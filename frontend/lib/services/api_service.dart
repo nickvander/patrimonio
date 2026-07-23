@@ -2355,6 +2355,11 @@ class ApiService {
     double baristaMonthlyIncome = 0.0,
     double annualTaxDrag = 0.0,
     bool withdrawalGuardrails = false,
+    bool mxScenario = false,
+    double expensesUsdPortion = 0.0,
+    double expensesMxnPortion = 0.0,
+    double fxAnnualDrift = 0.0,
+    double? usdMxnRate,
   }) async {
     final queryParams = {
       'start_balance': startBalance.toString(),
@@ -2371,6 +2376,20 @@ class ApiService {
       'withdrawal_guardrails': withdrawalGuardrails.toString(),
       if (yearsToRetirement != null)
         'years_to_retirement': yearsToRetirement.toString(),
+      // "Retire in Mexico" scenario. Appended only when the toggle is on so
+      // the canonical param string — and therefore the derived mc_seed —
+      // stays byte-identical for every pre-existing request.
+      if (mxScenario) ...{
+        'mx_scenario': 'true',
+        'annual_expenses_usd_portion': expensesUsdPortion.toString(),
+        'annual_expenses_mxn_portion': expensesMxnPortion.toString(),
+        'fx_annual_drift': fxAnnualDrift.toString(),
+        // Send the live rate the UI already displays so the backend's
+        // scenario math matches the FX pill; omitted → the backend uses its
+        // latest stored rate.
+        if (usdMxnRate != null && usdMxnRate > 0)
+          'usd_mxn_rate': usdMxnRate.toString(),
+      },
     };
 
     // F4: deterministic Monte Carlo — a stable seed derived from the

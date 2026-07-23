@@ -37,6 +37,11 @@ typedef WealthProjectionFetcher = Future<Map<String, dynamic>> Function({
   double baristaMonthlyIncome,
   double annualTaxDrag,
   bool withdrawalGuardrails,
+  bool mxScenario,
+  double expensesUsdPortion,
+  double expensesMxnPortion,
+  double fxAnnualDrift,
+  double? usdMxnRate,
 });
 typedef ProjectionDefaultsFetcher = Future<Map<String, dynamic>?> Function();
 typedef PortfolioDividendsFetcher = Future<Map<String, dynamic>?> Function();
@@ -48,6 +53,12 @@ class WealthProjectionScreen extends StatefulWidget {
   final double currentNetWorth;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+
+  /// Live USD→MXN rate from the dashboard's FX fetch (null before it lands).
+  /// Used by the "Retire in Mexico" scenario: to seed the peso split when the
+  /// toggle first turns on and passed with the projection request so the
+  /// backend's scenario math matches the rate shown in the FX pill.
+  final double? usdMxnRate;
 
   /// Test seams — null in production (the real ApiService is used).
   final WealthProjectionFetcher? projectionFetcher;
@@ -61,6 +72,7 @@ class WealthProjectionScreen extends StatefulWidget {
     required this.currentNetWorth,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.usdMxnRate,
     this.projectionFetcher,
     this.defaultsFetcher,
     this.dividendsFetcher,
@@ -116,6 +128,32 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   bool _withdrawalGuardrails = false;
   int _yearsToRetirement = 20;
   int _projectionYears = 30;
+
+  // "Retire in Mexico" scenario: split retirement spending into a USD and an
+  // MXN portion (each in its own currency, today's money) plus a long-run
+  // USD/MXN drift assumption. Off by default so the single-currency behavior
+  // is untouched for anyone who ignores the controls. The math lives in the
+  // backend's input-transformation layer; these are pure inputs.
+  bool _mxScenario = false;
+  double _mxUsdPortion = 0.0; // USD/yr
+  double _mxMxnPortion = 0.0; // MXN/yr (native pesos, NOT display currency)
+  double _fxAnnualDrift = 0.0; // fraction/yr; + = peso weakens
+  static const double _fxDriftMin = -0.10;
+  static const double _fxDriftMax = 0.10;
+  double _mxUsdMax = 100000.0;
+  double _mxMxnMax = 2000000.0;
+  // True once the portions hold a meaningful value (restored from the saved
+  // blob or seeded on first toggle-on) — prevents re-seeding over user edits.
+  bool _mxSeeded = false;
+
+  /// Live rate with the house hard fallback (20.0 — the same last-resort
+  /// constant as USD_MXN_ROW_RATE_SQL in the backend's services/tax.rs), for
+  /// the client-side seed only; the backend re-derives its own rate when the
+  /// request doesn't carry one.
+  double get _fxRateOrFallback {
+    final r = widget.usdMxnRate;
+    return (r != null && r > 0) ? r : 20.0;
+  }
 
   bool _isLoading = true;
   // F2: true when the last projection fetch threw. With no data to show, the
@@ -365,6 +403,20 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             (d('years_to_retirement') ?? _yearsToRetirement.toDouble())
                 .round()
                 .clamp(0, _projectionYears);
+        // Retire-in-Mexico scenario fields. Same U2 rule as the money
+        // sliders: clamp to the typed cap, grow the slider max to fit.
+        if (raw['mx_scenario'] is bool) {
+          _mxScenario = raw['mx_scenario'] as bool;
+        }
+        _mxUsdPortion = (d('annual_expenses_usd_portion') ?? _mxUsdPortion)
+            .clamp(0.0, _typedMoneyCap);
+        _mxMxnPortion = (d('annual_expenses_mxn_portion') ?? _mxMxnPortion)
+            .clamp(0.0, _typedMoneyCap);
+        _fxAnnualDrift = (d('fx_annual_drift') ?? _fxAnnualDrift)
+            .clamp(_fxDriftMin, _fxDriftMax);
+        if (_mxUsdPortion > 0 || _mxMxnPortion > 0) _mxSeeded = true;
+        _mxUsdMax = _grownMax(_mxUsdMax, _mxUsdPortion, 10000.0);
+        _mxMxnMax = _grownMax(_mxMxnMax, _mxMxnPortion, 100000.0);
         _assumptionsRestored = true;
       });
       return true;
@@ -388,6 +440,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         'withdrawal_guardrails': _withdrawalGuardrails,
         'years_to_retirement': _yearsToRetirement,
         'projection_years': _projectionYears,
+        'mx_scenario': _mxScenario,
+        'annual_expenses_usd_portion': _mxUsdPortion,
+        'annual_expenses_mxn_portion': _mxMxnPortion,
+        'fx_annual_drift': _fxAnnualDrift,
       };
 
   Future<void> _persistAssumptions() async {
@@ -525,6 +581,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         baristaMonthlyIncome: _baristaMonthlyIncome,
         annualTaxDrag: _annualTaxDrag,
         withdrawalGuardrails: _withdrawalGuardrails,
+        mxScenario: _mxScenario,
+        expensesUsdPortion: _mxUsdPortion,
+        expensesMxnPortion: _mxMxnPortion,
+        fxAnnualDrift: _fxAnnualDrift,
+        usdMxnRate: widget.usdMxnRate,
       );
       if (!mounted || seq != _fetchSeq) return; // stale response — drop it
       setState(() {
@@ -566,6 +627,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               // so a legend that wraps to extra lines grows the card instead
               // of squishing the plot — the old fixed 320 box did the latter.
               _buildChartCard(),
+              // Retire-in-Mexico dual-currency results, directly under the
+              // chart whose curve they annotate.
+              if (_mxPanelOn) ...[
+                const SizedBox(height: 16),
+                _buildMxScenarioPanel(),
+              ],
               // O2: informational dividend income outlook — sits between the
               // chart and the FIRE strip; never part of the chart itself.
               if (_showDividendOutlook && _dividendOutlookAvailable) ...[
@@ -605,6 +672,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   child: LayoutBuilder(builder: (context, col) {
                     final panelOn =
                         _showDividendOutlook && _dividendOutlookAvailable;
+                    final mxOn = _mxPanelOn;
                     // The classic desktop look lets the chart (flex 3) and
                     // the milestone tiles (flex 1) split whatever height the
                     // fixed-size cards — the FIRE strip and, when toggled on,
@@ -627,14 +695,25 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     // edge with no way to scroll (F1).
                     const chartMinH = 320.0;
                     const tilesMinH = 220.0;
+                    // The MX scenario panel is another ~250px of fixed
+                    // content; count it or the flex branch collapses the
+                    // chart to a sliver exactly like the F1 dividend-panel
+                    // defect.
                     final flexAvail = col.maxHeight -
-                        (210.0 + 32.0 + (panelOn ? 230.0 + 16.0 : 0.0));
+                        (210.0 +
+                            32.0 +
+                            (panelOn ? 230.0 + 16.0 : 0.0) +
+                            (mxOn ? 250.0 + 16.0 : 0.0));
                     final flexFits = flexAvail * 0.75 >= chartMinH &&
                         flexAvail * 0.25 >= tilesMinH;
                     if (flexFits) {
                       return Column(
                         children: [
                           Expanded(flex: 3, child: _buildChartCard()),
+                          if (mxOn) ...[
+                            const SizedBox(height: 16),
+                            _buildMxScenarioPanel(),
+                          ],
                           // O2: informational dividend income outlook — sits
                           // between the chart and the FIRE strip; never part
                           // of the chart itself.
@@ -678,6 +757,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                           // 360 keeps the plot itself (card minus title +
                           // legend chrome) comfortably above ~200px.
                           SizedBox(height: 360, child: _buildChartCard()),
+                          if (mxOn) ...[
+                            const SizedBox(height: 16),
+                            _buildMxScenarioPanel(),
+                          ],
                           if (panelOn) ...[
                             const SizedBox(height: 16),
                             _buildDividendOutlookPanel(),
@@ -989,34 +1072,105 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ),
       ),
       div(),
-      _buildSliderControl(
-        label: l.projAnnualExpenses,
-        value: _annualExpenses,
-        min: _expensesFloor,
-        max: _expensesMax,
-        isCurrency: true,
-        help: l.projHelpAnnualExpenses,
-        // F3: adopted → say how much data backs it; static $40k default →
-        // say it's an estimate instead of implying it came from tracked data.
-        // Restored user-saved assumptions (F10) carry no hint: the value is
-        // the user's own, neither derived nor a stock estimate.
-        hint: _expensesFromMonths != null
-            ? l.projBasedOnMonths(_expensesFromMonths!)
-            : (_assumptionsRestored ? null : l.projExpensesEstimateHint),
-        onChanged: (val) => setState(() => _annualExpenses = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editMoneyValue(
+      // The Mexico scenario REPLACES the single expense input with the
+      // USD/MXN split, so exactly one expense representation is on screen and
+      // the inactive one can't mislead.
+      if (!_mxScenario) ...[
+        _buildSliderControl(
           label: l.projAnnualExpenses,
-          currentUsd: _annualExpenses,
-          minUsd: _expensesFloor,
-          commit: (v) {
-            _annualExpenses = v;
-            if (v > _expensesMax) {
-              _expensesTypedMax = _grownMax(0.0, v, 50000.0);
-            }
-          },
+          value: _annualExpenses,
+          min: _expensesFloor,
+          max: _expensesMax,
+          isCurrency: true,
+          help: l.projHelpAnnualExpenses,
+          // F3: adopted → say how much data backs it; static $40k default →
+          // say it's an estimate instead of implying it came from tracked
+          // data. Restored user-saved assumptions (F10) carry no hint: the
+          // value is the user's own, neither derived nor a stock estimate.
+          hint: _expensesFromMonths != null
+              ? l.projBasedOnMonths(_expensesFromMonths!)
+              : (_assumptionsRestored ? null : l.projExpensesEstimateHint),
+          onChanged: (val) => setState(() => _annualExpenses = val),
+          onChangeEnd: (_) => _assumptionChanged(),
+          onTapValue: () => _editMoneyValue(
+            label: l.projAnnualExpenses,
+            currentUsd: _annualExpenses,
+            minUsd: _expensesFloor,
+            commit: (v) {
+              _annualExpenses = v;
+              if (v > _expensesMax) {
+                _expensesTypedMax = _grownMax(0.0, v, 50000.0);
+              }
+            },
+          ),
         ),
-      ),
+        div(),
+      ],
+      _buildMxToggle(),
+      if (_mxScenario) ...[
+        div(),
+        // Both portions render in their NATIVE currency with the ISO code
+        // (never the display-currency conversion) — "USD 12,000" next to
+        // "MXN 400,000" — because the split is defined per currency.
+        _buildSliderControl(
+          label: l.projMxUsdPortion,
+          value: _mxUsdPortion,
+          min: 0,
+          max: _mxUsdMax,
+          currencyCode: 'USD',
+          help: l.projMxHelpUsdPortion,
+          onChanged: (val) => setState(() => _mxUsdPortion = val),
+          onChangeEnd: (_) => _assumptionChanged(),
+          onTapValue: () => _editNativeMoneyValue(
+            label: l.projMxUsdPortion,
+            current: _mxUsdPortion,
+            code: 'USD',
+            commit: (v) {
+              _mxUsdPortion = v;
+              _mxUsdMax = _grownMax(_mxUsdMax, v, 10000.0);
+            },
+          ),
+        ),
+        div(),
+        _buildSliderControl(
+          label: l.projMxMxnPortion,
+          value: _mxMxnPortion,
+          min: 0,
+          max: _mxMxnMax,
+          currencyCode: 'MXN',
+          help: l.projMxHelpMxnPortion,
+          onChanged: (val) => setState(() => _mxMxnPortion = val),
+          onChangeEnd: (_) => _assumptionChanged(),
+          onTapValue: () => _editNativeMoneyValue(
+            label: l.projMxMxnPortion,
+            current: _mxMxnPortion,
+            code: 'MXN',
+            commit: (v) {
+              _mxMxnPortion = v;
+              _mxMxnMax = _grownMax(_mxMxnMax, v, 100000.0);
+            },
+          ),
+        ),
+        div(),
+        _buildSliderControl(
+          label: l.projMxFxDrift,
+          value: _fxAnnualDrift,
+          min: _fxDriftMin,
+          max: _fxDriftMax,
+          isPercent: true,
+          divisions: 40, // 0.5%/yr steps across the ±10% range
+          help: l.projMxHelpFxDrift,
+          onChanged: (val) => setState(() => _fxAnnualDrift = val),
+          onChangeEnd: (_) => _assumptionChanged(),
+          onTapValue: () => _editPercentValue(
+            label: l.projMxFxDrift,
+            currentFraction: _fxAnnualDrift,
+            minFraction: _fxDriftMin,
+            maxFraction: _fxDriftMax,
+            commit: (v) => _fxAnnualDrift = v,
+          ),
+        ),
+      ],
       div(),
       _buildSliderControl(
         label: l.projSafeWithdrawalRate,
@@ -1189,6 +1343,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     required double max,
     bool isCurrency = false,
     bool isPercent = false,
+    // MX split sliders: the value is NATIVE money in this ISO currency —
+    // rendered code-prefixed ("USD 12,000" / "MXN 400,000") with NO
+    // display-currency conversion, since the split is defined per currency.
+    String? currencyCode,
     int? divisions,
     String? hint,
     String? help,
@@ -1200,6 +1358,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     String displayValue;
     if (isPercent) {
       displayValue = formatPercent(context, value * 100, digits: 1);
+    } else if (currencyCode != null) {
+      displayValue = displayCurrencyWithCode(value, currencyCode);
     } else if (isCurrency) {
       final reported = value * widget.conversionFactor;
       displayValue = widget.currencyFormat.displayMoney(reported);
@@ -1350,6 +1510,38 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     _assumptionChanged();
   }
 
+  // Typed entry for a NATIVE-currency money slider (the MX split): the
+  // dialog works in that currency directly — no display-currency conversion
+  // on either side, unlike _editMoneyValue. Same debounced
+  // _assumptionChanged() commit path as every other control.
+  Future<void> _editNativeMoneyValue({
+    required String label,
+    required double current,
+    required String code,
+    required void Function(double v) commit,
+  }) async {
+    final l = AppLocalizations.of(context);
+    final result = await showDialog<double>(
+      context: context,
+      builder: (_) => _ValueEntryDialog(
+        title: label,
+        initialValue: current.round().toString(),
+        prefixText: '${code.toUpperCase()} ',
+        min: 0,
+        max: _typedMoneyCap,
+        // gen-l10n: explicit arb placeholders keep the (min, max) declaration
+        // order in the generated signature (same pattern as projGoalYearRange).
+        rangeError: l.projValueEntryRange(
+          displayCurrencyWithCode(0, code),
+          displayCurrencyWithCode(_typedMoneyCap, code),
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() => commit(result));
+    _assumptionChanged();
+  }
+
   /// U5: percent slider value as dialog text, in percent units with float
   /// noise trimmed — 0.07 → "7", 0.085 → "8.5".
   static String _percentText(double fraction) {
@@ -1461,6 +1653,61 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ],
       ),
     );
+  }
+
+  // "Retire in Mexico" scenario toggle (same row pattern as the guardrails
+  // toggle). Turning it on swaps the single expense slider for the USD/MXN
+  // split + FX-drift controls and re-runs the projection through the
+  // backend's input-transformation layer.
+  Widget _buildMxToggle() {
+    final l = AppLocalizations.of(context);
+    // A6-style a11y: label + status text merge into the switch node.
+    return MergeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.projMxToggle,
+                  style: TextStyle(color: context.textMuted, fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _mxScenario ? l.projMxToggleOn : l.projMxToggleOff,
+                  style: TextStyle(color: context.textFaint, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _mxScenario,
+            activeThumbColor: context.positive,
+            onChanged: _toggleMxScenario,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleMxScenario(bool v) {
+    setState(() {
+      _mxScenario = v;
+      if (v && !_mxSeeded) {
+        // First activation: seed the split as ALL-MXN at today's rate —
+        // the same effective spending, so with the default 0% drift the
+        // toggle is an identity (FI number unchanged) until the user moves
+        // the split or the drift. Rounded to a clean MXN 1,000.
+        _mxMxnPortion =
+            ((_annualExpenses * _fxRateOrFallback) / 1000).round() * 1000.0;
+        _mxUsdPortion = 0.0;
+        _mxSeeded = true;
+        _mxMxnMax = _grownMax(_mxMxnMax, _mxMxnPortion, 100000.0);
+      }
+    });
+    _assumptionChanged();
   }
 
   // O2: "Show dividend income outlook" advanced toggle (same row pattern as
@@ -1694,6 +1941,128 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  /// The backend's "Retire in Mexico" block, present only when the last
+  /// projection ran with the scenario on.
+  Map<String, dynamic>? get _mxResult =>
+      _projectionData?['mx_scenario'] as Map<String, dynamic>?;
+
+  bool get _mxPanelOn => _mxScenario && _mxResult != null;
+
+  // "Retire in Mexico" results panel — dividend-outlook chrome: the FI number
+  // and projected retirement income restated in BOTH currencies at the
+  // projected at-retirement rate, plus the effective spend the engine ran
+  // with and the rate/drift provenance line. Values come straight from the
+  // backend block (never re-derived client-side) so panel and chart can't
+  // disagree.
+  Widget _buildMxScenarioPanel() {
+    final l = AppLocalizations.of(context);
+    final mx = _mxResult;
+    if (mx == null) return const SizedBox.shrink();
+    double f(String k) => (mx[k] as num?)?.toDouble() ?? 0.0;
+
+    // All four figures are at-retirement constructs, so in nominal mode they
+    // inflate to the retirement year — same rule as the FIRE plan card.
+    final atRet = _nominalFactor(_yearsToRetirement.toDouble());
+    String both(double usd, double mxn) =>
+        '${displayCurrencyWithCode(usd * atRet, 'USD')} · '
+        '${displayCurrencyWithCode(mxn * atRet, 'MXN')}';
+
+    final valueStyle = TextStyle(
+      color: context.textPrimary,
+      fontWeight: FontWeight.w700,
+      fontSize: 13.5,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(color: context.textMuted, fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(value, style: valueStyle),
+            ],
+          ),
+        );
+
+    // gen-l10n orders these alphabetically → (now, retire); the template
+    // reads "{now} today → {retire} at retirement", same order.
+    final rateLine = l.projMxRateLine(
+      localizeNumberString(context, f('fx_rate_today').toStringAsFixed(2)),
+      localizeNumberString(
+          context, f('fx_rate_at_retirement').toStringAsFixed(2)),
+    );
+
+    return Semantics(
+      container: true,
+      hint: l.axInformational,
+      child: Card(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.public_rounded, size: 18, color: context.info),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.projMxPanelTitle,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  // Dollar-basis caption, consistent with the header badge.
+                  Text(
+                    _showNominal ? l.projNominalNote : l.proj3InTodaysDollars,
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Divider(color: context.hairline, height: 1),
+              row(l.projFiNumber,
+                  both(f('fi_number_usd'), f('fi_number_mxn'))),
+              row(
+                l.projMxIncomeRow,
+                both(f('monthly_income_at_retirement_usd'),
+                    f('monthly_income_at_retirement_mxn')),
+              ),
+              row(
+                l.projMxEffectiveSpend,
+                displayCurrencyWithCode(
+                    f('effective_annual_expenses_usd') * atRet, 'USD'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                rateLine,
+                style: TextStyle(
+                  color: context.textFaint,
+                  fontSize: 11,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                l.projMxDisclaimer,
+                style: TextStyle(
+                    color: context.textMuted, fontSize: 11.5, height: 1.35),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2552,12 +2921,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
-            axis(l.projSpendingLevel, [
-              lifeChip('lean', l.projPresetLean),
-              lifeChip('standard', l.projPresetStandard),
-              lifeChip('fat', l.projPresetFat),
-            ]),
-            const SizedBox(height: 10),
+            // The lifestyle presets scale the SINGLE expense figure, which
+            // the Mexico scenario ignores in favor of the USD/MXN split —
+            // hide them there so an inert control can't mislead.
+            if (!_mxScenario) ...[
+              axis(l.projSpendingLevel, [
+                lifeChip('lean', l.projPresetLean),
+                lifeChip('standard', l.projPresetStandard),
+                lifeChip('fat', l.projPresetFat),
+              ]),
+              const SizedBox(height: 10),
+            ],
             axis(l.projGoalLabel, [
               chip(_FireFocus.full, l.projFocusFull),
               chip(_FireFocus.coast, l.projTermCoast),

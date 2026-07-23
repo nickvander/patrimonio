@@ -73,8 +73,34 @@ WealthProjectionFetcher fixtureFetcher(
     double baristaMonthlyIncome = 0.0,
     double annualTaxDrag = 0.0,
     bool withdrawalGuardrails = false,
+    bool mxScenario = false,
+    double expensesUsdPortion = 0.0,
+    double expensesMxnPortion = 0.0,
+    double fxAnnualDrift = 0.0,
+    double? usdMxnRate,
   }) async =>
       build(years);
+}
+
+/// A "Retire in Mexico" response block matching the backend's
+/// `MxScenarioResult` shape, for scenario-panel tests.
+Map<String, dynamic> mxScenarioFixture({
+  double fxRateToday = 17.0,
+  double fxRateAtRetirement = 17.0,
+  double fxAnnualDrift = 0.0,
+}) {
+  return {
+    'effective_annual_expenses_usd': 40000.0,
+    'annual_expenses_usd_portion': 10000.0,
+    'annual_expenses_mxn_portion': 510000.0,
+    'fx_rate_today': fxRateToday,
+    'fx_rate_at_retirement': fxRateAtRetirement,
+    'fx_annual_drift': fxAnnualDrift,
+    'fi_number_usd': 1000000.0,
+    'fi_number_mxn': 1000000.0 * fxRateAtRetirement,
+    'monthly_income_at_retirement_usd': 3300.0,
+    'monthly_income_at_retirement_mxn': 3300.0 * fxRateAtRetirement,
+  };
 }
 
 Widget buildProjectionHost({
@@ -86,6 +112,7 @@ Widget buildProjectionHost({
   Locale? locale,
   double currentNetWorth = 500000.0,
   NumberFormat? currencyFormat,
+  double? usdMxnRate,
 }) {
   return MaterialApp(
     locale: locale,
@@ -95,6 +122,7 @@ Widget buildProjectionHost({
       body: WealthProjectionScreen(
         currentNetWorth: currentNetWorth,
         conversionFactor: 1.0,
+        usdMxnRate: usdMxnRate,
         currencyFormat: currencyFormat ??
             NumberFormat.currency(symbol: r'$', decimalDigits: 0),
         projectionFetcher:

@@ -25,6 +25,11 @@ void main() {
       double baristaMonthlyIncome = 0.0,
       double annualTaxDrag = 0.0,
       bool withdrawalGuardrails = false,
+      bool mxScenario = false,
+      double expensesUsdPortion = 0.0,
+      double expensesMxnPortion = 0.0,
+      double fxAnnualDrift = 0.0,
+      double? usdMxnRate,
     }) async {
       startBalances.add(startBalance);
       return projectionFixture(years: years);

@@ -7079,4 +7079,54 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recCreateRule => 'Crear regla';
+
+  @override
+  String get projMxToggle => 'Retiro en México';
+
+  @override
+  String get projMxToggleOn =>
+      'El gasto en el retiro se divide en una parte en USD y otra en MXN, con un supuesto de deriva cambiaria de largo plazo';
+
+  @override
+  String get projMxToggleOff =>
+      'Apagado: el gasto en el retiro es una sola cifra en dólares';
+
+  @override
+  String get projMxUsdPortion => 'Gasto en EE. UU. (USD/año)';
+
+  @override
+  String get projMxHelpUsdPortion =>
+      'La parte de tu gasto en el retiro que se queda en dólares, en dólares de hoy.';
+
+  @override
+  String get projMxMxnPortion => 'Gasto en México (MXN/año)';
+
+  @override
+  String get projMxHelpMxnPortion =>
+      'La parte de tu gasto en el retiro en pesos, en pesos de hoy.';
+
+  @override
+  String get projMxFxDrift => 'Deriva cambiaria de largo plazo (USD/MXN)';
+
+  @override
+  String get projMxHelpFxDrift =>
+      'Cambio anual supuesto del tipo de cambio USD/MXN más allá de la inflación. Positivo = el peso se debilita y el gasto en pesos cuesta menos dólares; 0% = se mantiene la paridad de poder de compra.';
+
+  @override
+  String get projMxPanelTitle => 'Escenario de retiro en México';
+
+  @override
+  String get projMxIncomeRow => 'Ingreso en el retiro (mensual)';
+
+  @override
+  String get projMxEffectiveSpend => 'Gasto anual efectivo';
+
+  @override
+  String projMxRateLine(String now, String retire) {
+    return 'USD/MXN $now hoy → ≈$retire al retiro';
+  }
+
+  @override
+  String get projMxDisclaimer =>
+      'La parte en pesos se convierte al tipo de cambio proyectado al momento del retiro y el modelo sigue calculando en dólares de hoy. Las cifras en pesos se muestran a ese mismo tipo de cambio.';
 }

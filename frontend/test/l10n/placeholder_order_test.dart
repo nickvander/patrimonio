@@ -86,4 +86,12 @@ void main() {
     final s = await render(tester, (l) => l.projValueEntryRange('MIN', 'MAX'));
     expect(s, 'Enter an amount between MIN and MAX');
   });
+
+  testWidgets('projMxRateLine(now, retire)', (tester) async {
+    // MX scenario template: "USD/MXN {now} today → ≈{retire} at retirement".
+    // Alphabetical (now, retire) happens to equal the template order — this
+    // pin catches any future rename that breaks that coincidence.
+    final s = await render(tester, (l) => l.projMxRateLine('NOW', 'RET'));
+    expect(s, 'USD/MXN NOW today → ≈RET at retirement');
+  });
 }

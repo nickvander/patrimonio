@@ -2813,5 +2813,29 @@
   "recRepeats": "Se repite",
   "recRepeatsNever": "No se repite",
   "recNextDueDate": "Próxima fecha",
-  "recCreateRule": "Crear regla"
+  "recCreateRule": "Crear regla",
+  "projMxToggle": "Retiro en México",
+  "projMxToggleOn": "El gasto en el retiro se divide en una parte en USD y otra en MXN, con un supuesto de deriva cambiaria de largo plazo",
+  "projMxToggleOff": "Apagado: el gasto en el retiro es una sola cifra en dólares",
+  "projMxUsdPortion": "Gasto en EE. UU. (USD/año)",
+  "projMxHelpUsdPortion": "La parte de tu gasto en el retiro que se queda en dólares, en dólares de hoy.",
+  "projMxMxnPortion": "Gasto en México (MXN/año)",
+  "projMxHelpMxnPortion": "La parte de tu gasto en el retiro en pesos, en pesos de hoy.",
+  "projMxFxDrift": "Deriva cambiaria de largo plazo (USD/MXN)",
+  "projMxHelpFxDrift": "Cambio anual supuesto del tipo de cambio USD/MXN más allá de la inflación. Positivo = el peso se debilita y el gasto en pesos cuesta menos dólares; 0% = se mantiene la paridad de poder de compra.",
+  "projMxPanelTitle": "Escenario de retiro en México",
+  "projMxIncomeRow": "Ingreso en el retiro (mensual)",
+  "projMxEffectiveSpend": "Gasto anual efectivo",
+  "projMxRateLine": "USD/MXN {now} hoy → ≈{retire} al retiro",
+  "@projMxRateLine": {
+    "placeholders": {
+      "now": {
+        "type": "String"
+      },
+      "retire": {
+        "type": "String"
+      }
+    }
+  },
+  "projMxDisclaimer": "La parte en pesos se convierte al tipo de cambio proyectado al momento del retiro y el modelo sigue calculando en dólares de hoy. Las cifras en pesos se muestran a ese mismo tipo de cambio."
 }

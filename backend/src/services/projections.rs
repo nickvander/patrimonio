@@ -58,6 +58,32 @@ pub struct ProjectionRequest {
     /// Optional RNG seed so tests are deterministic. Omit in production.
     #[serde(default)]
     pub mc_seed: Option<u64>,
+
+    // ---- "Retire in Mexico" scenario (all optional — absent = legacy
+    // single-currency behavior, byte-identical response) ----
+    /// Scenario toggle. When true, `annual_expenses` is IGNORED and the
+    /// effective retirement spend is derived from the USD/MXN split below —
+    /// a pure input transformation in front of the unchanged engine.
+    #[serde(default)]
+    pub mx_scenario: Option<bool>,
+    /// Portion of retirement spending that stays in US dollars (today's $/yr).
+    #[serde(default)]
+    pub annual_expenses_usd_portion: Option<f64>,
+    /// Portion of retirement spending in Mexican pesos (today's MXN/yr).
+    #[serde(default)]
+    pub annual_expenses_mxn_portion: Option<f64>,
+    /// Current USD→MXN rate. The handler fills this from the latest stored
+    /// `exchange_rates` row when the client omits it; the hard fallback
+    /// mirrors `services::tax::USD_MXN_ROW_RATE_SQL`'s 20.0.
+    #[serde(default)]
+    pub usd_mxn_rate: Option<f64>,
+    /// Assumed long-run *real* drift of the USD/MXN rate, fraction per year
+    /// (0.02 = the peso weakens 2%/yr beyond inflation differentials).
+    /// Default 0 = purchasing-power parity holds — the neutral long-run
+    /// assumption, which makes turning the scenario on with an all-MXN split
+    /// an identity. Clamped to ±10%/yr.
+    #[serde(default)]
+    pub fx_annual_drift: Option<f64>,
 }
 
 impl ProjectionRequest {
@@ -87,7 +113,33 @@ impl ProjectionRequest {
     fn real_return(&self) -> f64 {
         real_return(self.annual_return_rate, self.inflation())
     }
+    fn mx_on(&self) -> bool {
+        self.mx_scenario.unwrap_or(false)
+    }
+    /// FX drift clamped to a sane ±10%/yr — it comes straight off a query
+    /// param, and an absurd drift compounds into inf/0 rates over a long
+    /// horizon (same guardrail spirit as `years()` / `trials()`).
+    fn fx_drift(&self) -> f64 {
+        let d = self.fx_annual_drift.unwrap_or(0.0);
+        if d.is_finite() {
+            d.clamp(-0.10, 0.10)
+        } else {
+            0.0
+        }
+    }
+    /// Current USD→MXN rate with the house hard fallback (20.0 — the same
+    /// last-resort constant as `USD_MXN_ROW_RATE_SQL` in services::tax).
+    fn fx_rate_today(&self) -> f64 {
+        match self.usd_mxn_rate {
+            Some(r) if r.is_finite() && r > 0.0 => r,
+            _ => FALLBACK_USD_MXN_RATE,
+        }
+    }
 }
+
+/// Last-resort USD→MXN rate, matching the SQL fallback in
+/// `services::tax::USD_MXN_ROW_RATE_SQL` so the two FX rules can't disagree.
+const FALLBACK_USD_MXN_RATE: f64 = 20.0;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectionPoint {
@@ -136,6 +188,36 @@ pub struct MonteCarloResult {
     pub median_ending_balance: f64,
 }
 
+/// Derived figures for the "Retire in Mexico" scenario. Present only when
+/// the request set `mx_scenario=true`; the block re-states the headline FIRE
+/// outputs in both currencies at the projected at-retirement rate.
+///
+/// ⚠ Simplification: the MXN portion is converted at the *at-retirement*
+/// rate and held constant through decumulation (the engine's
+/// `annual_expenses` is a single real-USD figure). With nonzero drift the
+/// true USD cost of peso spending would keep drifting during retirement;
+/// this snapshot is the defensible first-order model, matching how the FI
+/// number itself is an at-retirement construct (4% rule at the boundary).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MxScenarioResult {
+    /// The single USD/yr figure the engine actually ran with:
+    /// `usd_portion + mxn_portion / fx_rate_at_retirement`.
+    pub effective_annual_expenses_usd: f64,
+    /// Echo of the (clamped) inputs, so the client can render provenance.
+    pub annual_expenses_usd_portion: f64,
+    pub annual_expenses_mxn_portion: f64,
+    pub fx_rate_today: f64,
+    /// `fx_rate_today * (1 + drift)^years_to_retirement`.
+    pub fx_rate_at_retirement: f64,
+    pub fx_annual_drift: f64,
+    /// `fire_metrics.fi_number`, restated for the dual-currency panel.
+    pub fi_number_usd: f64,
+    /// FI number in pesos at the at-retirement rate.
+    pub fi_number_mxn: f64,
+    pub monthly_income_at_retirement_usd: f64,
+    pub monthly_income_at_retirement_mxn: f64,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectionResponse {
     pub points: Vec<ProjectionPoint>,
@@ -143,6 +225,60 @@ pub struct ProjectionResponse {
     pub monte_carlo: MonteCarloResult,
     /// Always true today — all figures are in real (today's) dollars.
     pub real_dollars: bool,
+    /// "Retire in Mexico" scenario block; omitted from the JSON entirely for
+    /// legacy single-currency requests so their contract is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub mx_scenario: Option<MxScenarioResult>,
+}
+
+/// Inputs of the MX transformation, carried from [`apply_mx_scenario`] to the
+/// response block once the FIRE metrics exist.
+struct MxInputs {
+    usd_portion: f64,
+    mxn_portion: f64,
+    rate_today: f64,
+    rate_at_retirement: f64,
+    drift: f64,
+    effective_annual_expenses: f64,
+}
+
+/// The "Retire in Mexico" input transformation: collapse the USD/MXN
+/// spending split + FX drift into the single real-USD `annual_expenses` the
+/// unchanged engine consumes. Returns the request as-is when the scenario is
+/// off. Portions are clamped to [0, 1e12] — they come off query params and an
+/// absurd value would poison every downstream f64.
+fn apply_mx_scenario(req: &ProjectionRequest) -> (ProjectionRequest, Option<MxInputs>) {
+    if !req.mx_on() {
+        return (req.clone(), None);
+    }
+    let sane = |v: Option<f64>| match v {
+        Some(x) if x.is_finite() => x.clamp(0.0, 1e12),
+        _ => 0.0,
+    };
+    let usd_portion = sane(req.annual_expenses_usd_portion);
+    let mxn_portion = sane(req.annual_expenses_mxn_portion);
+    let rate_today = req.fx_rate_today();
+    let drift = req.fx_drift();
+    // Drift compounds over the accumulation phase only (see MxScenarioResult
+    // docs for why the at-retirement snapshot is the model). Floor the rate
+    // so a pathological drift can never divide by ~0.
+    let years = f64::from(req.retire_year());
+    let rate_at_retirement = (rate_today * (1.0 + drift).powf(years)).max(1e-6);
+    let effective_annual_expenses = usd_portion + mxn_portion / rate_at_retirement;
+    let mut eff = req.clone();
+    eff.annual_expenses = effective_annual_expenses;
+    (
+        eff,
+        Some(MxInputs {
+            usd_portion,
+            mxn_portion,
+            rate_today,
+            rate_at_retirement,
+            drift,
+            effective_annual_expenses,
+        }),
+    )
 }
 
 /// Fisher relation: real = (1 + nominal) / (1 + inflation) - 1.
@@ -152,6 +288,10 @@ fn real_return(nominal: f64, inflation: f64) -> f64 {
 
 /// Calculate a wealth projection in real (today's) dollars.
 pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
+    // "Retire in Mexico" is an input transformation, not a new engine: derive
+    // the effective USD annual_expenses first, then run the unchanged model.
+    let (effective_req, mx_inputs) = apply_mx_scenario(req);
+    let req = &effective_req;
     // Tax drag lowers the effective real return everywhere it's applied
     // (growth, FI-date, coast discount, Monte Carlo).
     let real = req.real_return() - req.annual_tax_drag.unwrap_or(0.0).max(0.0);
@@ -264,11 +404,29 @@ pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
 
     let monte_carlo = run_monte_carlo(req, real);
 
+    // Restate the headline FIRE outputs in both currencies at the projected
+    // at-retirement rate. Multiplication (never a re-derivation) so the USD
+    // and MXN figures can't drift apart from the engine's own numbers.
+    let mx_scenario = mx_inputs.map(|mx| MxScenarioResult {
+        effective_annual_expenses_usd: mx.effective_annual_expenses,
+        annual_expenses_usd_portion: mx.usd_portion,
+        annual_expenses_mxn_portion: mx.mxn_portion,
+        fx_rate_today: mx.rate_today,
+        fx_rate_at_retirement: mx.rate_at_retirement,
+        fx_annual_drift: mx.drift,
+        fi_number_usd: fire_metrics.fi_number,
+        fi_number_mxn: fire_metrics.fi_number * mx.rate_at_retirement,
+        monthly_income_at_retirement_usd: fire_metrics.monthly_income_at_retirement,
+        monthly_income_at_retirement_mxn: fire_metrics.monthly_income_at_retirement
+            * mx.rate_at_retirement,
+    });
+
     ProjectionResponse {
         points,
         fire_metrics,
         monte_carlo,
         real_dollars: true,
+        mx_scenario,
     }
 }
 
@@ -460,6 +618,11 @@ mod tests {
             annual_tax_drag: None,
             withdrawal_guardrails: None,
             mc_seed: Some(42),
+            mx_scenario: None,
+            annual_expenses_usd_portion: None,
+            annual_expenses_mxn_portion: None,
+            usd_mxn_rate: None,
+            fx_annual_drift: None,
         }
     }
 
@@ -660,6 +823,134 @@ mod tests {
             guarded > fixed,
             "guardrails should raise success on a stressed plan: {guarded} vs {fixed}"
         );
+    }
+
+    // ---- "Retire in Mexico" scenario (input-transformation layer) ----
+
+    /// base_req with the MX scenario on: the $40k spend expressed entirely in
+    /// pesos at rate 20 (40,000 × 20 = 800,000 MXN/yr), zero drift.
+    fn mx_req() -> ProjectionRequest {
+        let mut req = base_req();
+        req.mx_scenario = Some(true);
+        req.annual_expenses_usd_portion = Some(0.0);
+        req.annual_expenses_mxn_portion = Some(800_000.0);
+        req.usd_mxn_rate = Some(20.0);
+        req.fx_annual_drift = Some(0.0);
+        // Make the legacy field obviously wrong so the test proves it's
+        // ignored when the scenario is on.
+        req.annual_expenses = 123_456.0;
+        req
+    }
+
+    #[test]
+    fn mx_scenario_absent_leaves_response_unchanged() {
+        // Regression guard: users who ignore the new controls must see
+        // byte-identical numbers. No mx block, same FI number as ever.
+        let res = calculate_projection(&base_req());
+        assert!(res.mx_scenario.is_none());
+        assert!((res.fire_metrics.fi_number - 1_000_000.0).abs() < 1e-6);
+        // And the block is absent from the serialized JSON, not null.
+        let json = serde_json::to_string(&res).unwrap();
+        assert!(!json.contains("mx_scenario"));
+    }
+
+    #[test]
+    fn mx_all_mxn_split_at_zero_drift_is_an_identity() {
+        // 800k MXN at rate 20 with 0 drift == the legacy $40k request: the
+        // FI number, expected path and Monte Carlo must all match exactly
+        // (same seed), proving this is a pure input transformation.
+        let legacy = calculate_projection(&base_req());
+        let mx = calculate_projection(&mx_req());
+        assert!(
+            (mx.fire_metrics.fi_number - legacy.fire_metrics.fi_number).abs() < 1e-6,
+            "identity broken: {} vs {}",
+            mx.fire_metrics.fi_number,
+            legacy.fire_metrics.fi_number
+        );
+        assert_eq!(
+            mx.monte_carlo.success_rate,
+            legacy.monte_carlo.success_rate
+        );
+        assert!(
+            (mx.points.last().unwrap().balance - legacy.points.last().unwrap().balance).abs()
+                < 1e-6
+        );
+        let block = mx.mx_scenario.expect("mx block present");
+        assert!((block.effective_annual_expenses_usd - 40_000.0).abs() < 1e-6);
+        assert!((block.fx_rate_at_retirement - 20.0).abs() < 1e-9);
+        // Dual-currency restatement: MXN figures are USD × the rate.
+        assert!((block.fi_number_mxn - block.fi_number_usd * 20.0).abs() < 1e-6);
+        assert!(
+            (block.monthly_income_at_retirement_mxn
+                - block.monthly_income_at_retirement_usd * 20.0)
+                .abs()
+                < 1e-6
+        );
+    }
+
+    #[test]
+    fn mx_peso_weakening_drift_lowers_the_fi_number() {
+        // +3%/yr drift over 20 accumulation years: the peso spending costs
+        // fewer real dollars at retirement, so the FI number drops below the
+        // zero-drift $1M — by exactly the compounded rate.
+        let mut req = mx_req();
+        req.fx_annual_drift = Some(0.03);
+        let res = calculate_projection(&req);
+        let block = res.mx_scenario.expect("mx block present");
+        let expected_rate = 20.0 * 1.03_f64.powi(20);
+        assert!((block.fx_rate_at_retirement - expected_rate).abs() < 1e-6);
+        let expected_fi = (800_000.0 / expected_rate) / 0.04;
+        assert!(
+            (res.fire_metrics.fi_number - expected_fi).abs() < 1e-6,
+            "got {}, expected {expected_fi}",
+            res.fire_metrics.fi_number
+        );
+        assert!(res.fire_metrics.fi_number < 1_000_000.0);
+        // A strengthening peso (negative drift) moves it the other way.
+        req.fx_annual_drift = Some(-0.03);
+        let stronger = calculate_projection(&req);
+        assert!(stronger.fire_metrics.fi_number > 1_000_000.0);
+    }
+
+    #[test]
+    fn mx_mixed_split_sums_per_currency() {
+        // $20k USD + 400k MXN at rate 20, 0 drift → 20k + 20k = $40k.
+        let mut req = mx_req();
+        req.annual_expenses_usd_portion = Some(20_000.0);
+        req.annual_expenses_mxn_portion = Some(400_000.0);
+        let res = calculate_projection(&req);
+        assert!((res.fire_metrics.fi_number - 1_000_000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn mx_inputs_are_clamped_and_rate_falls_back() {
+        // Absurd drift clamps to +10%/yr; a missing/zero rate falls back to
+        // the house 20.0; garbage portions clamp to 0 instead of poisoning
+        // the whole projection with NaN/inf.
+        let mut req = mx_req();
+        req.fx_annual_drift = Some(5.0); // "500%/yr"
+        req.usd_mxn_rate = None;
+        let res = calculate_projection(&req);
+        let block = res.mx_scenario.expect("mx block present");
+        assert!((block.fx_annual_drift - 0.10).abs() < 1e-12);
+        assert!((block.fx_rate_today - 20.0).abs() < 1e-12);
+
+        let mut req = mx_req();
+        req.annual_expenses_usd_portion = Some(f64::NAN);
+        req.annual_expenses_mxn_portion = Some(f64::INFINITY);
+        let res = calculate_projection(&req);
+        let block = res.mx_scenario.expect("mx block present");
+        // Non-finite garbage (NaN/inf) is treated as "not provided" → 0.
+        assert_eq!(block.annual_expenses_usd_portion, 0.0);
+        assert_eq!(block.annual_expenses_mxn_portion, 0.0);
+        assert!(res.fire_metrics.fi_number.is_finite());
+        // A finite-but-absurd portion clamps to the 1e12 cap instead.
+        let mut req = mx_req();
+        req.annual_expenses_mxn_portion = Some(1e30);
+        let res = calculate_projection(&req);
+        let block = res.mx_scenario.expect("mx block present");
+        assert_eq!(block.annual_expenses_mxn_portion, 1e12);
+        assert!(res.fire_metrics.fi_number.is_finite());
     }
 
     #[test]

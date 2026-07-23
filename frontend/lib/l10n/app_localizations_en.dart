@@ -7017,4 +7017,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recCreateRule => 'Create rule';
+
+  @override
+  String get projMxToggle => 'Retire in Mexico';
+
+  @override
+  String get projMxToggleOn =>
+      'Retirement spending is split into a USD portion and an MXN portion, with a long-run FX drift assumption';
+
+  @override
+  String get projMxToggleOff =>
+      'Off — retirement spending is a single figure in dollars';
+
+  @override
+  String get projMxUsdPortion => 'U.S. spending (USD/yr)';
+
+  @override
+  String get projMxHelpUsdPortion =>
+      'The part of your retirement spending that stays in dollars, in today\'s dollars.';
+
+  @override
+  String get projMxMxnPortion => 'Mexico spending (MXN/yr)';
+
+  @override
+  String get projMxHelpMxnPortion =>
+      'The part of your retirement spending in pesos, in today\'s pesos.';
+
+  @override
+  String get projMxFxDrift => 'Long-run FX drift (USD/MXN)';
+
+  @override
+  String get projMxHelpFxDrift =>
+      'Assumed yearly change in the USD/MXN rate beyond inflation. Positive = the peso weakens, so peso spending costs fewer dollars; 0% = purchasing power parity holds.';
+
+  @override
+  String get projMxPanelTitle => 'Retire in Mexico scenario';
+
+  @override
+  String get projMxIncomeRow => 'Retirement income (monthly)';
+
+  @override
+  String get projMxEffectiveSpend => 'Effective annual spending';
+
+  @override
+  String projMxRateLine(String now, String retire) {
+    return 'USD/MXN $now today → ≈$retire at retirement';
+  }
+
+  @override
+  String get projMxDisclaimer =>
+      'The peso portion is converted at the projected rate at retirement and the model still runs in today\'s U.S. dollars. Peso figures are shown at that same rate.';
 }

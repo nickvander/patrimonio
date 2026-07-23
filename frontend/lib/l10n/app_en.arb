@@ -3765,5 +3765,29 @@
   "recRepeats": "Repeats",
   "recRepeatsNever": "Does not repeat",
   "recNextDueDate": "Next due date",
-  "recCreateRule": "Create rule"
+  "recCreateRule": "Create rule",
+  "projMxToggle": "Retire in Mexico",
+  "projMxToggleOn": "Retirement spending is split into a USD portion and an MXN portion, with a long-run FX drift assumption",
+  "projMxToggleOff": "Off — retirement spending is a single figure in dollars",
+  "projMxUsdPortion": "U.S. spending (USD/yr)",
+  "projMxHelpUsdPortion": "The part of your retirement spending that stays in dollars, in today's dollars.",
+  "projMxMxnPortion": "Mexico spending (MXN/yr)",
+  "projMxHelpMxnPortion": "The part of your retirement spending in pesos, in today's pesos.",
+  "projMxFxDrift": "Long-run FX drift (USD/MXN)",
+  "projMxHelpFxDrift": "Assumed yearly change in the USD/MXN rate beyond inflation. Positive = the peso weakens, so peso spending costs fewer dollars; 0% = purchasing power parity holds.",
+  "projMxPanelTitle": "Retire in Mexico scenario",
+  "projMxIncomeRow": "Retirement income (monthly)",
+  "projMxEffectiveSpend": "Effective annual spending",
+  "projMxRateLine": "USD/MXN {now} today → ≈{retire} at retirement",
+  "@projMxRateLine": {
+    "placeholders": {
+      "now": {
+        "type": "String"
+      },
+      "retire": {
+        "type": "String"
+      }
+    }
+  },
+  "projMxDisclaimer": "The peso portion is converted at the projected rate at retirement and the model still runs in today's U.S. dollars. Peso figures are shown at that same rate."
 }

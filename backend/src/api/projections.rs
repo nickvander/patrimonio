@@ -23,10 +23,30 @@ pub fn router() -> Router<AppState> {
 
 /// Calculate a wealth projection. All figures are real (today's) dollars.
 async fn calculate_projection(
-    State(_state): State<AppState>,
-    Query(payload): Query<ProjectionRequest>,
-) -> Json<ProjectionResponse> {
-    Json(projections::calculate_projection(&payload))
+    State(state): State<AppState>,
+    Query(mut payload): Query<ProjectionRequest>,
+) -> Result<Json<ProjectionResponse>, ApiError> {
+    // "Retire in Mexico" scenario: when the client didn't supply a usable
+    // USD→MXN rate, fill it from the latest stored rate so the scenario math
+    // matches every other FX surface. `exchange_rates` is global reference
+    // data (no user rows), so this is the one query legitimately not scoped
+    // by user_id. The engine itself still hard-falls-back to 20.0 (the
+    // USD_MXN_ROW_RATE_SQL constant) if the table is empty.
+    if payload.mx_scenario == Some(true)
+        && !payload
+            .usd_mxn_rate
+            .is_some_and(|r| r.is_finite() && r > 0.0)
+    {
+        payload.usd_mxn_rate = sqlx::query_scalar::<_, f64>(
+            "SELECT rate::float8 FROM exchange_rates
+              WHERE base_currency = 'USD' AND target_currency = 'MXN' AND rate > 0
+              ORDER BY recorded_at DESC LIMIT 1",
+        )
+        .fetch_optional(&state.db)
+        .await
+        .map_err(internal)?;
+    }
+    Ok(Json(projections::calculate_projection(&payload)))
 }
 
 /// Best-effort projection inputs derived from the user's tracked cash flow.

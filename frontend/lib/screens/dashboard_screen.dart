@@ -5371,6 +5371,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         currentNetWorth: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
         conversionFactor: conversionFactor,
         currencyFormat: currencyFormat,
+        // Raw nullable rate (NOT the ?? 1.0 display fallback): the Mexico
+        // scenario must never mistake "FX not loaded yet" for a 1:1 peso.
+        usdMxnRate: (_fxRate?['rate'] as num?)?.toDouble(),
       ),
       scrollable: false,
     );

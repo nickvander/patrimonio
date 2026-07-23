@@ -11307,6 +11307,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Create rule'**
   String get recCreateRule;
+
+  /// No description provided for @projMxToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Retire in Mexico'**
+  String get projMxToggle;
+
+  /// No description provided for @projMxToggleOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Retirement spending is split into a USD portion and an MXN portion, with a long-run FX drift assumption'**
+  String get projMxToggleOn;
+
+  /// No description provided for @projMxToggleOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off — retirement spending is a single figure in dollars'**
+  String get projMxToggleOff;
+
+  /// No description provided for @projMxUsdPortion.
+  ///
+  /// In en, this message translates to:
+  /// **'U.S. spending (USD/yr)'**
+  String get projMxUsdPortion;
+
+  /// No description provided for @projMxHelpUsdPortion.
+  ///
+  /// In en, this message translates to:
+  /// **'The part of your retirement spending that stays in dollars, in today\'s dollars.'**
+  String get projMxHelpUsdPortion;
+
+  /// No description provided for @projMxMxnPortion.
+  ///
+  /// In en, this message translates to:
+  /// **'Mexico spending (MXN/yr)'**
+  String get projMxMxnPortion;
+
+  /// No description provided for @projMxHelpMxnPortion.
+  ///
+  /// In en, this message translates to:
+  /// **'The part of your retirement spending in pesos, in today\'s pesos.'**
+  String get projMxHelpMxnPortion;
+
+  /// No description provided for @projMxFxDrift.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-run FX drift (USD/MXN)'**
+  String get projMxFxDrift;
+
+  /// No description provided for @projMxHelpFxDrift.
+  ///
+  /// In en, this message translates to:
+  /// **'Assumed yearly change in the USD/MXN rate beyond inflation. Positive = the peso weakens, so peso spending costs fewer dollars; 0% = purchasing power parity holds.'**
+  String get projMxHelpFxDrift;
+
+  /// No description provided for @projMxPanelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Retire in Mexico scenario'**
+  String get projMxPanelTitle;
+
+  /// No description provided for @projMxIncomeRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Retirement income (monthly)'**
+  String get projMxIncomeRow;
+
+  /// No description provided for @projMxEffectiveSpend.
+  ///
+  /// In en, this message translates to:
+  /// **'Effective annual spending'**
+  String get projMxEffectiveSpend;
+
+  /// No description provided for @projMxRateLine.
+  ///
+  /// In en, this message translates to:
+  /// **'USD/MXN {now} today → ≈{retire} at retirement'**
+  String projMxRateLine(String now, String retire);
+
+  /// No description provided for @projMxDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'The peso portion is converted at the projected rate at retirement and the model still runs in today\'s U.S. dollars. Peso figures are shown at that same rate.'**
+  String get projMxDisclaimer;
 }
 
 class _AppLocalizationsDelegate
