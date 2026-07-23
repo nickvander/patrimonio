@@ -1,7 +1,46 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-17 (manual sync made fire-and-forget + poll)
+> **Last updated:** 2026-07-23 (multi-agent UX sweep: 5 fixes + 6 features shipped)
 > **Branch:** `main`.
+
+## 2026-07-23 — Full-app UX/bug sweep, five fixes, six new features
+
+A six-critic walkthrough of the live app (desktop + mobile, en + es-MX)
+produced 52 findings; a PM pass approved 5 fixes, all implemented, QA-verified
+against the live UI, pushed (`309440f`…`68ad1e0`), and deployed to thelab:
+
+* **Sync 415 on web** — `trigger_sync` takes raw `Bytes`; empty body of any
+  content-type = sync-all, malformed JSON = 400.
+* **Loan agreement double-counted interest** in PAID/REMAINING (borrower-facing).
+* **Manual transactions** no longer claim Plaid provenance or re-case user text
+  (`source` now serialized per row).
+* **Chart axes**: new `compactMoney()` + TextPainter-measured
+  `compactMoneyAxisWidth()` kill the bare "$" on MXN axes and tick clipping.
+* **Bonds classification**: balance-only `account_type='bonds'` accounts (CETES)
+  count as Bonds in allocation; silent 20.0 FX fallback removed.
+
+Six PM-proposed features then shipped the same day (`2582ddf`…`161511d`), each
+QA-verified live incl. es-MX; three additive migrations (fx alerts +
+`user_notifications`, recurring rules, notifications-center extensions):
+
+* **FX center** behind the USD/MXN pill — sparkline (30/90d), visible
+  freshness, converter, force-refresh, threshold alerts → `user_notifications`.
+* **Staleness reminders** for import-only institutions — "as of" chips,
+  dashboard banner, threshold setting, notification rows (no schema change).
+* **Recurring transactions (expected-only MVP)** — rules table + management UI,
+  expected overlay in cash flow; no auto-posting.
+* **Retire-in-Mexico projections** — USD/MXN expense split + FX drift scenario
+  over the existing Monte Carlo engine.
+* **Tax export pack** — FBAR worksheet, 8949 + Schedule-B CSVs, MX annual
+  summary from existing computations.
+* **Notifications center** — bell is a real inbox (read state, deep links,
+  ingests fx/staleness/loan-due/sync-error sources).
+
+Deployed to thelab (migrations clean); APKs cut at `68ad1e0` and `161511d`.
+Deferred/rejected findings + 17-item quick-win backlog: see the session's PM
+report (workflow `wf_fee55e5b-c94`) and `work/FUTURE.md`. Backlog highlights:
+sparse-window category averages, manual-tx editing, FBAR country-vs-currency
+heuristic, harvest cross-bucket netting, MX tax parity (proposal #1, not built).
 
 ## 2026-07-17 — Manual sync no longer blocks the request (DEC-021)
 
