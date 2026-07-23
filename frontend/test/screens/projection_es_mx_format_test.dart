@@ -69,12 +69,14 @@ void main() {
         w is Text && w.data != null && w.data!.contains('1.000.000'));
     expect(spainStyle, findsNothing);
 
-    // Y-axis ticks carry the currency symbol in es too — es_MX compact
-    // currency renders as e.g. "1.5 M$" (suffix symbol, period decimal).
+    // Y-axis ticks carry the currency in es too — under es the host's
+    // injected format resolves to MXN, and the house compactMoney renders
+    // the "MXN " prefix (never intl's bare local "$", which read as USD)
+    // with es_MX compact magnitudes ("MXN 1.5 M").
     final tick = find.byWidgetPredicate((w) =>
         w is Text &&
         w.data != null &&
-        RegExp(r'^[\d.,]+\s?[kM]\$$').hasMatch(normSpace(w.data!)));
+        RegExp(r'^MXN [\d.,]+\s?[kKM]$').hasMatch(normSpace(w.data!)));
     expect(tick, findsWidgets);
 
     // The milestone tile title is the unified "Número FI" (was "Número IF").

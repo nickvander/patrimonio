@@ -280,12 +280,14 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
       );
     }
 
+    final double maxY = maxTotal <= 0 ? 1 : maxTotal * 1.15;
+
     // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
     // BarChart's built-in handling kept it pinned on mobile web.
     return TransientTooltipBarChart(
       data: BarChartData(
         alignment: BarChartAlignment.spaceAround,
-        maxY: maxTotal <= 0 ? 1 : maxTotal * 1.15,
+        maxY: maxY,
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
@@ -301,13 +303,25 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 44,
+              // Fit the box to the widest possible tick — a fixed 44 passed
+              // only while MXN ticks stayed short (MXN 20–80); K-scale MXN
+              // values would clip like the trends chart's did.
+              reservedSize: compactMoneyAxisWidth(
+                0,
+                maxY,
+                widget.currencyFormat.currencyName ?? 'USD',
+              ),
               getTitlesWidget: (value, meta) {
                 if (value <= meta.min || value >= meta.max) {
                   return const SizedBox.shrink();
                 }
                 return Text(
-                  NumberFormat.compact().format(value),
+                  // House compact money ticks — a bare compact() integer
+                  // carried no currency at all (see compactMoney).
+                  compactMoney(
+                    value,
+                    widget.currencyFormat.currencyName ?? 'USD',
+                  ),
                   style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },

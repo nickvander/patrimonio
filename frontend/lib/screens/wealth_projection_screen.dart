@@ -2180,9 +2180,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               padding: const EdgeInsets.only(right: 6, bottom: 2),
               style: TextStyle(color: goalColor, fontSize: 10),
               labelResolver: (_) => l.projGoalOffChart(
-                NumberFormat.compactSimpleCurrency(
-                  name: widget.currencyFormat.currencyName,
-                ).format(goalBase),
+                // House compact money — compactSimpleCurrency shows a bare
+                // "$" for MXN (see compactMoney).
+                compactMoney(
+                  goalBase,
+                  widget.currencyFormat.currencyName ?? 'USD',
+                ),
               ),
             ),
           ),
@@ -2305,10 +2308,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 }
                 // F6: compact *currency* ticks (skill §5) — a bare "1.5M"
                 // carried no currency and used Spain-style separators in es.
+                // House compact ticks — compactSimpleCurrency shows a bare
+                // "$" for MXN (see compactMoney).
                 return Text(
-                  NumberFormat.compactSimpleCurrency(
-                    name: widget.currencyFormat.currencyName,
-                  ).format(value),
+                  compactMoney(
+                    value,
+                    widget.currencyFormat.currencyName ?? 'USD',
+                  ),
                   style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },

@@ -264,7 +264,16 @@ class CashFlowTrendsChart extends StatelessWidget {
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 48,
+                        // Fit the box to the widest possible tick — a fixed
+                        // 48 clipped MXN K-scale ticks mid-number ("MXN 2.61K"
+                        // read as "MXN 2."). Ticks render
+                        // value * conversionFactor, so the width is computed
+                        // on the converted extent.
+                        reservedSize: compactMoneyAxisWidth(
+                          0,
+                          maxY * conversionFactor,
+                          currencyFormat.currencyName ?? 'USD',
+                        ),
                         getTitlesWidget: (value, meta) {
                           // Skip zero (visual baseline) and any tick that
                           // sits within 8% of maxY — those get squished
@@ -276,9 +285,13 @@ class CashFlowTrendsChart extends StatelessWidget {
                           return SideTitleWidget(
                             meta: meta,
                             child: Text(
-                              NumberFormat.compactSimpleCurrency(
-                                name: currencyFormat.currencyName,
-                              ).format(value * conversionFactor),
+                              // House compact ticks — compactSimpleCurrency
+                              // shows a bare "$" for MXN and stray decimals
+                              // on some magnitudes (see compactMoney).
+                              compactMoney(
+                                value * conversionFactor,
+                                currencyFormat.currencyName ?? 'USD',
+                              ),
                               style: TextStyle(
                                 fontSize: 10,
                                 color: context.textSubtle,

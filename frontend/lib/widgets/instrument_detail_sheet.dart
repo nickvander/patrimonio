@@ -705,7 +705,6 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         spanDays > 130 ? DateFormat('MMM yy') : DateFormat('MMM d');
     final xInterval = dayOffsetTickInterval(spanDays);
 
-    final compactAxis = NumberFormat.compactSimpleCurrency(name: currency);
 
     // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
     // LineChart's built-in handling kept it pinned on mobile web. The inline
@@ -756,7 +755,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 46,
+              reservedSize: compactMoneyAxisWidth(minY, maxY, currency),
               interval: yInterval,
               getTitlesWidget: (value, meta) {
                 // Skip labels that crowd the top/bottom edge — same guard
@@ -766,7 +765,9 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
                   return const SizedBox.shrink();
                 }
                 return Text(
-                  compactAxis.format(value),
+                  // House compact ticks — compactSimpleCurrency shows a bare
+                  // "$" for MXN (see compactMoney).
+                  compactMoney(value, currency),
                   style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },

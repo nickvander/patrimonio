@@ -1059,13 +1059,19 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   return const SizedBox();
                 }
                 return Text(
-                  NumberFormat.compactSimpleCurrency(
-                    name: currencyFormat.currencyName,
-                  ).format(value),
+                  // House compact ticks — compactSimpleCurrency shows a bare
+                  // "$" for MXN (see compactMoney).
+                  compactMoney(value, currencyFormat.currencyName ?? 'USD'),
                   style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },
-              reservedSize: 50,
+              // Fit the box to the widest possible tick — a fixed 50 wrapped
+              // "MXN 6.75M"'s final "M" onto a second line in MXN mode.
+              reservedSize: compactMoneyAxisWidth(
+                minY,
+                maxY,
+                currencyFormat.currencyName ?? 'USD',
+              ),
             ),
           ),
         ),

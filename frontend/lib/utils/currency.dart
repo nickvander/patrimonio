@@ -1,3 +1,9 @@
+import 'dart:math' as math;
+// Aliased: intl exports its own (bidi) TextDirection that would otherwise
+// shadow the dart:ui one TextPainter needs.
+import 'dart:ui' as ui;
+
+import 'package:flutter/painting.dart';
 import 'package:intl/intl.dart';
 
 double convertCurrency(
@@ -48,6 +54,113 @@ NumberFormat moneyFormat(String currency) {
 
 String formatCurrencyAmount(double amount, String currency) {
   return moneyFormat(currency).format(amount);
+}
+
+/// Compact money for chart axis ticks: `$1.53M`, `MXN 6.74M`.
+///
+/// Never build axis ticks with `NumberFormat.compactSimpleCurrency`: intl's
+/// simple-symbol table maps MXN to its *local* symbol `$`, so MXN axes are
+/// indistinguishable from USD ones, and its sub-1000 output keeps currency
+/// decimals on some magnitudes only (`$50.00` next to `$150` on one axis).
+/// `compactCurrency` is no better — in es it renders the symbol as a suffix
+/// (`6.74 MMXN`). This helper pairs the house [currencySymbol] glyph with a
+/// locale-aware `NumberFormat.compact()` magnitude (no stray decimals), puts
+/// the sign before the symbol like [moneyFormat] (`-$1.53M`), and uses
+/// no-break spaces so a tick never wraps inside fl_chart's fixed
+/// `reservedSize` title box.
+String compactMoney(num value, String currency) {
+  final sign = value < 0 ? '-' : '';
+  final magnitude = NumberFormat.compact().format(value.abs());
+  return '$sign${currencySymbol(currency)}$magnitude'
+      .replaceAll(' ', '\u00A0');
+}
+
+/// Per-(locale, currency, range, font) memo for [compactMoneyAxisWidth] so
+/// chart rebuilds (hover repaints every interaction frame) skip the
+/// TextPainter layouts. The key space is bounded by the handful of live
+/// charts; cleared wholesale in the unlikely event it grows past the cap.
+final Map<String, double> _axisWidthCache = {};
+const int _axisWidthCacheCap = 64;
+
+/// Breathing room added to the widest measured tick: the visual gap between
+/// label and plot area, plus slack for minor metric drift between the
+/// measuring TextPainter and the composed chart text.
+const double _axisTickPadding = 12;
+
+/// fl_chart `reservedSize` for a money y-axis whose ticks come from
+/// [compactMoney]: wide enough for the widest tick the axis can produce, in
+/// the current locale and currency, without hardcoding a width that wastes
+/// space in USD mode yet wraps or clips under the wider "MXN " prefix
+/// ("MXN 6.75M" used to wrap its final "M"; "MXN 2.61K" clipped to "MXN 2." \u2014
+/// a 10x misread).
+///
+/// [minValue]/[maxValue] are the axis extent in the DISPLAY currency \u2014 apply
+/// any `conversionFactor` first, exactly as the tick builder does. The actual
+/// tick positions don't need to be known (fl_chart may auto-pick intervals):
+/// `NumberFormat.compact()` emits at most three significant digits, so
+/// measuring the widest-digit candidate at every order of magnitude in the
+/// range (plus the endpoints) bounds every tick fl_chart can place.
+double compactMoneyAxisWidth(
+  double minValue,
+  double maxValue,
+  String currency, {
+  double fontSize = 10,
+}) {
+  final key =
+      '${Intl.getCurrentLocale()}|$currency|$minValue|$maxValue|$fontSize';
+  final cached = _axisWidthCache[key];
+  if (cached != null) return cached;
+  if (_axisWidthCache.length >= _axisWidthCacheCap) _axisWidthCache.clear();
+
+  double widest = 0;
+  for (final value in _axisWidthCandidates(minValue, maxValue)) {
+    widest =
+        math.max(widest, _tickTextWidth(compactMoney(value, currency), fontSize));
+  }
+  return _axisWidthCache[key] = (widest + _axisTickPadding).ceilToDouble();
+}
+
+/// Worst-case tick values for an axis range: 8.88 scaled through every decade
+/// up to each endpoint's magnitude \u2014 "8" is the widest digit in most faces,
+/// and three significant digits is `compact()`'s ceiling (fl_chart's
+/// auto-intervals really do land on ticks like "MXN 2.61K", not round
+/// numbers). The negative side is negated so the sign's width is measured
+/// too, and the endpoints themselves are always included.
+List<num> _axisWidthCandidates(double minValue, double maxValue) {
+  final candidates = <num>[];
+  void addDecades(double limit, double sign) {
+    for (double v = 8.88; v <= limit; v *= 10) {
+      candidates.add(sign * v);
+    }
+  }
+
+  if (maxValue > 0) {
+    addDecades(maxValue, 1);
+    candidates.add(maxValue);
+  }
+  if (minValue < 0) {
+    addDecades(-minValue, -1);
+    candidates.add(minValue);
+  }
+  if (candidates.isEmpty) candidates.add(0);
+  return candidates;
+}
+
+/// Laid-out width of one tick label in the axis label style. Inter is named
+/// explicitly because chart ticks inherit the UI family through
+/// `DefaultTextStyle`, which a bare TextPainter doesn't see.
+double _tickTextWidth(String text, double fontSize) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: TextStyle(fontSize: fontSize, fontFamily: 'Inter'),
+    ),
+    textDirection: ui.TextDirection.ltr,
+    maxLines: 1,
+  )..layout();
+  final width = painter.size.width;
+  painter.dispose();
+  return width;
 }
 
 /// Magnitude at/above which DISPLAY money drops the cents: "$385,784" rather

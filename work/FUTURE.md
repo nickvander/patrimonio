@@ -19,16 +19,6 @@
   device-local today (preferences storage); syncing them across devices
   needs a backend endpoint (natural home: an `app_settings` key, same
   pattern as `projection_assumptions`).
-* **Net-worth chart y-axis shows "$" for MXN (pre-existing,
-  user-visible).** The axis labels are built with
-  `NumberFormat.compactSimpleCurrency(name: currencyName)`, and intl's
-  simple-symbol table maps MXN to the *local* symbol "$" — not the house
-  "MX$" from `utils/currency.dart`'s `currencySymbol()` — so in MXN
-  display mode compact labels read as USD. Same pattern in
-  `net_worth_card.dart`, `components/trends_chart.dart`,
-  `wealth_projection_screen.dart`, `instrument_detail_sheet.dart`; fix
-  once with a shared compact-axis helper that goes through the house
-  symbol.
 * **Fold the Settings tab's inline auto-archived-accounts card into the
   Hidden-items row.** The collapsible "Auto-archived accounts" section
   still renders inline in `dashboard_screen.dart`; HiddenItemsScreen is
