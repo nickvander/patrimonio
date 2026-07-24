@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/passkeys.dart';
 import '../utils/theme_colors.dart';
+import '../widgets/recovery_codes_card.dart';
 import '../widgets/recovery_codes_dialog.dart';
 
 /// Account security: change password, manage 2FA, regenerate recovery
@@ -488,48 +489,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     ),
                     const SizedBox(height: 16),
                     _section(l.secRecoveryCodesSection),
-                    if ((_unusedRecoveryCodes ?? 99) < 3)
-                      Card(
-                        color: context.warning.withValues(alpha: 0.12),
-                        shape: RoundedRectangleBorder(
-                          side: BorderSide(
-                            color: context.warning.withValues(alpha: 0.6),
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.warning_amber_rounded,
-                            color: context.warning,
-                          ),
-                          title: Text(
-                            (_unusedRecoveryCodes ?? 0) == 0
-                                ? l.secNoCodesLeft
-                                : l.secFewCodesLeft(_unusedRecoveryCodes ?? 0),
-                            style: TextStyle(
-                              color: context.warning,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Text(l.secLowCodesWarningBody),
-                          trailing: FilledButton(
-                            onPressed: _regenerateRecoveryCodes,
-                            child: Text(l.secRegenerate),
-                          ),
-                        ),
-                      )
-                    else
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.vpn_key_outlined),
-                          title: Text(l.secUnusedCodes(_unusedRecoveryCodes ?? 0)),
-                          subtitle: Text(l.secUnusedCodesSubtitle),
-                          trailing: TextButton(
-                            onPressed: _regenerateRecoveryCodes,
-                            child: Text(l.secRegenerate),
-                          ),
-                        ),
-                      ),
+                    // The low/no-codes lockout warning is gated on 2FA
+                    // being enabled — see RecoveryCodesCard.
+                    RecoveryCodesCard(
+                      totpEnabled: _user?.totpEnabled ?? false,
+                      unusedCodes: _unusedRecoveryCodes,
+                      onRegenerate: _regenerateRecoveryCodes,
+                    ),
                     const SizedBox(height: 16),
                     _buildPasskeysSection(),
                     const SizedBox(height: 16),
