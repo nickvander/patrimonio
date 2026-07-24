@@ -632,5 +632,62 @@ void main() {
 
       expect(find.textContaining('≈'), findsNothing);
     });
+
+    testWidgets(
+        'in-session USD→MXN reporting swap re-converts the month-header '
+        'nets (memo invalidates on targetCurrency)', (tester) async {
+      // Regression: _ensureMonthNets memoized on (tx identity, fx identity,
+      // usdMxnRate) but NOT targetCurrency, so swapping the reporting
+      // currency in the app bar (same tx list instance, same rate) kept the
+      // cached USD nets and merely relabeled them MXN — headers and the
+      // rows' ≈ MXN lines visibly disagreed until a full reload.
+      _setViewSize(tester, const Size(1200, 900));
+      final now = DateTime.now();
+      final month = DateTime(now.year, now.month - 2, 1);
+      // Same list instance across both pumps — the swap changes ONLY the
+      // reporting currency, exactly like the app-bar toggle.
+      final txs = [
+        {
+          'id': 'm1',
+          'date': DateFormat('yyyy-MM-dd')
+              .format(DateTime(month.year, month.month, 15)),
+          'amount': 100.0,
+          'currency': 'USD',
+          'description': 'TX m1',
+          'user_description': 'Row m1',
+          'category': 'FOOD_AND_DRINK',
+          'account_name': 'Checking',
+        },
+        {
+          'id': 'm2',
+          'date': DateFormat('yyyy-MM-dd')
+              .format(DateTime(month.year, month.month, 10)),
+          'amount': -40.0,
+          'currency': 'USD',
+          'description': 'TX m2',
+          'user_description': 'Row m2',
+          'category': 'FOOD_AND_DRINK',
+          'account_name': 'Checking',
+        },
+      ];
+
+      // USD mode first: +100 − 40 → +$60.00 net (primes the memo).
+      await tester.pumpWidget(_unboundedHost(_tab(
+        txs,
+        currencyFormat: NumberFormat.currency(symbol: r'$'),
+        targetCurrency: 'USD',
+        usdMxnRate: 20.0,
+      )));
+      await tester.pump();
+      expect(find.text('+\$60.00 net'), findsOneWidget);
+
+      // Swap to MXN reporting — same State, same tx list identity, same
+      // rate. The header must show the CONVERTED net (60 × 20 = 1,200),
+      // not the stale USD figure relabeled MX$.
+      await tester.pumpWidget(_unboundedHost(mxnTab(txs)));
+      await tester.pump();
+      expect(find.text(r'+MX$1,200.00 net'), findsOneWidget);
+      expect(find.text(r'+MX$60.00 net'), findsNothing);
+    });
   });
 }

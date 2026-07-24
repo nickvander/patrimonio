@@ -2613,12 +2613,16 @@ class TransactionsTabState extends State<TransactionsTab> {
   // filter, exactly what the user sees under the landmark. FX-transfer
   // legs are skipped: money moving between the user's own pockets is
   // neither income nor spending (same rule as the rows' neutral ⇄
-  // treatment). Memoized on (list identity, fx identity, usdMxnRate),
-  // mirroring _ensureDescIndex / _ensureFxLinkIndex.
+  // treatment). Memoized on (list identity, fx identity, usdMxnRate,
+  // targetCurrency), mirroring _ensureDescIndex / _ensureFxLinkIndex.
+  // targetCurrency is part of the key so the in-session reporting-currency
+  // swap invalidates the cached nets (they'd otherwise stay in the old
+  // currency, merely relabeled).
   Map<String, double>? _monthNets;
   int _monthNetsTxIdentity = 0;
   int _monthNetsFxIdentity = 0;
   double _monthNetsRate = -1;
+  String _monthNetsCurrency = '';
   // Oldest (last) loaded calendar month — when the parent says more
   // pages exist, that month's subtotal is honestly flagged "(partial)".
   String? _monthNetsOldestKey;
@@ -2629,7 +2633,8 @@ class TransactionsTabState extends State<TransactionsTab> {
     if (_monthNets != null &&
         _monthNetsTxIdentity == identity &&
         _monthNetsFxIdentity == fxIdentity &&
-        _monthNetsRate == widget.usdMxnRate) {
+        _monthNetsRate == widget.usdMxnRate &&
+        _monthNetsCurrency == widget.targetCurrency) {
       return _monthNets!;
     }
     final fxIndex = _ensureFxLinkIndex();
@@ -2662,6 +2667,7 @@ class TransactionsTabState extends State<TransactionsTab> {
     _monthNetsTxIdentity = identity;
     _monthNetsFxIdentity = fxIdentity;
     _monthNetsRate = widget.usdMxnRate;
+    _monthNetsCurrency = widget.targetCurrency;
     _monthNetsOldestKey = oldest;
     return next;
   }
