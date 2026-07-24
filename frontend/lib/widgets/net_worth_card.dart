@@ -8,6 +8,7 @@ import '../services/preferences.dart';
 import '../theme/typography.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
+import '../utils/net_worth_delta.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
@@ -353,7 +354,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
         // user scrub the chart. Computed from history; hidden when we
         // don't have a comparable point >= 7 days back.
         Builder(builder: (context) {
-          final deltas = _computeMomYoyDeltas(history);
+          final deltas = computeMomYoyDeltas(history);
           final chips = <Widget>[
             if (deltas.mom != null)
               _DeltaChip(
@@ -375,7 +376,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           // Fall back to the legacy 30d/7d chip when we don't yet have a
           // month of history (keeps the early-onboarding read useful).
           if (chips.isEmpty) {
-            final delta = _computeDelta(history);
+            final delta = computeNetWorthDelta(history);
             if (delta == null) return const SizedBox.shrink();
             return Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -495,14 +496,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// each institution latest-vs-baseline and shows the top 3 by absolute
   /// change. Hidden when there's no plausible MoM delta (which already covers
   /// < 2 snapshots, no comparable point, negative/onboarding-inflated baselines
-  /// via `_computeMomYoyDeltas` + `_plausiblePct`) or no `by_institution` data.
+  /// via `computeMomYoyDeltas`) or no `by_institution` data.
   Widget _buildMoversSection() {
-    final mom = _computeMomYoyDeltas(history).mom;
+    final mom = computeMomYoyDeltas(history).mom;
     if (mom == null) return const SizedBox.shrink();
     final latestDate = _latestSnapshotDate(history);
     if (latestDate == null) return const SizedBox.shrink();
     // Same target the MoM chip diffs against; the movers helper snaps to the
-    // nearest snapshot within +/-5 days, matching `_computeMomYoyDeltas`.
+    // nearest snapshot within +/-5 days, matching `computeMomYoyDeltas`.
     final baselineDate =
         DateTime(latestDate.year, latestDate.month - 1, latestDate.day);
     final movers = topInstitutionMovers(history, baselineDate);
@@ -1137,125 +1138,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
   }
 }
 
-/// Delta from the latest snapshot back to a reference snapshot — used to
-/// drive the "↑ +$X vs 30d ago" chip below the hero number. Returns null
-/// when history is too short or contains no comparable point.
-_NetWorthDelta? _computeDelta(List<dynamic> history) {
-  if (history.length < 2) return null;
-  // Parse dates once. Skip points that don't parse or lack net_worth.
-  final points = <_DeltaPoint>[];
-  for (final raw in history) {
-    final m = raw as Map<String, dynamic>;
-    final ds = m['date']?.toString();
-    if (ds == null) continue;
-    final dt = DateTime.tryParse(ds);
-    if (dt == null) continue;
-    final nw = (m['net_worth'] as num?)?.toDouble();
-    if (nw == null) continue;
-    points.add(_DeltaPoint(date: dt, value: nw));
-  }
-  if (points.length < 2) return null;
-  points.sort((a, b) => a.date.compareTo(b.date));
-  final latest = points.last;
-
-  // Find the most recent snapshot within each window. Prefer 30d, fall
-  // back to 7d if we don't have ~a month of history yet. The window
-  // tolerance is +/- 5 days so a missing snapshot doesn't kill the chip.
-  _DeltaPoint? pick(int targetDaysAgo, int tolerance) {
-    final target = latest.date.subtract(Duration(days: targetDaysAgo));
-    _DeltaPoint? best;
-    int? bestDist;
-    for (final p in points) {
-      if (p == latest) continue;
-      final dist = (p.date.difference(target)).inDays.abs();
-      if (dist <= tolerance && (bestDist == null || dist < bestDist)) {
-        best = p;
-        bestDist = dist;
-      }
-    }
-    return best;
-  }
-
-  for (final (days, label) in const [
-    (30, '30d'),
-    (7, '7d'),
-  ]) {
-    final ref = pick(days, 5);
-    if (ref != null && ref.value != 0) {
-      final amount = latest.value - ref.value;
-      if (ref.value < 0) {
-        // Negative net-worth baseline: a percentage is meaningless here
-        // (improving from -50k to -40k isn't "+20%"), but the dollar delta is
-        // real — debt-payoff/early-onboarding users deserve to see it. Show
-        // the amount, suppress only the %.
-        return _NetWorthDelta(
-            amount: amount, percentage: null, windowLabel: label);
-      }
-      final pct = _plausiblePct(amount, ref.value, latest.value);
-      // Implausible baseline (onboarding — net worth >3x'd as accounts were
-      // added): hide the whole chip, not just the %. A "+$1.5M MoM" is as
-      // misleading as "+3905%". Try the next (shorter) window instead.
-      if (pct == null) continue;
-      return _NetWorthDelta(amount: amount, percentage: pct, windowLabel: label);
-    }
-  }
-  return null;
-}
-
-/// Month-over-month and year-over-year deltas vs the same calendar date one
-/// month / one year before the latest snapshot. Computed over the FULL history
-/// (independent of the chart's range chip) with a +/-5 day tolerance so a
-/// missing snapshot doesn't kill the figure. Either may be null when there
-/// isn't a comparable point that far back.
-({_NetWorthDelta? mom, _NetWorthDelta? yoy}) _computeMomYoyDeltas(
-    List<dynamic> history) {
-  final points = <_DeltaPoint>[];
-  for (final raw in history) {
-    final m = raw as Map<String, dynamic>;
-    final ds = m['date']?.toString();
-    if (ds == null) continue;
-    final dt = DateTime.tryParse(ds);
-    if (dt == null) continue;
-    final nw = (m['net_worth'] as num?)?.toDouble();
-    if (nw == null) continue;
-    points.add(_DeltaPoint(date: dt, value: nw));
-  }
-  if (points.length < 2) return (mom: null, yoy: null);
-  points.sort((a, b) => a.date.compareTo(b.date));
-  final latest = points.last;
-
-  _NetWorthDelta? deltaTo(DateTime targetDate, String label) {
-    _DeltaPoint? best;
-    int? bestDist;
-    for (final p in points) {
-      if (identical(p, latest)) continue;
-      final dist = p.date.difference(targetDate).inDays.abs();
-      if (dist <= 5 && (bestDist == null || dist < bestDist)) {
-        best = p;
-        bestDist = dist;
-      }
-    }
-    if (best == null || best.value == 0) return null;
-    final amount = latest.value - best.value;
-    if (best.value < 0) {
-      // Negative baseline: show the dollar delta, suppress the meaningless %.
-      return _NetWorthDelta(amount: amount, percentage: null, windowLabel: label);
-    }
-    final pct = _plausiblePct(amount, best.value, latest.value);
-    // Onboarding-inflated baseline → hide the chip entirely (no "+$1.5M MoM").
-    if (pct == null) return null;
-    return _NetWorthDelta(amount: amount, percentage: pct, windowLabel: label);
-  }
-
-  final d = latest.date;
-  return (
-    mom: deltaTo(DateTime(d.year, d.month - 1, d.day), 'MoM'),
-    yoy: deltaTo(DateTime(d.year - 1, d.month, d.day), 'YoY'),
-  );
-}
-
 /// Latest snapshot date in `history`, or null when none parse. Used to anchor
-/// the movers baseline (one month back) the same way `_computeMomYoyDeltas`
+/// the movers baseline (one month back) the same way `computeMomYoyDeltas`
 /// anchors the MoM chip.
 DateTime? _latestSnapshotDate(List<dynamic> history) {
   DateTime? latest;
@@ -1272,7 +1156,7 @@ DateTime? _latestSnapshotDate(List<dynamic> history) {
 
 /// Per-institution net-worth movers between the baseline snapshot (the one
 /// nearest [baselineDate] within +/-5 days — the same selection
-/// `_computeMomYoyDeltas` uses) and the latest snapshot. Each institution's
+/// `computeMomYoyDeltas` uses) and the latest snapshot. Each institution's
 /// `by_institution` value is diffed latest-vs-baseline, sorted by absolute
 /// change (largest first), and the top 3 are returned. Deltas are in the
 /// history's base units (the caller scales to reporting currency).
@@ -1297,7 +1181,7 @@ List<({String name, double delta})> topInstitutionMovers(
   points.sort((a, b) => a.date.compareTo(b.date));
   final latest = points.last;
 
-  // Nearest baseline point within +/-5 days (matches _computeMomYoyDeltas).
+  // Nearest baseline point within +/-5 days (matches computeMomYoyDeltas).
   // Records are value types, so skip the latest by index rather than identity.
   ({DateTime date, Map<String, dynamic> byInst})? baseline;
   int? bestDist;
@@ -1325,36 +1209,6 @@ List<({String name, double delta})> topInstitutionMovers(
   }
   movers.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
   return movers.take(3).toList();
-}
-
-class _DeltaPoint {
-  final DateTime date;
-  final double value;
-  _DeltaPoint({required this.date, required this.value});
-}
-
-class _NetWorthDelta {
-  final double amount;
-  /// Null when the baseline is unreliable (onboarding inflation — net worth
-  /// more than ~tripled over the window because accounts were still being
-  /// added). The dollar amount is still shown; the percentage is suppressed
-  /// rather than reporting a meaningless "+3905%".
-  final double? percentage;
-  final String windowLabel;
-  _NetWorthDelta({
-    required this.amount,
-    required this.percentage,
-    required this.windowLabel,
-  });
-}
-
-/// Percentage from a baseline → latest, or null when the baseline is so small
-/// relative to the latest that the change is onboarding/data noise, not a real
-/// market move (net worth doesn't 3x in a month from returns).
-double? _plausiblePct(double amount, double baseline, double latest) {
-  if (baseline <= 0) return null;
-  if (latest / baseline > 3.0) return null;
-  return (amount / baseline) * 100;
 }
 
 class _DeltaChip extends StatelessWidget {

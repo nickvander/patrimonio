@@ -4981,9 +4981,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get heroDeltaSince30d => 'vs 30d ago';
-
-  @override
   String get ovByCurrency => 'By currency';
 
   @override

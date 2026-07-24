@@ -8026,12 +8026,6 @@ abstract class AppLocalizations {
   /// **'Reflects {pct} of your portfolio we can price daily'**
   String lwPerfTwrCoverage(Object pct);
 
-  /// No description provided for @heroDeltaSince30d.
-  ///
-  /// In en, this message translates to:
-  /// **'vs 30d ago'**
-  String get heroDeltaSince30d;
-
   /// No description provided for @ovByCurrency.
   ///
   /// In en, this message translates to:

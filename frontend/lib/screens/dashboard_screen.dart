@@ -28,6 +28,7 @@ import '../utils/currency.dart';
 import '../utils/import_staleness.dart';
 import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
+import '../utils/net_worth_delta.dart';
 import '../utils/percent_format.dart';
 import '../utils/supported_banks.dart';
 import '../utils/sync_progress.dart';
@@ -52,6 +53,7 @@ import '../widgets/import_staleness_banner.dart';
 import '../widgets/lending_tab.dart';
 import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/net_worth_card.dart';
+import '../widgets/net_worth_delta_badge.dart';
 import '../widgets/net_worth_goal_tile.dart';
 import '../widgets/notifications_panel.dart';
 import '../widgets/performance_card.dart';
@@ -1023,12 +1025,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Compact month-over-month change badge shown under the hero total:
-  /// an arrow, the signed change and the percent move since ~30 days ago.
-  /// Returns null (the badge is omitted) when there isn't enough history to
-  /// compute a trustworthy delta — fewer than 2 points, or no point old
-  /// enough to compare against — so a brand-new account never shows a
-  /// misleading "+0".
+  /// Compact change badge shown under the hero total: an arrow, the signed
+  /// change and the percent move, labeled with the window the comparison
+  /// anchor was ACTUALLY found in ("vs 30d ago", or "vs 7d ago" when there
+  /// isn't a month of history yet). Delegates to [computeNetWorthDelta] — the
+  /// exact tolerance-capped 30d→7d fallback the net-worth card's trend chip
+  /// uses — so the hero badge and the chart chip can never disagree about the
+  /// anchor or claim a window the data doesn't cover. Returns null (the badge
+  /// is omitted) when there isn't enough history to compute a trustworthy
+  /// delta, so a brand-new account never shows a misleading "+0".
   ///
   /// History [net_worth] is stored in USD; [conversionFactor] reports it in
   /// the active currency. The delta is computed in USD then converted, so the
@@ -1037,80 +1042,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required NumberFormat currencyFormat,
     required double conversionFactor,
   }) {
-    final l = AppLocalizations.of(context);
-    final history = _netWorthHistory ?? const [];
-    if (history.length < 2) return null;
-
-    // Latest point is the canonical "now" — the same series the trend chart
-    // draws, so the badge agrees with the line's right edge.
-    final latest = history.last;
-    if (latest is! Map) return null;
-    final latestNet = (latest['net_worth'] as num?)?.toDouble();
-    final latestDateStr = (latest['date'] ?? '').toString();
-    final latestDate = DateTime.tryParse(latestDateStr);
-    if (latestNet == null || latestDate == null) return null;
-
-    // Find the point closest to ~30 days before the latest — the comparison
-    // anchor. Scanning backwards and keeping the nearest-to-target handles
-    // irregular snapshot spacing (gaps, multiple-per-day) gracefully.
-    final target = latestDate.subtract(const Duration(days: 30));
-    Map? anchor;
-    int? bestDistance;
-    for (var i = 0; i < history.length - 1; i++) {
-      final p = history[i];
-      if (p is! Map) continue;
-      final d = DateTime.tryParse((p['date'] ?? '').toString());
-      final n = (p['net_worth'] as num?)?.toDouble();
-      if (d == null || n == null) continue;
-      // Only points strictly older than the latest are valid comparisons.
-      if (!d.isBefore(latestDate)) continue;
-      final dist = (d.difference(target).inDays).abs();
-      if (bestDistance == null || dist < bestDistance) {
-        bestDistance = dist;
-        anchor = p;
-      }
-    }
-    if (anchor == null) return null;
-    final anchorNet = (anchor['net_worth'] as num?)?.toDouble();
-    if (anchorNet == null) return null;
-
-    final deltaUsd = latestNet - anchorNet;
-    final delta = deltaUsd * conversionFactor;
-    final up = deltaUsd >= 0;
-    final color = up ? context.positive : context.warning;
-    // Percent move relative to the anchor. Guard a zero/negative-magnitude
-    // base so we never divide by zero or print a nonsensical percent.
-    final pctLabel = anchorNet.abs() > 0
-        ? ' · ${up ? '+' : '−'}${formatPercent(context, deltaUsd.abs() / anchorNet.abs() * 100, digits: 1)}'
-        : '';
-    final sign = up ? '+' : '−';
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-            size: 14,
-            color: color,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '$sign${currencyFormat.displayMoney(delta.abs())}$pctLabel',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            l.heroDeltaSince30d,
-            style: TextStyle(fontSize: 11, color: context.textFaint),
-          ),
-        ],
-      ),
+    final delta = computeNetWorthDelta(_netWorthHistory ?? const []);
+    if (delta == null) return null;
+    return NetWorthDeltaBadge(
+      delta: delta,
+      currencyFormat: currencyFormat,
+      conversionFactor: conversionFactor,
     );
   }
 

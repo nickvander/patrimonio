@@ -5023,9 +5023,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get heroDeltaSince30d => 'vs hace 30 d';
-
-  @override
   String get ovByCurrency => 'Por moneda';
 
   @override
