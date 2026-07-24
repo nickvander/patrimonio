@@ -2205,7 +2205,8 @@
       }
     }
   },
-  "pfTopMoversByValue": "Top movers (by $)",
+  "pfMoversTodayTitle": "Top movers today (by $)",
+  "pfBestWorstAllTime": "Best & worst (all time)",
   "pfTopGainersByValue": "Top gainers",
   "pfTopLosersByValue": "Top losers",
   "pfLotCurrentValue": "Current value",

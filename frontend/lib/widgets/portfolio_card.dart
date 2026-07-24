@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/movers.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
@@ -1029,40 +1030,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
     return (top: top, gainer: gainer, loser: loser);
   }
 
-  /// Top movers ranked by absolute USD profit / loss (dollar P&L), as
-  /// opposed to [_computeMovers] which ranks by return %. A small high-%
-  /// gainer on a tiny position can dominate the % race while moving the
-  /// portfolio almost nothing; this surfaces the positions that actually
-  /// shifted the dollar total. Holdings whose `gain_loss_usd` is null
-  /// (institution reported no basis) are skipped — consistent with the
-  /// null handling in [_computeMovers]. Returns the top [count] dollar
-  /// gainers (gain_loss_usd > 0) descending and the top [count] dollar
-  /// losers (gain_loss_usd < 0) ascending.
-  ({List<Map<String, dynamic>> gainers, List<Map<String, dynamic>> losers})
-      _computeDollarMovers({int count = 3}) {
-    final withGl = <Map<String, dynamic>>[];
-    for (final h in _allHoldings) {
-      final gl = (h['gain_loss_usd'] as num?)?.toDouble();
-      if (gl == null) continue;
-      withGl.add(h as Map<String, dynamic>);
-    }
-    final sorted = List<Map<String, dynamic>>.from(withGl)
-      ..sort((a, b) {
-        final ga = (a['gain_loss_usd'] as num).toDouble();
-        final gb = (b['gain_loss_usd'] as num).toDouble();
-        return gb.compareTo(ga); // descending: biggest dollar gain first
-      });
-    final gainers = sorted
-        .where((h) => (h['gain_loss_usd'] as num).toDouble() > 0)
-        .take(count)
-        .toList();
-    // Losers: most-negative first. Reverse-iterate the descending list.
-    final losers = sorted.reversed
-        .where((h) => (h['gain_loss_usd'] as num).toDouble() < 0)
-        .take(count)
-        .toList();
-    return (gainers: gainers, losers: losers);
-  }
+  // Dollar-mover ranking (all-time `gain_loss_usd`, today
+  // `day_change_usd`) lives in utils/movers.dart (`topDollarMovers`) so
+  // the sort/skip-null semantics are unit-testable outside the widget.
 
   /// Headline facts for the overview card: holdings count and top position.
   /// The biggest gainer/loser moved to the dedicated signals strip (which
@@ -1166,13 +1136,18 @@ class _PortfolioCardState extends State<PortfolioCard> {
         ),
     ];
 
-    // Top movers by absolute dollar P&L — the positions that actually
-    // shifted the portfolio total (vs. the % race above, which a tiny
-    // position can win). Built only when at least one holding reports a
-    // basis; otherwise the section stays hidden.
-    final dollarMovers = _computeDollarMovers();
-    final hasDollarMovers =
-        dollarMovers.gainers.isNotEmpty || dollarMovers.losers.isNotEmpty;
+    // Dollar movers — the positions that actually shifted the portfolio
+    // total (vs. the % race above, which a tiny position can win). Two
+    // honest time frames: "today" ranks the day change the holdings table
+    // already carries per row; "all time" ranks cumulative dollar P&L.
+    // Each section only appears when at least one holding reports its
+    // figure (day closes present / basis reported).
+    final todayMovers = topDollarMovers(_allHoldings, field: 'day_change_usd');
+    final allTimeMovers = topDollarMovers(_allHoldings, field: 'gain_loss_usd');
+    final hasDollarMovers = todayMovers.gainers.isNotEmpty ||
+        todayMovers.losers.isNotEmpty ||
+        allTimeMovers.gainers.isNotEmpty ||
+        allTimeMovers.losers.isNotEmpty;
 
     // Nothing worth flagging (no winners/losers, well diversified, no
     // dollar movers) — render nothing rather than an empty card.
@@ -1222,7 +1197,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ],
             if (hasDollarMovers) ...[
               const SizedBox(height: 16),
-              _buildDollarMovers(dollarMovers.gainers, dollarMovers.losers),
+              _buildDollarMovers(today: todayMovers, allTime: allTimeMovers),
             ],
           ],
         ),
@@ -1230,19 +1205,30 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
-  /// "Top movers (by \$)" mini-section: each holding's signed dollar P&L,
-  /// scaled to the display currency via the conversion factor. Gainers
-  /// (green, descending) and losers (red, most-negative first) sit in two
-  /// stacked sub-lists. Empty sides are omitted.
-  Widget _buildDollarMovers(
-    List<Map<String, dynamic>> gainers,
-    List<Map<String, dynamic>> losers,
-  ) {
+  /// Dollar-movers mini-section, in two honestly-labelled time frames:
+  /// "Top movers today (by \$)" ranks the per-row day change
+  /// (`day_change_usd`) and "Best & worst (all time)" ranks cumulative
+  /// dollar P&L (`gain_loss_usd`) — the latter used to ship under a "Top
+  /// movers" title that implied intraday. Each figure is a signed USD
+  /// amount scaled to the display currency via the conversion factor.
+  /// Gainers (green, descending) and losers (red, most-negative first)
+  /// sit in two sub-lists; empty sides — and empty time frames — are
+  /// omitted.
+  Widget _buildDollarMovers({
+    required ({
+      List<Map<String, dynamic>> gainers,
+      List<Map<String, dynamic>> losers
+    }) today,
+    required ({
+      List<Map<String, dynamic>> gainers,
+      List<Map<String, dynamic>> losers
+    }) allTime,
+  }) {
     final l = AppLocalizations.of(context);
     final cf = widget.conversionFactor;
 
-    Widget moverRow(Map<String, dynamic> h, bool positive) {
-      final glUsd = (h['gain_loss_usd'] as num).toDouble();
+    Widget moverRow(Map<String, dynamic> h, bool positive, String field) {
+      final glUsd = (h[field] as num).toDouble();
       final disp = glUsd * cf;
       final color = positive ? context.positive : context.negative;
       return Padding(
@@ -1281,6 +1267,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       IconData icon,
       Color color,
       List<Map<String, dynamic>> rows,
+      String field,
     ) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1302,63 +1289,90 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ],
           ),
           const SizedBox(height: 4),
-          ...rows.map((h) => moverRow(h, color == context.positive)),
+          ...rows.map((h) => moverRow(h, color == context.positive, field)),
         ],
       );
     }
 
-    final columns = <Widget>[
-      if (gainers.isNotEmpty)
-        moverColumn(
-          l.pfTopGainersByValue,
-          Icons.trending_up,
-          context.positive,
-          gainers,
-        ),
-      if (losers.isNotEmpty)
-        moverColumn(
-          l.pfTopLosersByValue,
-          Icons.trending_down,
-          context.negative,
-          losers,
-        ),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          l.pfTopMoversByValue,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.4,
-            color: context.textSubtle,
+    // One labelled time frame: a small title, then the gainer/loser
+    // columns (side-by-side on wide, stacked on phone).
+    Widget timeFrame(
+      String title,
+      ({
+        List<Map<String, dynamic>> gainers,
+        List<Map<String, dynamic>> losers
+      }) movers,
+      String field,
+    ) {
+      final columns = <Widget>[
+        if (movers.gainers.isNotEmpty)
+          moverColumn(
+            l.pfTopGainersByValue,
+            Icons.trending_up,
+            context.positive,
+            movers.gainers,
+            field,
           ),
-        ),
-        const SizedBox(height: 10),
-        LayoutBuilder(builder: (ctx, c) {
-          // Two columns side-by-side on wide screens, stacked on phone.
-          if (c.maxWidth >= 560 && columns.length == 2) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        if (movers.losers.isNotEmpty)
+          moverColumn(
+            l.pfTopLosersByValue,
+            Icons.trending_down,
+            context.negative,
+            movers.losers,
+            field,
+          ),
+      ];
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: context.textSubtle,
+            ),
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(builder: (ctx, c) {
+            // Two columns side-by-side on wide screens, stacked on phone.
+            if (c.maxWidth >= 560 && columns.length == 2) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: columns[0]),
+                  const SizedBox(width: 12),
+                  Expanded(child: columns[1]),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: columns[0]),
-                const SizedBox(width: 12),
-                Expanded(child: columns[1]),
+                for (var i = 0; i < columns.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 12),
+                  columns[i],
+                ],
               ],
             );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < columns.length; i++) ...[
-                if (i > 0) const SizedBox(height: 12),
-                columns[i],
-              ],
-            ],
-          );
-        }),
+          }),
+        ],
+      );
+    }
+
+    final hasToday = today.gainers.isNotEmpty || today.losers.isNotEmpty;
+    final hasAllTime =
+        allTime.gainers.isNotEmpty || allTime.losers.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hasToday)
+          timeFrame(l.pfMoversTodayTitle, today, 'day_change_usd'),
+        if (hasToday && hasAllTime) const SizedBox(height: 16),
+        if (hasAllTime)
+          timeFrame(l.pfBestWorstAllTime, allTime, 'gain_loss_usd'),
       ],
     );
   }

@@ -1607,21 +1607,10 @@ class TransactionsTabState extends State<TransactionsTab> {
   /// loaded transactions list. Same source the filter dialog uses so
   /// the split-row dropdown stays in sync with what the user actually
   /// has, instead of offering a fixed taxonomy that drifts over time.
-  List<String> _distinctCategories() {
-    final set = <String>{};
-    for (final t in widget.transactions) {
-      if (t is! Map) continue;
-      final cat = prettyCategory(
-        userCategory: t['user_category']?.toString(),
-        detailed: t['category_detailed']?.toString(),
-        primary: t['category']?.toString(),
-      );
-      if (cat.isNotEmpty) set.add(cat);
-    }
-    final list = set.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return list;
-  }
+  /// Delegates to the shared util so the dashboard's Home quick-add
+  /// FAB offers the identical list when this tab isn't mounted.
+  List<String> _distinctCategories() =>
+      distinctPrettyCategories(widget.transactions);
 
   /// Open the split editor for [tx]. On save, fires
   /// `widget.onSplitTransaction` with the parent id and the children

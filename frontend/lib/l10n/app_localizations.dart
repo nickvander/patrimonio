@@ -8242,11 +8242,17 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{in 1 day} other{in {count} days}}'**
   String lendingAgingDaysUntil(int count);
 
-  /// No description provided for @pfTopMoversByValue.
+  /// No description provided for @pfMoversTodayTitle.
   ///
   /// In en, this message translates to:
-  /// **'Top movers (by \$)'**
-  String get pfTopMoversByValue;
+  /// **'Top movers today (by \$)'**
+  String get pfMoversTodayTitle;
+
+  /// No description provided for @pfBestWorstAllTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Best & worst (all time)'**
+  String get pfBestWorstAllTime;
 
   /// No description provided for @pfTopGainersByValue.
   ///

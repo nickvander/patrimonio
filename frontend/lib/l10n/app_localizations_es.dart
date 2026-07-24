@@ -5176,7 +5176,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get pfTopMoversByValue => 'Mayores movimientos (por \$)';
+  String get pfMoversTodayTitle => 'Mayores movimientos de hoy (por \$)';
+
+  @override
+  String get pfBestWorstAllTime => 'Mejores y peores (histórico)';
 
   @override
   String get pfTopGainersByValue => 'Mayores ganancias';

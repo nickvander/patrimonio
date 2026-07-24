@@ -196,3 +196,26 @@ String _sentence(String s) {
   final lower = s.toLowerCase().replaceAll('_', ' ');
   return lower[0].toUpperCase() + lower.substring(1);
 }
+
+/// Distinct prettified category labels present in [transactions], sorted
+/// case-insensitively. The single source for category suggestion lists
+/// (the Activity tab's set-category autocomplete and the Add-transaction
+/// dialog, wherever it's opened from) so suggestions reflect the
+/// categories the user actually has instead of a fixed taxonomy that
+/// drifts over time — and so the Home quick-add FAB can offer the same
+/// list without the Activity tab being mounted.
+List<String> distinctPrettyCategories(List<dynamic> transactions) {
+  final set = <String>{};
+  for (final t in transactions) {
+    if (t is! Map) continue;
+    final cat = prettyCategory(
+      userCategory: t['user_category']?.toString(),
+      detailed: t['category_detailed']?.toString(),
+      primary: t['category']?.toString(),
+    );
+    if (cat.isNotEmpty) set.add(cat);
+  }
+  final list = set.toList()
+    ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return list;
+}

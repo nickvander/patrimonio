@@ -244,19 +244,26 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                       ),
                     ),
                     const SizedBox(width: 12),
+                    // Money never ellipsizes mid-digits: mirror the
+                    // net-worth hero — FittedBox shrinks the total down
+                    // on narrow cards instead of clipping it to
+                    // "Total $1,234,5…".
                     Flexible(
-                      child: Text(
-                        l.lwAllocTotal(widget.currencyFormat
-                            .displayMoney(activeTotal * widget.conversionFactor)),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: context.textSubtle,
-                          fontWeight: FontWeight.w600,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          l.lwAllocTotal(widget.currencyFormat
+                              .displayMoney(activeTotal * widget.conversionFactor)),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: context.textSubtle,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
                         ),
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

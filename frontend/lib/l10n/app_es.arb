@@ -1707,7 +1707,8 @@
       }
     }
   },
-  "pfTopMoversByValue": "Mayores movimientos (por $)",
+  "pfMoversTodayTitle": "Mayores movimientos de hoy (por $)",
+  "pfBestWorstAllTime": "Mejores y peores (histórico)",
   "pfTopGainersByValue": "Mayores ganancias",
   "pfTopLosersByValue": "Mayores pérdidas",
   "pfLotCurrentValue": "Valor actual",

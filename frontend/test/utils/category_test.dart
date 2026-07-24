@@ -40,4 +40,22 @@ void main() {
     expect(prettyCategory(detailed: 'SOME_RARE_UNCOVERED_CODE'),
         'Some rare uncovered code');
   });
+
+  group('distinctPrettyCategories', () {
+    test('dedupes, prettifies, prefers user overrides, sorts', () {
+      final txs = [
+        {'category_detailed': 'FOOD_AND_DRINK_RESTAURANT'},
+        {'category_detailed': 'FOOD_AND_DRINK_RESTAURANT'}, // dupe
+        {'user_category': 'Zapatos'},
+        {'category': 'LOAN_PAYMENTS'},
+        'not-a-map',
+      ];
+      expect(distinctPrettyCategories(txs),
+          ['Loan payment', 'Restaurants', 'Zapatos']);
+    });
+
+    test('empty input yields no suggestions', () {
+      expect(distinctPrettyCategories(const []), isEmpty);
+    });
+  });
 }

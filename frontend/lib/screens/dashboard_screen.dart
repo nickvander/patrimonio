@@ -24,6 +24,7 @@ import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/app_locale.dart';
 import '../utils/bar_scroll.dart';
+import '../utils/category.dart';
 import '../utils/currency.dart';
 import '../utils/import_staleness.dart';
 import '../utils/lending_summary.dart'
@@ -41,6 +42,7 @@ import '../widgets/accounts_list_widget.dart';
 import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
 import '../widgets/add_recurring_rule_dialog.dart';
+import '../widgets/add_transaction_dialog.dart';
 import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/command_palette.dart';
@@ -2938,6 +2940,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _loadAllData(silent: true, forceRefresh: true);
   }
 
+  /// Quick capture from the compact-layout FAB (Home or Activity): the
+  /// exact same Add-transaction flow as the Activity tab. Prefers the
+  /// mounted tab's [TransactionsTabState.openAddDialog] (one code path,
+  /// including its account preselect) — but the IndexedStack only mounts
+  /// Activity once visited, and on a fresh session Home comes first, so
+  /// fall back to opening the shared dialog directly with the same
+  /// accounts / suggestions / refresh wiring the tab would use.
+  void _openQuickAddTransaction() {
+    final txTab = _txTabKey.currentState;
+    if (txTab != null) {
+      txTab.openAddDialog();
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (_) => AddTransactionDialog(
+        accounts: (_overview?['accounts'] as List?) ?? const [],
+        apiService: _apiService,
+        onCreated: () => _refreshAfterTransactionMutation(),
+        categorySuggestions:
+            distinctPrettyCategories(_transactions ?? const []),
+      ),
+    );
+  }
+
   /// Targeted refresh after a transaction mutation (categorize / rename /
   /// delete / split / manual add / FX-transfer link). Refetches ONLY the
   /// reads a transaction change can affect — the transaction list (which
@@ -4009,24 +4036,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // screens get a left rail (built into the body Row below).
               bottomNavigationBar:
                   (!firstRun && isCompact) ? _buildBottomBar() : null,
-              // Thumb-zone creation for the Activity tab: on compact
-              // layouts the tab's toolbar '+' is hidden (hostProvidesAddFab)
-              // and "Add transaction" moves here, docked above the bottom
-              // nav. Wide layouts keep the inline '+' and never show the
-              // FAB — both affordances key off the same isCompact signal,
-              // so no width shows both. Section lookup mirrors _buildBody's
-              // clamped indexing so a transient out-of-range _section can't
-              // throw. The tab is mounted whenever its section is selected
-              // (IndexedStack marks it visited), so currentState is
-              // non-null here; `?.` keeps any edge case a no-op.
+              // Thumb-zone quick capture on compact layouts: the Activity
+              // tab's toolbar '+' is hidden (hostProvidesAddFab) and "Add
+              // transaction" moves here, docked above the bottom nav — and
+              // the Home tab gets the same FAB so capturing a transaction
+              // doesn't require a tab switch first. Wide layouts keep the
+              // inline '+' and never show the FAB — both affordances key
+              // off the same isCompact signal, so no width shows both.
+              // Section lookup mirrors _buildBody's clamped indexing so a
+              // transient out-of-range _section can't throw. On Home the
+              // Activity tab may not be mounted yet (IndexedStack mounts
+              // visited sections only), so _openQuickAddTransaction falls
+              // back to opening the shared dialog directly.
               floatingActionButton: (!firstRun &&
                       isCompact &&
-                      _destinations[_section.clamp(0, _destinations.length - 1)]
-                              .id ==
-                          NavId.transactions)
+                      const {NavId.transactions, NavId.overview}.contains(
+                          _destinations[
+                                  _section.clamp(0, _destinations.length - 1)]
+                              .id))
                   ? FloatingActionButton(
                       tooltip: l.txAddTransaction,
-                      onPressed: () => _txTabKey.currentState?.openAddDialog(),
+                      onPressed: _openQuickAddTransaction,
                       child: const Icon(Icons.add),
                     )
                   : null,
@@ -5198,6 +5228,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // "Make recurring" — expected-only rule pre-filled from the tx.
         onMakeRecurring: _openMakeRecurring,
       ),
+      // Mobile-native pull-to-refresh, mirroring the Overview tab. The
+      // light full refetch (forceRefresh busts the ApiService response
+      // cache so the pull provably fetches, never a cached echo) — not
+      // _refreshData, whose stock-repricing pass is too heavy for an
+      // overscroll, and never runSync.
+      onRefresh: () => _loadAllData(silent: true, forceRefresh: true),
     );
 
     // Dedicated cash-flow page: monthly summary, the bar-chart of
