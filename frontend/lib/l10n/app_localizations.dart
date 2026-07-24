@@ -374,6 +374,12 @@ abstract class AppLocalizations {
   /// **'Outstanding'**
   String get lendingOutstanding;
 
+  /// Footnote under a loan card's Outstanding figure when that figure includes unpaid scheduled interest on top of the principal. {amount} is the formatted interest portion.
+  ///
+  /// In en, this message translates to:
+  /// **'incl. {amount} interest'**
+  String lendingOutstandingInclInterest(String amount);
+
   /// No description provided for @lendingTotalLent.
   ///
   /// In en, this message translates to:
@@ -8533,7 +8539,7 @@ abstract class AppLocalizations {
   /// No description provided for @lendingInterestIncomeInterestReceived.
   ///
   /// In en, this message translates to:
-  /// **'Interest received'**
+  /// **'Interest collected so far'**
   String get lendingInterestIncomeInterestReceived;
 
   /// No description provided for @lendingInterestIncomePrincipalReceived.
@@ -9011,8 +9017,14 @@ abstract class AppLocalizations {
   /// No description provided for @lendScheduleColBalance.
   ///
   /// In en, this message translates to:
-  /// **'Balance remaining'**
+  /// **'Principal balance'**
   String get lendScheduleColBalance;
+
+  /// Footnote under the amortization table (wide layouts) explaining the Principal balance column excludes interest.
+  ///
+  /// In en, this message translates to:
+  /// **'Principal balance is what\'s left of the amount lent — interest isn\'t included.'**
+  String get lendSchedulePrincipalBalanceNote;
 
   /// No description provided for @lendScheduleRowMeta.
   ///
@@ -9248,11 +9260,23 @@ abstract class AppLocalizations {
   /// **'Interest rate'**
   String get lendFieldInterestRate;
 
-  /// No description provided for @lendFieldOptional.
+  /// No description provided for @lendFieldNotes.
   ///
   /// In en, this message translates to:
-  /// **'Optional'**
-  String get lendFieldOptional;
+  /// **'Notes'**
+  String get lendFieldNotes;
+
+  /// No description provided for @lendFieldNotesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. for the car deposit'**
+  String get lendFieldNotesHint;
+
+  /// Empty-state hint inside the clearable 'Pay back by' date field. The field is optional; optionality is conveyed by the hint styling, not the word 'optional'.
+  ///
+  /// In en, this message translates to:
+  /// **'When do they pay it back?'**
+  String get lendFieldPayBackByHint;
 
   /// No description provided for @lendFieldTermMonths.
   ///

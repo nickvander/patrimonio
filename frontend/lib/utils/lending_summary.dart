@@ -428,3 +428,20 @@ LoanProjection? projectLoan({
           cadence: paymentFrequency == 'lump_sum' ? 'balloon' : paymentFrequency);
   }
 }
+
+/// The interest portion baked into a loan card's "Outstanding" figure.
+///
+/// The card shows `total_owed` (Σ unpaid scheduled payments = principal +
+/// interest) while `outstanding` is the principal-only running balance —
+/// both come straight from the backend payload. The difference is the
+/// unpaid scheduled interest included in the headline figure, surfaced as
+/// an "incl. X interest" footnote so the number doesn't read as principal.
+///
+/// Returns 0 when either field is missing (older payloads / no schedule)
+/// or when the difference is a rounding sliver (< half a cent), so the
+/// footnote only appears when real interest is included.
+double interestIncludedInOutstanding(num? totalOwed, num? principalOutstanding) {
+  if (totalOwed == null || principalOutstanding == null) return 0;
+  final diff = totalOwed.toDouble() - principalOutstanding.toDouble();
+  return diff < 0.005 ? 0 : diff;
+}

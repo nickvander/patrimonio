@@ -316,4 +316,31 @@ void main() {
       );
     });
   });
+
+  group('interestIncludedInOutstanding', () {
+    // The loan card's "Outstanding" shows total_owed (principal + unpaid
+    // scheduled interest); the footnote discloses the interest portion.
+    test('scheduled loan: total_owed minus principal outstanding', () {
+      expect(interestIncludedInOutstanding(16000, 14000), 2000);
+    });
+
+    test('no interest included → 0 (no footnote)', () {
+      expect(interestIncludedInOutstanding(14000, 14000), 0);
+    });
+
+    test('older payloads without total_owed → 0', () {
+      expect(interestIncludedInOutstanding(null, 14000), 0);
+      expect(interestIncludedInOutstanding(16000, null), 0);
+    });
+
+    test('sub-half-cent rounding slivers are suppressed', () {
+      expect(interestIncludedInOutstanding(14000.004, 14000), 0);
+      expect(interestIncludedInOutstanding(14000.01, 14000),
+          closeTo(0.01, 1e-9));
+    });
+
+    test('settled loans (both zeroed server-side) → 0', () {
+      expect(interestIncludedInOutstanding(0, 0), 0);
+    });
+  });
 }

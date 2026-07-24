@@ -55,6 +55,15 @@
   "lendingTitle": "Money I've lent",
   "lendingAddLoan": "Add loan",
   "lendingOutstanding": "Outstanding",
+  "lendingOutstandingInclInterest": "incl. {amount} interest",
+  "@lendingOutstandingInclInterest": {
+    "description": "Footnote under a loan card's Outstanding figure when that figure includes unpaid scheduled interest on top of the principal. {amount} is the formatted interest portion.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "lendingTotalLent": "Total lent",
   "lendingActive": "Active",
   "lendingInterestEarned": "Interest earned",
@@ -2280,7 +2289,7 @@
   "lendingInterestIncomeAllTime": "All time",
   "lendingInterestIncomeEmpty": "No interest received in this period yet.",
   "lendingInterestIncomeTotalsByCurrency": "Totals by currency",
-  "lendingInterestIncomeInterestReceived": "Interest received",
+  "lendingInterestIncomeInterestReceived": "Interest collected so far",
   "lendingInterestIncomePrincipalReceived": "Principal received",
   "lendingInterestIncomePaymentsCount": "Payments",
   "lendingInterestIncomeByMonth": "Interest by month",
@@ -2407,7 +2416,11 @@
   "lendScheduleColDue": "Due",
   "lendScheduleColInterest": "Interest",
   "lendScheduleColPayment": "Payment",
-  "lendScheduleColBalance": "Balance remaining",
+  "lendScheduleColBalance": "Principal balance",
+  "lendSchedulePrincipalBalanceNote": "Principal balance is what's left of the amount lent — interest isn't included.",
+  "@lendSchedulePrincipalBalanceNote": {
+    "description": "Footnote under the amortization table (wide layouts) explaining the Principal balance column excludes interest."
+  },
   "lendScheduleRowMeta": "Bal {balance} · int {interest}",
   "@lendScheduleRowMeta": {
     "placeholders": {
@@ -2483,7 +2496,12 @@
   "lendFieldCurrency": "Currency",
   "lendFieldLentOn": "Lent on",
   "lendFieldInterestRate": "Interest rate",
-  "lendFieldOptional": "Optional",
+  "lendFieldNotes": "Notes",
+  "lendFieldNotesHint": "e.g. for the car deposit",
+  "lendFieldPayBackByHint": "When do they pay it back?",
+  "@lendFieldPayBackByHint": {
+    "description": "Empty-state hint inside the clearable 'Pay back by' date field. The field is optional; optionality is conveyed by the hint styling, not the word 'optional'."
+  },
   "lendFieldTermMonths": "Term (months)",
   "lendFieldMostTheyCanPay": "Most they can pay",
   "lendFieldRateIsPer": "Rate is per",

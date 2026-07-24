@@ -71,6 +71,9 @@ void main() {
         'borrower_name': 'Alice',
         'principal': 100.0,
         'outstanding': 100.0,
+        // Scheduled loan: total owed includes $20 of unpaid interest, so
+        // the card must disclose it under the Outstanding figure.
+        'total_owed': 120.0,
         'total_repaid': 0.0,
         'interest_earned': 0.0,
         'currency': 'USD',
@@ -111,6 +114,16 @@ void main() {
       find.textContaining('converted to USD'),
       findsOneWidget,
     );
+
+    // Copy-pass regressions:
+    // 1) The "Lent … · <date>" meta renders a locale-aware date, never the
+    //    raw ISO payload string.
+    expect(find.textContaining('2026-01-01'), findsNothing);
+    expect(find.textContaining('Jan 1, 2026'), findsWidgets);
+    // 2) Alice's Outstanding ($120 = $100 principal + $20 scheduled
+    //    interest) discloses the interest portion; Bob (no total_owed)
+    //    gets no footnote.
+    expect(find.text(r'incl. $20.00 interest'), findsOneWidget);
   });
   // (The earlier "unbounded ListView throws" case was removed: the layout
   // assertion cascades into multiple exceptions that takeException() can't

@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../utils/currency.dart' show MoneyDisplayFormat, moneyFormat;
 import '../utils/flat_schedule.dart';
 import '../utils/lending_summary.dart';
+import '../utils/loan_dates.dart';
 import '../utils/theme_colors.dart';
 import 'interest_income_sheet.dart';
 
@@ -624,6 +625,10 @@ class _LendingTabState extends State<LendingTab> {
         ? ((totalToPay - outstanding) / totalToPay).clamp(0.0, 1.0)
         : 0.0;
     final linked = loan['disbursement_tx_id'] != null;
+    // Unpaid scheduled interest baked into the "Outstanding" figure
+    // (total_owed − principal-only outstanding) — see the footnote below.
+    final interestIncluded = interestIncludedInOutstanding(
+        loan['total_owed'] as num?, loan['outstanding'] as num?);
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
@@ -672,7 +677,10 @@ class _LendingTabState extends State<LendingTab> {
               ),
               const SizedBox(height: 4),
               Text(
-                '${AppLocalizations.of(context).lendLentMeta(_money(principal, currency), (loan['origination_date'] ?? '').toString())}'
+                // gen-l10n orders placeholders alphabetically (amount, date) —
+                // same as the template order here. The origination date is
+                // rendered locale-aware, not as the raw ISO payload string.
+                '${AppLocalizations.of(context).lendLentMeta(_money(principal, currency), formatIsoDateMedium((loan['origination_date'] ?? '').toString()))}'
                 '${linked ? '' : ' · ${AppLocalizations.of(context).lendDisbursementNotLinkedOptional}'}',
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
               ),
@@ -715,6 +723,23 @@ class _LendingTabState extends State<LendingTab> {
                       )),
                 ],
               ),
+              // "Outstanding" is the TOTAL owed; when unpaid scheduled
+              // interest is part of that figure, say so — otherwise the
+              // number silently reads as principal.
+              if (interestIncluded > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      AppLocalizations.of(context)
+                          .lendingOutstandingInclInterest(
+                              _money(interestIncluded, currency)),
+                      style:
+                          TextStyle(fontSize: 10.5, color: context.textFaint),
+                    ),
+                  ),
+                ),
               // Interest on this loan: realized income (cash basis) and,
               // beside it, the informational "owed so far" accrual that
               // hasn't been paid yet. Accrued is already zeroed server-side
@@ -830,12 +855,10 @@ class _LendingTabState extends State<LendingTab> {
     );
   }
 
-  /// "Jun 29" from a YYYY-MM-DD due date; falls back to the raw string if
-  /// it doesn't parse, so a malformed value never blanks the pill.
-  String _shortDate(String ymd) {
-    final d = DateTime.tryParse(ymd);
-    return d == null ? ymd : DateFormat('MMM d').format(d);
-  }
+  /// "Jun 29" (en) / "29 jun" (es) from a YYYY-MM-DD due date; falls back
+  /// to the raw string if it doesn't parse, so a malformed value never
+  /// blanks the pill.
+  String _shortDate(String ymd) => formatIsoDateShort(ymd);
 
   // ---------- add loan ----------
 
@@ -1206,7 +1229,9 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                             AppLocalizations.of(context).lendFieldLentOn,
                             icon: Icons.event_outlined),
                         child: Text(
-                          DateFormat('MMM d, y').format(_originationDate),
+                          // Locale-aware skeleton — es-MX reads "1 may 2024",
+                          // not the US-ordered "may 1, 2024".
+                          DateFormat.yMMMd().format(_originationDate),
                           style: TextStyle(color: context.textPrimary),
                         ),
                       ),
@@ -1257,8 +1282,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                     controller: _notesCtrl,
                     maxLines: 2,
                     decoration: _decoration(
-                        AppLocalizations.of(context).lendFieldOptional,
-                        hint: 'e.g. for the car deposit',
+                        AppLocalizations.of(context).lendFieldNotes,
+                        hint: AppLocalizations.of(context).lendFieldNotesHint,
                         icon: Icons.notes_outlined),
                   ),
                 ]),
@@ -2164,7 +2189,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                 child: Text(
                   _genStart == null
                       ? '—'
-                      : DateFormat('MMM d, y').format(_genStart!),
+                      : DateFormat.yMMMd().format(_genStart!),
                   style: TextStyle(color: context.textPrimary, fontSize: 13),
                 ),
               ),
@@ -2178,7 +2203,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                 child: Text(
                   _genEnd == null
                       ? '—'
-                      : DateFormat('MMM d, y').format(_genEnd!),
+                      : DateFormat.yMMMd().format(_genEnd!),
                   style: TextStyle(color: context.textPrimary, fontSize: 13),
                 ),
               ),
@@ -2427,8 +2452,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   icon: Icons.event_available_outlined),
               child: Text(
                 _expectedRepaymentDate == null
-                    ? 'Optional — when do they pay it back?'
-                    : DateFormat('MMM d, y').format(_expectedRepaymentDate!),
+                    ? AppLocalizations.of(context).lendFieldPayBackByHint
+                    : DateFormat.yMMMd().format(_expectedRepaymentDate!),
                 style: TextStyle(
                   color: _expectedRepaymentDate == null
                       ? context.textFaint
@@ -2761,8 +2786,8 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                   icon: Icons.event_available_outlined),
               child: Text(
                 _expectedRepaymentDate == null
-                    ? 'Optional — when do they pay it back?'
-                    : DateFormat('MMM d, y').format(_expectedRepaymentDate!),
+                    ? AppLocalizations.of(context).lendFieldPayBackByHint
+                    : DateFormat.yMMMd().format(_expectedRepaymentDate!),
                 style: TextStyle(
                   color: _expectedRepaymentDate == null
                       ? context.textFaint
@@ -2941,8 +2966,8 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                     controller: _notesCtrl,
                     maxLines: 2,
                     decoration: _decoration(
-                        AppLocalizations.of(context).lendFieldOptional,
-                        hint: 'e.g. for the car deposit',
+                        AppLocalizations.of(context).lendFieldNotes,
+                        hint: AppLocalizations.of(context).lendFieldNotesHint,
                         icon: Icons.notes_outlined),
                   ),
                 ]),
@@ -3567,8 +3592,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   String _fmtPaidDate(dynamic isoDate) {
     final s = (isoDate ?? '').toString();
     if (s.isEmpty) return '';
-    final parsed = DateTime.tryParse(s);
-    return parsed == null ? s : DateFormat('MMM d, y').format(parsed);
+    return formatIsoDateMedium(s);
   }
 
   /// Close the loan sheet, then jump to the linked bank transaction (the
@@ -3984,8 +4008,10 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
+              // gen-l10n orders placeholders alphabetically (date, when) —
+              // same as the template order here.
               l10n.lendPayBackByWhen(
-                  DateFormat('MMM d, y').format(date), when),
+                  DateFormat.yMMMd().format(date), when),
               style: TextStyle(
                   fontSize: 12.5, color: color, fontWeight: FontWeight.w600),
             ),
@@ -4000,7 +4026,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     final nextDue = _nextDueIndex(rows);
     // On a phone there's no room for 5-6 columns — the money truncates and
     // the Interest/Balance columns collide. Drop those two on narrow (the
-    // Balance-remaining already shows in the progress line above); each row
+    // amount remaining already shows in the progress line above); each row
     // instead carries a compact "int · balance" subtitle so nothing is lost.
     final narrow = MediaQuery.sizeOf(context).width < 520;
     // Totals footer.
@@ -4052,6 +4078,20 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
             ],
           ),
         ),
+        // Footnote for the "Principal balance" column (wide layouts only —
+        // narrow drops the column): the running balance is principal, not
+        // principal + interest, so say so where the space allows.
+        if (!narrow)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                l10n.lendSchedulePrincipalBalanceNote,
+                style: TextStyle(fontSize: 10.5, color: context.textFaint),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -4122,14 +4162,10 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     );
   }
 
-  /// Short "MMM d" for the schedule's Due column — recovers width for the
-  /// money columns vs. the raw ISO date. Falls back to the raw string when
-  /// it doesn't parse.
-  String _fmtDue(dynamic raw) {
-    final s = (raw ?? '').toString();
-    final d = DateTime.tryParse(s);
-    return d == null ? s : DateFormat('MMM d').format(d);
-  }
+  /// Short locale-aware date for the schedule's Due column — recovers
+  /// width for the money columns vs. the raw ISO date. Falls back to the
+  /// raw string when it doesn't parse.
+  String _fmtDue(dynamic raw) => formatIsoDateShort((raw ?? '').toString());
 
   Widget _schCell(String text,
       {int flex = 1, bool alignRight = false, bool bold = false}) {
@@ -4732,7 +4768,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: Text(DateFormat('MMM d, y').format(_cashDate),
+            child: Text(DateFormat.yMMMd().format(_cashDate),
                 style: TextStyle(color: context.textPrimary)),
           ),
         ),

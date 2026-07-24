@@ -27,7 +27,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get navProjections => 'Proyecciones';
 
   @override
-  String get navTaxPlanning => 'Planeación fiscal';
+  String get navTaxPlanning => 'Impuestos';
 
   @override
   String get navLending => 'Préstamos';
@@ -147,6 +147,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lendingOutstanding => 'Pendiente';
+
+  @override
+  String lendingOutstandingInclInterest(String amount) {
+    return 'incluye $amount de intereses';
+  }
 
   @override
   String get lendingTotalLent => 'Total prestado';
@@ -5361,7 +5366,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendingInterestIncomeTotalsByCurrency => 'Totales por moneda';
 
   @override
-  String get lendingInterestIncomeInterestReceived => 'Intereses recibidos';
+  String get lendingInterestIncomeInterestReceived =>
+      'Intereses cobrados a la fecha';
 
   @override
   String get lendingInterestIncomePrincipalReceived => 'Capital recibido';
@@ -5652,7 +5658,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendScheduleColPayment => 'Pago';
 
   @override
-  String get lendScheduleColBalance => 'Saldo restante';
+  String get lendScheduleColBalance => 'Saldo de capital';
+
+  @override
+  String get lendSchedulePrincipalBalanceNote =>
+      'El saldo de capital es lo que falta del monto prestado; no incluye intereses.';
 
   @override
   String lendScheduleRowMeta(String balance, String interest) {
@@ -5784,7 +5794,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendFieldInterestRate => 'Tasa de interés';
 
   @override
-  String get lendFieldOptional => 'Opcional';
+  String get lendFieldNotes => 'Notas';
+
+  @override
+  String get lendFieldNotesHint => 'p. ej., para el enganche del auto';
+
+  @override
+  String get lendFieldPayBackByHint => '¿Para cuándo lo pagarán?';
 
   @override
   String get lendFieldTermMonths => 'Plazo (meses)';

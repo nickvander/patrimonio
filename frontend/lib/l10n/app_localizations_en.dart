@@ -149,6 +149,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendingOutstanding => 'Outstanding';
 
   @override
+  String lendingOutstandingInclInterest(String amount) {
+    return 'incl. $amount interest';
+  }
+
+  @override
   String get lendingTotalLent => 'Total lent';
 
   @override
@@ -5317,7 +5322,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendingInterestIncomeTotalsByCurrency => 'Totals by currency';
 
   @override
-  String get lendingInterestIncomeInterestReceived => 'Interest received';
+  String get lendingInterestIncomeInterestReceived =>
+      'Interest collected so far';
 
   @override
   String get lendingInterestIncomePrincipalReceived => 'Principal received';
@@ -5609,7 +5615,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendScheduleColPayment => 'Payment';
 
   @override
-  String get lendScheduleColBalance => 'Balance remaining';
+  String get lendScheduleColBalance => 'Principal balance';
+
+  @override
+  String get lendSchedulePrincipalBalanceNote =>
+      'Principal balance is what\'s left of the amount lent — interest isn\'t included.';
 
   @override
   String lendScheduleRowMeta(String balance, String interest) {
@@ -5739,7 +5749,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendFieldInterestRate => 'Interest rate';
 
   @override
-  String get lendFieldOptional => 'Optional';
+  String get lendFieldNotes => 'Notes';
+
+  @override
+  String get lendFieldNotesHint => 'e.g. for the car deposit';
+
+  @override
+  String get lendFieldPayBackByHint => 'When do they pay it back?';
 
   @override
   String get lendFieldTermMonths => 'Term (months)';

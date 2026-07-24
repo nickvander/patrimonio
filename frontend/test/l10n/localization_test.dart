@@ -116,6 +116,42 @@ void main() {
     expect(await readKeys(tester, const Locale('es'), eq), '1 USD = MXN 17.58');
   });
 
+  // Lending copy & clarity pass regressions: the schedule's balance column
+  // names the figure honestly ("Principal balance" — it excludes interest),
+  // the interest-income sheet says "collected" (cash basis, unambiguous vs.
+  // the accrual-flavoured "Interest earned"), the loan card's outstanding
+  // footnote discloses included interest, and the es nav label for Tax
+  // planning is short enough for the rail ("Impuestos", not the truncating
+  // "Planeación fiscal" — the tax screen itself keeps its full title).
+  testWidgets('lending copy pass strings resolve in both locales',
+      (tester) async {
+    String quad(AppLocalizations l) => '${l.lendScheduleColBalance}|'
+        '${l.lendingInterestIncomeInterestReceived}|'
+        '${l.lendingOutstandingInclInterest(r'$25.00')}|'
+        '${l.navTaxPlanning}';
+    expect(
+        await readKeys(tester, const Locale('en'), quad),
+        'Principal balance|Interest collected so far|'
+        r'incl. $25.00 interest|Tax planning');
+    expect(
+        await readKeys(tester, const Locale('es'), quad),
+        'Saldo de capital|Intereses cobrados a la fecha|'
+        r'incluye $25.00 de intereses|Impuestos');
+  });
+
+  // The lending form fields dropped the developer-voice "Optional" label:
+  // the notes field is labelled by what it is, with a localized example
+  // hint, and the clearable "Pay back by" field carries a question hint.
+  testWidgets('lending form labels drop the "Optional" developer voice',
+      (tester) async {
+    String trio(AppLocalizations l) =>
+        '${l.lendFieldNotes}|${l.lendFieldNotesHint}|${l.lendFieldPayBackByHint}';
+    expect(await readKeys(tester, const Locale('en'), trio),
+        'Notes|e.g. for the car deposit|When do they pay it back?');
+    expect(await readKeys(tester, const Locale('es'), trio),
+        'Notas|p. ej., para el enganche del auto|¿Para cuándo lo pagarán?');
+  });
+
   test('both locales are supported', () {
     final codes =
         AppLocalizations.supportedLocales.map((l) => l.languageCode).toSet();

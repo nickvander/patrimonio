@@ -6,7 +6,7 @@
   "navTransactions": "Transacciones",
   "navCashFlow": "Flujo de efectivo",
   "navProjections": "Proyecciones",
-  "navTaxPlanning": "Planeación fiscal",
+  "navTaxPlanning": "Impuestos",
   "navLending": "Préstamos",
   "navSettings": "Configuración",
   "navShortOverview": "Inicio",
@@ -46,6 +46,15 @@
   "lendingTitle": "Dinero que presté",
   "lendingAddLoan": "Agregar préstamo",
   "lendingOutstanding": "Pendiente",
+  "lendingOutstandingInclInterest": "incluye {amount} de intereses",
+  "@lendingOutstandingInclInterest": {
+    "description": "Footnote under a loan card's Outstanding figure when that figure includes unpaid scheduled interest on top of the principal. {amount} is the formatted interest portion.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
   "lendingTotalLent": "Total prestado",
   "lendingActive": "Activos",
   "lendingInterestEarned": "Intereses ganados",
@@ -1780,7 +1789,7 @@
   "lendingInterestIncomeAllTime": "Todo el tiempo",
   "lendingInterestIncomeEmpty": "Aún no se han recibido intereses en este periodo.",
   "lendingInterestIncomeTotalsByCurrency": "Totales por moneda",
-  "lendingInterestIncomeInterestReceived": "Intereses recibidos",
+  "lendingInterestIncomeInterestReceived": "Intereses cobrados a la fecha",
   "lendingInterestIncomePrincipalReceived": "Capital recibido",
   "lendingInterestIncomePaymentsCount": "Pagos",
   "lendingInterestIncomeByMonth": "Intereses por mes",
@@ -1907,7 +1916,11 @@
   "lendScheduleColDue": "Vence",
   "lendScheduleColInterest": "Interés",
   "lendScheduleColPayment": "Pago",
-  "lendScheduleColBalance": "Saldo restante",
+  "lendScheduleColBalance": "Saldo de capital",
+  "lendSchedulePrincipalBalanceNote": "El saldo de capital es lo que falta del monto prestado; no incluye intereses.",
+  "@lendSchedulePrincipalBalanceNote": {
+    "description": "Footnote under the amortization table (wide layouts) explaining the Principal balance column excludes interest."
+  },
   "lendScheduleRowMeta": "Saldo {balance} · int {interest}",
   "@lendScheduleRowMeta": {
     "placeholders": {
@@ -1983,7 +1996,12 @@
   "lendFieldCurrency": "Moneda",
   "lendFieldLentOn": "Prestado el",
   "lendFieldInterestRate": "Tasa de interés",
-  "lendFieldOptional": "Opcional",
+  "lendFieldNotes": "Notas",
+  "lendFieldNotesHint": "p. ej., para el enganche del auto",
+  "lendFieldPayBackByHint": "¿Para cuándo lo pagarán?",
+  "@lendFieldPayBackByHint": {
+    "description": "Empty-state hint inside the clearable 'Pay back by' date field. The field is optional; optionality is conveyed by the hint styling, not the word 'optional'."
+  },
   "lendFieldTermMonths": "Plazo (meses)",
   "lendFieldMostTheyCanPay": "Máximo que pueden pagar",
   "lendFieldRateIsPer": "La tasa es por",
