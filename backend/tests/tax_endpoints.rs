@@ -2122,7 +2122,8 @@ async fn tax_non_wash_loss_reduces_liability_normally() {
 
 /// Seed an institution (with a country) + one account (with a currency),
 /// returning the account id. Lets the FBAR foreign-account signal be exercised
-/// in both directions (non-US country, and MXN currency under a US country).
+/// in every direction: non-US country, US country (domestic regardless of
+/// currency), and unknown country ('' → the MXN-currency fallback heuristic).
 async fn seed_account_with_country_currency(
     pool: &PgPool,
     user_id: uuid::Uuid,
@@ -2186,15 +2187,15 @@ async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
 
-    // Two foreign accounts: one by institution country (MX), one by MXN
-    // currency under a US-country institution. Plus a US/USD account that must
-    // NOT count toward the aggregate.
+    // Two foreign accounts: one by institution country (MX), one by the
+    // MXN-currency fallback under an UNKNOWN-country institution. Plus a
+    // US/USD account that must NOT count toward the aggregate.
     let mx_bank = seed_account_with_country_currency(
         &pool, user_id, "Banamex", "MX", "Cuenta MXN", "MXN",
     )
     .await;
-    let mxn_under_us = seed_account_with_country_currency(
-        &pool, user_id, "Frontier US-MX", "US", "USD-labeled MXN", "MXN",
+    let mxn_under_unknown = seed_account_with_country_currency(
+        &pool, user_id, "Frontier ??", "", "Unknown-country MXN", "MXN",
     )
     .await;
     let domestic = seed_account_with_country_currency(
@@ -2205,7 +2206,7 @@ async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
     // On 2026-03-10 the two foreign accounts sum to 6,000 + 5,000 = 11,000 USD
     // (> 10k). On other days they're lower. The domestic 50k must be ignored.
     seed_snapshot(&pool, user_id, mx_bank, "2026-03-10", "MXN", "6000").await;
-    seed_snapshot(&pool, user_id, mxn_under_us, "2026-03-10", "MXN", "5000").await;
+    seed_snapshot(&pool, user_id, mxn_under_unknown, "2026-03-10", "MXN", "5000").await;
     seed_snapshot(&pool, user_id, mx_bank, "2026-02-01", "MXN", "4000").await;
     seed_snapshot(&pool, user_id, domestic, "2026-03-10", "USD", "50000").await;
 
@@ -2234,8 +2235,90 @@ async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
         .map(|a| a["name"].as_str().unwrap())
         .collect();
     assert!(names.contains(&"Cuenta MXN"));
-    assert!(names.contains(&"USD-labeled MXN"));
+    assert!(names.contains(&"Unknown-country MXN"));
     assert!(!names.contains(&"Checking"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fbar_classifies_by_country_not_currency_and_flags_unknown() {
+    // Regression for the country-first classification fix: the old rule was
+    // `country <> 'US' OR currency = 'MXN'`, which swept a US bank's
+    // MXN-denominated account (e.g. a multi-currency account at a US fintech)
+    // into the FBAR aggregate. Now: a US-country account is domestic
+    // regardless of currency; the MXN heuristic only applies when the
+    // institution's country is unknown, and those rows carry
+    // `classified_by_currency = true` ("confirm location" in the UI).
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // US-country institution, MXN-denominated account → domestic, excluded.
+    let us_mxn = seed_account_with_country_currency(
+        &pool, user_id, "Frontier US", "US", "US multi-currency MXN", "MXN",
+    )
+    .await;
+    // Unknown-country institution, MXN account → included via the currency
+    // fallback and flagged for confirmation.
+    let unknown_mxn = seed_account_with_country_currency(
+        &pool, user_id, "Caja ???", "", "Cuenta misteriosa", "MXN",
+    )
+    .await;
+    // Known-MX institution → included by country, NOT flagged.
+    let mx_bank = seed_account_with_country_currency(
+        &pool, user_id, "BBVA MX", "MX", "Cuenta MX", "MXN",
+    )
+    .await;
+
+    // The US-country MXN balance alone would cross the $10k threshold — if
+    // the old currency rule leaked back in, `exceeded` flips to true and the
+    // aggregate jumps by 20,000.
+    seed_snapshot(&pool, user_id, us_mxn, "2026-04-01", "MXN", "20000").await;
+    seed_snapshot(&pool, user_id, unknown_mxn, "2026-04-01", "MXN", "3000").await;
+    seed_snapshot(&pool, user_id, mx_bank, "2026-04-01", "MXN", "4000").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "fbar body: {body}");
+
+    // 3,000 + 4,000 foreign — the 20,000 US-country MXN account is domestic.
+    assert!(
+        (body["peak_aggregate_usd"].as_f64().unwrap() - 7000.0).abs() < 0.01,
+        "US-country MXN account must not count as foreign: {body}"
+    );
+    assert_eq!(body["exceeded"], serde_json::json!(false), "{body}");
+
+    let accts = body["foreign_accounts"].as_array().expect("array");
+    assert_eq!(accts.len(), 2, "exactly the unknown + MX accounts: {body}");
+    let by_name = |n: &str| {
+        accts
+            .iter()
+            .find(|a| a["name"] == n)
+            .unwrap_or_else(|| panic!("missing account {n}: {body}"))
+    };
+    let unknown = by_name("Cuenta misteriosa");
+    assert_eq!(
+        unknown["classified_by_currency"],
+        serde_json::json!(true),
+        "unknown-country MXN row must be flagged for location confirmation: {body}"
+    );
+    assert_eq!(unknown["country"], Value::Null, "{body}");
+    let mx = by_name("Cuenta MX");
+    assert_eq!(
+        mx["classified_by_currency"],
+        serde_json::json!(false),
+        "known-country row is classified by country, not flagged: {body}"
+    );
+    assert!(
+        !accts.iter().any(|a| a["name"] == "US multi-currency MXN"),
+        "US-country MXN account must be absent from foreign_accounts: {body}"
+    );
 }
 
 #[tokio::test]

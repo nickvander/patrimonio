@@ -3442,6 +3442,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se detectaron cuentas en el extranjero para este año.';
 
   @override
+  String get taxFbarConfirmLocation => 'Confirma la ubicación';
+
+  @override
+  String get taxFbarConfirmLocationTooltip =>
+      'Esta institución no tiene país configurado, así que la cuenta se contó como extranjera solo por estar en MXN. Configura el país de la institución para confirmarlo o corregirlo.';
+
+  @override
   String taxFbarAccountPeak(String amount) {
     return 'En la fecha máxima: $amount';
   }

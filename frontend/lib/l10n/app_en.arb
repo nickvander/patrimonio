@@ -1316,6 +1316,8 @@
   "taxFbarInformational": "Informational only — this does not decide an FBAR filing obligation. Consult a tax professional.",
   "taxFbarFatcaNote": "FATCA Form 8938 thresholds are different and higher, and are not computed here.",
   "taxFbarNoForeignAccounts": "No foreign accounts detected for this year.",
+  "taxFbarConfirmLocation": "Confirm location",
+  "taxFbarConfirmLocationTooltip": "This institution has no country set, so the account was counted as foreign only because it is in MXN. Set the institution's country to confirm or correct this.",
   "taxFbarAccountPeak": "On peak date: {amount}",
   "@taxFbarAccountPeak": {
     "placeholders": {

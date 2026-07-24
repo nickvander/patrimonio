@@ -70,13 +70,16 @@ TransactionsTab _tab(
   bool hasMore = false,
   bool singleAccountContext = false,
   double? runningBalanceAnchor,
+  NumberFormat? currencyFormat,
+  String targetCurrency = 'USD',
+  double usdMxnRate = 0,
 }) {
   return TransactionsTab(
     transactions: txs,
     conversionFactor: 1.0,
-    currencyFormat: NumberFormat.currency(symbol: r'$'),
-    targetCurrency: 'USD',
-    usdMxnRate: 0,
+    currencyFormat: currencyFormat ?? NumberFormat.currency(symbol: r'$'),
+    targetCurrency: targetCurrency,
+    usdMxnRate: usdMxnRate,
     fxTransfers: fxTransfers,
     hasMore: hasMore,
     singleAccountContext: singleAccountContext,
@@ -583,6 +586,51 @@ void main() {
       );
       expect(find.text(monthLabel(monthB)), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('MXN reporting mode — rows carry the converted ≈ line on every width',
+      () {
+    // Regression: narrow (phone) viewports used to hide the converted
+    // estimate under the native amount, so in MXN reporting mode the month
+    // headers/nets (reporting currency) sat over USD-only rows with nothing
+    // visible to reconcile them against.
+    TransactionsTab mxnTab(List<dynamic> txs) => _tab(
+          txs,
+          currencyFormat: NumberFormat.currency(symbol: r'MX$'),
+          targetCurrency: 'MXN',
+          usdMxnRate: 20.0,
+        );
+
+    testWidgets('narrow: a USD row in MXN mode shows the ≈ MXN estimate',
+        (tester) async {
+      _setViewSize(tester, const Size(420, 900));
+      // One USD row of +10.00 → at 20.0 the MXN estimate is 200.00.
+      await tester.pumpWidget(_unboundedHost(mxnTab(_makeTxs(1))));
+      await tester.pump();
+
+      expect(find.text(r'≈ MX$200.00'), findsOneWidget);
+    });
+
+    testWidgets('wide: the estimate is still there (unchanged behavior)',
+        (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      await tester.pumpWidget(_unboundedHost(mxnTab(_makeTxs(1))));
+      await tester.pump();
+
+      expect(find.text(r'≈ MX$200.00'), findsOneWidget);
+    });
+
+    testWidgets('no estimate when the row is already in the reporting currency',
+        (tester) async {
+      _setViewSize(tester, const Size(420, 900));
+      final txs = _makeTxs(1)
+          .map((t) => {...t, 'currency': 'MXN'})
+          .toList();
+      await tester.pumpWidget(_unboundedHost(mxnTab(txs)));
+      await tester.pump();
+
+      expect(find.textContaining('≈'), findsNothing);
     });
   });
 }

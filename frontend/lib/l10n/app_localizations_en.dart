@@ -3411,6 +3411,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'No foreign accounts detected for this year.';
 
   @override
+  String get taxFbarConfirmLocation => 'Confirm location';
+
+  @override
+  String get taxFbarConfirmLocationTooltip =>
+      'This institution has no country set, so the account was counted as foreign only because it is in MXN. Set the institution\'s country to confirm or correct this.';
+
+  @override
   String taxFbarAccountPeak(String amount) {
     return 'On peak date: $amount';
   }

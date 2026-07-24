@@ -5652,6 +5652,18 @@ abstract class AppLocalizations {
   /// **'No foreign accounts detected for this year.'**
   String get taxFbarNoForeignAccounts;
 
+  /// No description provided for @taxFbarConfirmLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm location'**
+  String get taxFbarConfirmLocation;
+
+  /// No description provided for @taxFbarConfirmLocationTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'This institution has no country set, so the account was counted as foreign only because it is in MXN. Set the institution\'s country to confirm or correct this.'**
+  String get taxFbarConfirmLocationTooltip;
+
   /// No description provided for @taxFbarAccountPeak.
   ///
   /// In en, this message translates to:

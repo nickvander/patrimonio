@@ -1663,16 +1663,19 @@ impl TaxService {
     /// $10,000 at ANY point in the year?" — the FBAR trigger question — from
     /// the daily `balance_snapshots.balance_usd` series.
     ///
-    /// FOREIGN-ACCOUNT SIGNAL (documented choice): an account is treated as
-    /// foreign when its institution's `country <> 'US'` (the explicit,
-    /// operator-set signal) OR its `accounts.currency = 'MXN'` (the
-    /// product's defining cross-border case). `country` is the primary,
-    /// most-reliable signal — it is set per institution at link/creation —
-    /// and the MXN-currency fallback catches a Mexican account whose
-    /// institution row was created without a country. Both are surfaced so
-    /// the user can sanity-check the classification. (Country codes are
-    /// upper-cased for the comparison; a NULL/empty country is NOT treated as
-    /// foreign — only a positively non-US country counts.)
+    /// FOREIGN-ACCOUNT SIGNAL (documented choice): the institution's
+    /// `country` column is the classifier. An account is foreign when its
+    /// institution's country is set and not `'US'`; a US-country account is
+    /// domestic **regardless of its currency** (a USD↔MXN multi-currency
+    /// account at a US bank is not an FBAR "foreign financial account" —
+    /// the old `OR currency = 'MXN'` rule wrongly swept those in). The
+    /// MXN-currency heuristic survives ONLY as a fallback for institutions
+    /// whose country is unknown (NULL/empty — possible via manual creation
+    /// even though the column defaults to 'US'): an MXN account there is
+    /// *probably* Mexican, so it is included and flagged
+    /// `classified_by_currency = true` so the UI can ask the user to
+    /// confirm the institution's location. (Country codes are upper-cased
+    /// for the comparison.)
     ///
     /// AGGREGATE-MAX METHOD: for each day that has ANY foreign snapshot, sum
     /// the foreign accounts' `balance_usd`, then take the MAX of those daily
@@ -1706,8 +1709,13 @@ impl TaxService {
             JOIN institutions i ON i.id = a.institution_id
             WHERE b.user_id = $1
               AND b.as_of_date >= $2 AND b.as_of_date <= $3
+              -- Country-first classification: a positively non-US country is
+              -- foreign; the MXN heuristic applies ONLY when the country is
+              -- unknown (empty). A US-country MXN-denominated account is
+              -- domestic — it must NOT inflate the FBAR aggregate.
               AND (UPPER(COALESCE(i.country, '')) NOT IN ('US', '')
-                   OR UPPER(COALESCE(a.currency, '')) = 'MXN')
+                   OR (COALESCE(i.country, '') = ''
+                       AND UPPER(COALESCE(a.currency, '')) = 'MXN'))
             ORDER BY b.as_of_date ASC, b.id ASC
             "#,
         )
@@ -1773,8 +1781,12 @@ impl TaxService {
             JOIN institutions i ON i.id = a.institution_id
             WHERE b.user_id = $1
               AND b.as_of_date >= $2 AND b.as_of_date <= $3
+              -- Same country-first predicate as the daily-aggregate query
+              -- above — the two must stay in lockstep or the account list
+              -- and the aggregate disagree about what "foreign" means.
               AND (UPPER(COALESCE(i.country, '')) NOT IN ('US', '')
-                   OR UPPER(COALESCE(a.currency, '')) = 'MXN')
+                   OR (COALESCE(i.country, '') = ''
+                       AND UPPER(COALESCE(a.currency, '')) = 'MXN'))
             -- Group by the qualified source expressions, NOT the output aliases:
             -- both balance_snapshots.currency and accounts.currency exist, so an
             -- unqualified `currency` (or `country`) in GROUP BY is ambiguous and
@@ -1793,17 +1805,24 @@ impl TaxService {
 
         let foreign_accounts: Vec<FbarAccount> = accounts
             .iter()
-            .map(|r| FbarAccount {
-                account_id: r.try_get("account_id").ok(),
-                name: r.try_get("account_name").unwrap_or_default(),
-                institution: r.try_get("institution").unwrap_or_default(),
-                country: {
+            .map(|r| {
+                let country = {
                     let c: String = r.try_get("country").unwrap_or_default();
                     if c.is_empty() { None } else { Some(c) }
-                },
-                currency: r.try_get("currency").unwrap_or_default(),
-                peak_contribution_usd: r.try_get("peak_contribution_usd").unwrap_or_default(),
-                ytd_max_usd: r.try_get("ytd_max_usd").unwrap_or_default(),
+                };
+                FbarAccount {
+                    account_id: r.try_get("account_id").ok(),
+                    name: r.try_get("account_name").unwrap_or_default(),
+                    institution: r.try_get("institution").unwrap_or_default(),
+                    // With the country-first predicate, an unknown country
+                    // means this row got in ONLY via the MXN heuristic — the
+                    // UI shows a "confirm location" flag on exactly these.
+                    classified_by_currency: country.is_none(),
+                    country,
+                    currency: r.try_get("currency").unwrap_or_default(),
+                    peak_contribution_usd: r.try_get("peak_contribution_usd").unwrap_or_default(),
+                    ytd_max_usd: r.try_get("ytd_max_usd").unwrap_or_default(),
+                }
             })
             .collect();
 
@@ -2177,7 +2196,15 @@ pub struct FbarAccount {
     /// foreign signal. `None` when the account was classified foreign only by
     /// its MXN currency.
     pub country: Option<String>,
-    /// The account's currency (upper-cased) — the secondary foreign signal.
+    /// True when the institution's country is unknown and this account was
+    /// included ONLY via the MXN-currency fallback heuristic — the UI flags
+    /// these "confirm location" so the user sets the institution's country.
+    /// Accounts with a known non-US country are classified by country and
+    /// carry `false` here.
+    #[serde(default)]
+    pub classified_by_currency: bool,
+    /// The account's currency (upper-cased) — the fallback foreign signal
+    /// (only consulted when the institution's country is unknown).
     pub currency: String,
     /// This account's `balance_usd` on the peak aggregate date (0 if it had no
     /// snapshot that exact day).

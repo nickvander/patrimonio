@@ -140,7 +140,9 @@ const Map<String, dynamic> _unrealized = {
   'constants_verified': false,
 };
 
-// T13 — FBAR: peak over the $10k threshold, one foreign MXN account.
+// T13 — FBAR: peak over the $10k threshold, one country-classified foreign
+// MXN account plus one included only via the MXN-currency fallback (unknown
+// institution country → `classified_by_currency` → "confirm location" pill).
 const Map<String, dynamic> _fbar = {
   'year': 2025,
   'threshold_usd': 10000.0,
@@ -153,9 +155,20 @@ const Map<String, dynamic> _fbar = {
       'name': 'Banamex Checking',
       'institution': 'Banamex',
       'country': 'MX',
+      'classified_by_currency': false,
       'currency': 'MXN',
       'peak_contribution_usd': 14500.0,
       'ytd_max_usd': 14500.0,
+    },
+    {
+      'account_id': null,
+      'name': 'Caja Misteriosa',
+      'institution': 'Caja ???',
+      'country': null,
+      'classified_by_currency': true,
+      'currency': 'MXN',
+      'peak_contribution_usd': 0.0,
+      'ytd_max_usd': 900.0,
     },
   ],
   'constants_verified': false,
@@ -372,6 +385,10 @@ void main() {
     expect(find.text(l.taxFbarExceeded), findsOneWidget);
     // The foreign account contributing to the peak is listed.
     expect(find.text('Banamex Checking'), findsOneWidget);
+    // Exactly the currency-fallback row (unknown institution country) carries
+    // the "confirm location" pill — the country-classified row must not.
+    expect(find.text('Caja Misteriosa'), findsOneWidget);
+    expect(find.text(l.taxFbarConfirmLocation), findsOneWidget);
   });
 
   testWidgets(

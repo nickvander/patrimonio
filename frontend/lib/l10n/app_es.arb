@@ -1067,6 +1067,8 @@
   "taxFbarInformational": "Solo informativo — esto no determina una obligación de presentar el FBAR. Consulta a un profesional fiscal.",
   "taxFbarFatcaNote": "Los umbrales del Formulario 8938 (FATCA) son distintos y más altos, y no se calculan aquí.",
   "taxFbarNoForeignAccounts": "No se detectaron cuentas en el extranjero para este año.",
+  "taxFbarConfirmLocation": "Confirma la ubicación",
+  "taxFbarConfirmLocationTooltip": "Esta institución no tiene país configurado, así que la cuenta se contó como extranjera solo por estar en MXN. Configura el país de la institución para confirmarlo o corregirlo.",
   "taxFbarAccountPeak": "En la fecha máxima: {amount}",
   "@taxFbarAccountPeak": {
     "placeholders": {

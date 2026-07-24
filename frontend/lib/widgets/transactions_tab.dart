@@ -3183,9 +3183,13 @@ class TransactionsTabState extends State<TransactionsTab> {
               ),
             ),
             const SizedBox(width: 12),
-            // Right-aligned amount. Bold native currency on top, optional
-            // converted estimate below (desktop only — narrow viewports
-            // hide it so the description column has breathing room).
+            // Right-aligned amount. Bold native currency on top, converted
+            // reporting-currency estimate below whenever the row's native
+            // currency differs from the reporting currency — on EVERY width.
+            // (Narrow used to hide the estimate for breathing room, but the
+            // month headers/nets are in the reporting currency, so in MXN
+            // mode a phone showed MXN headers over USD-only rows with no
+            // visible way to reconcile them.)
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: isNarrow ? 128 : 140),
               child: Column(
@@ -3218,7 +3222,7 @@ class TransactionsTabState extends State<TransactionsTab> {
                       maxLines: 1,
                     ),
                   ),
-                  if (needsConversion && !isNarrow)
+                  if (needsConversion)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(

@@ -2113,6 +2113,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final peakContrib =
         (raw['peak_contribution_usd'] as num?)?.toDouble() ?? 0;
     final ytdMax = (raw['ytd_max_usd'] as num?)?.toDouble() ?? 0;
+    // Backend flag: the institution has no country set, so this row was
+    // counted foreign only via the MXN-currency heuristic — surface a
+    // "confirm location" warning pill so the user can set the country.
+    final classifiedByCurrency = raw['classified_by_currency'] == true;
 
     final tags = <String>[
       if (institution.isNotEmpty) institution,
@@ -2144,6 +2148,37 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     tags,
                     style: TextStyle(color: context.textFaint, fontSize: 11),
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (classifiedByCurrency) ...[
+                  const SizedBox(height: 4),
+                  Tooltip(
+                    message: l.taxFbarConfirmLocationTooltip,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: context.warning.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.help_outline,
+                              size: 12, color: context.warning),
+                          const SizedBox(width: 4),
+                          Text(
+                            l.taxFbarConfirmLocation,
+                            style: TextStyle(
+                              color: context.warning,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ],
