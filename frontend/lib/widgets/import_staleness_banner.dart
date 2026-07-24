@@ -50,21 +50,23 @@ class ImportStalenessBanner extends StatelessWidget {
       icon: const Icon(Icons.upload_file, size: 16),
       label: Text(l.impStaleBannerImport),
     );
-    // Same dismiss affordance as SyncErrorBanner's ×: compact, subtle,
-    // tooltip spells out that it snoozes rather than resolves.
-    final dismissButton = onDismiss == null
+    // Dismiss × — a corner affordance, never a peer of the action button.
+    // Tooltip spells out that it snoozes rather than resolves. [compact]
+    // shrinks it to sit inline on the wide single-row layout; phones get
+    // the full-size (48dp floor) target in the top-right corner.
+    IconButton? dismissButton({required bool compact}) => onDismiss == null
         ? null
         : IconButton(
             onPressed: () => onDismiss!(stale),
-            icon: const Icon(Icons.close, size: 18),
+            icon: Icon(Icons.close, size: compact ? 18 : 20),
             tooltip: l.impStaleBannerDismiss,
-            visualDensity: VisualDensity.compact,
+            visualDensity:
+                compact ? VisualDensity.compact : VisualDensity.standard,
             color: context.textSubtle,
           );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: context.accentSoft(accent),
         borderRadius: BorderRadius.circular(12),
@@ -90,47 +92,59 @@ class ImportStalenessBanner extends StatelessWidget {
               );
 
         if (isNarrow) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.history_toggle_off, color: accent, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: summaryText),
-                ],
-              ),
-              if (moreText != null) ...[
-                const SizedBox(height: 4),
-                moreText,
-              ],
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  importButton,
-                  if (dismissButton != null) ...[
-                    const SizedBox(width: 4),
-                    dismissButton,
+          final dismiss = dismissButton(compact: false);
+          // Corner ×: the container's right/top padding shrinks so the
+          // full-size target hugs the corner without inflating the banner.
+          return Padding(
+            padding: EdgeInsets.fromLTRB(16, dismiss == null ? 12 : 6,
+                dismiss == null ? 16 : 4, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(Icons.history_toggle_off, color: accent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: summaryText),
+                    ?dismiss,
                   ],
-                ],
-              ),
-            ],
+                ),
+                if (moreText != null)
+                  Padding(
+                    // Align under the summary text (icon 18 + gap 8), not
+                    // the banner edge, so the block reads as one message.
+                    padding: const EdgeInsets.only(left: 26, top: 2),
+                    child: moreText,
+                  ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(right: dismiss == null ? 0 : 12),
+                    child: importButton,
+                  ),
+                ),
+              ],
+            ),
           );
         }
-        return Row(
-          children: [
-            Icon(Icons.history_toggle_off, color: accent, size: 18),
-            const SizedBox(width: 8),
-            Flexible(child: summaryText),
-            const SizedBox(width: 8),
-            Expanded(child: moreText ?? const SizedBox.shrink()),
-            importButton,
-            if (dismissButton != null) ...[
-              const SizedBox(width: 4),
-              dismissButton,
+        final dismiss = dismissButton(compact: true);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.history_toggle_off, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Flexible(child: summaryText),
+              const SizedBox(width: 8),
+              Expanded(child: moreText ?? const SizedBox.shrink()),
+              importButton,
+              if (dismiss != null) ...[
+                const SizedBox(width: 4),
+                dismiss,
+              ],
             ],
-          ],
+          ),
         );
       }),
     );
