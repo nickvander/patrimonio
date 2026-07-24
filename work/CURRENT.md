@@ -1,7 +1,25 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-23 (multi-agent UX sweep: 5 fixes + 6 features shipped)
+> **Last updated:** 2026-07-24 (quick-win backlog: 14 of 17 deferred items shipped)
 > **Branch:** `main`.
+
+## 2026-07-24 — Quick-win backlog burn-down
+
+13 commits (`f7e5af0`…`bac4073`) closing 14 of the 17 items deferred from the
+2026-07-23 sweep, each live-UI-verified: window-honest category averages,
+hero-badge anchor honesty (shared `net_worth_delta.dart`), **editable manual
+transactions** (PUT endpoint + prefilled dialog), always-visible entry
+currency in the tx form, lending copy/clarity pass, 2FA-gated recovery-code
+warning, projections/tax copy honesty, flat-loan inline validation +
+scroll-to-error, es-MX launch checklist, no mid-digit money truncation +
+mobile Home quick-add FAB + honest movers card, MXN month-header
+reconciliation, and **FBAR classified by institution country** (currency
+heuristic only for unknown-country rows, flagged; per-account override
+trimmed — DEC-022). Deployed to thelab; APK cut at `bac4073`.
+
+Still deferred (need design, not a sitting): portfolio-total reconciliation
+(portfolio-1), MC-median chart honesty (projections-tax-5), netted harvest
+model (projections-tax-2 proper). Plus feature proposal #1: MX tax parity.
 
 ## 2026-07-23 — Full-app UX/bug sweep, five fixes, six new features
 
