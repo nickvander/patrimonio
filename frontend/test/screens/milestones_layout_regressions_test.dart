@@ -47,7 +47,12 @@ void main() {
     // All four tile titles visible in the viewport ('FI number' also
     // appears as a glossary term later in the tree — the glossary follows
     // the tiles now — so take the first match).
-    for (final title in ['Success rate', 'FI number', 'Years to FI', 'FI income']) {
+    for (final title in [
+      'Success rate',
+      'FI number',
+      'Years to FI',
+      'Income at projected balance',
+    ]) {
       final f = find.text(title).first;
       expect(f, findsOneWidget, reason: 'missing tile title: $title');
       final rect = tester.getRect(f);

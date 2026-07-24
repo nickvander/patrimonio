@@ -902,8 +902,8 @@
   "projFiNumber": "FI number",
   "projYearsToFi": "Years to FI",
   "projEstimate": "Estimate",
-  "projFiIncome": "FI income",
-  "projMonthlyAtWithdrawalRate": "Monthly @ withdrawal rate",
+  "projIncomeAtProjectedBalance": "Income at projected balance",
+  "projIncomeAtProjectedBalanceSub": "Monthly · projected balance × withdrawal rate",
   "projInflation": "Inflation",
   "projYearsToRetirement": "Years to retirement",
   "projVolatility": "Return volatility",
@@ -1276,6 +1276,7 @@
   "taxHarvestEstimateTooltip": "Loss × your marginal rate — an estimate on unverified constants, not a guaranteed saving.",
   "taxHarvestNote": "Selling these losers could offset gains. Estimated saving = loss × your marginal rate.",
   "taxNoHarvestCandidates": "No loss lots to harvest right now.",
+  "taxHarvestLossesNoSavings": "Loss lots exist above, but under this simplified estimate (loss × marginal rate) selling them wouldn't reduce your estimated tax right now.",
   "taxWashSaleMarker": "Wash sale",
   "taxWashSaleSafeAfter": "Safe to re-buy after {date}",
   "@taxWashSaleSafeAfter": {

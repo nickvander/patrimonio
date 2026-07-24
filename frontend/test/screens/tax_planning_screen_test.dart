@@ -182,7 +182,8 @@ const Map<String, dynamic> _contributions = {
   'constants_verified': false,
 };
 
-Widget _host({Map<String, dynamic>? settingStore}) {
+Widget _host(
+    {Map<String, dynamic>? settingStore, Map<String, dynamic>? unrealized}) {
   final store = settingStore ?? <String, dynamic>{};
   return MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -197,8 +198,8 @@ Widget _host({Map<String, dynamic>? settingStore}) {
             _summary,
         transactionsFetcher: ({required int year}) async => _transactions,
         disposalsFetcher: (int year) async => _disposals,
-        unrealizedFetcher:
-            ({required int year, required String status}) async => _unrealized,
+        unrealizedFetcher: ({required int year, required String status}) async =>
+            unrealized ?? _unrealized,
         fbarFetcher: (int year) async => _fbar,
         contributionsFetcher: (int year) async => _contributions,
         // All-history realized-gains by_year — the (fixed) source of the year
@@ -288,6 +289,77 @@ void main() {
     expect(find.text(l.taxHarvestEstimate(r'$33')), findsOneWidget);
     // …with the wash-sale marker on the flagged loss.
     expect(find.text(l.taxWashSaleMarker), findsWidgets);
+  });
+
+  testWidgets(
+      'harvest empty state is honest when loss lots exist but the savings '
+      'model recommends none (en + es copy present)', (tester) async {
+    _setSize(tester, const Size(1100, 2600));
+    // A visible loss lot with NO positive savings estimate: it renders in the
+    // bucket table above, but it is not a harvest candidate.
+    final unrealized = <String, dynamic>{
+      ..._unrealized,
+      'lots': [
+        {
+          'symbol': 'PLTR',
+          'name': 'Palantir',
+          'account_name': 'Fidelity Brokerage',
+          'account_type': 'brokerage',
+          'acquired_date': '2025-01-15',
+          'qty': 10,
+          'cost_basis_usd': 500.0,
+          'current_value_usd': 350.0,
+          'unrealized_gain_usd': -150.0, // LOSS, but…
+          'long_term': false,
+          'estimated_tax_savings_usd': 0.0, // …$0 saved under the model
+        },
+      ],
+      'short_term_gain': -150.0,
+    };
+    await tester.pumpWidget(_host(unrealized: unrealized));
+    await tester.pumpAndSettle();
+
+    final l = await AppLocalizations.delegate.load(const Locale('en'));
+    // Regression: the card used to claim "No loss lots to harvest" while the
+    // -$150 loss sat in the table right above it. It must now explain WHY
+    // nothing is recommended instead of denying the losses exist.
+    expect(find.text(l.taxHarvestLossesNoSavings), findsOneWidget);
+    expect(find.text(l.taxNoHarvestCandidates), findsNothing);
+
+    // Both locales carry a real, distinct translation of the new copy.
+    final es = await AppLocalizations.delegate.load(const Locale('es'));
+    expect(es.taxHarvestLossesNoSavings, isNotEmpty);
+    expect(es.taxHarvestLossesNoSavings, isNot(l.taxHarvestLossesNoSavings));
+  });
+
+  testWidgets(
+      '"no loss lots" copy still shows when there genuinely are none',
+      (tester) async {
+    _setSize(tester, const Size(1100, 2600));
+    final unrealized = <String, dynamic>{
+      ..._unrealized,
+      'lots': [
+        {
+          'symbol': 'NVDA',
+          'name': 'NVIDIA',
+          'account_name': 'Fidelity Brokerage',
+          'account_type': 'brokerage',
+          'acquired_date': '2024-12-01',
+          'qty': 3,
+          'cost_basis_usd': 900.0,
+          'current_value_usd': 1200.0,
+          'unrealized_gain_usd': 300.0, // gains only
+          'long_term': false,
+        },
+      ],
+      'short_term_gain': 300.0,
+    };
+    await tester.pumpWidget(_host(unrealized: unrealized));
+    await tester.pumpAndSettle();
+
+    final l = await AppLocalizations.delegate.load(const Locale('en'));
+    expect(find.text(l.taxNoHarvestCandidates), findsOneWidget);
+    expect(find.text(l.taxHarvestLossesNoSavings), findsNothing);
   });
 
   testWidgets('T13: FBAR exceeded state is surfaced', (tester) async {

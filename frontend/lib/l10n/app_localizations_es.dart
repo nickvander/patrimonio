@@ -2798,10 +2798,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projEstimate => 'Estimación';
 
   @override
-  String get projFiIncome => 'Ingreso FI';
+  String get projIncomeAtProjectedBalance => 'Ingreso al saldo proyectado';
 
   @override
-  String get projMonthlyAtWithdrawalRate => 'Mensual a la tasa de retiro';
+  String get projIncomeAtProjectedBalanceSub =>
+      'Mensual · saldo proyectado × tasa de retiro';
 
   @override
   String get projInflation => 'Inflación';
@@ -3370,6 +3371,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get taxNoHarvestCandidates =>
       'No hay lotes en pérdida para cosechar por ahora.';
+
+  @override
+  String get taxHarvestLossesNoSavings =>
+      'Hay lotes en pérdida arriba, pero con esta estimación simplificada (pérdida × tasa marginal) venderlos no reduciría tu impuesto estimado por ahora.';
 
   @override
   String get taxWashSaleMarker => 'Venta ficticia';

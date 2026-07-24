@@ -18,6 +18,7 @@ import 'package:patrimonio/screens/wealth_projection_screen.dart';
 Map<String, dynamic> projectionFixture({
   int years = 30,
   double baristaFiNumber = 700000.0,
+  double monthlyIncomeAtRetirement = 3300.0,
 }) {
   return {
     'points': [
@@ -30,7 +31,7 @@ Map<String, dynamic> projectionFixture({
       'barista_fi_number': baristaFiNumber,
       'coast_fi_achieved': false,
       'estimated_years_to_fi': 8.5,
-      'monthly_income_at_retirement': 3300.0,
+      'monthly_income_at_retirement': monthlyIncomeAtRetirement,
     },
     'monte_carlo': {
       'success_rate': 0.92,

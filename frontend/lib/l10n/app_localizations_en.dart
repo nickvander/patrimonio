@@ -2771,10 +2771,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projEstimate => 'Estimate';
 
   @override
-  String get projFiIncome => 'FI income';
+  String get projIncomeAtProjectedBalance => 'Income at projected balance';
 
   @override
-  String get projMonthlyAtWithdrawalRate => 'Monthly @ withdrawal rate';
+  String get projIncomeAtProjectedBalanceSub =>
+      'Monthly · projected balance × withdrawal rate';
 
   @override
   String get projInflation => 'Inflation';
@@ -3339,6 +3340,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get taxNoHarvestCandidates => 'No loss lots to harvest right now.';
+
+  @override
+  String get taxHarvestLossesNoSavings =>
+      'Loss lots exist above, but under this simplified estimate (loss × marginal rate) selling them wouldn\'t reduce your estimated tax right now.';
 
   @override
   String get taxWashSaleMarker => 'Wash sale';

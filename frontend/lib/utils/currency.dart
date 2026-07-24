@@ -195,6 +195,19 @@ extension MoneyDisplayFormat on NumberFormat {
   /// app); on other formats the result is unspecified.
   String displayMoney(num value) {
     if (value.abs() < wholeMoneyThreshold) return format(value);
+    return wholeMoney(value);
+  }
+
+  /// Formats [value] without cents regardless of magnitude — [displayMoney]
+  /// with the [wholeMoneyThreshold] removed. For display surfaces where the
+  /// figure is itself an estimate (e.g. projection tiles), so cents would
+  /// imply precision the number doesn't have. Rounding, locale, grouping,
+  /// symbol, and sign placement follow [displayMoney]; the same "not where
+  /// exact precision is semantically required" caveat applies.
+  ///
+  /// Only meaningful on currency formats; on other formats [value] is
+  /// formatted as-is.
+  String wholeMoney(num value) {
     final name = currencyName;
     if (name == null) return format(value); // not a currency format
     // `this.` disambiguates from this library's top-level currencySymbol().

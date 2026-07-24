@@ -249,6 +249,33 @@ void main() {
     });
   });
 
+  group('hasLossLots — honest harvest empty state', () {
+    test('true for a loss lot even when the savings gate excludes it', () {
+      // Regression: a loss lot with a zero/absent savings estimate is not a
+      // harvest candidate, but the empty state must not claim "no loss lots"
+      // while the loss sits visibly in the bucket table above.
+      final lots = [
+        {'symbol': 'GAIN', 'unrealized_gain_usd': 300.0},
+        {'symbol': 'LOSS_NO_EST', 'unrealized_gain_usd': -40.0},
+      ];
+      expect(harvestCandidates(lots), isEmpty);
+      expect(hasLossLots(lots), isTrue);
+    });
+
+    test('false when every lot is a gain, and for null/empty/junk rows', () {
+      expect(
+        hasLossLots([
+          {'symbol': 'GAIN', 'unrealized_gain_usd': 300.0},
+          'junk',
+          {'symbol': 'NO_FIELD'},
+        ]),
+        isFalse,
+      );
+      expect(hasLossLots(null), isFalse);
+      expect(hasLossLots(const []), isFalse);
+    });
+  });
+
   group('contributionProgress', () {
     test('fraction and room for a partial contribution', () {
       final p = contributionProgress(

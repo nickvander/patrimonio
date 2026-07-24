@@ -1498,6 +1498,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             ordinaryMarginalRate: ordinaryMarginalPct,
             ltcgMarginalRate: ltcgMarginalPct,
             netBuckets: netBuckets,
+            lossLotsExist: hasLossLots(lots),
           ),
         ],
       ],
@@ -1654,6 +1655,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     double? ordinaryMarginalRate,
     double? ltcgMarginalRate,
     Map<String, dynamic>? netBuckets,
+    bool lossLotsExist = false,
   }) {
     final hasMarginalRates =
         ordinaryMarginalRate != null || ltcgMarginalRate != null;
@@ -1710,7 +1712,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
               child: Text(
-                l.taxNoHarvestCandidates,
+                // Honest empty state: when loss lots ARE visible in the buckets
+                // above but the simplified savings model estimates $0 for all
+                // of them, say WHY nothing is recommended — "no loss lots"
+                // would contradict the table the user is looking at.
+                lossLotsExist
+                    ? l.taxHarvestLossesNoSavings
+                    : l.taxNoHarvestCandidates,
                 style: TextStyle(color: context.textSubtle, fontSize: 12),
               ),
             )

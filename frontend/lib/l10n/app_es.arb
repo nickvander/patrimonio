@@ -792,8 +792,8 @@
   "projFiNumber": "Número FI",
   "projYearsToFi": "Años para FI",
   "projEstimate": "Estimación",
-  "projFiIncome": "Ingreso FI",
-  "projMonthlyAtWithdrawalRate": "Mensual a la tasa de retiro",
+  "projIncomeAtProjectedBalance": "Ingreso al saldo proyectado",
+  "projIncomeAtProjectedBalanceSub": "Mensual · saldo proyectado × tasa de retiro",
   "projInflation": "Inflación",
   "projYearsToRetirement": "Años para el retiro",
   "projVolatility": "Volatilidad del rendimiento",
@@ -1027,6 +1027,7 @@
   "taxHarvestEstimateTooltip": "Pérdida × tu tasa marginal — un estimado con constantes sin verificar, no un ahorro garantizado.",
   "taxHarvestNote": "Vender estas posiciones en pérdida podría compensar ganancias. Ahorro estimado = pérdida × tu tasa marginal.",
   "taxNoHarvestCandidates": "No hay lotes en pérdida para cosechar por ahora.",
+  "taxHarvestLossesNoSavings": "Hay lotes en pérdida arriba, pero con esta estimación simplificada (pérdida × tasa marginal) venderlos no reduciría tu impuesto estimado por ahora.",
   "taxWashSaleMarker": "Venta ficticia",
   "taxWashSaleSafeAfter": "Se puede recomprar después del {date}",
   "@taxWashSaleSafeAfter": {

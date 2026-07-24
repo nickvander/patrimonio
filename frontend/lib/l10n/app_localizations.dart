@@ -4622,17 +4622,17 @@ abstract class AppLocalizations {
   /// **'Estimate'**
   String get projEstimate;
 
-  /// No description provided for @projFiIncome.
+  /// No description provided for @projIncomeAtProjectedBalance.
   ///
   /// In en, this message translates to:
-  /// **'FI income'**
-  String get projFiIncome;
+  /// **'Income at projected balance'**
+  String get projIncomeAtProjectedBalance;
 
-  /// No description provided for @projMonthlyAtWithdrawalRate.
+  /// No description provided for @projIncomeAtProjectedBalanceSub.
   ///
   /// In en, this message translates to:
-  /// **'Monthly @ withdrawal rate'**
-  String get projMonthlyAtWithdrawalRate;
+  /// **'Monthly · projected balance × withdrawal rate'**
+  String get projIncomeAtProjectedBalanceSub;
 
   /// No description provided for @projInflation.
   ///
@@ -5537,6 +5537,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No loss lots to harvest right now.'**
   String get taxNoHarvestCandidates;
+
+  /// No description provided for @taxHarvestLossesNoSavings.
+  ///
+  /// In en, this message translates to:
+  /// **'Loss lots exist above, but under this simplified estimate (loss × marginal rate) selling them wouldn\'t reduce your estimated tax right now.'**
+  String get taxHarvestLossesNoSavings;
 
   /// No description provided for @taxWashSaleMarker.
   ///

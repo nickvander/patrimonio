@@ -110,6 +110,32 @@ void main() {
     });
   });
 
+  group('wholeMoney — always centless (estimate surfaces)', () {
+    test('drops cents below the display threshold too', () {
+      // displayMoney keeps cents under \$10,000; wholeMoney never shows them
+      // (regression: the projections income tile showed "\$3,300.75" —
+      // fake precision on an estimated figure).
+      expect(moneyFormat('USD').wholeMoney(3300.75), '\$3,301');
+      expect(moneyFormat('USD').wholeMoney(3300.0), '\$3,300');
+    });
+
+    test('matches displayMoney at/above the threshold', () {
+      expect(moneyFormat('USD').wholeMoney(385783.67),
+          displayCurrencyAmount(385783.67, 'USD'));
+    });
+
+    test('rounds half away from zero and keeps the sign', () {
+      expect(moneyFormat('USD').wholeMoney(1234.5), '\$1,235');
+      expect(moneyFormat('USD').wholeMoney(-1234.56), '-\$1,235');
+    });
+
+    test('es-MX locale keeps Mexico conventions', () {
+      final es = NumberFormat.currency(
+          locale: 'es_MX', name: 'USD', symbol: '\$');
+      expect(es.wholeMoney(3300.75), '\$3,301');
+    });
+  });
+
   group('compactMoney — chart axis ticks', () {
     // The helper joins symbol and magnitude with no-break spaces so fl_chart
     // axis ticks never wrap; normalize them so assertions read naturally.

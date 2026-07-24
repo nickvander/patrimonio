@@ -217,6 +217,22 @@ List<Map<String, dynamic>> harvestCandidates(List<dynamic>? lots) {
   return out;
 }
 
+/// True when any lot carries an unrealized loss, whether or not it clears the
+/// [harvestCandidates] positive-savings gate. Drives the harvest card's empty
+/// state: loss lots CAN sit visibly in the buckets above while the candidate
+/// list is empty (the per-bucket savings model estimates $0 saved for them),
+/// and in that case the card must not claim "no loss lots" — it says the
+/// losses exist but don't reduce the simplified estimate.
+bool hasLossLots(List<dynamic>? lots) {
+  if (lots == null) return false;
+  for (final r in lots) {
+    if (r is! Map) continue;
+    final gain = (r['unrealized_gain_usd'] as num?)?.toDouble() ?? 0;
+    if (gain < 0) return true;
+  }
+  return false;
+}
+
 /// Totals across the harvest candidates for the summary footer, in USD.
 ///
 /// `totalLossUsd` sums the candidates' (negative) `unrealized_gain_usd` so it

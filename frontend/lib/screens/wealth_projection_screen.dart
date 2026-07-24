@@ -689,12 +689,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     // the leftover and needs ~320px of card so the plot
                     // itself stays ≥ ~200px (title + legend chrome inside the
                     // card use ~70, padding ~48). The milestone tile row
-                    // (flex 1) needs its ~220px too — the old estimate
+                    // (flex 1) needs its ~240px too — the old estimate
                     // omitted it, so at 1440×900 the flex branch was chosen
                     // and the OverflowBox painted the tiles past the window
-                    // edge with no way to scroll (F1).
+                    // edge with no way to scroll (F1). (240, was 220: the
+                    // honest income-tile title/subtitle wrap one line taller.)
                     const chartMinH = 320.0;
-                    const tilesMinH = 220.0;
+                    const tilesMinH = 240.0;
                     // The MX scenario panel is another ~250px of fixed
                     // content; count it or the flex branch collapses the
                     // chart to a sliver exactly like the F1 dividend-panel
@@ -727,7 +728,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                           Expanded(
                             flex: 1,
                             child: LayoutBuilder(builder: (context, tiles) {
-                              // The 4-up tile row wants ~200px of height.
+                              // The 4-up tile row wants ~tilesMinH of height.
                               // When its flex share comes up shorter, the
                               // release build has always just painted past
                               // the window edge; mirror that with an
@@ -739,7 +740,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                                 alignment: Alignment.topCenter,
                                 minHeight: tiles.maxHeight,
                                 maxHeight:
-                                    math.max(tiles.maxHeight, 220.0),
+                                    math.max(tiles.maxHeight, tilesMinH),
                                 child: _buildMilestonesRow(),
                               );
                             }),
@@ -3016,7 +3017,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final mc = _projectionData!['monte_carlo'] as Map<String, dynamic>?;
     final successRate = (mc?['success_rate'] as num?)?.toDouble() ?? 0.0;
 
-    // FI number + FI income are at-retirement figures; show them in retirement-
+    // FI number + projected-balance income are at-retirement figures; show them in retirement-
     // year dollars when nominal is on (factor is 1.0 when it's off).
     final atRetire = _nominalFactor(_yearsToRetirement.toDouble());
 
@@ -3098,14 +3099,19 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           color: context.info,
           compact: stacked,
         ),
+        // Honesty pass: this figure is withdrawal rate × the PROJECTED balance
+        // at retirement — not income at the adjacent FI number — so the title
+        // and subtitle say so, and the value rounds to whole dollars
+        // (wholeMoney, not displayMoney): cents would fake precision on an
+        // estimate.
         _buildMilestoneCard(
-          title: l.projFiIncome,
-          value: widget.currencyFormat.displayMoney(
+          title: l.projIncomeAtProjectedBalance,
+          value: widget.currencyFormat.wholeMoney(
             (metrics['monthly_income_at_retirement'] as num).toDouble() *
                 widget.conversionFactor *
                 atRetire,
           ),
-          subtitle: l.projMonthlyAtWithdrawalRate,
+          subtitle: l.projIncomeAtProjectedBalanceSub,
           icon: Icons.account_balance_wallet_rounded,
           color: context.purpleAccent,
           compact: stacked,
