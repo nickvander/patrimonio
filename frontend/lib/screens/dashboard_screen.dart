@@ -771,6 +771,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             } catch (_) {}
           },
           onAlertsChanged: _reloadAccountAlerts,
+          realtimeEvents: _realtime.events,
         ),
       ));
     }
@@ -1591,6 +1592,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               } catch (_) {}
                             },
                             onAlertsChanged: _reloadAccountAlerts,
+                            realtimeEvents: _realtime.events,
                           );
                         },
                       );
@@ -3918,6 +3920,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       } catch (_) {}
                     },
                     onAlertsChanged: _reloadAccountAlerts,
+                    realtimeEvents: _realtime.events,
                   ),
                   ),
                   // Then the server-backed inbox (dated events, newest
@@ -4225,6 +4228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             importStaleThresholdDays: _importStaleDays,
             onAddAccount: _openAddAccount,
             onAlertsChanged: _reloadAccountAlerts,
+            realtimeEvents: _realtime.events,
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);

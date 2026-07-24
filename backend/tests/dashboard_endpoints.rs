@@ -573,6 +573,67 @@ async fn transactions_listing_includes_source_field() {
     }
 }
 
+#[tokio::test]
+#[serial_test::serial]
+async fn transactions_listing_includes_user_notes_and_user_category() {
+    // manual-tx-edit QA fix: this feed powers the main Transactions tab,
+    // whose "Edit transaction" dialog prefills notes/category from the
+    // row. The SELECT omitted user_notes/user_category, so the dialog
+    // prefilled null and the subsequent PUT wrote user_notes = NULL —
+    // a saved note was silently wiped by editing an unrelated field.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let noted = seed_tx(&pool, user_id, account, "CRITIC TEST noted row", "-9.99").await;
+    sqlx::query(
+        "UPDATE transactions SET user_notes = 'note to keep', user_category = 'Coffee' \
+         WHERE id = $1 AND user_id = $2",
+    )
+    .bind(noted)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .expect("stamp overrides");
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions?limit=100",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().unwrap();
+    let row = rows
+        .iter()
+        .find(|r| r["id"].as_str().unwrap_or_default() == noted.to_string())
+        .expect("seeded manual tx should be listed");
+    assert_eq!(
+        row["user_notes"], "note to keep",
+        "feed must carry the stored note — the edit dialog prefills from it"
+    );
+    assert_eq!(
+        row["user_category"], "Coffee",
+        "feed must carry the category override (user_category-first display)"
+    );
+    // Both keys serialize on every row (explicit null at worst), matching
+    // the per-account feed's shape so both edit surfaces see one contract.
+    for r in rows {
+        let obj = r.as_object().unwrap();
+        assert!(obj.contains_key("user_notes"), "user_notes key on every row");
+        assert!(
+            obj.contains_key("user_category"),
+            "user_category key on every row"
+        );
+    }
+}
+
 // =====================================================================
 // /api/accounts/transactions/{id}/splits — split + unsplit + edit-split
 // =====================================================================

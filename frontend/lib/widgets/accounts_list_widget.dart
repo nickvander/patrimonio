@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../screens/account_transactions_screen.dart';
+import '../services/realtime_service.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
 import '../utils/import_staleness.dart';
@@ -49,6 +52,10 @@ class AccountsListWidget extends StatefulWidget {
   /// Forwarded to the account panel so a low-balance threshold change
   /// refreshes the dashboard's notifications bell immediately.
   final VoidCallback? onAlertsChanged;
+  /// Forwarded to the account panel: the dashboard's single realtime
+  /// event stream, so an open panel refreshes when a transaction changes
+  /// elsewhere (see [AccountTransactionsScreen.realtimeEvents]).
+  final Stream<RealtimeEvent>? realtimeEvents;
   /// Days after which an import-only account's "as of `<date>`" chip turns
   /// warning-colored. The dashboard passes the user's persisted
   /// `import_staleness_days` setting so chip and banner flip together.
@@ -67,6 +74,7 @@ class AccountsListWidget extends StatefulWidget {
     this.onRevalueAccount,
     this.onAddAccount,
     this.onAlertsChanged,
+    this.realtimeEvents,
     this.importStaleThresholdDays = kDefaultImportStaleDays,
   });
 
@@ -90,6 +98,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       widget.onRevalueAccount;
   VoidCallback? get onAddAccount => widget.onAddAccount;
   VoidCallback? get onAlertsChanged => widget.onAlertsChanged;
+  Stream<RealtimeEvent>? get realtimeEvents => widget.realtimeEvents;
 
   // Local UI state (collapse / filter), kept on the State so a silent data
   // refresh doesn't reset which groups are open or what's typed in search.
@@ -1008,6 +1017,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               ? null
               : (id, nickname) async => onRenameAccount!(id, nickname),
           onAlertsChanged: onAlertsChanged,
+          realtimeEvents: realtimeEvents,
         );
       },
       child: ExcludeSemantics(
@@ -1371,6 +1381,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               ? null
               : (id, nickname) async => onRenameAccount!(id, nickname),
           onAlertsChanged: onAlertsChanged,
+          realtimeEvents: realtimeEvents,
         );
       },
       child: LayoutBuilder(

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/screens/account_transactions_screen.dart';
+import 'package:patrimonio/services/realtime_service.dart';
 import 'package:patrimonio/widgets/transactions_tab.dart';
 
 // The panel host (AccountTransactionsScreen) takes test seams for its
@@ -119,6 +120,7 @@ Widget _host(Widget panel) => MaterialApp(
 AccountTransactionsScreen _panel({
   required AccountTransactionsFetcher fetcher,
   List<_Update>? updates,
+  Stream<RealtimeEvent>? realtimeEvents,
 }) {
   return AccountTransactionsScreen(
     account: _account,
@@ -127,6 +129,7 @@ AccountTransactionsScreen _panel({
     currencyFormat: NumberFormat.currency(symbol: r'$'),
     targetCurrency: 'USD',
     usdMxnRate: 0,
+    realtimeEvents: realtimeEvents,
     transactionsFetcher: fetcher,
     transactionUpdater: updates == null
         ? null
@@ -420,6 +423,69 @@ void main() {
       expect(find.text('Showing 50 of 50'), findsOneWidget);
       expect(find.text('Load more'), findsOneWidget);
       await tester.pumpAndSettle();
+    });
+  });
+
+  group('Account panel — realtime refresh (manual-tx-edit QA fix 3)', () {
+    // Pre-fix, the panel never subscribed to server pushes: a transaction
+    // edited elsewhere (dashboard Transactions tab, another tab/device)
+    // left an open panel stale indefinitely. The panel now takes the
+    // opener's realtime stream and maps TransactionsChanged/resync onto
+    // the same depth-preserving in-place refetch a local edit uses.
+    testWidgets(
+        'a TransactionsChanged push refetches in place (no spinner) and a '
+        'burst of events coalesces into ONE refetch', (tester) async {
+      _setViewSize(tester, const Size(1000, 900));
+      final backend = _FakeBackend(_makeTable(5));
+      final events = StreamController<RealtimeEvent>.broadcast();
+      addTearDown(events.close);
+
+      await tester.pumpWidget(
+          _host(_panel(fetcher: backend.fetch, realtimeEvents: events.stream)));
+      await tester.pumpAndSettle();
+      expect(backend.calls, hasLength(1));
+      expect(find.text('Row 0'), findsOneWidget);
+
+      // Out-of-band edit lands server-side, then the push arrives — twice
+      // in quick succession (e.g. the editing surface's own follow-up).
+      backend.table[0]['user_description'] = 'Row 0 (edited elsewhere)';
+      events.add(
+          const RealtimeEvent(type: RealtimeEventType.transactionsChanged));
+      events.add(
+          const RealtimeEvent(type: RealtimeEventType.transactionsChanged));
+      await tester.pump(); // deliver stream events → debounce armed
+      // Inside the debounce window nothing has refetched yet.
+      expect(backend.calls, hasLength(1));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      // One coalesced, depth-preserving refetch from the top…
+      expect(backend.calls, hasLength(2));
+      expect(backend.calls.last, (limit: 50, offset: 0));
+      // …that landed the edit without a full-body spinner/remount.
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Row 0 (edited elsewhere)'), findsOneWidget);
+    });
+
+    testWidgets('non-transaction pushes (fx rate ticks) do not refetch',
+        (tester) async {
+      _setViewSize(tester, const Size(1000, 900));
+      final backend = _FakeBackend(_makeTable(5));
+      final events = StreamController<RealtimeEvent>.broadcast();
+      addTearDown(events.close);
+
+      await tester.pumpWidget(
+          _host(_panel(fetcher: backend.fetch, realtimeEvents: events.stream)));
+      await tester.pumpAndSettle();
+      expect(backend.calls, hasLength(1));
+
+      events.add(const RealtimeEvent(type: RealtimeEventType.fxRatesUpdated));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(backend.calls, hasLength(1),
+          reason: 'FX ticks are frequent and change nothing this list shows');
     });
   });
 }

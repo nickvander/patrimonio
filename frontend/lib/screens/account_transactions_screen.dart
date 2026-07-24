@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
@@ -9,6 +11,7 @@ import '../l10n/app_localizations.dart';
 // services/account_alerts_cache.dart.
 import '../services/account_alerts_cache.dart';
 import '../services/api_service.dart';
+import '../services/realtime_service.dart';
 import '../services/transaction_mutation_refresh.dart'
     show mergeRefetchedTransactions, txRefetchLimit;
 import '../theme/typography.dart';
@@ -74,6 +77,13 @@ class AccountTransactionsScreen extends StatefulWidget {
   /// Fired after a low-balance threshold is saved/removed so the opener
   /// (e.g. the dashboard) can refresh its notifications bell immediately.
   final VoidCallback? onAlertsChanged;
+  /// The opener's server-push stream (the dashboard's single
+  /// [RealtimeService] connection — this panel deliberately does NOT open
+  /// a second websocket). When wired, a TransactionsChanged/resync push
+  /// triggers the same depth-preserving in-place refetch a local edit
+  /// does, so an edit performed elsewhere (the dashboard Transactions
+  /// tab, another tab/device) no longer leaves the open panel stale.
+  final Stream<RealtimeEvent>? realtimeEvents;
   /// Test seam: one paged, newest-first fetch of this account's
   /// transactions. Production leaves it null and the panel uses
   /// `ApiService.getAccountTransactions` — widget tests inject a fake
@@ -107,6 +117,7 @@ class AccountTransactionsScreen extends StatefulWidget {
     this.onBalanceUpdate,
     this.onRenameAccount,
     this.onAlertsChanged,
+    this.realtimeEvents,
     this.transactionsFetcher,
     this.transactionUpdater,
     this.holdingsFetcher,
@@ -152,6 +163,12 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   Map<String, dynamic> _dividends = const {};
   // Low-balance alert thresholds (account id -> native-currency amount).
   Map<String, double> _accountAlerts = const {};
+  // Server-push subscription (see [AccountTransactionsScreen.realtimeEvents])
+  // + a short debounce that coalesces event bursts — and the echo of the
+  // panel's own mutations (which already refetch via their callbacks) —
+  // into one refetch, mirroring the dashboard's 400ms coalescing window.
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
+  Timer? _realtimeDebounce;
 
   /// Locally-tracked balance and nickname so this screen can reflect an edit
   /// immediately without writing back into the parent's shared map. The
@@ -170,10 +187,30 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     _fetchBalanceHistory();
     _fetchHoldings();
     _hydrateAlerts();
+    _realtimeSub = widget.realtimeEvents?.listen(_handleRealtimeEvent);
+  }
+
+  /// Server-pushed change while the panel is open (e.g. the same
+  /// transaction edited from the dashboard Transactions tab, another
+  /// browser tab, or a background sync). Only transaction-shaped events
+  /// refetch — the panel's other data (balance chart, holdings) keeps its
+  /// existing on-mutation refresh paths — and `resync` is included because
+  /// it means "events were dropped; refetch everything you show".
+  void _handleRealtimeEvent(RealtimeEvent e) {
+    if (e.type != RealtimeEventType.transactionsChanged &&
+        e.type != RealtimeEventType.resync) {
+      return;
+    }
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) _refetchTransactionsInPlace();
+    });
   }
 
   @override
   void dispose() {
+    _realtimeSub?.cancel();
+    _realtimeDebounce?.cancel();
     // Round 3 (undo-reachability, part b): a pending delete-undo lives on
     // the panel's nested messenger, which dies with this State — re-show
     // the remaining countdown on the ROOT messenger (captured before the
@@ -1698,6 +1735,7 @@ Future<void> showAccountTransactionsPanel(
   Function(String, double)? onBalanceUpdate,
   Future<void> Function(String, String)? onRenameAccount,
   VoidCallback? onAlertsChanged,
+  Stream<RealtimeEvent>? realtimeEvents,
 }) {
   final size = MediaQuery.sizeOf(context);
   final isNarrow = size.width < 700;
@@ -1714,6 +1752,7 @@ Future<void> showAccountTransactionsPanel(
       onBalanceUpdate: onBalanceUpdate,
       onRenameAccount: onRenameAccount,
       onAlertsChanged: onAlertsChanged,
+      realtimeEvents: realtimeEvents,
     ),
   );
 

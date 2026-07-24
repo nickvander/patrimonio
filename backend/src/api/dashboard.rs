@@ -1169,7 +1169,8 @@ async fn recent_transactions(
                t.date, t.description, t.category, t.category_detailed,
                t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
-               t.user_description, t.payment_payee, t.payment_payer,
+               t.user_description, t.user_category, t.user_notes,
+               t.payment_payee, t.payment_payer,
                t.parent_id,
                t.pending,
                t.source
@@ -1255,6 +1256,14 @@ async fn recent_transactions(
                         .flatten(),
                     user_description: r
                         .try_get::<Option<String>, _>("user_description")
+                        .ok()
+                        .flatten(),
+                    user_category: r
+                        .try_get::<Option<String>, _>("user_category")
+                        .ok()
+                        .flatten(),
+                    user_notes: r
+                        .try_get::<Option<String>, _>("user_notes")
                         .ok()
                         .flatten(),
                     payment_payee: r
@@ -3273,6 +3282,17 @@ struct TransactionEntry {
     /// every Plaid-side fallback when set.
     #[serde(skip_serializing_if = "Option::is_none")]
     user_description: Option<String>,
+    /// User category override — the list/detail surfaces display this
+    /// over the raw `category` when set. Deliberately NOT skipped when
+    /// absent so this feed matches the per-account feed's shape
+    /// (`TransactionResponse` in api/accounts.rs): omitting these two
+    /// fields once made the edit dialog prefill from nulls and the
+    /// subsequent PUT silently wipe a saved note (real data loss).
+    user_category: Option<String>,
+    /// Free-form user note. Same no-skip rationale as `user_category` —
+    /// the edit dialog prefills from this field, so the feed must carry
+    /// the stored value, not leave the client to guess null.
+    user_notes: Option<String>,
     /// Plaid `payment_meta.payee` — for ACH/wire/bill-pay rows where the
     /// bank's `name` is "Miscellaneous Debit" but the payee is the only
     /// useful identifier (e.g. "PG&E", "VERIZON").
