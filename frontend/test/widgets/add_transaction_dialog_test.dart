@@ -203,4 +203,95 @@ void main() {
     expect(find.text('Editar transacción'), findsOneWidget);
     expect(find.text('Guardar'), findsOneWidget);
   });
+
+  // ---- Entry currency always visible (quick-win regression) ------------
+
+  // Material renders prefixText inside an AnimatedOpacity that is 0.0 until
+  // the field is focused or non-empty — so a plain text finder "finds" the
+  // prefix even while it's invisible. Assert the actual opacity of the
+  // nearest AnimatedOpacity ancestor (closest-first ordering).
+  double prefixOpacity(WidgetTester tester, String prefix) {
+    return tester
+        .widget<AnimatedOpacity>(find
+            .ancestor(
+              of: find.text(prefix),
+              matching: find.byType(AnimatedOpacity),
+            )
+            .first)
+        .opacity;
+  }
+
+  testWidgets(
+      'entry currency is visible on the amount field without focusing it',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      AddTransactionDialog(
+        accounts: const [
+          {'id': 'acct-1', 'nickname': 'Checking', 'currency': 'USD'},
+          {'id': 'acct-2', 'nickname': 'CETES Directo', 'currency': 'MXN'},
+        ],
+        apiService: ApiService(),
+        onCreated: () {},
+        initialAccountId: 'acct-2',
+      ),
+    ));
+    await tester.pump();
+
+    // Add mode: the amount field is empty and unfocused — the account's
+    // currency prefix must be painted anyway (regression: prefixText used
+    // to hide until focus because the label sat in-line).
+    expect(prefixOpacity(tester, 'MXN '), 1.0);
+  });
+
+  testWidgets('account dropdown entries carry the native currency',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      AddTransactionDialog(
+        accounts: const [
+          {'id': 'acct-1', 'nickname': 'Fidelity Brokerage', 'currency': 'USD'},
+          {'id': 'acct-2', 'nickname': 'CETES Directo', 'currency': 'MXN'},
+        ],
+        apiService: ApiService(),
+        onCreated: () {},
+      ),
+    ));
+
+    // The collapsed dropdown keeps every item in its internal IndexedStack;
+    // non-selected items are offstage, so search offstage too — each label
+    // (name + " · CODE" token) is present exactly once.
+    expect(find.text(' · USD', skipOffstage: false), findsOneWidget);
+    expect(find.text(' · MXN', skipOffstage: false), findsOneWidget);
+    expect(
+        find.text('Fidelity Brokerage', skipOffstage: false), findsOneWidget);
+    expect(find.text('CETES Directo', skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('phone width (390) lays out with the amount field widest',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_host(
+      AddTransactionDialog(
+        accounts: const [
+          {'id': 'acct-2', 'nickname': 'CETES Directo', 'currency': 'MXN'},
+        ],
+        apiService: ApiService(),
+        onCreated: () {},
+      ),
+    ));
+    await tester.pump();
+
+    // Any RenderFlex overflow at this width fails the test on its own;
+    // additionally the amount field (currency + digits, the cramped one)
+    // must have taken the wider share of the row vs the date field.
+    final amountWidth =
+        tester.getSize(find.widgetWithText(TextFormField, 'Amount')).width;
+    final dateWidth =
+        tester.getSize(find.widgetWithText(InputDecorator, 'Date').first).width;
+    expect(amountWidth, greaterThan(dateWidth));
+    expect(prefixOpacity(tester, 'MXN '), 1.0);
+  });
 }

@@ -279,9 +279,27 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   final nick = (a['nickname'] ?? '').toString();
                   final name = (a['name'] ?? '').toString();
                   final label = nick.isNotEmpty ? nick : name;
+                  final acctCurrency =
+                      (a['currency'] ?? 'USD').toString().toUpperCase();
+                  // The account's native currency rides as its own
+                  // non-shrinking token ("Checking · MXN") so picking an
+                  // account states the entry currency up front — the long
+                  // name ellipsizes, the currency never does.
                   return DropdownMenuItem(
                     value: id,
-                    child: maskAwareNameText(label, const TextStyle()),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: maskAwareNameText(label, const TextStyle()),
+                        ),
+                        Text(
+                          ' · $acctCurrency',
+                          maxLines: 1,
+                          style: TextStyle(color: context.textMuted),
+                        ),
+                      ],
+                    ),
                   );
                 }).toList(),
                 onChanged: (v) => setState(() => _accountId = v),
@@ -310,7 +328,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
               Row(
                 children: [
                   Expanded(
-                    flex: 2,
+                    // Amount is the most cramped field (currency prefix +
+                    // digits) — it gets the wider flex; the date can afford
+                    // to scale down (FittedBox below).
+                    flex: 3,
                     child: TextFormField(
                       controller: _amountController,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -322,6 +343,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                       decoration: InputDecoration(
                         labelText: l.dlgTxAmount,
                         prefixText: '$currency ',
+                        // Material hides prefixText until the field is
+                        // focused or non-empty; force the label to float so
+                        // the entry currency is visible from the start.
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -335,7 +360,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    flex: 3,
+                    flex: 2,
                     child: InkWell(
                       onTap: () async {
                         final picked = await showDatePicker(
@@ -353,7 +378,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),
-                        child: Text(DateFormat('MMM d, y').format(_date)),
+                        // Scale down rather than overflow in the narrower
+                        // flex on phone widths (390px dialogs).
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(DateFormat('MMM d, y').format(_date)),
+                        ),
                       ),
                     ),
                   ),
