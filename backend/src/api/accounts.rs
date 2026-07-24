@@ -10,7 +10,7 @@ use sqlx::Row;
 use tracing::{error, info};
 
 use crate::api::dashboard::latest_usd_mxn_rate;
-use crate::api::session::AuthContext;
+use crate::api::session::{internal, ApiError, AuthContext};
 use crate::models::holding::Holding;
 use crate::AppState;
 
@@ -51,7 +51,14 @@ pub fn router() -> Router<AppState> {
         // from the param route below and reuses the static-before-dynamic
         // ordering already required for `/transactions/batch`.
         .route("/transactions/batch-delete", post(batch_delete_transactions))
-        .route("/transactions/{tx_id}", patch(update_transaction).delete(delete_transaction))
+        // PATCH tweaks user overrides on ANY row; PUT is the full edit of a
+        // manually-entered row (source='manual' only — see the handler).
+        .route(
+            "/transactions/{tx_id}",
+            patch(update_transaction)
+                .put(update_manual_transaction)
+                .delete(delete_transaction),
+        )
         .route(
             "/transactions/{tx_id}/splits",
             axum::routing::post(split_transaction)
@@ -760,6 +767,173 @@ async fn update_transaction(
             error!("Failed to update transaction: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateManualTransactionRequest {
+    /// Mirrors `CreateManualTransactionRequest` (api/dashboard.rs) — the
+    /// Edit flow reopens the add dialog pre-filled and resubmits the
+    /// same field set, now against an existing row.
+    account_id: uuid::Uuid,
+    date: chrono::NaiveDate,
+    description: String,
+    /// Negative = outflow (expense), positive = inflow (income) — same
+    /// storage convention as the create path and the Plaid sync import.
+    amount: rust_decimal::Decimal,
+    currency: String,
+    #[serde(default)]
+    category: Option<String>,
+    #[serde(default)]
+    notes: Option<String>,
+}
+
+/// Full edit of a manually-entered transaction (PUT). Unlike the PATCH
+/// above — user-override tweaks that are valid on any row — this
+/// rewrites the facts themselves (amount, date, direction, currency,
+/// account, description), which is only safe when the user *is* the
+/// source of truth, i.e. `source = 'manual'`. Synced/imported rows get
+/// 403 so bank-reported history can't silently drift from the statement;
+/// rows the caller doesn't own get 404 (indistinguishable from missing).
+///
+/// Mirrors the create/delete paths: `create_manual_transaction` derives
+/// nothing beyond the row itself (no balance/snapshot writes — manual
+/// rows leave `balance_after` NULL and the account's balance is the
+/// user-maintained figure), so the update likewise touches only the row
+/// and republishes the realtime event. The dedup `external_id`
+/// signature is recomputed from the new fields so the create path's
+/// double-submit collapsing keeps working against the edited values.
+async fn update_manual_transaction(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(tx_id): Path<uuid::Uuid>,
+    Json(payload): Json<UpdateManualTransactionRequest>,
+) -> Result<StatusCode, ApiError> {
+    info!(
+        "Editing manual transaction {} for user {}",
+        tx_id, ctx.user_id
+    );
+
+    // Preflight: the row must exist and belong to the caller, and be a
+    // plain (unsplit) manual row.
+    let row = sqlx::query(
+        "SELECT t.source, t.parent_id IS NOT NULL AS is_split_child, \
+                EXISTS(SELECT 1 FROM transactions c WHERE c.parent_id = t.id) AS is_split_parent \
+         FROM transactions t WHERE t.id = $1 AND t.user_id = $2",
+    )
+    .bind(tx_id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal)?
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "transaction not found"))?;
+
+    let source: Option<String> = row.try_get("source").ok().flatten();
+    if source.as_deref() != Some("manual") {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "only manually-entered transactions can be edited",
+        ));
+    }
+    // Split children inherit source='manual' from a manual parent, and a
+    // split parent's amount anchors the children-sum-to-parent invariant
+    // — editing either directly would silently break the split. Those go
+    // through the split editor / unsplit flow instead.
+    let is_split_child: bool = row.try_get("is_split_child").unwrap_or(false);
+    let is_split_parent: bool = row.try_get("is_split_parent").unwrap_or(false);
+    if is_split_child || is_split_parent {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "split transactions can't be edited directly — edit or undo the split instead",
+        ));
+    }
+
+    // The (possibly changed) target account must belong to the caller —
+    // same guard as the PATCH's move path, otherwise an edit could
+    // re-parent a row into someone else's account.
+    let owns = sqlx::query("SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2")
+        .bind(payload.account_id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(internal)?;
+    if owns.is_none() {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "account not found"));
+    }
+
+    // Same dedup signature as create_manual_transaction, recomputed from
+    // the edited fields. A collision with another row's signature on the
+    // same account means the edit would duplicate it — surfaced as 409.
+    let signature = format!(
+        "manual:{}:{}:{}",
+        payload.date,
+        payload.amount,
+        payload
+            .description
+            .to_lowercase()
+            .chars()
+            .take(50)
+            .collect::<String>()
+    );
+
+    // user_category / user_description overrides are cleared: the edit
+    // dialog prefills FROM the effective (override-first) values and the
+    // user has just re-stated them — a stale override left in place
+    // would keep masking the very columns this edit writes and make the
+    // edit look ignored in every list view.
+    let result = sqlx::query(
+        r#"
+        UPDATE transactions
+        SET account_id = $1,
+            external_id = $2,
+            date = $3,
+            description = $4,
+            amount = $5,
+            currency = $6,
+            category = $7,
+            user_category = NULL,
+            user_description = NULL,
+            user_notes = $8
+        WHERE id = $9 AND user_id = $10 AND source = 'manual'
+        "#,
+    )
+    .bind(payload.account_id)
+    .bind(&signature)
+    .bind(payload.date)
+    .bind(&payload.description)
+    .bind(payload.amount)
+    .bind(&payload.currency)
+    .bind(&payload.category)
+    .bind(payload.notes.as_ref().filter(|n| !n.is_empty()))
+    .bind(tx_id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+
+    match result {
+        // Raced away between preflight and write (deleted concurrently).
+        Ok(r) if r.rows_affected() == 0 => Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "transaction not found",
+        )),
+        Ok(_) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            Ok(StatusCode::OK)
+        }
+        // (account_id, external_id) unique clash — the edited values now
+        // exactly match another manual entry. Same message the create
+        // path uses for its ON CONFLICT dedup.
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "duplicate manual transaction",
+        )),
+        Err(e) => Err(internal(e)),
     }
 }
 

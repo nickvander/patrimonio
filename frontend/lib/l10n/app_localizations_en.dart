@@ -598,6 +598,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txEditSplit => 'Edit split';
 
   @override
+  String get txEditTransaction => 'Edit transaction';
+
+  @override
   String get txSplitRemoved => 'Split removed';
 
   @override
@@ -4410,7 +4413,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dlgTxTitle => 'Add transaction';
 
   @override
+  String get dlgTxEditTitle => 'Edit transaction';
+
+  @override
   String get dlgTxAdded => 'Transaction added';
+
+  @override
+  String get dlgTxUpdated => 'Transaction updated';
 
   @override
   String get dlgTxNoAccounts =>

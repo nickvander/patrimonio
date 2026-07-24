@@ -600,6 +600,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get txEditSplit => 'Editar división';
 
   @override
+  String get txEditTransaction => 'Editar movimiento';
+
+  @override
   String get txSplitRemoved => 'División eliminada';
 
   @override
@@ -4449,7 +4452,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dlgTxTitle => 'Agregar transacción';
 
   @override
+  String get dlgTxEditTitle => 'Editar transacción';
+
+  @override
   String get dlgTxAdded => 'Transacción agregada';
+
+  @override
+  String get dlgTxUpdated => 'Transacción actualizada';
 
   @override
   String get dlgTxNoAccounts =>

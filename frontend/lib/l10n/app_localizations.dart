@@ -1130,6 +1130,12 @@ abstract class AppLocalizations {
   /// **'Edit split'**
   String get txEditSplit;
 
+  /// No description provided for @txEditTransaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit transaction'**
+  String get txEditTransaction;
+
   /// No description provided for @txSplitRemoved.
   ///
   /// In en, this message translates to:
@@ -7196,11 +7202,23 @@ abstract class AppLocalizations {
   /// **'Add transaction'**
   String get dlgTxTitle;
 
+  /// No description provided for @dlgTxEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit transaction'**
+  String get dlgTxEditTitle;
+
   /// No description provided for @dlgTxAdded.
   ///
   /// In en, this message translates to:
   /// **'Transaction added'**
   String get dlgTxAdded;
+
+  /// No description provided for @dlgTxUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction updated'**
+  String get dlgTxUpdated;
 
   /// No description provided for @dlgTxNoAccounts.
   ///

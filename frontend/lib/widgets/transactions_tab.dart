@@ -2258,6 +2258,29 @@ class TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
+  /// Opens the Add-transaction dialog in EDIT mode for a manual row
+  /// (`source == 'manual'`): every field pre-filled from the row, submit
+  /// PUTs an update against it. Reuses [AddTransactionDialog] so the
+  /// edit form can never drift from the add form. Fired from the detail
+  /// panel's "Edit transaction" overflow action (manual rows only — the
+  /// server enforces this too with a 403).
+  void _openEditManualDialog(dynamic tx) {
+    if (widget.apiService == null) return;
+    showDialog(
+      context: context,
+      builder: (_) => AddTransactionDialog(
+        accounts: widget.accounts,
+        apiService: widget.apiService!,
+        onCreated: () => widget.onTransactionAdded?.call(),
+        categorySuggestions: _distinctCategories(),
+        // Account-scoped payloads omit account_id — the host's own
+        // account preselect covers that case, same as the add flow.
+        initialAccountId: widget.addTransactionAccountId,
+        editTransaction: Map<String, dynamic>.from(tx as Map),
+      ),
+    );
+  }
+
   Future<void> _downloadCsv() async {
     if (widget.apiService == null) return;
     // A filter/search — or a host whose list is implicitly scoped to one
@@ -3902,7 +3925,17 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     final canCreateLoan =
         s.widget.onCreateLoanFromTx != null && sourceAmount < 0;
     final canMakeRecurring = s.widget.onMakeRecurring != null;
-    final hasOverflow = canMove ||
+    // Full edit (amount/date/direction/account/…) — ONLY for hand-typed
+    // rows: the user is the source of truth there, whereas synced /
+    // imported facts belong to the bank (the server enforces the same
+    // rule with a 403). Split children are excluded — their amounts are
+    // bound to the parent; that path is the split editor.
+    final canEditManual = source == 'manual' &&
+        !isChild &&
+        s.widget.apiService != null &&
+        s.widget.accounts.isNotEmpty;
+    final hasOverflow = canEditManual ||
+        canMove ||
         canSplit ||
         canEditSplit ||
         canUnsplit ||
@@ -3958,6 +3991,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
         icon: const Icon(Icons.more_horiz, size: 22),
         onSelected: (value) {
           switch (value) {
+            case 'editManual':
+              // Close the detail panel first — the edit rewrites the very
+              // fields the panel is showing, so a stale panel behind the
+              // dialog would misrepresent the row after save.
+              _close();
+              s._openEditManualDialog(tx);
+              break;
             case 'split':
               s._openSplitDialog(tx, sourceCurrency, sourceAmount,
                   titleDescription, originalCategory);
@@ -3991,6 +4031,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           }
         },
         itemBuilder: (ctx) => [
+          if (canEditManual)
+            PopupMenuItem(
+              value: 'editManual',
+              child: _menuRow(Icons.edit_note, l.txEditTransaction),
+            ),
           if (canSplit)
             PopupMenuItem(
               value: 'split',

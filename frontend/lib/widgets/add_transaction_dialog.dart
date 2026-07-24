@@ -32,6 +32,13 @@ class AddTransactionDialog extends StatefulWidget {
   /// match any entry in [accounts]; the user can still switch accounts.
   final String? initialAccountId;
 
+  /// Edit mode: the manual transaction (a row map from the transactions
+  /// payload, `source == 'manual'`) being edited. When set, every field
+  /// pre-fills from the row, the "Repeats" rule option is hidden (a rule
+  /// belongs to creation, not correction), and submit PUTs an update to
+  /// the existing row instead of creating a new one. Null = add mode.
+  final Map<String, dynamic>? editTransaction;
+
   const AddTransactionDialog({
     super.key,
     required this.accounts,
@@ -39,6 +46,7 @@ class AddTransactionDialog extends StatefulWidget {
     required this.onCreated,
     this.categorySuggestions = const [],
     this.initialAccountId,
+    this.editTransaction,
   });
 
   @override
@@ -64,9 +72,45 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   /// transaction being added already covers the current occurrence.
   String? _repeats;
 
+  bool get _isEditing => widget.editTransaction != null;
+
   @override
   void initState() {
     super.initState();
+    final edit = widget.editTransaction;
+    if (edit != null) {
+      // Pre-fill everything from the row being edited, using the same
+      // EFFECTIVE values the list shows (override-first) — the server
+      // clears the user_* overrides on save, so what's in the fields is
+      // exactly what the row will display afterwards.
+      final amt = ((edit['amount'] as num?)?.toDouble() ?? 0.0);
+      // Storage sign convention: negative = outflow (expense).
+      _isExpense = amt < 0;
+      _amountController.text = amt.abs().toStringAsFixed(2);
+      final parsedDate = DateTime.tryParse((edit['date'] ?? '').toString());
+      if (parsedDate != null) _date = parsedDate;
+      final userDesc = (edit['user_description'] ?? '').toString().trim();
+      _descController.text = userDesc.isNotEmpty
+          ? userDesc
+          : (edit['description'] ?? '').toString();
+      final userCat = (edit['user_category'] ?? '').toString().trim();
+      final rawCat = (edit['category'] ?? '').toString().trim();
+      // The backend serializes a NULL category as the "Uncategorized"
+      // sentinel in list payloads — don't surface that as an editable
+      // value or saving would persist it as a real category.
+      _categoryController.text = userCat.isNotEmpty
+          ? userCat
+          : (rawCat == 'Uncategorized' ? '' : rawCat);
+      _notesController.text = (edit['user_notes'] ?? '').toString();
+      final acctId = edit['account_id']?.toString();
+      if (acctId != null &&
+          widget.accounts.any((a) => a['id']?.toString() == acctId)) {
+        _accountId = acctId;
+        return;
+      }
+      // Account-scoped payloads omit account_id; fall through to the
+      // host's preselect (the panel's own account) / default pick.
+    }
     // Caller-preselected account (account-scoped hosts) wins when it
     // actually exists in the list.
     final preferred = widget.initialAccountId;
@@ -120,23 +164,41 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
     setState(() => _saving = true);
     try {
-      await widget.apiService.createManualTransaction(
-        accountId: _accountId!,
-        date: _date,
-        description: desc,
-        amount: signed,
-        currency: currency,
-        category: _categoryController.text.trim().isEmpty
-            ? null
-            : _categoryController.text.trim(),
-        notes: _notesController.text.trim().isEmpty
-            ? null
-            : _notesController.text.trim(),
-      );
+      if (_isEditing) {
+        await widget.apiService.updateManualTransaction(
+          id: widget.editTransaction!['id'].toString(),
+          accountId: _accountId!,
+          date: _date,
+          description: desc,
+          amount: signed,
+          currency: currency,
+          category: _categoryController.text.trim().isEmpty
+              ? null
+              : _categoryController.text.trim(),
+          notes: _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
+        );
+      } else {
+        await widget.apiService.createManualTransaction(
+          accountId: _accountId!,
+          date: _date,
+          description: desc,
+          amount: signed,
+          currency: currency,
+          category: _categoryController.text.trim().isEmpty
+              ? null
+              : _categoryController.text.trim(),
+          notes: _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
+        );
+      }
       // The transaction itself is committed; the optional rule is a
       // separate best-effort write. A rule failure must not look like a
       // failed transaction (retrying would double-post), so it reports
-      // its own error and the dialog still closes.
+      // its own error and the dialog still closes. (Edit mode never sets
+      // _repeats — the Repeats field is hidden there.)
       String? ruleError;
       if (_repeats != null) {
         try {
@@ -162,9 +224,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(ruleError ??
-                (_repeats != null
-                    ? '${l.dlgTxAdded} · ${l.recRuleCreated}'
-                    : l.dlgTxAdded))),
+                (_isEditing
+                    ? l.dlgTxUpdated
+                    : _repeats != null
+                        ? '${l.dlgTxAdded} · ${l.recRuleCreated}'
+                        : l.dlgTxAdded))),
       );
     } catch (e) {
       if (!mounted) return;
@@ -184,7 +248,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         (selectedAcct?['currency'] ?? 'USD').toString().toUpperCase();
 
     return AlertDialog(
-      title: Text(l.dlgTxTitle),
+      title: Text(_isEditing ? l.dlgTxEditTitle : l.dlgTxTitle),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: SingleChildScrollView(
@@ -320,30 +384,34 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 12),
               // "Repeats" — creates a recurring rule alongside the
-              // transaction (expected-only; nothing auto-posts).
-              DropdownButtonFormField<String?>(
-                initialValue: _repeats,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: l.recRepeats,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(l.recRepeatsNever),
+              // transaction (expected-only; nothing auto-posts). Hidden
+              // in edit mode: correcting an existing row shouldn't mint
+              // a new rule.
+              if (!_isEditing) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  initialValue: _repeats,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: l.recRepeats,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
                   ),
-                  for (final c in kRecurringCadences)
+                  items: [
                     DropdownMenuItem<String?>(
-                      value: c,
-                      child: Text(cadenceLabel(l, c)),
+                      value: null,
+                      child: Text(l.recRepeatsNever),
                     ),
-                ],
-                onChanged: (v) => setState(() => _repeats = v),
-              ),
+                    for (final c in kRecurringCadences)
+                      DropdownMenuItem<String?>(
+                        value: c,
+                        child: Text(cadenceLabel(l, c)),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _repeats = v),
+                ),
+              ],
             ],
           ),
           ),
@@ -363,7 +431,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text(l.actionAdd),
+              : Text(_isEditing ? l.actionSave : l.actionAdd),
         ),
       ],
     );

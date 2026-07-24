@@ -32,6 +32,7 @@ use rust_decimal::Decimal;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use sqlx::Row;
 use std::str::FromStr;
 use tower::ServiceExt;
 
@@ -1157,6 +1158,215 @@ async fn single_update_transaction_sets_category_ok() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK, "single inline edit must 200, not 500");
     assert_eq!(tx_category(&pool, t1).await.as_deref(), Some("Dining"));
+}
+
+// =====================================================================
+// PUT /api/accounts/transactions/{id} — full edit of a manual row
+// =====================================================================
+
+/// JSON body for the manual-edit PUT — same field set the create path
+/// takes (the frontend reopens the add dialog and resubmits).
+fn manual_edit_body(account: uuid::Uuid) -> Value {
+    serde_json::json!({
+        "account_id": account.to_string(),
+        "date": "2026-01-15",
+        "description": "Team dinner",
+        "amount": "-62.75",
+        "currency": "USD",
+        "category": "Dining",
+        "notes": "will be reimbursed"
+    })
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn put_manual_edit_updates_amount_date_direction_and_clears_overrides() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    // Seed an INFLOW so the edit also flips direction (sign), and give it
+    // stale overrides to prove the full edit clears them (a leftover
+    // user_category/user_description would keep masking the edited
+    // category/description in every list view).
+    let tx = seed_tx(&pool, user_id, account, "Coffee", "4.50").await;
+    sqlx::query(
+        "UPDATE transactions SET user_category = 'Old override', user_description = 'Renamed' \
+         WHERE id = $1",
+    )
+    .bind(tx)
+    .execute(&pool)
+    .await
+    .expect("stamp overrides");
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            &format!("/api/accounts/transactions/{tx}"),
+            Some(&manual_edit_body(account)),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "manual edit should succeed");
+
+    let row = sqlx::query(
+        "SELECT date, description, amount, currency, category, user_category, \
+                user_description, user_notes, external_id \
+         FROM transactions WHERE id = $1",
+    )
+    .bind(tx)
+    .fetch_one(&pool)
+    .await
+    .expect("read edited row");
+    assert_eq!(
+        row.get::<chrono::NaiveDate, _>("date").to_string(),
+        "2026-01-15"
+    );
+    assert_eq!(row.get::<String, _>("description"), "Team dinner");
+    assert_eq!(
+        row.get::<Decimal, _>("amount"),
+        Decimal::from_str("-62.75").unwrap(),
+        "amount + direction (sign) must be rewritten"
+    );
+    assert_eq!(row.get::<String, _>("currency"), "USD");
+    assert_eq!(
+        row.get::<Option<String>, _>("category").as_deref(),
+        Some("Dining")
+    );
+    assert_eq!(
+        row.get::<Option<String>, _>("user_notes").as_deref(),
+        Some("will be reimbursed")
+    );
+    assert_eq!(
+        row.get::<Option<String>, _>("user_category"),
+        None,
+        "stale user_category override must be cleared by a full edit"
+    );
+    assert_eq!(
+        row.get::<Option<String>, _>("user_description"),
+        None,
+        "stale user_description override must be cleared by a full edit"
+    );
+    // The dedup signature follows the edited fields, exactly as the
+    // create path would have computed it for these values.
+    assert_eq!(
+        row.get::<Option<String>, _>("external_id").as_deref(),
+        Some("manual:2026-01-15:-62.75:team dinner"),
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn put_manual_edit_rejects_non_manual_source_with_403() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    // A Plaid-synced row: its facts are the bank's, not the user's.
+    let tx: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id) \
+         VALUES ($1, CURRENT_DATE, 'Synced coffee', -4.50, 'USD', 'plaid', $2) RETURNING id",
+    )
+    .bind(account)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed plaid tx");
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            &format!("/api/accounts/transactions/{tx}"),
+            Some(&manual_edit_body(account)),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::FORBIDDEN,
+        "synced rows must never be rewritable"
+    );
+    let desc: String = sqlx::query_scalar("SELECT description FROM transactions WHERE id = $1")
+        .bind(tx)
+        .fetch_one(&pool)
+        .await
+        .expect("row still there");
+    assert_eq!(desc, "Synced coffee", "row must be untouched");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn put_manual_edit_cross_user_is_404() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (alice_id, _alice_token) = seed_owner(&pool, "alice").await;
+    let (_bob_id, bob_token) = seed_owner(&pool, "bob").await;
+    let (_a_inst, a_acct) = seed_account(&pool, alice_id).await;
+    let a_tx = seed_tx(&pool, alice_id, a_acct, "Alice groceries", "-80.00").await;
+
+    // Bob attacks Alice's manual row (even naming her account as target).
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            &format!("/api/accounts/transactions/{a_tx}"),
+            Some(&manual_edit_body(a_acct)),
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "foreign rows must look nonexistent, not forbidden"
+    );
+    let desc: String = sqlx::query_scalar("SELECT description FROM transactions WHERE id = $1")
+        .bind(a_tx)
+        .fetch_one(&pool)
+        .await
+        .expect("row still there");
+    assert_eq!(desc, "Alice groceries", "Alice's row must be untouched");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn put_manual_edit_cannot_move_into_foreign_account() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (alice_id, alice_token) = seed_owner(&pool, "alice").await;
+    let (bob_id, _bob_token) = seed_owner(&pool, "bob").await;
+    let (_a_inst, a_acct) = seed_account(&pool, alice_id).await;
+    let (_b_inst, b_acct) = seed_account(&pool, bob_id).await;
+    let a_tx = seed_tx(&pool, alice_id, a_acct, "Alice cash", "-10.00").await;
+
+    // Alice edits her own row but targets BOB's account — the destination
+    // ownership guard must reject it (mirrors the PATCH move guard).
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            &format!("/api/accounts/transactions/{a_tx}"),
+            Some(&manual_edit_body(b_acct)),
+            Some(&alice_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        tx_account(&pool, a_tx).await,
+        a_acct,
+        "row must stay on Alice's account"
+    );
 }
 
 #[tokio::test]

@@ -112,4 +112,95 @@ void main() {
 
     expect(accountDropdown(tester).initialValue, 'acct-1');
   });
+
+  // ---- Edit mode (manual transactions become editable) -----------------
+
+  const editAccounts = [
+    {'id': 'acct-1', 'nickname': 'Checking', 'currency': 'USD'},
+    {'id': 'acct-2', 'nickname': 'Savings', 'currency': 'MXN'},
+  ];
+
+  // A row map as the transactions payload delivers it: negative amount =
+  // outflow/expense, user_* overrides carry the effective display values.
+  const editTx = {
+    'id': 'tx-1',
+    'account_id': 'acct-2',
+    'date': '2026-01-15',
+    'description': 'coffee raw',
+    'user_description': 'Coffee with Sam',
+    'amount': -62.75,
+    'currency': 'MXN',
+    'category': 'Dining',
+    'user_notes': 'reimbursed',
+    'source': 'manual',
+  };
+
+  testWidgets('edit mode pre-fills every field from the row (en)',
+      (tester) async {
+    await tester.pumpWidget(_host(
+      AddTransactionDialog(
+        accounts: editAccounts,
+        apiService: ApiService(),
+        onCreated: () {},
+        editTransaction: editTx,
+      ),
+    ));
+
+    // Edit chrome: title + Save (not Add), and no "Repeats" rule field —
+    // correcting a row must not mint a recurring rule.
+    expect(find.text('Edit transaction'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+    expect(find.text('Add'), findsNothing);
+    expect(find.text('Repeats'), findsNothing);
+
+    // Field prefills: account, unsigned amount, effective (override-
+    // first) description, category, notes.
+    expect(accountDropdown(tester).initialValue, 'acct-2');
+    expect(find.widgetWithText(TextField, '62.75'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Coffee with Sam'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Dining'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'reimbursed'), findsOneWidget);
+
+    // Negative stored amount → the Expense segment is preselected.
+    final seg = tester.widget<SegmentedButton<bool>>(
+        find.byType(SegmentedButton<bool>));
+    expect(seg.selected, {true});
+  });
+
+  testWidgets('edit mode filters the "Uncategorized" backend sentinel',
+      (tester) async {
+    // A NULL category serializes as "Uncategorized" in list payloads;
+    // pre-filling that would persist it as a real category on save.
+    final tx = Map<String, dynamic>.from(editTx)
+      ..['category'] = 'Uncategorized';
+    await tester.pumpWidget(_host(
+      AddTransactionDialog(
+        accounts: editAccounts,
+        apiService: ApiService(),
+        onCreated: () {},
+        editTransaction: tx,
+      ),
+    ));
+
+    expect(find.widgetWithText(TextField, 'Uncategorized'), findsNothing);
+  });
+
+  testWidgets('edit mode renders localized chrome in es', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('es'),
+      home: Scaffold(
+        body: AddTransactionDialog(
+          accounts: editAccounts,
+          apiService: ApiService(),
+          onCreated: () {},
+          editTransaction: editTx,
+        ),
+      ),
+    ));
+
+    expect(find.text('Editar transacción'), findsOneWidget);
+    expect(find.text('Guardar'), findsOneWidget);
+  });
 }

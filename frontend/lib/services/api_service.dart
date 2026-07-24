@@ -2099,6 +2099,56 @@ class ApiService {
     }
   }
 
+  /// Full edit of a manually-entered transaction — same field set as
+  /// [createManualTransaction], PUT against the existing row. Only
+  /// `source == 'manual'` rows are editable: the server answers 403 for
+  /// synced/imported rows (their facts belong to the bank) and 404 for
+  /// rows or target accounts the caller doesn't own.
+  Future<void> updateManualTransaction({
+    required String id,
+    required String accountId,
+    required DateTime date,
+    required String description,
+    required double amount,
+    required String currency,
+    String? category,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{
+      'account_id': accountId,
+      'date': '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+      'description': description,
+      'amount': amount,
+      'currency': currency,
+      // Absent keys deserialize to None server-side and CLEAR the
+      // column — deliberate for an edit (blanking the category field
+      // must actually remove the category, unlike the create where
+      // absent just means "none yet").
+      if (category != null && category.isNotEmpty) 'category': category,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    };
+    final response = await _put(
+      Uri.parse('$_baseUrl/accounts/transactions/$id'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode(body),
+    );
+    if (response.statusCode == 409) {
+      // Either the edited values now collide with another manual entry
+      // (dedup signature) or the row is part of a split — surface the
+      // server's message, which distinguishes the two.
+      throw _errorFromBody(response,
+          fallback: _t('Conflicting manual transaction',
+              'Movimiento manual en conflicto'));
+    }
+    if (response.statusCode != 200) {
+      throw _errorFromBody(response,
+          fallback: _t('Failed to update transaction',
+              'No se pudo actualizar el movimiento'));
+    }
+  }
+
   /// Split a transaction into [splits] children. Each split is
   /// `{description, amount, [category]}`. The original parent stays
   /// in the DB for audit but is hidden from every list view.
