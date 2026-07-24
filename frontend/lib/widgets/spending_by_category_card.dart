@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../utils/category.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
+import '../utils/spending_window.dart';
 import '../utils/theme_colors.dart';
 
 /// "Where's my money going?" — per-category spending stacked by month.
@@ -197,7 +198,7 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
                 style: TextStyle(color: context.textMuted, fontSize: 11),
               ),
               const SizedBox(height: 8),
-              _buildLegend(cats, months.length),
+              _buildLegend(cats),
             ],
           ],
           );
@@ -400,17 +401,15 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
     );
   }
 
-  Widget _buildLegend(List<dynamic> cats, int monthCount) {
+  Widget _buildLegend(List<dynamic> cats) {
     final palette = _palette(context);
-    // The most recent month in the window is the current, still-incomplete
-    // month. Counting it as a whole month understates the per-month average
-    // (a half-elapsed month's spend would be divided across a full slot), so
-    // count it as the fraction of the month elapsed so far instead.
-    final now = DateTime.now();
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    final currentMonthFraction = now.day / daysInMonth;
-    final divisor =
-        monthCount > 0 ? (monthCount - 1) + currentMonthFraction : 1.0;
+    // Average over the REQUESTED window, not the backend's `months` list —
+    // that list only carries months that actually had spending, so dividing
+    // by its length inflated sparse categories ($4.50 spent once in a
+    // 12-month window rendered as ~$6/mo). The in-progress current month
+    // counts as its elapsed fraction, not a whole slot (see
+    // spendingWindowDivisor).
+    final divisor = spendingWindowDivisor(_effectiveMonths, DateTime.now());
     return Wrap(
       spacing: 16,
       runSpacing: 8,
