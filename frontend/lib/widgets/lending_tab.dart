@@ -1024,6 +1024,23 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   // default view isn't a wall of dropdowns.
   bool _showAdvanced = false;
 
+  // ----- Inline validation (Form) -----
+  // Errors stay hidden until the first failed submit, then re-validate live
+  // so they clear as the user fixes each field.
+  final _formKey = GlobalKey<FormState>();
+  AutovalidateMode _autovalidate = AutovalidateMode.disabled;
+  // Keys on the validated fields so a failed submit can scroll the FIRST
+  // invalid field into view and name it in the fallback toast — a
+  // below-the-fold "Payment amount" used to fail with only a generic toast
+  // and no visible cue.
+  final _borrowerFieldKey = GlobalKey<FormFieldState<String>>();
+  final _principalFieldKey = GlobalKey<FormFieldState<String>>();
+  final _flatInterestFieldKey = GlobalKey<FormFieldState<String>>();
+  // Shared by the flat-amount "Payment amount" field and the
+  // solve-by-payment "Most they can pay" field — the two are never mounted
+  // at the same time.
+  final _paymentFieldKey = GlobalKey<FormFieldState<String>>();
+
   // ----- Custom-schedule mode (_interestType == 'custom') -----
   // The explicit installment rows the user pastes / edits. Each carries its
   // own controllers so an inline edit doesn't rebuild the whole list.
@@ -1170,7 +1187,10 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       ],
     );
 
-    final contentColumn = Column(
+    final contentColumn = Form(
+        key: _formKey,
+        autovalidateMode: _autovalidate,
+        child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1185,10 +1205,15 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                           n.toLowerCase().contains(value.text.toLowerCase()));
                     },
                     onSelected: (s) => _borrowerText = s,
-                    fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
+                    fieldViewBuilder: (ctx, ctrl, focus, _) => TextFormField(
+                      key: _borrowerFieldKey,
                       controller: ctrl,
                       focusNode: focus,
                       onChanged: (v) => _borrowerText = v,
+                      validator: (v) => (v ?? '').trim().isEmpty
+                          ? AppLocalizations.of(context)
+                              .lendToastEnterBorrowerName
+                          : null,
                       decoration: _decoration(
                           AppLocalizations.of(context).lendFieldBorrowerName,
                           hint: 'e.g. Jose Ramirez',
@@ -1196,11 +1221,19 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
+                  TextFormField(
+                    key: _principalFieldKey,
                     controller: _principalCtrl,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (_) => setState(() {}),
+                    validator: (v) {
+                      final p = double.tryParse((v ?? '').trim());
+                      return (p == null || p <= 0)
+                          ? AppLocalizations.of(context)
+                              .lendToastEnterValidAmount
+                          : null;
+                    },
                     decoration: _decoration(
                         AppLocalizations.of(context).lendFieldAmountLent,
                         prefixText: '$_sym ',
@@ -1290,7 +1323,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                 const SizedBox(height: 16),
                 _buildPreviewCard(),
               ],
-    );
+        ));
 
     final cancelButton = TextButton(
       onPressed: _submitting ? null : () => Navigator.pop(context, false),
@@ -1630,11 +1663,18 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         ),
         const SizedBox(height: 12),
         if (_setByPayment)
-          TextField(
+          TextFormField(
+            key: _paymentFieldKey,
             controller: _paymentCtrl,
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => setState(() {}),
+            validator: (v) {
+              final p = double.tryParse((v ?? '').trim());
+              return (p == null || p <= 0)
+                  ? AppLocalizations.of(context).lendErrEnterPayment
+                  : null;
+            },
             decoration: _decoration(
                 AppLocalizations.of(context).lendFieldMostTheyCanPay,
                 prefixText: '$_sym ',
@@ -1696,10 +1736,22 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
+        TextFormField(
+          key: _flatInterestFieldKey,
           controller: _flatInterestCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           onChanged: (_) => setState(() {}),
+          // Blank is a valid "no interest" entry; anything typed must parse
+          // to a non-negative amount (the old code silently read garbage
+          // as 0).
+          validator: (v) {
+            final t = (v ?? '').trim();
+            if (t.isEmpty) return null;
+            final i = double.tryParse(t);
+            return (i == null || i < 0)
+                ? l10n.lendToastEnterValidAmount
+                : null;
+          },
           decoration: _decoration(
             l10n.lendFieldAgreedInterest,
             hint: 'e.g. 2000',
@@ -1708,10 +1760,30 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
           ),
         ),
         const SizedBox(height: 14),
-        TextField(
+        TextFormField(
+          key: _paymentFieldKey,
           controller: _paymentCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           onChanged: (_) => setState(() {}),
+          validator: (v) {
+            final p = double.tryParse((v ?? '').trim());
+            if (p == null || p <= 0) return l10n.lendErrEnterPayment;
+            // Mirror the submit-time check: a payment so small the schedule
+            // would blow past the installment cap gets flagged here, not
+            // via a generic toast after the fact.
+            final principal = double.tryParse(_principalCtrl.text.trim());
+            final interest =
+                double.tryParse(_flatInterestCtrl.text.trim()) ?? 0;
+            if (principal != null &&
+                principal > 0 &&
+                interest >= 0 &&
+                _flatScheduleRows(
+                        principal: principal, interest: interest, payment: p)
+                    .isEmpty) {
+              return l10n.lendErrPaymentTooSmall;
+            }
+            return null;
+          },
           decoration: _decoration(
             l10n.lendFieldPaymentAmount,
             hint: 'e.g. 4000',
@@ -2473,7 +2545,50 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     );
   }
 
+  /// Runs the inline validators. On failure it (1) shows the inline field
+  /// errors and keeps them live, (2) scrolls the FIRST invalid field into
+  /// view — the "Payment amount" field sits below the fold on short
+  /// viewports — and (3) toasts a fallback message that NAMES the field,
+  /// so the failure is loud even if the field is momentarily off-screen.
+  bool _validateForm() {
+    if (_formKey.currentState?.validate() ?? true) return true;
+    setState(() => _autovalidate = AutovalidateMode.onUserInteraction);
+    final l10n = AppLocalizations.of(context);
+    // Visual (top-to-bottom) order; unmounted fields have no state and are
+    // skipped. The payment key serves whichever payment field is mounted.
+    final fields = <(GlobalKey<FormFieldState<String>>, String)>[
+      (_borrowerFieldKey, l10n.lendFieldBorrowerName),
+      (_principalFieldKey, l10n.lendFieldAmountLent),
+      (_flatInterestFieldKey, l10n.lendFieldAgreedInterest),
+      (
+        _paymentFieldKey,
+        _isFlatAmount
+            ? l10n.lendFieldPaymentAmount
+            : l10n.lendFieldMostTheyCanPay
+      ),
+    ];
+    for (final (key, label) in fields) {
+      if (!(key.currentState?.hasError ?? false)) continue;
+      final fieldCtx = key.currentContext;
+      if (fieldCtx != null) {
+        Scrollable.ensureVisible(
+          fieldCtx,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.15,
+        );
+      }
+      _toast(l10n.lendToastCheckField(label));
+      break;
+    }
+    return false;
+  }
+
   Future<void> _submit() async {
+    // Inline validation covers every style's shared fields (and the flat
+    // payment fields); the per-style submits below keep their own checks
+    // only as unreachable backstops.
+    if (!_validateForm()) return;
     if (_isCustom) {
       await _submitCustom();
       return;

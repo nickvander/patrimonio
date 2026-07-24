@@ -2586,6 +2586,17 @@
   "lendTooltipExportPaymentPlan": "Export payment plan",
   "lendToastEnterBorrowerName": "Enter a borrower name",
   "lendToastEnterValidAmount": "Enter a valid amount",
+  "lendToastCheckField": "Fix “{field}” to continue",
+  "@lendToastCheckField": {
+    "description": "Fallback toast on a failed loan-form submit, naming the first invalid field (its visible label) in case it is off-screen.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "lendErrEnterPayment": "Enter a payment amount greater than 0",
+  "lendErrPaymentTooSmall": "Too small — this payment would never pay off the loan",
   "lendToastFailedToAddLoan": "Failed to add loan",
   "lendToastCouldntSaveChanges": "Couldn't save changes",
   "lendToastScheduleGenerated": "Schedule generated",

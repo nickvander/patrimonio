@@ -5959,6 +5959,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendToastEnterValidAmount => 'Enter a valid amount';
 
   @override
+  String lendToastCheckField(String field) {
+    return 'Fix “$field” to continue';
+  }
+
+  @override
+  String get lendErrEnterPayment => 'Enter a payment amount greater than 0';
+
+  @override
+  String get lendErrPaymentTooSmall =>
+      'Too small — this payment would never pay off the loan';
+
+  @override
   String get lendToastFailedToAddLoan => 'Failed to add loan';
 
   @override

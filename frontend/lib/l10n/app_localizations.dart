@@ -9638,6 +9638,24 @@ abstract class AppLocalizations {
   /// **'Enter a valid amount'**
   String get lendToastEnterValidAmount;
 
+  /// Fallback toast on a failed loan-form submit, naming the first invalid field (its visible label) in case it is off-screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix “{field}” to continue'**
+  String lendToastCheckField(String field);
+
+  /// No description provided for @lendErrEnterPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a payment amount greater than 0'**
+  String get lendErrEnterPayment;
+
+  /// No description provided for @lendErrPaymentTooSmall.
+  ///
+  /// In en, this message translates to:
+  /// **'Too small — this payment would never pay off the loan'**
+  String get lendErrPaymentTooSmall;
+
   /// No description provided for @lendToastFailedToAddLoan.
   ///
   /// In en, this message translates to:
