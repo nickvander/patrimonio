@@ -4337,11 +4337,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get impStaleBannerImport => 'Import statement';
 
   @override
+  String get impStaleBannerDismiss => 'Snooze for 7 days';
+
+  @override
+  String get impStaleSnoozedSnack => 'Import reminders snoozed for 7 days';
+
+  @override
   String get impStaleThresholdTitle => 'Import staleness reminder';
 
   @override
   String get impStaleThresholdSubtitle =>
       'Remind me when imported data is older than this';
+
+  @override
+  String get impStaleRemindHeader => 'Remind me per institution';
+
+  @override
+  String get impStaleRemindSubtitle =>
+      'Off silences the banner and bell for that institution — its “as of” dates stay visible';
 
   @override
   String impContinuityGap(

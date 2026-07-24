@@ -7092,6 +7092,18 @@ abstract class AppLocalizations {
   /// **'Import statement'**
   String get impStaleBannerImport;
 
+  /// No description provided for @impStaleBannerDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Snooze for 7 days'**
+  String get impStaleBannerDismiss;
+
+  /// No description provided for @impStaleSnoozedSnack.
+  ///
+  /// In en, this message translates to:
+  /// **'Import reminders snoozed for 7 days'**
+  String get impStaleSnoozedSnack;
+
   /// No description provided for @impStaleThresholdTitle.
   ///
   /// In en, this message translates to:
@@ -7103,6 +7115,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remind me when imported data is older than this'**
   String get impStaleThresholdSubtitle;
+
+  /// No description provided for @impStaleRemindHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me per institution'**
+  String get impStaleRemindHeader;
+
+  /// No description provided for @impStaleRemindSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Off silences the banner and bell for that institution — its “as of” dates stay visible'**
+  String get impStaleRemindSubtitle;
 
   /// No description provided for @impContinuityGap.
   ///

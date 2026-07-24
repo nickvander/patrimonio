@@ -88,4 +88,66 @@ void main() {
     await tester.tap(find.text('Import statement'));
     expect(tapped, isTrue);
   });
+
+  testWidgets('no dismiss × without an onDismiss handler', (tester) async {
+    await tester
+        .pumpWidget(_wrap(const ImportStalenessBanner(stale: _stale)));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.close), findsNothing);
+  });
+
+  testWidgets('dismiss × renders and reports the shown institutions',
+      (tester) async {
+    List<StaleImportInstitution>? dismissed;
+    await tester.pumpWidget(_wrap(ImportStalenessBanner(
+      stale: _stale,
+      onDismiss: (shown) => dismissed = shown,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.close), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close));
+    expect(dismissed, isNotNull,
+        reason: 'tapping × must fire the dismiss callback');
+    expect(dismissed!.map((s) => s.name), ['Banamex', 'CetesDirecto'],
+        reason: 'the callback receives exactly the institutions listed, '
+            'so the parent snoozes precisely that set');
+  });
+
+  testWidgets('a muted institution is absent from the banner',
+      (tester) async {
+    // Compose the real filter + the banner, as the dashboard does: Banamex
+    // (the most-stale institution) is muted, so the banner must lead with
+    // CetesDirecto and show no "more" line.
+    final stale = staleImportInstitutions(
+      [
+        {
+          'institution_id': 'inst-banamex',
+          'institution_name': 'Banamex',
+          'integration_type': 'manual',
+          'last_data_at': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(days: 42))
+              .toIso8601String(),
+        },
+        {
+          'institution_id': 'inst-cetes',
+          'institution_name': 'CetesDirecto',
+          'integration_type': 'manual',
+          'last_data_at': DateTime.now()
+              .toUtc()
+              .subtract(const Duration(days: 31))
+              .toIso8601String(),
+        },
+      ],
+      thresholdDays: 30,
+      muted: {'inst-banamex'},
+    );
+    await tester.pumpWidget(_wrap(ImportStalenessBanner(stale: stale)));
+    await tester.pumpAndSettle();
+    final text = _allText(tester);
+    expect(text, isNot(contains('Banamex')));
+    expect(text,
+        contains('CetesDirecto data is 31 days old — import a statement'));
+    expect(text, isNot(contains('more institution')));
+  });
 }

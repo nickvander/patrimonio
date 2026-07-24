@@ -9,20 +9,27 @@ import '../utils/theme_colors.dart';
 /// old — import a statement", deep-linking to the import screen.
 ///
 /// Sits under [SyncErrorBanner] in the pinned column. Deliberately the
-/// info accent, not warning — old data is a nudge, not a failure; the
-/// user makes it disappear by importing (or raising the threshold in
-/// Settings), so there is no dismiss affordance to manage.
+/// info accent, not warning — old data is a nudge, not a failure. The ×
+/// snoozes the CURRENTLY listed institutions for 7 days (persisted
+/// server-side, see the dashboard's snooze handler); an institution that
+/// goes stale later still banners immediately.
 class ImportStalenessBanner extends StatelessWidget {
-  /// Stale institutions, most-stale first (see [staleImportInstitutions]).
+  /// Stale institutions, most-stale first, already filtered for snoozes
+  /// and mutes (see [staleImportInstitutions]).
   final List<StaleImportInstitution> stale;
 
   /// Opens the import screen.
   final VoidCallback? onImport;
 
+  /// Called with the institutions currently shown when the user taps ×.
+  /// The parent persists a 7-day snooze for exactly this set.
+  final void Function(List<StaleImportInstitution> shown)? onDismiss;
+
   const ImportStalenessBanner({
     super.key,
     required this.stale,
     this.onImport,
+    this.onDismiss,
   });
 
   @override
@@ -43,6 +50,17 @@ class ImportStalenessBanner extends StatelessWidget {
       icon: const Icon(Icons.upload_file, size: 16),
       label: Text(l.impStaleBannerImport),
     );
+    // Same dismiss affordance as SyncErrorBanner's ×: compact, subtle,
+    // tooltip spells out that it snoozes rather than resolves.
+    final dismissButton = onDismiss == null
+        ? null
+        : IconButton(
+            onPressed: () => onDismiss!(stale),
+            icon: const Icon(Icons.close, size: 18),
+            tooltip: l.impStaleBannerDismiss,
+            visualDensity: VisualDensity.compact,
+            color: context.textSubtle,
+          );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -87,7 +105,16 @@ class ImportStalenessBanner extends StatelessWidget {
                 const SizedBox(height: 4),
                 moreText,
               ],
-              Align(alignment: Alignment.centerRight, child: importButton),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  importButton,
+                  if (dismissButton != null) ...[
+                    const SizedBox(width: 4),
+                    dismissButton,
+                  ],
+                ],
+              ),
             ],
           );
         }
@@ -99,6 +126,10 @@ class ImportStalenessBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(child: moreText ?? const SizedBox.shrink()),
             importButton,
+            if (dismissButton != null) ...[
+              const SizedBox(width: 4),
+              dismissButton,
+            ],
           ],
         );
       }),

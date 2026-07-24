@@ -1781,8 +1781,12 @@
     }
   },
   "impStaleBannerImport": "Import statement",
+  "impStaleBannerDismiss": "Snooze for 7 days",
+  "impStaleSnoozedSnack": "Import reminders snoozed for 7 days",
   "impStaleThresholdTitle": "Import staleness reminder",
   "impStaleThresholdSubtitle": "Remind me when imported data is older than this",
+  "impStaleRemindHeader": "Remind me per institution",
+  "impStaleRemindSubtitle": "Off silences the banner and bell for that institution — its “as of” dates stay visible",
   "impContinuityGap": "Possible missing statement: ‘{fromFile}’ ends at {fromBalance} ({fromDate}), but ‘{toFile}’ opens at {toBalance} ({toDate}) — an unexplained difference of {diff}. A statement covering the period between them may be missing.",
   "@impContinuityGap": {
     "placeholders": {

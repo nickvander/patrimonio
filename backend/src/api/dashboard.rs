@@ -242,6 +242,7 @@ async fn dashboard_overview(
         sqlx::query(
             r#"
             SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
+                   a.institution_id,
                    i.name as institution_name, i.integration_type, a.ticker_symbol, a.crypto_amount,
                    a.clabe, a.holder_name,
                    -- Freshness of import-only accounts: last import confirm /
@@ -364,6 +365,10 @@ async fn dashboard_overview(
             id: r.get::<uuid::Uuid, _>("id").to_string(),
             name: r.get("name"),
             nickname: r.try_get::<Option<String>, _>("nickname").ok().flatten(),
+            institution_id: r
+                .try_get::<uuid::Uuid, _>("institution_id")
+                .map(|u| u.to_string())
+                .unwrap_or_default(),
             institution_name: r.get("institution_name"),
             account_type: r.get("account_type"),
             current_balance: r.try_get::<rust_decimal::Decimal, _>("current_balance")
@@ -3023,6 +3028,9 @@ struct AccountDetail {
     /// in the UI. None when not set.
     #[serde(skip_serializing_if = "Option::is_none")]
     nickname: Option<String>,
+    /// Owning institution's id — the stable key the staleness snooze/mute
+    /// settings are stored under (names can be renamed; ids can't).
+    institution_id: String,
     institution_name: String,
     account_type: String,
     current_balance: f64,

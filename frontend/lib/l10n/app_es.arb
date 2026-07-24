@@ -1452,8 +1452,12 @@
   "impStaleBannerSummary": "Los datos de {name} tienen {days, plural, =1{1 día} other{{days} días}} — importa un estado de cuenta",
   "impStaleBannerMore": "{count, plural, =1{1 institución más también necesita} other{{count} instituciones más también necesitan}} una importación reciente",
   "impStaleBannerImport": "Importar estado de cuenta",
+  "impStaleBannerDismiss": "Posponer 7 días",
+  "impStaleSnoozedSnack": "Recordatorios de importación pospuestos 7 días",
   "impStaleThresholdTitle": "Recordatorio de datos importados",
   "impStaleThresholdSubtitle": "Recuérdame cuando los datos importados sean más antiguos que esto",
+  "impStaleRemindHeader": "Recuérdame por institución",
+  "impStaleRemindSubtitle": "Apagado silencia el aviso y la campana para esa institución — sus fechas “al día” siguen visibles",
   "impContinuityGap": "Posible estado de cuenta faltante: ‘{fromFile}’ cierra en {fromBalance} ({fromDate}), pero ‘{toFile}’ abre en {toBalance} ({toDate}) — una diferencia sin explicar de {diff}. Puede faltar un estado de cuenta que cubra el periodo entre ellos.",
   "@impContinuityGap": {
     "placeholders": {

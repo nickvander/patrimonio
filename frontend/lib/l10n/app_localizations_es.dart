@@ -4376,11 +4376,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get impStaleBannerImport => 'Importar estado de cuenta';
 
   @override
+  String get impStaleBannerDismiss => 'Posponer 7 días';
+
+  @override
+  String get impStaleSnoozedSnack =>
+      'Recordatorios de importación pospuestos 7 días';
+
+  @override
   String get impStaleThresholdTitle => 'Recordatorio de datos importados';
 
   @override
   String get impStaleThresholdSubtitle =>
       'Recuérdame cuando los datos importados sean más antiguos que esto';
+
+  @override
+  String get impStaleRemindHeader => 'Recuérdame por institución';
+
+  @override
+  String get impStaleRemindSubtitle =>
+      'Apagado silencia el aviso y la campana para esa institución — sus fechas “al día” siguen visibles';
 
   @override
   String impContinuityGap(

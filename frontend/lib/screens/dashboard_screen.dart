@@ -249,6 +249,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // sweep reads the same key), surfaced as a stepper in the Modules card.
   // Drives both the dashboard banner and the accounts-list "as of" chips.
   int _importStaleDays = kDefaultImportStaleDays;
+  // Per-institution staleness snoozes (banner ×, 7 days) and permanent
+  // mutes ("Remind me" toggles in the Modules card), both keyed by
+  // institution id and server-stored (app_settings
+  // 'import_staleness_snoozes' / 'import_staleness_muted') so they hold
+  // across web + Android AND silence the backend's nightly bell sweep.
+  Map<String, ImportStaleSnooze> _importStaleSnoozes = {};
+  Set<String> _importStaleMuted = {};
   List<dynamic>? _fxTransfers;
   // Pending date-window seed from a chart-bar tap. When non-null, the
   // TransactionsTab seeds its filters with a custom date range covering
@@ -2239,10 +2246,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
+            // Per-institution "Remind me" toggles for import-only (manual)
+            // institutions. Off = permanently muted: never banners, never
+            // gets a bell row — but the accounts-list "as of" chips stay
+            // (data honesty is not muted). Persisted server-side so the
+            // nightly sweep honors it too.
+            ..._buildImportStaleReminderToggles(l),
           ],
         ),
       ),
     );
+  }
+
+  /// The "Remind me" rows under the staleness stepper: one switch per
+  /// import-only institution (from the sync-status list, which carries
+  /// id + integration_type for every institution). Empty when the user
+  /// has no manual institutions — then the whole block disappears.
+  List<Widget> _buildImportStaleReminderToggles(AppLocalizations l) {
+    final manual = (_syncData ?? const [])
+        .whereType<Map>()
+        .where((i) => (i['integration_type'] ?? '').toString() == 'manual')
+        .where((i) => (i['id'] ?? '').toString().isNotEmpty)
+        .toList()
+      ..sort((a, b) => (a['name'] ?? '')
+          .toString()
+          .toLowerCase()
+          .compareTo((b['name'] ?? '').toString().toLowerCase()));
+    if (manual.isEmpty) return const [];
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l.impStaleRemindHeader,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.textPrimary)),
+            const SizedBox(height: 2),
+            Text(l.impStaleRemindSubtitle,
+                style: TextStyle(fontSize: 12, color: context.textSubtle)),
+          ],
+        ),
+      ),
+      for (final inst in manual)
+        SwitchListTile(
+          dense: true,
+          value: !_importStaleMuted.contains(inst['id'].toString()),
+          onChanged: (v) =>
+              _setImportStaleReminder(inst['id'].toString(), v),
+          title: Text((inst['name'] ?? '').toString(),
+              style: TextStyle(fontSize: 13, color: context.textPrimary)),
+        ),
+    ];
   }
 
   /// Preferences card on the Settings tab — language + theme. These app-level
@@ -3305,6 +3362,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {/* local dismissal still holds for the session */}
   }
 
+  /// Dismiss (×) on the import-staleness banner: snooze the institutions
+  /// currently listed for 7 days, per institution, persisted server-side
+  /// (so the dismissal holds across web + Android and silences the
+  /// nightly bell sweep too). Each entry records the institution's
+  /// last_data_at at dismiss time — a fresh import moves past it and
+  /// re-arms the reminder immediately, and an institution NOT in this
+  /// set that goes stale later still banners right away.
+  Future<void> _snoozeImportStaleBanner(
+      List<StaleImportInstitution> shown) async {
+    final now = DateTime.now().toUtc();
+    final until = now.add(kImportStaleSnoozeWindow);
+    final merged = Map<String, ImportStaleSnooze>.from(_importStaleSnoozes)
+      // Prune expired windows so the setting doesn't grow forever.
+      ..removeWhere((_, s) => !now.isBefore(s.until));
+    for (final inst in shown) {
+      if (inst.institutionId.isEmpty) continue;
+      merged[inst.institutionId] =
+          ImportStaleSnooze(until: until, dataAsOf: inst.lastDataAt);
+    }
+    setState(() => _importStaleSnoozes = merged);
+    try {
+      await _apiService.putSetting(
+        kImportStaleSnoozesSettingKey,
+        merged.map((id, s) => MapEntry(id, s.toJson())),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text(AppLocalizations.of(context).impStaleSnoozedSnack)),
+        );
+      }
+    } catch (_) {/* local dismissal still holds for the session */}
+  }
+
+  /// "Remind me" toggle for one import-only institution (Modules card).
+  /// Off = permanently muted: no banner, no bell rows — but the accounts
+  /// list "as of" chips stay (data honesty is not muted).
+  Future<void> _setImportStaleReminder(String institutionId, bool remind) async {
+    final prev = _importStaleMuted;
+    final next = Set<String>.from(prev);
+    if (remind) {
+      next.remove(institutionId);
+    } else {
+      next.add(institutionId);
+    }
+    setState(() => _importStaleMuted = next);
+    try {
+      await _apiService.putSetting(
+          kImportStaleMutedSettingKey, next.toList());
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _importStaleMuted = prev);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+      );
+    }
+  }
+
   Future<void> _loadLenderName() async {
     try {
       final raw = await _apiService.getSetting('lender_name');
@@ -3563,6 +3681,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService
             .getNotifications(forceRefresh: forceRefresh)
             .catchError((_) => null),
+        // Staleness banner snoozes + per-institution mutes. Best-effort —
+        // absent/failed just means nothing is snoozed or muted.
+        _apiService
+            .getSetting(kImportStaleSnoozesSettingKey)
+            .catchError((_) => null),
+        _apiService
+            .getSetting(kImportStaleMutedSettingKey)
+            .catchError((_) => null),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -3627,6 +3753,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? recurringUpcomingRaw
             : null;
         _serverNotifications = results[24] as Map<String, dynamic>?;
+        _importStaleSnoozes = staleSnoozesFrom(results[25]);
+        _importStaleMuted = staleMutedFrom(results[26]);
         _isLoading = false;
       });
 
@@ -4103,12 +4231,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // Gentle nudge when an import-only (manual) institution's
                   // data is past the user's staleness threshold. Computed
                   // client-side off the overview accounts' last_data_at so
-                  // it always agrees with the "as of" chips below.
+                  // it always agrees with the "as of" chips below. Snoozed
+                  // (banner ×, 7 days) and muted ("Remind me" off)
+                  // institutions are filtered out here; the "as of" chips
+                  // below deliberately ignore both.
                   if (!firstRun)
                     ImportStalenessBanner(
                       stale: staleImportInstitutions(
                         _overview?['accounts'] ?? const [],
                         thresholdDays: _importStaleDays,
+                        snoozes: _importStaleSnoozes,
+                        muted: _importStaleMuted,
                       ),
                       onImport: () {
                         Navigator.push(
@@ -4118,6 +4251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ).then((_) => _loadAllData(silent: true));
                       },
+                      onDismiss: _snoozeImportStaleBanner,
                     ),
                   Expanded(
                     child: (!firstRun && !isCompact)

@@ -433,6 +433,215 @@ async fn staleness_threshold_setting_is_honored() {
     assert_eq!(stale_notification_count(&pool, user_id).await, 1);
 }
 
+// ---------------------------------------------------------------------------
+// Snooze (banner dismiss = 7-day per-institution silence) + permanent mute
+// ---------------------------------------------------------------------------
+
+/// The institution's freshest data timestamp, exactly as the sweep sees it.
+async fn last_data_at(pool: &PgPool, inst_id: uuid::Uuid) -> chrono::DateTime<chrono::Utc> {
+    sqlx::query_scalar(
+        "SELECT MAX(GREATEST(a.updated_at, tx.last_tx_at)) \
+         FROM accounts a \
+         LEFT JOIN LATERAL ( \
+             SELECT MAX(t.created_at) AS last_tx_at \
+             FROM transactions t WHERE t.account_id = a.id \
+         ) tx ON TRUE \
+         WHERE a.institution_id = $1",
+    )
+    .bind(inst_id)
+    .fetch_one(pool)
+    .await
+    .expect("institution last_data_at")
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn snoozed_institution_is_silent_until_expiry_then_notifies_again() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) =
+        seed_institution_account(&pool, user_id, "CetesDirecto", "manual", 45).await;
+    let data_as_of = last_data_at(&pool, inst).await;
+
+    // Dismissing the banner writes the snooze through the real settings
+    // endpoint (same JSON the frontend produces): until = +7d, plus the
+    // last_data_at observed at dismiss time.
+    let until = chrono::Utc::now() + chrono::Duration::days(7);
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/settings/import_staleness_snoozes",
+            Some(&serde_json::json!({
+                inst.to_string(): {
+                    "until": until.to_rfc3339(),
+                    "data_as_of": data_as_of.to_rfc3339(),
+                }
+            })),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // While snoozed the sweep must stay COMPLETELY silent — no bell row,
+    // not merely a deduplicated one.
+    let recorded = record_staleness_notifications(&pool).await.expect("sweep");
+    assert_eq!(recorded, 0, "active snooze → no notification row");
+    assert_eq!(stale_notification_count(&pool, user_id).await, 0);
+
+    // Rewind the snooze window to the past: still stale → notifies again.
+    let expired = chrono::Utc::now() - chrono::Duration::hours(1);
+    sqlx::query(
+        "UPDATE app_settings \
+         SET value = jsonb_set(value, ARRAY[$2], jsonb_build_object( \
+                 'until', to_jsonb($3::text), \
+                 'data_as_of', value->$2->>'data_as_of')) \
+         WHERE user_id = $1 AND key = 'import_staleness_snoozes'",
+    )
+    .bind(user_id)
+    .bind(inst.to_string())
+    .bind(expired.to_rfc3339())
+    .execute(&pool)
+    .await
+    .expect("expire snooze");
+
+    let recorded = record_staleness_notifications(&pool).await.expect("sweep 2");
+    assert_eq!(recorded, 1, "expired snooze + still stale → reminder fires");
+    assert_eq!(stale_notification_count(&pool, user_id).await, 1);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fresh_import_invalidates_an_active_snooze() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    // Aggressive 1-day threshold so "stale again soon after an import"
+    // can happen INSIDE a still-open 7-day snooze window — the exact case
+    // where data_as_of (not window expiry) must do the re-arming.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/settings/import_staleness_days",
+            Some(&serde_json::json!(1)),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let (inst, acct) = seed_institution_account(&pool, user_id, "Banamex", "manual", 45).await;
+    let data_as_of = last_data_at(&pool, inst).await;
+    let until = chrono::Utc::now() + chrono::Duration::days(7);
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/settings/import_staleness_snoozes",
+            Some(&serde_json::json!({
+                inst.to_string(): {
+                    "until": until.to_rfc3339(),
+                    "data_as_of": data_as_of.to_rfc3339(),
+                }
+            })),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        record_staleness_notifications(&pool).await.expect("sweep 1"),
+        0,
+        "snoozed → silent"
+    );
+
+    // A fresh import 2 days later (inside the snooze window) that is
+    // already 1-day-stale again: last_data_at is now NEWER than the
+    // snooze's data_as_of, so the snooze no longer applies.
+    age_account(&pool, acct, 2).await;
+    let recorded = record_staleness_notifications(&pool).await.expect("sweep 2");
+    assert_eq!(
+        recorded, 1,
+        "data newer than the snooze's data_as_of = new episode → reminder fires"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn muted_institution_never_notifies_but_others_still_do() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let (muted_inst, _) =
+        seed_institution_account(&pool, user_id, "CetesDirecto", "manual", 45).await;
+    seed_institution_account(&pool, user_id, "Banamex", "manual", 60).await;
+
+    // "Remind me" toggled off for CetesDirecto in Settings.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/settings/import_staleness_muted",
+            Some(&serde_json::json!([muted_inst.to_string()])),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let recorded = record_staleness_notifications(&pool).await.expect("sweep");
+    assert_eq!(recorded, 1, "only the unmuted institution notifies");
+    let titles: Vec<String> = sqlx::query_scalar(
+        "SELECT title FROM user_notifications WHERE user_id = $1 AND kind = 'import_stale'",
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(titles.len(), 1);
+    assert!(
+        titles[0].contains("Banamex"),
+        "the bell row belongs to the unmuted institution: {titles:?}"
+    );
+
+    // Mute is permanent: later sweeps stay silent for the muted one even
+    // as it gets more stale (dedup never enters the picture).
+    let recorded = record_staleness_notifications(&pool).await.expect("sweep 2");
+    assert_eq!(recorded, 0);
+    assert_eq!(stale_notification_count(&pool, user_id).await, 1);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn overview_accounts_carry_the_institution_id_snoozes_are_keyed_on() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _) = seed_institution_account(&pool, user_id, "Banamex", "manual", 5).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/overview", None, Some(&cookie)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = body_json(res.into_body()).await;
+    let accounts = json["accounts"].as_array().expect("accounts array");
+    assert_eq!(
+        accounts[0]["institution_id"].as_str(),
+        Some(inst.to_string().as_str()),
+        "overview accounts expose institution_id so the frontend can key \
+         snooze/mute entries on it: {json}"
+    );
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn archived_accounts_do_not_keep_an_institution_on_the_radar() {
