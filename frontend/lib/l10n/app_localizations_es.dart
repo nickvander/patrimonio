@@ -2680,6 +2680,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dashSetupHideDetails => 'Ocultar detalles';
 
   @override
+  String get dashSetupCheckPlaid => 'Vinculación de cuentas con Plaid';
+
+  @override
+  String get dashSetupCheckEncryption => 'Cifrado de credenciales';
+
+  @override
+  String get dashSetupCheckFx => 'Tipos de cambio';
+
+  @override
+  String get dashSetupCheckCoinbase => 'OAuth de Coinbase';
+
+  @override
+  String get dashSetupCheckPlaidWebhook => 'URL del webhook de Plaid';
+
+  @override
+  String get dashSetupCheckCors => 'Lista de orígenes permitidos (CORS)';
+
+  @override
   String get dashHiddenItems => 'Elementos ocultos';
 
   @override

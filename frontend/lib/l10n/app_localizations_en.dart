@@ -2653,6 +2653,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashSetupHideDetails => 'Hide details';
 
   @override
+  String get dashSetupCheckPlaid => 'Plaid account linking';
+
+  @override
+  String get dashSetupCheckEncryption => 'Credential encryption';
+
+  @override
+  String get dashSetupCheckFx => 'Exchange rates';
+
+  @override
+  String get dashSetupCheckCoinbase => 'Coinbase OAuth';
+
+  @override
+  String get dashSetupCheckPlaidWebhook => 'Plaid webhook URL';
+
+  @override
+  String get dashSetupCheckCors => 'CORS allow-list';
+
+  @override
   String get dashHiddenItems => 'Hidden items';
 
   @override

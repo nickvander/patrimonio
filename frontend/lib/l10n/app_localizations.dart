@@ -4400,6 +4400,42 @@ abstract class AppLocalizations {
   /// **'Hide details'**
   String get dashSetupHideDetails;
 
+  /// No description provided for @dashSetupCheckPlaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid account linking'**
+  String get dashSetupCheckPlaid;
+
+  /// No description provided for @dashSetupCheckEncryption.
+  ///
+  /// In en, this message translates to:
+  /// **'Credential encryption'**
+  String get dashSetupCheckEncryption;
+
+  /// No description provided for @dashSetupCheckFx.
+  ///
+  /// In en, this message translates to:
+  /// **'Exchange rates'**
+  String get dashSetupCheckFx;
+
+  /// No description provided for @dashSetupCheckCoinbase.
+  ///
+  /// In en, this message translates to:
+  /// **'Coinbase OAuth'**
+  String get dashSetupCheckCoinbase;
+
+  /// No description provided for @dashSetupCheckPlaidWebhook.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid webhook URL'**
+  String get dashSetupCheckPlaidWebhook;
+
+  /// No description provided for @dashSetupCheckCors.
+  ///
+  /// In en, this message translates to:
+  /// **'CORS allow-list'**
+  String get dashSetupCheckCors;
+
   /// No description provided for @dashHiddenItems.
   ///
   /// In en, this message translates to:

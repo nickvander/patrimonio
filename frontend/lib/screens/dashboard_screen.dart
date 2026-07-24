@@ -30,6 +30,7 @@ import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
 import '../utils/net_worth_delta.dart';
 import '../utils/percent_format.dart';
+import '../utils/setup_check_l10n.dart';
 import '../utils/supported_banks.dart';
 import '../utils/sync_progress.dart';
 import '../utils/theme_colors.dart';
@@ -4666,7 +4667,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              check['label'] ?? '',
+                              // Localize by stable key; the server's English
+                              // `label` is only the fallback for keys this
+                              // build doesn't know (newer backend).
+                              setupCheckLabel(
+                                  l, key, check['label']?.toString() ?? ''),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -4696,7 +4701,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // generic line if all the labels happen to be missing.
                 Text(
                   l.dashRecommendedBeforeProduction(recommended
-                      .map((c) => (c as Map)['label']?.toString() ?? '')
+                      .map((c) => setupCheckLabel(
+                          l,
+                          (c as Map)['key']?.toString() ?? '',
+                          c['label']?.toString() ?? ''))
                       .where((s) => s.isNotEmpty)
                       .join(', ')),
                   style: TextStyle(color: context.textSubtle, fontSize: 12),
