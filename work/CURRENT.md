@@ -33,10 +33,22 @@ trends). The gap was entirely client-side, in three layers that each fail
    `WidgetsBindingObserver`: on resume it reconnects and reloads when the
    on-screen data is older than 30s.
 
-Known remaining gap (not fixed, low impact): an imported statement's
-portfolio total becomes a `balance_snapshots` row dated at the statement's
-period end, so the **net-worth chart's tail** doesn't move until a sync
-writes today's snapshot. The headline net-worth figure updates immediately.
+4. **Chart lagged the hero.** The hero net-worth figure reads
+   `accounts.current_balance` (which the confirm updates); the chart reads
+   `balance_snapshots`, where the import only wrote rows dated at the
+   statement's month ends. Today's row came from the nightly cron — so the
+   two disagreed until it ran, which is a second reason "Sync now" looked
+   like the thing that applied an import. The confirm now also upserts
+   TODAY's snapshot from the closing balance (`DO UPDATE`, because a cron row
+   written this morning holds the pre-import balance; `balance_usd`
+   FX-converted at write time).
+
+   Gated on the statement being the **newest** data for the account
+   (closing date ≥ the newest transaction date already stored). That guard
+   also fixes a pre-existing bug in the same family: the closing balance was
+   applied unconditionally, so importing a backlog (a 2024 statement after a
+   2026 one) walked `current_balance` back two years. History still
+   back-fills its own month-end snapshots either way.
 
 ## 2026-07-24 — Quick-win backlog burn-down
 

@@ -504,6 +504,23 @@ async fn confirm_handler(
     // current balance after the import — idempotent on re-import.
     let mut closing: Option<(chrono::NaiveDate, rust_decimal::Decimal)> = None;
 
+    // How far the account's existing data already reaches, read BEFORE this
+    // batch lands. A statement that ends before this is HISTORY: its rows and
+    // month-end snapshots are still welcome, but it must not touch the
+    // account's present-day balance. Without this guard, importing a backlog
+    // (2024 statements after 2026 ones) walked `current_balance` backwards to
+    // a two-year-old figure. Transaction dates — not `updated_at` — because
+    // we're asking "how recent is the DATA", not "when did we last write it".
+    let prior_latest_tx: Option<chrono::NaiveDate> = sqlx::query_scalar(
+        "SELECT MAX(date) FROM transactions WHERE account_id = $1 AND user_id = $2",
+    )
+    .bind(payload.account_id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
     for (i, ct) in payload.transactions.into_iter().enumerate() {
         let ConfirmTx { tx, source_file } = ct;
         if let Some(bal) = tx.balance_after {
@@ -601,10 +618,18 @@ async fn confirm_handler(
         imported_count, duplicate_count, payload.account_id
     );
 
+    // Is this statement the newest word on the account, or history? Only the
+    // newest one may speak for "today" (see `prior_latest_tx`). Equality
+    // counts so re-importing the same statement stays idempotent.
+    let is_newest_statement = closing
+        .map(|(d, _)| prior_latest_tx.is_none_or(|prior| d >= prior))
+        .unwrap_or(false);
+
     // Set the account's current balance from the statement's closing
     // balance, so an imported account doesn't read $0. Idempotent: re-
-    // importing the same (or newer) statements just re-sets it.
-    if let Some((_, bal)) = closing {
+    // importing the same (or newer) statements just re-sets it. An OLDER
+    // statement is skipped — it would regress the balance to a stale figure.
+    if let (Some((_, bal)), true) = (closing, is_newest_statement) {
         let _ = sqlx::query(
             "UPDATE accounts SET current_balance = $1, updated_at = NOW() \
              WHERE id = $2 AND user_id = $3",
@@ -612,6 +637,46 @@ async fn confirm_handler(
         .bind(bal)
         .bind(payload.account_id)
         .bind(ctx.user_id)
+        .execute(&state.db)
+        .await;
+
+        // …and record it as TODAY's snapshot, so the net-worth CHART agrees
+        // with the net-worth HERO immediately. The hero reads
+        // `accounts.current_balance` (just updated); the chart reads
+        // `balance_snapshots`, whose only other writer for today is the
+        // nightly cron. Without this row the two disagreed until the next
+        // snapshot ran — which is exactly why a manual "Sync now" appeared
+        // to be what "applied" an import.
+        //
+        // DO UPDATE, not DO NOTHING: if the cron already wrote today's row
+        // it holds the PRE-import balance, and the statement is the fresher
+        // information. (The historical back-fill below keeps DO NOTHING —
+        // real dailies must never be clobbered by a month-end figure.)
+        //
+        // `balance_usd` is FX-converted at write time; copying an MXN
+        // balance straight across turns a ~$890k MXN portfolio into a ~17x
+        // overstatement in net worth.
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
+            SELECT a.id, $3::numeric, CURRENT_DATE, a.currency,
+                   CASE WHEN a.currency = 'MXN' AND r.rate IS NOT NULL AND r.rate <> 0
+                        THEN ROUND($3::numeric / r.rate, 2) ELSE $3::numeric END,
+                   a.user_id
+            FROM accounts a
+            LEFT JOIN LATERAL (
+                SELECT rate FROM exchange_rates
+                WHERE base_currency = 'USD' AND target_currency = 'MXN'
+                ORDER BY recorded_at DESC LIMIT 1
+            ) r ON TRUE
+            WHERE a.id = $1 AND a.user_id = $2
+            ON CONFLICT (account_id, as_of_date) DO UPDATE
+                SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd
+            "#,
+        )
+        .bind(payload.account_id)
+        .bind(ctx.user_id)
+        .bind(bal)
         .execute(&state.db)
         .await;
     }
