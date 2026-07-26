@@ -1,7 +1,42 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-24 (quick-win backlog: 14 of 17 deferred items shipped)
-> **Branch:** `main`.
+> **Last updated:** 2026-07-26 (post-import refresh reliability)
+> **Branch:** `fix/post-import-refresh`.
+
+## 2026-07-26 — "Imported, but Home didn't update until I hit Sync now"
+
+Reported after a cetesdirecto PDF import. The **backend was never at fault**:
+prod logs show the confirm landed 10 transactions at 17:09:50 and published
+`transactions_changed` + `accounts_changed` immediately, and replaying the
+same cetes-shaped confirm locally showed every dashboard endpoint reflecting
+it in the same request (tx feed 6→16, balance 85,000→92,500, net worth,
+trends). The gap was entirely client-side, in three layers that each fail
+**silently**:
+
+1. **All-or-nothing refresh (the actual cause).** `_loadAllData` fans ~28
+   reads through one `Future.wait`, which rejects on the FIRST throw, and the
+   `silent: true` catch (used by both post-import reloads) keeps the current
+   screen. One transient 503 discarded the whole refresh, with no error and
+   no retry. Reproduced in the real UI by injecting a 9s 503 on
+   `/dashboard/holdings` across the confirm — Home kept the pre-import card
+   until "Sync now". Fixed: each core read degrades to the value already on
+   screen (`services/resilient_reload.dart`), and a degraded pass arms a
+   bounded retry (5s/15s/45s). Same repro post-fix: Home updates immediately.
+2. **No websocket heartbeat.** Neither side pinged (the old "browser
+   keep-alive pings" comment was wrong — browsers don't send those), so a
+   socket dropped without a close frame left the client believing it was
+   connected and every push was lost. The server now emits
+   `{"event":"heartbeat"}` every 30s (a text frame, because browsers don't
+   expose ping/pong to JS) and the client reconnects after 90s of silence.
+3. **No app-lifecycle handling.** Resuming from background/sleep neither
+   refetched nor revived the socket. The dashboard is now a
+   `WidgetsBindingObserver`: on resume it reconnects and reloads when the
+   on-screen data is older than 30s.
+
+Known remaining gap (not fixed, low impact): an imported statement's
+portfolio total becomes a `balance_snapshots` row dated at the statement's
+period end, so the **net-worth chart's tail** doesn't move until a sync
+writes today's snapshot. The headline net-worth figure updates immediately.
 
 ## 2026-07-24 — Quick-win backlog burn-down
 

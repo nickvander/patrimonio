@@ -136,7 +136,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   String? _error;
@@ -335,6 +336,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // the attempt counter resets on any clean load.
   Timer? _silentRetryTimer;
   int _silentRetryAttempts = 0;
+  // When the last reload finished. Drives the resume refresh's staleness
+  // gate (see didChangeAppLifecycleState).
+  DateTime? _lastLoadCompletedAt;
 
   @override
   void initState() {
@@ -374,6 +378,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // and forget until logout.
     _realtime.connect();
     _realtimeSub = _realtime.events.listen(_handleRealtimeEvent);
+    // Resume handling: see [didChangeAppLifecycleState].
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// A backgrounded app (phone doze, laptop sleep, hidden browser tab) comes
+  /// back with data that can be hours old AND, often, a websocket that died
+  /// without a close frame — so nothing pushes and nothing refetches, and
+  /// the screen keeps showing pre-sleep numbers until the user forces a
+  /// refresh. On resume, revive the channel and pull fresh data.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    // No-op if the socket survived; reconnects it if the watchdog (or the
+    // OS) tore it down while we were away.
+    _realtime.connect();
+    // Only reload if what's on screen has had time to go stale. Resume
+    // fires on every tab flick and on transient interruptions (an OS
+    // dialog bounces inactive→resumed), and a full reload is ~28
+    // requests — gate it on the age of the data, not on the event.
+    final last = _lastLoadCompletedAt;
+    if (last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 30)) {
+      return;
+    }
+    _loadAllData(silent: true, forceRefresh: true);
   }
 
   // Pull low-balance thresholds from the backend setting and merge over the
@@ -402,6 +432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _reloadDebounce?.cancel();
     _silentRetryTimer?.cancel();
     _syncPollTimer?.cancel();
@@ -578,6 +609,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
     debugPrint('realtime: received ${e.type}');
     switch (e.type) {
+      case RealtimeEventType.heartbeat:
+        // Liveness only — RealtimeService already re-armed its watchdog.
+        // Deliberately NOT a reload: it arrives every 30s.
+        return;
       case RealtimeEventType.fxRatesUpdated:
         // FX ticks are the most frequent push and only change the
         // displayed USD↔MXN conversion, which every card derives
@@ -3817,6 +3852,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint(
         "State updated with Phase 7 data: ${_allocationData?.length} categories, ${_trendData?.length} trend months",
       );
+
+      _lastLoadCompletedAt = DateTime.now();
 
       // Something came back stale (a read fell back to what was already on
       // screen). Re-run soon so the miss heals itself instead of waiting for

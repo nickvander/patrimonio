@@ -42,12 +42,31 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| run_socket(socket, realtime, user_id))
 }
 
+/// How often the server emits a `heartbeat` frame on an otherwise idle
+/// socket. Two jobs: it lets the client's watchdog distinguish "nothing
+/// happened" from "this socket is dead" (see `RealtimeEvent::Heartbeat`),
+/// and a failed `send` is how *we* notice a client that vanished without
+/// a close frame, so the task and its broadcast subscription get dropped.
+///
+/// 30s is comfortably under any intermediary idle timeout (prod nginx uses
+/// `proxy_read_timeout 3600s`) and gives the client's 90s watchdog three
+/// chances before it reconnects.
+const HEARTBEAT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Pre-serialized `RealtimeEvent::Heartbeat`. Pinned by a unit test so it
+/// can't drift from the enum's serde representation.
+const HEARTBEAT_FRAME: &str = r#"{"event":"heartbeat"}"#;
+
 async fn run_socket(
     mut socket: WebSocket,
     realtime: crate::services::realtime::Realtime,
     user_id: uuid::Uuid,
 ) {
     let mut rx = realtime.subscribe(user_id).await;
+    let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
+    // `interval` fires its first tick immediately; drop it so a fresh
+    // socket doesn't open with a redundant frame.
+    heartbeat.tick().await;
     loop {
         tokio::select! {
             // Pump server-side events to the client.
@@ -76,6 +95,15 @@ async fn run_socket(
                     Err(RecvError::Closed) => return,
                 }
             }
+            // Liveness tick on an idle socket. A send error means the
+            // client is gone (dropped connection, no close frame), which
+            // is the only way we learn about it while nothing is being
+            // published — drop the socket and its subscription.
+            _ = heartbeat.tick() => {
+                if socket.send(Message::Text(HEARTBEAT_FRAME.into())).await.is_err() {
+                    return;
+                }
+            }
             // Drain inbound client messages (pings, browser tab
             // close). We don't act on text/binary frames — the
             // channel is server-push only.
@@ -87,5 +115,28 @@ async fn run_socket(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::realtime::RealtimeEvent;
+
+    /// The client's liveness watchdog keys off this exact frame, so the
+    /// constant and the enum's serde representation must not drift apart.
+    #[test]
+    fn heartbeat_frame_matches_the_event_serialization() {
+        assert_eq!(
+            serde_json::to_string(&RealtimeEvent::Heartbeat).unwrap(),
+            HEARTBEAT_FRAME
+        );
+    }
+
+    /// Three heartbeats fit inside the client's 90s watchdog window, so a
+    /// single dropped frame can't trigger a spurious reconnect.
+    #[test]
+    fn heartbeat_interval_leaves_the_client_margin() {
+        assert!(HEARTBEAT_INTERVAL.as_secs() * 3 <= 90);
     }
 }

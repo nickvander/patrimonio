@@ -49,6 +49,18 @@ pub enum RealtimeEvent {
     /// UI show a short toast ("Chase synced — 3 new transactions")
     /// instead of just a silent refresh.
     SyncComplete { institution: String },
+    /// Server→client liveness tick. Carries no data and is **never
+    /// published through the hub** — the socket loop emits it on a timer
+    /// (see `api::realtime::HEARTBEAT_INTERVAL`). It exists so the client
+    /// can tell "quiet" from "dead": a websocket dropped by a sleeping
+    /// device or a NAT/proxy timeout often produces no close frame, so
+    /// without a periodic frame the client sits on a half-open socket
+    /// forever, never reconnecting and never seeing another push.
+    ///
+    /// It's a text frame rather than a WebSocket Ping because browsers do
+    /// not expose ping/pong to JavaScript — a Ping would keep the
+    /// connection warm but stay invisible to the web client's watchdog.
+    Heartbeat,
 }
 
 /// Cloneable handle to the hub. Cheap to clone — only the inner
