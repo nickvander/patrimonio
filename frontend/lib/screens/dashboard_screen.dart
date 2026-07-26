@@ -20,6 +20,7 @@ import '../services/preferences.dart';
 import '../services/realtime_service.dart';
 import '../services/resilient_reload.dart';
 import '../services/transaction_mutation_refresh.dart';
+import '../theme/buttons.dart';
 import '../theme/palette.dart';
 import '../theme/typography.dart';
 import '../utils/account_category.dart';
@@ -5785,28 +5786,36 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                   const SizedBox(height: 16),
                   LayoutBuilder(builder: (ctx, c) {
-                    final isNarrow = c.maxWidth < 520;
-                    final tileWidth =
-                        isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
+                    // Full-bleed and stacked while the card is touch-shaped;
+                    // content-sized (bounded) once there is pointer room. The
+                    // old rule was `(c.maxWidth - 16) / 2` with no cap, which
+                    // stretched a two-word label to 565px at 1440. See
+                    // theme/buttons.dart.
+                    final constraints = actionButtonConstraints(c.maxWidth);
                     Widget tile(IconData icon, String label,
                         {required Color bg,
                         Color? fg,
                         Color? iconColor,
                         VoidCallback? onPressed}) {
                       final foreground = fg ?? context.textPrimary;
-                      return SizedBox(
-                        width: tileWidth,
+                      return ConstrainedBox(
+                        constraints: constraints,
                         child: ElevatedButton.icon(
-                          icon: Icon(icon, color: iconColor ?? foreground),
+                          icon: Icon(icon, size: 18,
+                              color: iconColor ?? foreground),
                           label: Text(
                             label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           style: ElevatedButton.styleFrom(
-                            // Slimmer, flatter tiles — the vertical: 20 + the
-                            // default elevation made these read as chunky.
-                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            // M3 Expressive "Small" (40dp). The tiles were on
+                            // vertical: 13 + icon 24 ≈ 50dp, which that ramp
+                            // reserves for a hero action.
+                            minimumSize:
+                                const Size(0, kActionButtonHeight),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 20),
                             elevation: 0,
                             backgroundColor: bg,
                             // Pin foreground so the label stays legible on
@@ -5898,11 +5907,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                             tile(
                               Icons.login,
                               l.dashLinkCoinbase,
-                              // Coinbase brand blue (#0052FF) with white
-                              // text/icon so the brand reads correctly in
-                              // light mode too.
-                              bg: const Color(0xFF0052FF),
-                              fg: Colors.white,
+                              // Coinbase brand blue (#0052FF) rides the ICON,
+                              // not the fill. As a saturated full-width fill
+                              // it was the loudest element on the page and
+                              // outranked the user's own primary actions —
+                              // a partner's brand colour shouldn't win the
+                              // hierarchy inside our surface. Tonal fill keeps
+                              // this level with its siblings; the mark still
+                              // identifies it.
+                              bg: context.accentSoft(const Color(0xFF0052FF)),
+                              iconColor: const Color(0xFF0052FF),
                               onPressed: () {
                                 final baseUrl = _apiService.baseUrl;
                                 navigateTo('$baseUrl/auth/coinbase');
@@ -6074,9 +6088,12 @@ class _DashboardScreenState extends State<DashboardScreen>
           // "Sync all" acts on already-connected accounts, so it sits with
           // the sync-status / FX monitoring row rather than the add-account
           // actions. Inline spinner instead of a blocking SnackBar.
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
+          // Content-sized once there's pointer room, full-bleed on a phone.
+          // This was `width: double.infinity` + `vertical: 18`, i.e. a
+          // 1650x56 slab at desktop width — the single worst offender on the
+          // Settings page. See theme/buttons.dart.
+          LayoutBuilder(builder: (ctx, c) {
+            final button = ElevatedButton.icon(
               icon: _isSyncing
                   ? SizedBox(
                       width: 18,
@@ -6087,7 +6104,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             context.textPrimary),
                       ),
                     )
-                  : const Icon(Icons.sync),
+                  : const Icon(Icons.sync, size: 18),
               label: Text(
                 _isSyncing
                     ? (_syncTotal > 0
@@ -6098,16 +6115,25 @@ class _DashboardScreenState extends State<DashboardScreen>
                 overflow: TextOverflow.ellipsis,
               ),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 18),
+                minimumSize: const Size(0, kActionButtonHeight),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                elevation: 0,
                 backgroundColor: context.accentSoft(context.info),
                 foregroundColor: context.textPrimary,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
               onPressed: _isSyncing ? null : runSync,
-            ),
-          ),
+            );
+            final width = actionButtonWidth(c.maxWidth);
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: width == null
+                  ? button
+                  : SizedBox(width: width, child: button),
+            );
+          }),
           const SizedBox(height: 16),
           LayoutBuilder(builder: (ctx, c) {
             // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
