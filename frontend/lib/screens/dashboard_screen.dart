@@ -18,6 +18,7 @@ import '../services/backend_config.dart';
 import '../services/plaid_oauth.dart';
 import '../services/preferences.dart';
 import '../services/realtime_service.dart';
+import '../services/resilient_reload.dart';
 import '../services/transaction_mutation_refresh.dart';
 import '../theme/palette.dart';
 import '../theme/typography.dart';
@@ -174,6 +175,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _fxRate;
   List<dynamic>? _transactions;
   List<AllocationData>? _allocationData;
+  // The raw /allocation rows behind [_allocationData]. Kept because
+  // [_allocationData] is theme-resolved (colors baked in) and can't be fed
+  // back to the API layer: a degraded reload needs the RAW list to hand to
+  // [keepPreviousOnError] as the previous value.
+  List<dynamic>? _allocationRaw;
   List<Map<String, dynamic>>? _trendData;
   // Cash Flow tab period selector. [_cashFlowPeriod] is the user's choice;
   // [_cashFlowTrends] is the period-specific series fetched on change. While
@@ -324,6 +330,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final List<StreamSubscription<dynamic>> _plaidSubs = [];
   // Coalesces bursty data-change pushes into a single dashboard reload.
   Timer? _reloadDebounce;
+  // Re-runs a silent reload that came back degraded (some read fell back to
+  // its previous value) or died outright. Bounded by [silentRetryDelay];
+  // the attempt counter resets on any clean load.
+  Timer? _silentRetryTimer;
+  int _silentRetryAttempts = 0;
 
   @override
   void initState() {
@@ -392,6 +403,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _reloadDebounce?.cancel();
+    _silentRetryTimer?.cancel();
     _syncPollTimer?.cancel();
     _realtimeSub?.cancel();
     _cancelPlaidSubs();
@@ -3608,18 +3620,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final txLimit = txRefetchLimit(
         loadedCount: _transactions?.length ?? 0, pageSize: _txPageSize);
 
+    // A silent refresh must survive ONE endpoint hiccup: `Future.wait`
+    // rejects on the first throw, and the silent catch below keeps the old
+    // screen — so without this, a single 503 discarded the entire refresh
+    // (a just-imported statement stayed invisible until the user forced a
+    // sync). Each core read degrades to what's already on screen instead,
+    // and [degraded] arms a bounded retry so the miss self-heals.
+    var degraded = false;
+    // Tracked separately: the transaction list drives a
+    // "did the page come back short?" pagination decision below, which is
+    // meaningless when the page IS the previous list.
+    var txReadFailed = false;
+    void noteDegraded(Object e) {
+      // A 401 already triggered the global sign-out; retrying would just
+      // race the auth gate's teardown.
+      if (e is UnauthorizedException) return;
+      degraded = true;
+      debugPrint('Data load: kept previous value after $e');
+    }
+
+    Future<T> soft<T extends Object>(Future<T> read, T? previous) =>
+        keepPreviousOnError(read,
+            previous: previous, silent: silent, onError: noteDegraded);
+
     try {
       final results = await Future.wait([
-        _apiService.getDashboardOverview(forceRefresh: forceRefresh),
-        _apiService.getNetWorthHistory(forceRefresh: forceRefresh),
-        _apiService.getHoldings(forceRefresh: forceRefresh),
-        _apiService.getCreditUtilization(forceRefresh: forceRefresh),
-        _apiService.getSyncStatus(forceRefresh: forceRefresh),
-        _apiService.getSetupStatus(),
-        _apiService.getExchangeRate('USD', 'MXN'),
-        _apiService.getTransactions(limit: txLimit),
-        _apiService.getAllocationData(forceRefresh: forceRefresh),
-        _apiService.getTrendData(forceRefresh: forceRefresh),
+        soft(_apiService.getDashboardOverview(forceRefresh: forceRefresh),
+            _overview),
+        soft(_apiService.getNetWorthHistory(forceRefresh: forceRefresh),
+            _netWorthHistory),
+        soft(_apiService.getHoldings(forceRefresh: forceRefresh),
+            _portfolioData),
+        soft(_apiService.getCreditUtilization(forceRefresh: forceRefresh),
+            _creditData),
+        soft(_apiService.getSyncStatus(forceRefresh: forceRefresh), _syncData),
+        soft(_apiService.getSetupStatus(), _setupStatus),
+        soft(_apiService.getExchangeRate('USD', 'MXN'), _fxRate),
+        keepPreviousOnError(
+          _apiService.getTransactions(limit: txLimit),
+          previous: _transactions,
+          silent: silent,
+          onError: (e) {
+            txReadFailed = true;
+            noteDegraded(e);
+          },
+        ),
+        soft(_apiService.getAllocationData(forceRefresh: forceRefresh),
+            _allocationRaw),
+        soft(_apiService.getTrendData(forceRefresh: forceRefresh), _trendData),
         // These two are non-blocking — a failure shouldn't take the
         // whole dashboard down. Wrap each Future so it can't propagate.
         _apiService
@@ -3691,7 +3739,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .catchError((_) => null),
       ]);
 
-      debugPrint("All data loaded successfully");
+      debugPrint(degraded
+          ? "Data loaded with some reads degraded to their previous value"
+          : "All data loaded successfully");
 
       final allocationRaw = results[8] as List<dynamic>;
       final trendsRaw = results[9] as List<dynamic>;
@@ -3705,18 +3755,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _setupStatus = results[5] as Map<String, dynamic>;
         _fxRate = results[6] as Map<String, dynamic>;
         final refetchedTxs = results[7] as List<dynamic>;
-        _transactions = mergeRefetchedTransactions(
-          previous: _transactions ?? const [],
-          refetched: refetchedTxs,
-          requestedLimit: txLimit,
-        );
-        // If the page came back smaller than what we asked for, the server
-        // ran out of rows — there can't be more pages. A full page on a
-        // depth-preserving reload tells us nothing new, so keep the flag.
-        if (refetchedTxs.length < txLimit) {
-          _transactionsHasMore = false;
+        // When the read failed, `refetchedTxs` IS the current list — merging
+        // it is a no-op and its length says nothing about the server's page
+        // depth, so leave the list and the pagination flag alone.
+        if (!txReadFailed) {
+          _transactions = mergeRefetchedTransactions(
+            previous: _transactions ?? const [],
+            refetched: refetchedTxs,
+            requestedLimit: txLimit,
+          );
+          // If the page came back smaller than what we asked for, the server
+          // ran out of rows — there can't be more pages. A full page on a
+          // depth-preserving reload tells us nothing new, so keep the flag.
+          if (refetchedTxs.length < txLimit) {
+            _transactionsHasMore = false;
+          }
         }
 
+        _allocationRaw = allocationRaw;
         _allocationData = _mapAllocationData(allocationRaw, brightness);
 
         _trendData = trendsRaw.map((e) => e as Map<String, dynamic>).toList();
@@ -3762,6 +3818,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "State updated with Phase 7 data: ${_allocationData?.length} categories, ${_trendData?.length} trend months",
       );
 
+      // Something came back stale (a read fell back to what was already on
+      // screen). Re-run soon so the miss heals itself instead of waiting for
+      // the user to notice and force a refresh.
+      if (degraded) {
+        _scheduleSilentRetry();
+      } else {
+        _clearSilentRetry();
+      }
+
       // A just-linked institution lands in 'syncing' until its background
       // Plaid sync finishes (exchange-token returns first). Keep refreshing
       // until it clears so the new accounts appear on their own.
@@ -3778,8 +3843,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _error = e.toString().replaceFirst('Exception: ', '');
           _isLoading = false;
         });
+      } else if (e is! UnauthorizedException) {
+        // A silent load that died outright (first load, or a read with no
+        // previous value to keep) leaves the screen stale with no signal —
+        // the same trap [keepPreviousOnError] closes, one level up.
+        _scheduleSilentRetry();
       }
     }
+  }
+
+  /// Re-run a silent reload that came back degraded, on a bounded backoff.
+  /// Gives up after [silentRetryDelay] runs out of attempts rather than
+  /// polling a broken backend forever — the next push / sub-screen return /
+  /// explicit refresh reloads anyway.
+  void _scheduleSilentRetry() {
+    final delay = silentRetryDelay(_silentRetryAttempts + 1);
+    if (delay == null) return;
+    _silentRetryAttempts++;
+    _silentRetryTimer?.cancel();
+    _silentRetryTimer = Timer(delay, () {
+      if (mounted) _loadAllData(silent: true, forceRefresh: true);
+    });
+  }
+
+  /// A clean load ends the retry episode: cancel any pending attempt and
+  /// re-arm the full budget for the next one.
+  void _clearSilentRetry() {
+    _silentRetryTimer?.cancel();
+    _silentRetryTimer = null;
+    _silentRetryAttempts = 0;
   }
 
   /// Maps the raw /allocation rows into [AllocationData], resolving each
@@ -3887,8 +3979,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       setState(() {
         _portfolioData = results[0] as Map<String, dynamic>;
-        _allocationData =
-            _mapAllocationData(results[1] as List<dynamic>, brightness);
+        _allocationRaw = results[1] as List<dynamic>;
+        _allocationData = _mapAllocationData(_allocationRaw!, brightness);
       });
     } catch (e) {
       debugPrint('Portfolio refresh error: $e');
