@@ -2053,6 +2053,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String impHoldingsNotAttached(Object error) {
+    return 'Transactions imported, but the statement\'s positions were not attached: $error';
+  }
+
+  @override
   String get impReadingFiles => 'Reading files…';
 
   @override
@@ -3080,6 +3085,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get taxRetry => 'Retry';
+
+  @override
+  String get taxSectionLoadFailed =>
+      'This section could not be loaded — the figures below are not a result.';
 
   @override
   String get taxExportCsv => 'Export CSV';

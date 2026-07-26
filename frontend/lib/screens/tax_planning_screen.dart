@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../services/realtime_service.dart';
 import '../theme/typography.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
@@ -61,12 +64,24 @@ class TaxPlanningScreen extends StatefulWidget {
   final TaxContributionsFetcher? contributionsFetcher;
   final TaxRealizedYearsFetcher? realizedYearsFetcher;
 
+  /// Server-push channel (the dashboard's single [RealtimeService] stream —
+  /// this screen does NOT open a second websocket).
+  ///
+  /// WHY: this screen is a permanently-mounted `IndexedStack` child that
+  /// loaded once in `initState` and had no other refresh path. Import a year
+  /// of statements from the Overview tab, come back, and the capital-gains
+  /// estimate, disposals list and FBAR maximums were still the pre-import
+  /// ones — with nothing on screen saying so, on the tab people file taxes
+  /// from.
+  final Stream<RealtimeEvent>? realtimeEvents;
+
   const TaxPlanningScreen({
     super.key,
     required this.conversionFactor,
     required this.currencyFormat,
     required this.targetCurrency,
     required this.usdMxnRate,
+    this.realtimeEvents,
     this.summaryFetcher,
     this.transactionsFetcher,
     this.disposalsFetcher,
@@ -97,6 +112,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   List<dynamic>? _taxDisposals;
   Map<String, dynamic>? _unrealized;
   Map<String, dynamic>? _fbar;
+  /// Optional sections whose fetch failed on the last load — so a missing
+  /// payload can be rendered as "couldn't load" rather than as a finding.
+  Set<String> _failedSections = const {};
   Map<String, dynamic>? _contributions;
   /// `by_year` rows from `/dashboard/realized-gains` — one entry per year
   /// with a disposal, independent of the selected year's filter. Feeds the
@@ -139,10 +157,45 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   TaxRealizedYearsFetcher get _fetchRealizedYears =>
       widget.realizedYearsFetcher ?? () => _apiService.getRealizedGains();
 
+  // Server-push subscription + its coalescing timer. A multi-account import
+  // fires several pushes; one reload after the flurry is enough.
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
+  Timer? _pushDebounce;
+
   @override
   void initState() {
     super.initState();
     _bootstrap();
+    _realtimeSub = widget.realtimeEvents?.listen(_handleRealtimeEvent);
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    _pushDebounce?.cancel();
+    super.dispose();
+  }
+
+  /// Anything that changes transactions, holdings or balances changes what
+  /// this tab reports — capital gains, disposals, FBAR peaks. Ignore the
+  /// liveness heartbeat and FX ticks (this screen converts client-side from
+  /// the props the dashboard passes down).
+  void _handleRealtimeEvent(RealtimeEvent e) {
+    switch (e.type) {
+      case RealtimeEventType.heartbeat:
+      case RealtimeEventType.fxRatesUpdated:
+        return;
+      case RealtimeEventType.transactionsChanged:
+      case RealtimeEventType.accountsChanged:
+      case RealtimeEventType.syncComplete:
+      case RealtimeEventType.resync:
+      case RealtimeEventType.unknown:
+        _pushDebounce?.cancel();
+        _pushDebounce = Timer(const Duration(milliseconds: 400), () {
+          if (mounted) _loadTaxData();
+        });
+        return;
+    }
   }
 
   /// Load the persisted filing status first (the screen used to reset to
@@ -179,13 +232,21 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
 
     // Optional planning sections fail SOFT: one failing endpoint (e.g. FBAR)
     // must not blank the entire tab. Each is fetched independently and yields
-    // null on error, so only its own section degrades to an empty state while
-    // the core tax data still renders.
-    Future<Map<String, dynamic>?> soft(Future<Map<String, dynamic>> f) async {
+    // null on error, so only its own section degrades while the core tax data
+    // still renders.
+    //
+    // The failure is NAMED, though. A null FBAR payload used to render the
+    // no-data state — "No foreign-account balance history found for this
+    // year" — which is an affirmative claim about the user's tax position,
+    // made on the strength of a request that didn't come back.
+    final failed = <String>{};
+    Future<Map<String, dynamic>?> soft(
+        String section, Future<Map<String, dynamic>> f) async {
       try {
         return await f;
       } catch (e) {
-        debugPrint('Tax planning: optional section failed to load: $e');
+        debugPrint('Tax planning: $section failed to load: $e');
+        failed.add(section);
         return null;
       }
     }
@@ -200,11 +261,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       ]);
       // Secondary planning sections — fail-soft, fetched alongside the core.
       final optional = await Future.wait([
-        soft(_fetchUnrealized(year: _selectedYear, status: _filingStatus)),
-        soft(_fetchFbar(_selectedYear)),
-        soft(_fetchContributions(_selectedYear)),
+        soft('unrealized',
+            _fetchUnrealized(year: _selectedYear, status: _filingStatus)),
+        soft('fbar', _fetchFbar(_selectedYear)),
+        soft('contributions', _fetchContributions(_selectedYear)),
         // Year-dropdown source: all-history by_year, never year-filtered.
-        soft(_fetchRealizedYears()),
+        soft('realized_years', _fetchRealizedYears()),
       ]);
 
       if (!mounted) return;
@@ -217,6 +279,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         _contributions = optional[2];
         _realizedByYear =
             (optional[3]?['by_year'] as List<dynamic>?) ?? _realizedByYear;
+        _failedSections = failed;
         _firstLoad = false;
         _refetching = false;
       });
@@ -230,11 +293,25 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     }
   }
 
-  void _onFilingStatusChanged(String value) {
+  /// Filing status drives every US figure on this screen AND the server-side
+  /// CSV/PDF exports, so the write is awaited: it used to be fire-and-forget,
+  /// which let the UI recompute off a value that never persisted and silently
+  /// reverted on the next visit.
+  Future<void> _onFilingStatusChanged(String value) async {
+    final previous = _filingStatus;
     setState(() => _filingStatus = value);
-    // Persist under the backend's key so direct CSV/PDF links pick it up too.
-    _writeSetting(kFilingStatusSettingKey, value).catchError((_) {});
     _loadTaxData();
+    try {
+      // Persist under the backend's key so direct CSV/PDF links pick it up too.
+      await _writeSetting(kFilingStatusSettingKey, value);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _filingStatus = previous);
+      _loadTaxData();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+      );
+    }
   }
 
   void _onYearChanged(int value) {
@@ -282,9 +359,20 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     // already read into `result` inside the dialog, so it's safe to drop here.
     controller.dispose();
     if (result == null) return; // dismissed / cancelled → no change
+    final previous = _elective401kUsd;
     setState(() => _elective401kUsd = result > 0 ? result : null);
-    _writeSetting(k401kElectiveSettingKey, result > 0 ? result : 0)
-        .catchError((_) {});
+    try {
+      await _writeSetting(k401kElectiveSettingKey, result > 0 ? result : 0);
+    } catch (_) {
+      // Awaited + rolled back: the contribution-room card is computed from
+      // this, so silently keeping a value the server never stored means next
+      // visit's headroom disagrees with today's.
+      if (!mounted) return;
+      setState(() => _elective401kUsd = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+      );
+    }
   }
 
   String _filingStatusLabel(AppLocalizations l, String value) {
@@ -1953,6 +2041,48 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildFbarSection(AppLocalizations l, {bool header = true}) {
+    // A failed fetch is NOT a finding. Rendering the no-data state here told
+    // the user "no foreign-account balance history found for this year" on
+    // the strength of a request that never returned — on the card that
+    // answers "must I file FinCEN 114?".
+    if (_failedSections.contains('fbar')) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (header) ...[
+            _sectionTitle(l.taxFbarTitle),
+            const SizedBox(height: 12),
+          ],
+          Card(
+            elevation: 4,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off_outlined,
+                      size: 16, color: context.warning),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.taxSectionLoadFailed,
+                      style:
+                          TextStyle(color: context.textMuted, fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _refetching ? null : () => _loadTaxData(),
+                    child: Text(l.taxRetry),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     final data = _fbar ?? const {};
     final peak = (data['peak_aggregate_usd'] as num?)?.toDouble() ?? 0;
     final threshold = (data['threshold_usd'] as num?)?.toDouble() ?? 0;

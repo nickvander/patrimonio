@@ -352,6 +352,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     }
   }
 
+  /// Set when the READ of `projection_assumptions` failed — as opposed to
+  /// there being nothing saved. The two used to be indistinguishable (`catch
+  /// → return false`), and the consequences diverge sharply: a transient read
+  /// failure sent the screen down the "no saved assumptions" path, seeded
+  /// derived defaults, and then the next slider nudge PERSISTED those
+  /// defaults over the user's real scenario. While this is true we refuse to
+  /// write (see [_persistAssumptions]).
+  bool _assumptionsReadFailed = false;
+
   // F10: restore the assumption sliders from the `projection_assumptions`
   // setting. Returns true when a stored blob was applied; a malformed or
   // missing blob silently leaves the defaults.
@@ -359,6 +368,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     try {
       final read = widget.settingReader ?? _apiService.getSetting;
       final raw = await read('projection_assumptions');
+      _assumptionsReadFailed = false;
       if (!mounted || raw is! Map) return false;
       double? d(String k) {
         final v = raw[k];
@@ -421,7 +431,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       });
       return true;
     } catch (_) {
-      // Silent fallback to the static defaults / tracked-data prefill.
+      // Fallback to the static defaults / tracked-data prefill for THIS
+      // session, but remember that we never learned what was stored — so we
+      // don't overwrite it.
+      _assumptionsReadFailed = true;
       return false;
     }
   }
@@ -447,11 +460,25 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       };
 
   Future<void> _persistAssumptions() async {
+    if (_assumptionsReadFailed) {
+      // We are showing defaults we derived, not the user's saved scenario —
+      // writing now would destroy it. Try the read once more; only a
+      // successful read (or a confirmed absence) unlocks writing.
+      final restored = await _hydrateAssumptions();
+      if (_assumptionsReadFailed) {
+        debugPrint('projection: assumptions unreadable — refusing to overwrite');
+        return;
+      }
+      // The read came back: whatever it held is now on screen, so there is
+      // no pending user edit to persist.
+      if (restored) return;
+    }
     final write = widget.settingWriter ?? _apiService.putSetting;
     try {
       await write('projection_assumptions', _assumptionsJson);
     } catch (_) {
-      // Best-effort — the projection itself already reflects the change.
+      // Best-effort — the projection itself already reflects the change, and
+      // the next committed change retries.
     }
   }
 

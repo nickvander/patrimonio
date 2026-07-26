@@ -79,4 +79,66 @@ void main() {
     expect(blob['monthly_contribution'], 1000.0);
     expect(blob['withdrawal_guardrails'], false);
   });
+
+  // A failed READ used to be indistinguishable from "nothing saved": the
+  // screen fell back to derived defaults and the next committed change
+  // persisted those defaults OVER the user's real scenario. A transient
+  // network blip on open must not be able to destroy saved assumptions.
+  testWidgets('a read failure does not let defaults overwrite saved values',
+      (tester) async {
+    setTestSize(tester, const Size(1300, 1800));
+    var reads = 0;
+    final writes = <String, dynamic>{};
+    await tester.pumpWidget(buildProjectionHost(
+      settingReader: (key) async {
+        reads++;
+        throw Exception('network down');
+      },
+      settingWriter: (key, value) async => writes[key] = value,
+    ));
+    await tester.pumpAndSettle();
+
+    final lean = find.widgetWithText(ChoiceChip, 'Lean');
+    await tester.ensureVisible(lean);
+    await tester.pumpAndSettle();
+    await tester.tap(lean);
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(writes, isEmpty,
+        reason: 'must not overwrite a scenario we failed to read');
+    expect(reads, greaterThan(1),
+        reason: 'it should retry the read before deciding to write');
+  });
+
+  // …but once the read succeeds and confirms there is genuinely nothing
+  // stored, writing is correct again.
+  testWidgets('a recovered read unblocks persistence', (tester) async {
+    setTestSize(tester, const Size(1300, 1800));
+    var reads = 0;
+    final writes = <String, dynamic>{};
+    await tester.pumpWidget(buildProjectionHost(
+      settingReader: (key) async {
+        reads++;
+        if (reads == 1) throw Exception('network down');
+        return null; // nothing saved
+      },
+      settingWriter: (key, value) async => writes[key] = value,
+    ));
+    await tester.pumpAndSettle();
+
+    // Two different presets: the first commit spends its turn re-reading,
+    // the second is the one that must actually persist.
+    for (final label in ['Lean', 'Fat']) {
+      final chip = find.widgetWithText(ChoiceChip, label);
+      await tester.ensureVisible(chip);
+      await tester.pumpAndSettle();
+      await tester.tap(chip);
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+    }
+
+    expect(writes['projection_assumptions'], isNotNull,
+        reason: 'the retried read confirmed nothing was stored');
+  });
 }

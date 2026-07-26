@@ -521,6 +521,29 @@ async fn confirm_handler(
     .ok()
     .flatten();
 
+    // One transaction for the whole batch. A per-row failure used to be
+    // logged and skipped: the row silently vanished, `imported_count` just
+    // didn't increment, and the response's "{new} new, {dup} duplicates" made
+    // the loss read as deduplication. Worse, the closing-balance update below
+    // still ran, so the account's balance came from a statement whose rows
+    // hadn't all landed and the ledger no longer summed to it. All-or-nothing
+    // instead — and "Undo import" already works per batch, so atomicity here
+    // matches the mental model the UI already presents.
+    let mut tx_conn = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("Import confirm: could not begin transaction: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "error",
+                    "message": "Could not start the import. Nothing was imported.",
+                })),
+            )
+                .into_response();
+        }
+    };
+
     for (i, ct) in payload.transactions.into_iter().enumerate() {
         let ConfirmTx { tx, source_file } = ct;
         if let Some(bal) = tx.balance_after {
@@ -595,7 +618,7 @@ async fn confirm_handler(
         // SET clause, so a re-import never clobbers a detail already stored
         // (only balance_after is backfilled on conflict).
         .bind(category_detailed)
-        .fetch_optional(&state.db)
+        .fetch_optional(&mut *tx_conn)
         .await;
 
         match result {
@@ -608,9 +631,36 @@ async fn confirm_handler(
             }
             Ok(None) => duplicate_count += 1,
             Err(e) => {
+                // Dropping `tx_conn` rolls the whole batch back, so the user
+                // can fix the statement and retry against a clean slate
+                // rather than hunting for which rows silently didn't land.
                 error!("Failed to insert transaction: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "status": "error",
+                        "message": format!(
+                            "Import failed on row {} of {}. Nothing was imported — no partial batch was left behind.",
+                            i + 1,
+                            signatures.len()
+                        ),
+                    })),
+                )
+                    .into_response();
             }
         }
+    }
+
+    if let Err(e) = tx_conn.commit().await {
+        error!("Import confirm: commit failed: {e}");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "Import could not be saved. Nothing was imported.",
+            })),
+        )
+            .into_response();
     }
 
     info!(
@@ -653,32 +703,34 @@ async fn confirm_handler(
         // information. (The historical back-fill below keeps DO NOTHING —
         // real dailies must never be clobbered by a month-end figure.)
         //
-        // `balance_usd` is FX-converted at write time; copying an MXN
+        // `balance_usd` is FX-converted at write time via the shared
+        // LATEST_USD_MXN_RATE_SQL ladder (always positive) — copying an MXN
         // balance straight across turns a ~$890k MXN portfolio into a ~17x
         // overstatement in net worth.
-        let _ = sqlx::query(
+        let today_snapshot_sql = format!(
             r#"
             INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
             SELECT a.id, $3::numeric, CURRENT_DATE, a.currency,
-                   CASE WHEN a.currency = 'MXN' AND r.rate IS NOT NULL AND r.rate <> 0
-                        THEN ROUND($3::numeric / r.rate, 2) ELSE $3::numeric END,
+                   CASE WHEN a.currency = 'MXN'
+                        THEN ROUND($3::numeric / fx.rate, 2) ELSE $3::numeric END,
                    a.user_id
             FROM accounts a
-            LEFT JOIN LATERAL (
-                SELECT rate FROM exchange_rates
-                WHERE base_currency = 'USD' AND target_currency = 'MXN'
-                ORDER BY recorded_at DESC LIMIT 1
-            ) r ON TRUE
+            CROSS JOIN LATERAL (SELECT {rate} AS rate) fx
             WHERE a.id = $1 AND a.user_id = $2
             ON CONFLICT (account_id, as_of_date) DO UPDATE
                 SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd
             "#,
-        )
-        .bind(payload.account_id)
-        .bind(ctx.user_id)
-        .bind(bal)
-        .execute(&state.db)
-        .await;
+            rate = crate::services::exchange_rate::LATEST_USD_MXN_RATE_SQL,
+        );
+        if let Err(e) = sqlx::query(&today_snapshot_sql)
+            .bind(payload.account_id)
+            .bind(ctx.user_id)
+            .bind(bal)
+            .execute(&state.db)
+            .await
+        {
+            error!("Failed to write today's balance snapshot after import: {e}");
+        }
     }
 
     // Back-fill historical net-worth snapshots from the per-row running balance
@@ -688,12 +740,10 @@ async fn confirm_handler(
     // current rate (an approximation for old months; no historical FX stored).
     // Accounts without a running balance (Cetes / Nu) yield no rows. Idempotent:
     // ON CONFLICT preserves any existing daily snapshot.
-    let _ = sqlx::query(
+    let backfill_sql = format!(
         r#"
         WITH rate AS (
-            SELECT rate FROM exchange_rates
-            WHERE base_currency='USD' AND target_currency='MXN'
-            ORDER BY recorded_at DESC LIMIT 1
+            SELECT {rate} AS rate
         ),
         monthly AS (
             SELECT DISTINCT ON (date_trunc('month', t.date))
@@ -704,19 +754,24 @@ async fn confirm_handler(
         )
         INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
         SELECT $1, m.bal, m.d, a.currency,
-               CASE WHEN a.currency = 'MXN' AND r.rate IS NOT NULL AND r.rate <> 0
+               CASE WHEN a.currency = 'MXN'
                     THEN ROUND(m.bal / r.rate, 2) ELSE m.bal END,
                $2
         FROM monthly m
         JOIN accounts a ON a.id = $1
-        LEFT JOIN rate r ON TRUE
+        CROSS JOIN rate r
         ON CONFLICT (account_id, as_of_date) DO NOTHING
         "#,
-    )
-    .bind(payload.account_id)
-    .bind(ctx.user_id)
-    .execute(&state.db)
-    .await;
+        rate = crate::services::exchange_rate::LATEST_USD_MXN_RATE_SQL,
+    );
+    if let Err(e) = sqlx::query(&backfill_sql)
+        .bind(payload.account_id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await
+    {
+        error!("Failed to back-fill historical balance snapshots after import: {e}");
+    }
 
     if imported_count > 0 || closing.is_some() {
         state

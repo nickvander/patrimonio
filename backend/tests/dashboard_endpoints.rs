@@ -4544,6 +4544,115 @@ async fn set_setting(pool: &PgPool, user_id: uuid::Uuid, key: &str, value: Value
     .expect("set setting");
 }
 
+/// An installment paid EXACTLY must land as 'paid'.
+///
+/// `Decimal::from_f64_retain(1033.33)` keeps the full binary expansion
+/// (`1033.3299999999999272…`), and the allocation loop compares that
+/// unrounded value against the stored `scheduled_amount` (`1033.330000`) in
+/// SQL — so an exact payoff evaluated `>=` as FALSE and the row stayed
+/// 'partial' while `paid_amount` was written as exactly `scheduled_amount`.
+/// A self-contradicting row, and `list_reminders` filters on
+/// `status NOT IN ('paid','skipped')`, so the installment reminded forever
+/// and `services::notifications` kept minting rows for it.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_exact_installment_payment_is_marked_paid() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // 12,400 / 12 = 1033.333… → installments of 1033.33 with the tail row
+    // absorbing the residual. The repeating cent is the whole point.
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 12400.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"),
+        Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let rows = loan_payment_rows(&app, &token, loan_id).await;
+    let first_due = rows[0]["scheduled_amount"].as_f64().unwrap();
+    assert!((first_due - 1033.33).abs() < 0.001, "got {first_due}");
+
+    // Pay it to the cent.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": first_due, "paid_date": "2026-02-15"})),
+        Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let rows = loan_payment_rows(&app, &token, loan_id).await;
+    assert_eq!(rows[0]["status"].as_str(), Some("paid"),
+        "an exactly-paid installment must not read as partial");
+    assert_eq!(rows.len(), 12, "no phantom installment appended");
+}
+
+/// Topping a partial payment up to the exact scheduled amount must close the
+/// installment and NOT append a residual row: `533.33 - 533.32999999999992724`
+/// leaves 1.1e-13 of f64 dust, and `if remaining > 0.0` treated that as real
+/// money, inserting a 0.00 installment that then showed up in the plan table
+/// and both exports.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_partial_then_exact_topup_leaves_no_phantom_installment() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 12400.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"),
+        Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+
+    for amount in [500.0, 533.33] {
+        let res = app.clone().oneshot(req(
+            Method::POST, &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": amount, "paid_date": "2026-02-15"})),
+            Some(&token),
+        )).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CREATED, "payment of {amount}");
+    }
+
+    let rows = loan_payment_rows(&app, &token, loan_id).await;
+    assert_eq!(rows.len(), 12, "phantom 0.00 installment appended: {rows:#?}");
+    assert_eq!(rows[0]["status"].as_str(), Some("paid"));
+    let paid = rows[0]["paid_amount"].as_f64().unwrap();
+    assert!((paid - 1033.33).abs() < 0.001, "got {paid}");
+}
+
+/// Newest-first is not the order these assertions want; fetch the schedule
+/// as the API returns it and index by installment.
+async fn loan_payment_rows(app: &Router, token: &str, loan_id: uuid::Uuid) -> Vec<Value> {
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/payments"),
+            None,
+            Some(token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let mut rows: Vec<Value> = body_json(res.into_body())
+        .await
+        .as_array()
+        .expect("payments array")
+        .clone();
+    rows.sort_by_key(|r| r["installment_number"].as_i64().unwrap_or(0));
+    rows
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn loan_schedule_generates_and_sums_to_principal() {

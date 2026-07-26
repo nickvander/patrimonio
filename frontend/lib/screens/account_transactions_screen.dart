@@ -414,7 +414,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     ).whenComplete(controller.dispose);
   }
 
-  void _saveThreshold(double? value) {
+  /// Persist a low-balance threshold. The write is AWAITED: it used to be
+  /// fire-and-forget with the success snackbar shown immediately, so on the
+  /// APK with an expired session the user got "Alert saved" for an alert that
+  /// 401'd and would never fire. On failure the optimistic local + cached
+  /// state is rolled back so the UI matches the server.
+  Future<void> _saveThreshold(double? value) async {
+    final previous = Map<String, double>.from(_accountAlerts);
     final next = Map<String, double>.from(_accountAlerts);
     final l = AppLocalizations.of(context);
     if (value == null) {
@@ -424,8 +430,22 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     }
     setState(() => _accountAlerts = next);
     writeCachedAccountAlerts(next);
-    _apiService.putSetting('account_balance_alerts', next).catchError((_) {});
     widget.onAlertsChanged?.call();
+
+    try {
+      await _apiService.putSetting('account_balance_alerts', next);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _accountAlerts = previous);
+      writeCachedAccountAlerts(previous);
+      widget.onAlertsChanged?.call();
+      _messenger.showSnackBar(
+        SnackBar(content: Text(l.dashSettingSaveFailed)),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     // Panel messenger, not root: a root snackbar would be hidden behind
     // this panel route (see build()).
     _messenger.showSnackBar(

@@ -3434,6 +3434,12 @@ abstract class AppLocalizations {
   /// **'Confirmation failed: {error}'**
   String impConfirmationFailed(Object error);
 
+  /// No description provided for @impHoldingsNotAttached.
+  ///
+  /// In en, this message translates to:
+  /// **'Transactions imported, but the statement\'s positions were not attached: {error}'**
+  String impHoldingsNotAttached(Object error);
+
   /// No description provided for @impReadingFiles.
   ///
   /// In en, this message translates to:
@@ -5137,6 +5143,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get taxRetry;
+
+  /// No description provided for @taxSectionLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'This section could not be loaded — the figures below are not a result.'**
+  String get taxSectionLoadFailed;
 
   /// No description provided for @taxExportCsv.
   ///

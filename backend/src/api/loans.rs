@@ -28,6 +28,35 @@ use crate::api::session::AuthContext;
 use crate::services::loan_match;
 use crate::AppState;
 
+/// A money amount quantised to cents, ready to bind.
+///
+/// `Decimal::from_f64_retain` keeps the FULL binary expansion — it does not
+/// round — so `from_f64_retain(1033.33)` is
+/// `1033.3299999999999272404238578`. Binding that unrounded is what made an
+/// exact payoff read as a partial payment: the allocation loop compares
+/// `COALESCE(paid_amount, 0) + $2 >= scheduled_amount` in SQL, where
+/// `scheduled_amount` is the stored `NUMERIC(20,6)` cents (`1033.330000`) and
+/// `$2` still carries the full expansion — so the row stayed `'partial'`
+/// while `paid_amount` (rounded on store by the column's scale) was written
+/// as exactly `scheduled_amount`. A self-contradicting row, and
+/// `list_reminders` filters on `status NOT IN ('paid','skipped')`, so the
+/// installment reminded forever.
+///
+/// Schedules are generated at 2dp (`services::loan_schedule::round2`), so
+/// cents is the right quantum here. Rates and non-money values must NOT go
+/// through this.
+fn cents(x: f64) -> rust_decimal::Decimal {
+    rust_decimal::Decimal::from_f64_retain(x)
+        .unwrap_or_default()
+        .round_dp(2)
+}
+
+/// Half a cent. Residual f64 arithmetic in the allocation loop leaves dust
+/// (`533.33 - 533.32999999999992724 = 1.1e-13`); comparing that against a
+/// bare `0.0` appended a phantom 0.00 installment to the schedule — visible
+/// in the plan table and both exports. Anything under half a cent is zero.
+const MONEY_EPSILON: f64 = 0.005;
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_loans).post(create_loan))
@@ -1383,13 +1412,13 @@ async fn record_payment(
         for (row_id, sched_amount, sched_interest, paid_so_far, interest_so_far, has_tx) in
             scheduled_rows
         {
-            if remaining <= 0.0 {
+            if remaining <= MONEY_EPSILON {
                 break;
             }
             // How much of THIS installment is still owed, and the slice of
             // the payment we apply to it.
             let row_remaining = (sched_amount - paid_so_far).max(0.0);
-            if row_remaining <= 0.0 {
+            if row_remaining <= MONEY_EPSILON {
                 continue;
             }
             let slice = remaining.min(row_remaining);
@@ -1437,11 +1466,11 @@ async fn record_payment(
                 "#,
             )
             .bind(tx_for_row)
-            .bind(rust_decimal::Decimal::from_f64_retain(slice).unwrap_or_default())
+            .bind(cents(slice))
             .bind(paid_date)
-            .bind(rust_decimal::Decimal::from_f64_retain(principal_portion).unwrap_or_default())
-            .bind(rust_decimal::Decimal::from_f64_retain(interest_portion).unwrap_or_default())
-            .bind(rust_decimal::Decimal::from_f64_retain(running_balance).unwrap_or_default())
+            .bind(cents(principal_portion))
+            .bind(cents(interest_portion))
+            .bind(cents(running_balance))
             .bind(row_id)
             .bind(ctx.user_id)
             .execute(&mut *tx_conn)
@@ -1456,7 +1485,7 @@ async fn record_payment(
         // leftover, exactly as the old no-schedule branch did. Open-ended
         // accrual (no scheduled_interest) handles its own interest-first
         // split here.
-        if remaining > 0.0 {
+        if remaining > MONEY_EPSILON {
             let interest_portion = split_interest_portion(
                 remaining,
                 running_balance,
@@ -1490,13 +1519,13 @@ async fn record_payment(
             .bind(ctx.user_id)
             .bind(id)
             .bind(next)
-            .bind(rust_decimal::Decimal::from_f64_retain(remaining).unwrap_or_default())
+            .bind(cents(remaining))
             .bind(tx_for_row)
-            .bind(rust_decimal::Decimal::from_f64_retain(remaining).unwrap_or_default())
+            .bind(cents(remaining))
             .bind(paid_date)
-            .bind(rust_decimal::Decimal::from_f64_retain(principal_portion).unwrap_or_default())
-            .bind(rust_decimal::Decimal::from_f64_retain(interest_portion).unwrap_or_default())
-            .bind(rust_decimal::Decimal::from_f64_retain(running_balance).unwrap_or_default())
+            .bind(cents(principal_portion))
+            .bind(cents(interest_portion))
+            .bind(cents(running_balance))
             .execute(&mut *tx_conn)
             .await?;
         }

@@ -221,10 +221,22 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
       '$account|${gap['from_file'] ?? ''}→${gap['to_file'] ?? ''}';
 
   Future<void> _dismissGap(String key) async {
+    final previous = _dismissedGaps;
     setState(() => _dismissedGaps = {..._dismissedGaps, key});
     try {
       await _api.putSetting('dismissed_continuity_gaps', _dismissedGaps.toList());
-    } catch (_) {/* localStorage / next load reconciles */}
+    } catch (_) {
+      // Roll back rather than leave the gap hidden locally: a dismissal that
+      // didn't persist means the "you're missing February" warning silently
+      // reappears next session, which reads as the app being flaky.
+      if (!mounted) return;
+      setState(() => _dismissedGaps = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context).dashSettingSaveFailed),
+        ),
+      );
+    }
   }
 
   Widget _coverageCard(Map c, bool es, AppLocalizations l) {

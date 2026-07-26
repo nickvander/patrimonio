@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
+import 'package:patrimonio/services/realtime_service.dart';
 
 // These tests drive the screen entirely through its injected fetcher seams,
 // so they never subclass ApiService (which pulls package:web into the test VM
@@ -195,8 +198,17 @@ const Map<String, dynamic> _contributions = {
   'constants_verified': false,
 };
 
-Widget _host(
-    {Map<String, dynamic>? settingStore, Map<String, dynamic>? unrealized}) {
+Widget _host({
+  Map<String, dynamic>? settingStore,
+  Map<String, dynamic>? unrealized,
+  /// Make the FBAR fetch throw, to prove a failed section is not rendered as
+  /// a finding.
+  bool failFbar = false,
+  /// Server-push channel, for the "does this tab ever refresh?" tests.
+  Stream<RealtimeEvent>? realtimeEvents,
+  /// Counts summary fetches so a test can assert a push caused a reload.
+  void Function()? onSummaryFetch,
+}) {
   final store = settingStore ?? <String, dynamic>{};
   return MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -207,13 +219,19 @@ Widget _host(
         currencyFormat: NumberFormat.currency(symbol: r'$', decimalDigits: 0),
         targetCurrency: 'USD',
         usdMxnRate: 18.0,
-        summaryFetcher: ({required int year, required String status}) async =>
-            _summary,
+        realtimeEvents: realtimeEvents,
+        summaryFetcher: ({required int year, required String status}) async {
+          onSummaryFetch?.call();
+          return _summary;
+        },
         transactionsFetcher: ({required int year}) async => _transactions,
         disposalsFetcher: (int year) async => _disposals,
         unrealizedFetcher: ({required int year, required String status}) async =>
             unrealized ?? _unrealized,
-        fbarFetcher: (int year) async => _fbar,
+        fbarFetcher: (int year) async {
+          if (failFbar) throw Exception('FBAR endpoint unavailable');
+          return _fbar;
+        },
         contributionsFetcher: (int year) async => _contributions,
         // All-history realized-gains by_year — the (fixed) source of the year
         // dropdown; 2024 appears in NO year-filtered fixture above, so it can
@@ -418,5 +436,70 @@ void main() {
     expect(find.text(l.taxRetirementGroup401k), findsOneWidget);
     // 23,500 limit − 5,000 YTD = 18,500 room left.
     expect(find.text(l.taxRemainingRoom(r'$18,500')), findsOneWidget);
+  });
+
+  // A permanently-mounted IndexedStack child with no refresh path showed
+  // pre-import capital gains, disposals and FBAR maximums indefinitely — on
+  // the tab people file taxes from.
+  testWidgets('a server push reloads the tab', (tester) async {
+    _setSize(tester, const Size(1100, 1600));
+    final pushes = StreamController<RealtimeEvent>.broadcast();
+    addTearDown(pushes.close);
+    var fetches = 0;
+    await tester.pumpWidget(_host(
+      realtimeEvents: pushes.stream,
+      onSummaryFetch: () => fetches++,
+    ));
+    await tester.pumpAndSettle();
+    expect(fetches, 1, reason: 'initial load');
+
+    pushes.add(const RealtimeEvent(type: RealtimeEventType.transactionsChanged));
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pumpAndSettle();
+    expect(fetches, 2, reason: 'an import elsewhere must refresh this tab');
+  });
+
+  testWidgets('the 30s liveness heartbeat is not a reload trigger',
+      (tester) async {
+    _setSize(tester, const Size(1100, 1600));
+    final pushes = StreamController<RealtimeEvent>.broadcast();
+    addTearDown(pushes.close);
+    var fetches = 0;
+    await tester.pumpWidget(_host(
+      realtimeEvents: pushes.stream,
+      onSummaryFetch: () => fetches++,
+    ));
+    await tester.pumpAndSettle();
+
+    pushes.add(const RealtimeEvent(type: RealtimeEventType.heartbeat));
+    pushes.add(const RealtimeEvent(type: RealtimeEventType.fxRatesUpdated));
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pumpAndSettle();
+    expect(fetches, 1, reason: 'neither event changes what this tab reports');
+  });
+
+  testWidgets('a failed FBAR fetch does not claim there are no foreign accounts',
+      (tester) async {
+    _setSize(tester, const Size(1100, 2600));
+    await tester.pumpWidget(_host(failFbar: true));
+    await tester.pumpAndSettle();
+
+    final l = await AppLocalizations.delegate.load(const Locale('en'));
+    expect(find.text(l.taxSectionLoadFailed), findsOneWidget);
+    expect(find.text(l.taxFbarNoData), findsNothing,
+        reason: 'a dead request is not evidence of no foreign accounts');
+    expect(find.text(l.taxFbarUnder), findsNothing,
+        reason: 'nor of being under the threshold');
+    expect(find.widgetWithText(TextButton, l.taxRetry), findsOneWidget);
+  });
+
+  testWidgets('the FBAR section still renders normally when it loads',
+      (tester) async {
+    _setSize(tester, const Size(1100, 2600));
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+
+    final l = await AppLocalizations.delegate.load(const Locale('en'));
+    expect(find.text(l.taxSectionLoadFailed), findsNothing);
   });
 }

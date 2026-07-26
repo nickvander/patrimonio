@@ -208,6 +208,65 @@ void main() {
       out.firstWhere((n) => n.id.startsWith('since_tx:')).onTap!();
       expect(received, DateTime.parse('2026-07-20T10:00:00Z'));
     });
+
+    // The bell and the Overview banner render this same `delta_usd` through
+    // the same l10n key. The bell used to hardcode USD, so reporting in MXN
+    // produced "+MXN 21,000" in the banner and "+$1,234.50" in the bell.
+    test('the largest move is reported in the reporting currency', () {
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [],
+        onJumpToManagement: () {},
+        sinceLastLogin: digest,
+        onJumpToTransactions: (_) {},
+        targetCurrency: 'MXN',
+        conversionFactor: 17.0,
+      );
+      final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
+      expect(mover.title, contains('MXN'));
+      expect(mover.title, contains('20,986.50'),
+          reason: '1234.50 USD * 17 — converted, not relabelled');
+      expect(mover.title, isNot(contains(r'$1,234.50')));
+    });
+
+    test('defaults stay USD for context-less callers', () {
+      final out = deriveDigest(l, since: digest);
+      final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
+      expect(mover.title, contains('1,234.50'));
+      expect(mover.title, isNot(contains('MXN')));
+    });
+  });
+
+  group('reporting currency on USD-derived rows', () {
+    test('a net-worth move is converted, and native-currency rows are not', () {
+      // Net-worth history is USD-stored; a low-balance threshold is native.
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [
+          {'date': '2026-07-24', 'net_worth': 100000.0},
+          {'date': '2026-07-25', 'net_worth': 101000.0},
+        ],
+        onJumpToManagement: () {},
+        accounts: const [
+          {
+            'id': 'a1',
+            'name': 'Banorte Cheques',
+            'currency': 'MXN',
+            'current_balance': 900.0,
+          }
+        ],
+        accountAlerts: const {'a1': 1000.0},
+        targetCurrency: 'MXN',
+        conversionFactor: 17.0,
+      );
+
+      final low = out.firstWhere((n) => n.id.startsWith('low_balance:'));
+      expect(low.detail, contains('900'),
+          reason: 'a native MXN balance must NOT be multiplied by the factor');
+      expect(low.detail, isNot(contains('15,300')));
+    });
   });
 
   group('serverNotificationsToApp', () {

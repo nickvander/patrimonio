@@ -2077,6 +2077,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String impHoldingsNotAttached(Object error) {
+    return 'Movimientos importados, pero no se adjuntaron las posiciones del estado de cuenta: $error';
+  }
+
+  @override
   String get impReadingFiles => 'Leyendo archivos…';
 
   @override
@@ -3107,6 +3112,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get taxRetry => 'Reintentar';
+
+  @override
+  String get taxSectionLoadFailed =>
+      'No se pudo cargar esta sección — las cifras de abajo no son un resultado.';
 
   @override
   String get taxExportCsv => 'Exportar CSV';

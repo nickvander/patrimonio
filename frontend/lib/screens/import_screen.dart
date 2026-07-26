@@ -1451,6 +1451,10 @@ class _ImportScreenState extends State<ImportScreen> {
       // Continuity gaps arrive as structured maps (from_file, balances, dates,
       // diff) so they can be localized client-side — the backend has no locale.
       final warnings = <Map<String, dynamic>>[];
+      // Set when the statement's holdings couldn't be attached (see below):
+      // the transactions still landed, so this is a caveat on the success
+      // message rather than a failure of the whole import.
+      String? holdingsError;
       // One confirm call per destination account.
       for (final entry in byAccount.entries) {
         final response =
@@ -1475,9 +1479,12 @@ class _ImportScreenState extends State<ImportScreen> {
           primaryId.isNotEmpty) {
         try {
           await _apiService.importHoldings(primaryId, holdings);
-        } catch (_) {
-          // Don't fail the whole import if holdings couldn't be attached —
-          // the transactions + balance already landed.
+        } catch (e) {
+          // Don't fail the whole import — the transactions + balance already
+          // landed — but don't paint success over it either. The server side
+          // is atomic (nothing was changed), so the actionable message is
+          // "positions weren't attached", and re-running the import is safe.
+          holdingsError = e.toString().replaceFirst('Exception: ', '');
         }
       }
 
@@ -1494,12 +1501,15 @@ class _ImportScreenState extends State<ImportScreen> {
           : (Localizations.localeOf(context).languageCode == 'es'
               ? ' (secciones sin cuenta omitidas: ${unassigned.join(", ")})'
               : ' (skipped unassigned sections: ${unassigned.join(", ")})');
+      final base =
+          (messages.isEmpty ? l.impImportSuccessful : messages.join(' · ')) +
+              skippedNote;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            (messages.isEmpty ? l.impImportSuccessful : messages.join(' · ')) +
-                skippedNote,
-          ),
+          content: Text(holdingsError == null
+              ? base
+              : l.impHoldingsNotAttached(holdingsError)),
+          backgroundColor: holdingsError == null ? null : context.negative,
         ),
       );
       Navigator.pop(context);

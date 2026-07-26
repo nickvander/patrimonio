@@ -109,30 +109,32 @@ async fn main() -> Result<()> {
                 // balance_usd MUST be FX-converted, not a copy of the native
                 // balance — otherwise an MXN account (e.g. a ~$890k MXN cetes
                 // portfolio) lands in net worth as ~$890k USD, a ~17x
-                // overstatement. Mirror the create-account path: divide a MXN
-                // balance by the latest USD→MXN rate; pass USD through; default
-                // other currencies 1:1 (no rates yet).
-                let _ = sqlx::query(
+                // overstatement. The rate comes from the shared
+                // LATEST_USD_MXN_RATE_SQL ladder, which always resolves to a
+                // positive number, so there is no "no rate" branch that could
+                // fall back to the native figure. Non-MXN currencies pass
+                // through 1:1 (no rates stored for them).
+                let snapshot_sql = format!(
                     r#"
                     INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
                     SELECT a.id, a.current_balance, $1, a.currency,
                            CASE
-                             WHEN a.currency = 'MXN' AND r.rate IS NOT NULL AND r.rate <> 0
-                                  THEN ROUND(a.current_balance / r.rate, 2)
+                             WHEN a.currency = 'MXN'
+                                  THEN ROUND(a.current_balance / fx.rate, 2)
                              ELSE a.current_balance
                            END,
                            a.user_id
                     FROM accounts a
-                    LEFT JOIN LATERAL (
-                        SELECT rate FROM exchange_rates
-                        WHERE base_currency = 'USD' AND target_currency = 'MXN'
-                        ORDER BY recorded_at DESC LIMIT 1
-                    ) r ON TRUE
+                    CROSS JOIN LATERAL (SELECT {rate} AS rate) fx
                     ON CONFLICT (account_id, as_of_date) DO NOTHING
-                    "#
-                )
-                .bind(today)
-                .execute(&db).await;
+                    "#,
+                    rate = patrimonio::services::exchange_rate::LATEST_USD_MXN_RATE_SQL,
+                );
+                // Loud on failure: a silent miss here leaves the net-worth
+                // chart carry-forward-flat for a day with no trace anywhere.
+                if let Err(e) = sqlx::query(&snapshot_sql).bind(today).execute(&db).await {
+                    tracing::error!("Daily balance snapshot cron failed: {e}");
+                }
 
                 // Staleness reminders for import-only (manual) institutions:
                 // once the day's snapshots are written, record a

@@ -169,21 +169,15 @@ async fn update_account_balance(
         let currency: String = row.get("currency");
         
         // 3. Upsert balance snapshot for today
-        // We calculate balance_usd if currency is MXN by fetching latest rate
+        // balance_usd is FX-converted via the shared rate ladder, which always
+        // returns a positive rate — the old inline lookup fell back to the
+        // NATIVE balance when the query missed, writing raw MXN into the USD
+        // column (~17x overstatement in net worth).
         let mut balance_usd = payload.current_balance;
         if currency == "MXN" {
-            let rate_row = sqlx::query(
-                "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
-            )
-            .fetch_one(&state.db)
-            .await;
-            
-            if let Ok(r) = rate_row {
-                let rate: rust_decimal::Decimal = r.get("rate");
-                if !rate.is_zero() {
-                    balance_usd = payload.current_balance / rate;
-                }
-            }
+            let rate =
+                crate::services::exchange_rate::latest_usd_mxn_rate_for_write(&state.db).await;
+            balance_usd = (payload.current_balance / rate).round_dp(2);
         } else if currency != "USD" {
             // Default to 1:1 if not USD/MXN for now
             balance_usd = payload.current_balance;
@@ -464,21 +458,12 @@ async fn create_account(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    // 3. Create initial balance snapshot
+    // 3. Create initial balance snapshot. Same shared-ladder conversion as the
+    // update path: never fall back to the native balance for balance_usd.
     let mut balance_usd = payload.initial_balance;
     if payload.currency == "MXN" {
-        let rate_row = sqlx::query(
-            "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
-        )
-        .fetch_one(&state.db)
-        .await;
-
-        if let Ok(r) = rate_row {
-            let rate: rust_decimal::Decimal = r.get("rate");
-            if !rate.is_zero() {
-                balance_usd = (payload.initial_balance / rate).round_dp(2);
-            }
-        }
+        let rate = crate::services::exchange_rate::latest_usd_mxn_rate_for_write(&state.db).await;
+        balance_usd = (payload.initial_balance / rate).round_dp(2);
     }
 
     let _ = sqlx::query(
@@ -1869,6 +1854,14 @@ struct ImportHoldingsRequest {
 /// Each symbol REPLACES any prior manually-imported row for the same symbol, so
 /// re-importing newer statements just updates the quantities. The account's
 /// balance is then recomputed as the sum of its holdings.
+///
+/// ATOMIC, and it must stay that way. The replace is a hard DELETE followed by
+/// an INSERT — imports supersede any undo (see `delete_holding`) — so a failure
+/// between the two destroys a position with no way back. Both statements used
+/// to be `let _ =` inside a handler that returned 200 unconditionally: a failed
+/// INSERT (mis-parsed quantity, pool blip) dropped the fund, silently
+/// recomputed the account down to its cash sleeve, and told the user "Import
+/// successful". One transaction per request; errors reach the client.
 async fn import_holdings(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -1882,6 +1875,18 @@ async fn import_holdings(
         )
             .into_response();
     }
+    let mut tx = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("import_holdings begin failed: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "could not start the holdings import",
+            )
+                .into_response();
+        }
+    };
+
     for h in &payload.holdings {
         let symbol = h.symbol.trim().to_uppercase();
         if symbol.is_empty() {
@@ -1892,14 +1897,22 @@ async fn import_holdings(
         };
         // Replace any prior manual row for this (account, symbol) so a re-import
         // is idempotent. Plaid-sourced rows (external_id set) are left alone.
-        let _ = sqlx::query(
+        if let Err(e) = sqlx::query(
             "DELETE FROM holdings WHERE account_id = $1 AND user_id = $2 AND symbol = $3 AND external_id IS NULL",
         )
         .bind(account_id)
         .bind(ctx.user_id)
         .bind(&symbol)
-        .execute(&state.db)
-        .await;
+        .execute(&mut *tx)
+        .await
+        {
+            error!("Failed to clear prior holding rows for {symbol}: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "holdings import failed; nothing was changed",
+            )
+                .into_response();
+        }
 
         let name = h
             .name
@@ -1932,7 +1945,7 @@ async fn import_holdings(
                 (p, v, kind)
             };
 
-        let _ = sqlx::query(
+        if let Err(e) = sqlx::query(
             r#"
             INSERT INTO holdings (id, account_id, user_id, symbol, name, quantity, price, value, currency, holding_type, updated_at)
             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'USD', $8, NOW())
@@ -1946,11 +1959,40 @@ async fn import_holdings(
         .bind(price)
         .bind(value)
         .bind(htype)
-        .execute(&state.db)
-        .await;
+        .execute(&mut *tx)
+        .await
+        {
+            // The DELETE above already ran for this symbol — without the
+            // rollback this drop of the transaction performs, the position
+            // would simply be gone.
+            error!("Failed to insert imported holding {symbol}: {e}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "holdings import failed; nothing was changed",
+            )
+                .into_response();
+        }
     }
+
+    if let Err(e) = tx.commit().await {
+        error!("import_holdings commit failed: {e}");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "holdings import failed; nothing was changed",
+        )
+            .into_response();
+    }
+
+    // Balance is derived from the rows we just wrote, so a failure here leaves
+    // the account showing a stale total against correct holdings — report it
+    // rather than letting the client paint success over it.
     if let Err(e) = recompute_holding_balance(&state.db, account_id, ctx.user_id).await {
         error!("Failed to recompute balance after holdings import: {}", e);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "holdings were imported but the account balance could not be recomputed",
+        )
+            .into_response();
     }
     StatusCode::OK.into_response()
 }

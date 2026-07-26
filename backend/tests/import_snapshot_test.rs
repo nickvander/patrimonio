@@ -439,6 +439,81 @@ async fn an_older_statement_does_not_regress_the_current_balance() {
     assert_eq!(april, Some(dec("24000.00")), "history still back-fills");
 }
 
+/// A batch that fails mid-way must leave NOTHING behind — not a partial
+/// ledger, and above all not a `current_balance` set from a statement whose
+/// rows didn't all land. Per-row insert errors used to be logged and skipped,
+/// so the loss was reported to the user as deduplication.
+#[tokio::test]
+#[serial_test::serial]
+async fn a_failed_row_rolls_the_whole_batch_back() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let account = seed_account(&pool, user_id, "85000").await;
+
+    // `description` is NOT NULL; a 300k-character description overflows no
+    // column, so force the failure the way production would hit it — a CHECK
+    // that rejects one row of the batch.
+    sqlx::query(
+        "ALTER TABLE transactions ADD CONSTRAINT tmp_no_boom CHECK (description <> 'BOOM')",
+    )
+    .execute(&pool)
+    .await
+    .expect("add temp constraint");
+
+    let body = json!({
+        "account_id": account.to_string(),
+        "transactions": [
+            {"date": "2026-06-01", "description": "GOOD ROW", "amount": "10.00",
+             "currency": "MXN", "source_file": "06-2026.pdf"},
+            {"date": "2026-06-02", "description": "BOOM", "amount": "-20.00",
+             "currency": "MXN", "balance_after": "92500.00", "source_file": "06-2026.pdf"},
+        ]
+    });
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/imports/confirm",
+            Some(&body),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let msg = body_json(res.into_body()).await["message"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        msg.contains("Nothing was imported"),
+        "the client must be told the batch was rolled back, got: {msg}"
+    );
+
+    let landed: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE account_id = $1")
+            .bind(account)
+            .fetch_one(&pool)
+            .await
+            .expect("count");
+    assert_eq!(landed, 0, "the good row must not survive a failed batch");
+    assert_eq!(
+        current_balance(&pool, account).await,
+        dec("85000"),
+        "balance must not move for a batch that didn't land"
+    );
+    assert!(
+        snapshot_today(&pool, account).await.is_none(),
+        "and no snapshot should have been written either"
+    );
+
+    sqlx::query("ALTER TABLE transactions DROP CONSTRAINT tmp_no_boom")
+        .execute(&pool)
+        .await
+        .expect("drop temp constraint");
+}
+
 /// Re-importing the SAME statement is a no-op, not a regression: the guard
 /// compares dates with `>=` precisely so equality still applies.
 #[tokio::test]

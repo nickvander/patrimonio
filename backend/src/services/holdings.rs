@@ -167,16 +167,12 @@ pub(crate) async fn recompute_holding_balance(
         .bind(account_id)
         .fetch_one(db)
         .await?;
+    // Shared rate ladder (always positive) — the old inline lookup fell back
+    // to the native total when no usable row existed, writing raw MXN into
+    // balance_usd.
     let balance_usd = if currency == "MXN" {
-        let rate: Option<rust_decimal::Decimal> = sqlx::query_scalar(
-            "SELECT rate FROM exchange_rates WHERE base_currency='USD' AND target_currency='MXN' ORDER BY recorded_at DESC LIMIT 1",
-        )
-        .fetch_optional(db)
-        .await?;
-        match rate {
-            Some(r) if !r.is_zero() => (total / r).round_dp(2),
-            _ => total,
-        }
+        let rate = crate::services::exchange_rate::latest_usd_mxn_rate_for_write(db).await;
+        (total / rate).round_dp(2)
     } else {
         total
     };

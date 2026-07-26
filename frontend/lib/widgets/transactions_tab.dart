@@ -13,6 +13,7 @@ import '../utils/category.dart';
 import '../utils/category_style.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/merchant_total.dart';
 import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
 import '../utils/url_opener.dart';
@@ -3880,20 +3881,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           rawDescription.trim().toLowerCase();
     }).toList();
     final similar = merchantMatches.take(3).toList();
-    final merchantTotal = merchantMatches.fold<double>(
-      sourceAmount.abs(),
-      (sum, other) {
-        final amt = ((other['amount'] as num?)?.toDouble() ?? 0.0).abs();
-        final otherCcy =
-            (other['currency'] ?? s.widget.targetCurrency).toString();
-        return sum +
-            convertCurrency(
-              amt,
-              from: otherCcy,
-              to: s.widget.targetCurrency,
-              usdMxnRate: s.widget.usdMxnRate,
-            );
-      },
+    // Seeded with the CONVERTED amount — see [merchantLifetimeTotal] for the
+    // mixed-currency overstatement this replaced.
+    final merchantTotal = merchantLifetimeTotal(
+      openConvertedAmount: convertedAmount,
+      siblings: merchantMatches,
+      targetCurrency: s.widget.targetCurrency,
+      usdMxnRate: s.widget.usdMxnRate,
     );
     final merchantCount = merchantMatches.length + 1;
 

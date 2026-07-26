@@ -154,6 +154,22 @@ List<AppNotification> deriveNotifications({
   /// Jump to the Transactions tab pre-filtered to "since [anchor]" when a
   /// digest row is tapped. Receives the previous-login anchor.
   void Function(DateTime anchor)? onJumpToTransactions,
+  /// The user's reporting currency, and the factor that takes a USD-stored
+  /// figure into it (1.0 for USD, the USD/MXN rate for MXN) — same pair the
+  /// Overview cards take.
+  ///
+  /// Three rows here derive from USD-denominated data (net-worth deltas,
+  /// `largest_move.delta_usd`, spending averages) and used to be formatted as
+  /// literal USD. The bell and the Overview banner render the SAME datum
+  /// through the SAME l10n key, so reporting in MXN showed
+  /// "+MXN 21,000" in the banner and "+$1,234.00" in the bell. Defaults keep
+  /// context-less callers and tests on the old behaviour.
+  ///
+  /// Rows carrying their own currency (loan installments, low-balance
+  /// thresholds, subscription prices) are NOT touched by this — they're
+  /// already native and correct.
+  String targetCurrency = 'USD',
+  double conversionFactor = 1.0,
 }) {
   final out = <AppNotification>[];
 
@@ -326,7 +342,7 @@ List<AppNotification> deriveNotifications({
         final pct = (delta / priorNw) * 100;
         // Stay quiet on a flat day — a sub-0.25% wobble isn't worth a badge.
         if (pct.abs() >= 0.25) {
-          final amount = money(delta.abs(), 'USD');
+          final amount = money(delta.abs() * conversionFactor, targetCurrency);
           final pctStr = formatPercentLocale(l.localeName, pct.abs(), digits: 1);
           final detail =
               l.lwNotifNetWorthSinceSyncDetail(DateFormat('MMM d').format(latestDt));
@@ -384,7 +400,7 @@ List<AppNotification> deriveNotifications({
       if (deltaUsd != 0) {
         final up = deltaUsd >= 0;
         final signed =
-            '${up ? '+' : '−'}${money(deltaUsd.abs(), 'USD')}';
+            '${up ? '+' : '−'}${money(deltaUsd.abs() * conversionFactor, targetCurrency)}';
         out.add(AppNotification(
           id: 'since_move:$sinceAnchorIso',
           icon: up ? Icons.trending_up : Icons.trending_down,
@@ -445,7 +461,8 @@ List<AppNotification> deriveNotifications({
         accent: BrandPalette.warning(brightness),
         title: l.lwNotifSpendingUpTitle(
             s.label, '${(s.pct * 100).round()}%'),
-        detail: l.lwNotifSpendingUpDetail(lookback, money(s.avg, 'USD')),
+        detail: l.lwNotifSpendingUpDetail(
+            lookback, money(s.avg * conversionFactor, targetCurrency)),
         onTap: onJumpToSpending,
       ));
     }

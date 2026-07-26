@@ -4155,6 +4155,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                           builder: (_) => const HiddenItemsScreen())),
                   sinceLastLogin: _sinceLastLogin,
                   onJumpToTransactions: _jumpToTransactionsSince,
+                  // The bell renders the same USD-stored deltas the Overview
+                  // banner does; without these it reported them as literal USD
+                  // and the two disagreed whenever reporting in MXN.
+                  targetCurrency: _targetCurrency,
+                  conversionFactor: conversionFactor,
                   onJumpToAccount: (account) => showAccountTransactionsPanel(
                     context,
                     account: account,
@@ -5738,6 +5743,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
+        // Permanently mounted in the IndexedStack, so without a push channel
+        // it would keep showing whatever it loaded when the app opened.
+        realtimeEvents: _realtime.events,
       ),
       scrollable: false,
     );
