@@ -1,7 +1,44 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-26 (post-import refresh reliability)
-> **Branch:** `fix/post-import-refresh`.
+> **Last updated:** 2026-07-26 (audit batch + desktop button sizing)
+> **Branch:** `main`.
+
+## 2026-07-26 (late) — Audit batch landed, plus desktop button sizing
+
+Two commits on `main`, both fully verified locally, **not yet pushed or
+deployed to thelab, and no APK cut**:
+
+* **`a953fe6`** — the seven-item batch approved from the five-agent audit:
+  merchant lifetime total (~6x too high in mixed currency), loan payoff
+  recorded as `partial` (`from_f64_retain` keeps the full binary expansion),
+  `balance_usd` written as raw native MXN (six writers now share
+  `LATEST_USD_MXN_RATE_SQL`; `fetch_and_store_rate` refuses a non-positive
+  rate), holdings import deleting a position and reporting success (now one
+  transaction; import confirm made atomic too), the notifications bell
+  ignoring the reporting currency, the Tax tab never refetching (and a failed
+  FBAR fetch reading as "no foreign accounts"), and five fire-and-forget
+  settings writes that claimed success — including the projection-assumptions
+  read failure that overwrote the user's real FIRE scenario with defaults.
+* **`c20620b`** — Settings action buttons stopped stretching to the card at
+  desktop width (`(maxWidth - 16) / 2` and `width: double.infinity` produced a
+  565px and a 1650x56 button at 1440). New `theme/buttons.dart` holds the
+  rule; both sites drop to the M3 Expressive 40dp step; Coinbase brand blue
+  moved from the fill to the icon. Mobile is byte-for-byte unchanged.
+
+Gates: clippy clean, backend suite green (276 unit + 136 integration + the
+rest, 0 failures), `flutter analyze` at its 18-info baseline, `flutter test`
+771 passing (up from 751 — 20 new regression tests).
+
+**Still open from the audit, not started:** item 7 ("Sync complete" fires
+unconditionally after the 8-minute deadline; institutions stuck in `syncing`
+never recover without a reaper), the tail findings (truncated filtered totals,
+`import_cleanup` claiming "No recent imports" on a load failure, unvalidated
+`?year=300000` panicking with no `CatchPanicLayer`, FBAR per-account
+contribution using an exact-date lookup), the four items needing a product
+call (FBAR unverified badge + FinCEN peak-balance method, description-keyed
+import dedup, the FIRE chart drawing the mean rather than the fetched p50, no
+off-machine backup), and the feature shortlist led by manual purchase-lot
+entry.
 
 ## 2026-07-26 — "Imported, but Home didn't update until I hit Sync now"
 
