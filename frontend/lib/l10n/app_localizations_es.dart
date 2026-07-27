@@ -2539,6 +2539,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dashSyncComplete => 'Sincronización completa';
 
   @override
+  String get dashSyncStillRunning =>
+      'La sincronización está tardando más de lo normal; sigue ejecutándose en segundo plano';
+
+  @override
   String dashSyncFailed(Object error) {
     return 'Falló la sincronización: $error';
   }

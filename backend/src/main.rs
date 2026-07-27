@@ -71,6 +71,16 @@ async fn main() -> Result<()> {
     migrator.run(&db).await?;
     tracing::info!("Migrations complete");
 
+    // Any institution still marked 'syncing' is a leftover from a run this
+    // process's predecessor never finished — a sync task is detached and dies
+    // with the process, so it can never write its terminal status. Nothing
+    // aged these off, so the Settings card span forever and a manual re-sync
+    // was the only escape. Reap before serving, so the first
+    // /dashboard/sync-status poll already reports the truth.
+    if let Err(e) = patrimonio::services::sync::reap_stale_syncs(&db, true).await {
+        tracing::error!("Boot reap of stale 'syncing' institutions failed: {e}");
+    }
+
     // Connect to Redis
     let redis_client = redis::Client::open(config.redis_url.clone())?;
 
@@ -151,6 +161,29 @@ async fn main() -> Result<()> {
             })
         }).expect("Failed to add cron job")
     ).await.expect("Failed to register job");
+
+    // Watchdog for syncs that wedge WITHOUT the process dying — a hung
+    // upstream call leaves the row in 'syncing' with no terminal status ever
+    // written, and the boot reaper above only covers the restart case. Every
+    // 5 minutes; the reap itself is age-gated (30 min), so this is a cheap
+    // near-empty query in steady state.
+    let reaper_db = db.clone();
+    sched
+        .add(
+            Job::new_async("0 */5 * * * *", move |_uuid, mut _l| {
+                let db = reaper_db.clone();
+                Box::pin(async move {
+                    if let Err(e) =
+                        patrimonio::services::sync::reap_stale_syncs(&db, false).await
+                    {
+                        tracing::warn!("Stale-sync watchdog failed: {e}");
+                    }
+                })
+            })
+            .expect("Failed to add stale-sync watchdog job"),
+        )
+        .await
+        .expect("Failed to register stale-sync watchdog job");
 
     // Nightly holdings price refresh — re-price every manual account's holdings
     // from Yahoo and recompute balances, so a live-priced position (e.g. an HSA
@@ -341,6 +374,10 @@ async fn main() -> Result<()> {
             sanitize_forwarded_headers,
         ))
         .layer(cors)
+        // OUTERMOST, so it wraps every other layer and every handler — a
+        // panic anywhere below becomes a logged, generic 500 instead of a
+        // severed connection. Why it exists + the leak rules: panic_guard.rs.
+        .layer(patrimonio::panic_guard::layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use csv::WriterBuilder;
 use chrono::Datelike;
-use crate::api::session::AuthContext;
+use crate::api::session::{ApiError, AuthContext};
 use crate::{AppState, services::tax::{TaxService, TaxEstimation}};
 
 pub fn router() -> Router<AppState> {
@@ -30,6 +30,42 @@ pub fn router() -> Router<AppState> {
 struct TaxQuery {
     year: Option<i32>,
     status: Option<String>,
+}
+
+/// Range of `?year=` values the tax endpoints accept.
+///
+/// The bound that matters is chrono's: `NaiveDate::from_ymd_opt` returns
+/// `None` outside roughly ±262143, and every tax computation calls it as
+/// `from_ymd_opt(year, 1, 1).unwrap()` (services/tax.rs:1032 and seven
+/// siblings). `GET /api/tax/summary?year=300000` therefore PANICKED inside
+/// the handler — with no `CatchPanicLayer` mounted that aborted the
+/// connection, so the client saw a dropped request rather than any status
+/// code, and the panic was reachable by any authenticated user.
+///
+/// The window is deliberately much tighter than chrono's: these endpoints
+/// read `transactions`/`balance_snapshots` for a filing year, so anything
+/// outside a plausible human tax range is a typo or a probe, and answering
+/// with 400 is more useful than an empty 200.
+pub(crate) const MIN_TAX_YEAR: i32 = 1900;
+pub(crate) const MAX_TAX_YEAR: i32 = 2200;
+
+impl TaxQuery {
+    /// The requested year, defaulting to the current one, rejected with 400
+    /// when out of range. Every handler must go through this — calling
+    /// `from_ymd_opt(...).unwrap()` on an unvalidated `?year=` is the panic
+    /// described on [`MIN_TAX_YEAR`].
+    fn resolved_year(&self) -> Result<i32, ApiError> {
+        let year = self
+            .year
+            .unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+        if !(MIN_TAX_YEAR..=MAX_TAX_YEAR).contains(&year) {
+            return Err(ApiError::new(
+                axum::http::StatusCode::BAD_REQUEST,
+                &format!("year must be between {MIN_TAX_YEAR} and {MAX_TAX_YEAR}"),
+            ));
+        }
+        Ok(year)
+    }
 }
 
 /// The setting key under which the frontend persists the user's filing
@@ -86,7 +122,10 @@ async fn get_tax_summary(
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
     let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
     match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
@@ -109,7 +148,10 @@ async fn get_tax_transactions(
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
 
     match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
         Ok(transactions) => {
@@ -139,7 +181,10 @@ async fn get_tax_disposals(
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
 
     match TaxService::get_lot_disposals(&state.db, year, ctx.user_id).await {
         Ok(mut disposals) => {
@@ -173,7 +218,10 @@ async fn get_tax_unrealized(
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
     let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
     let today = chrono::Utc::now().naive_utc().date();
 
@@ -208,7 +256,10 @@ async fn get_fbar_status(
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
 
     match TaxService::fbar_status(&state.db, year, ctx.user_id).await {
         Ok(status) => Json::<crate::services::tax::FbarStatus>(status).into_response(),
@@ -238,7 +289,10 @@ async fn get_retirement_contributions(
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
 
     match TaxService::retirement_contributions(&state.db, year, ctx.user_id).await {
         Ok(contributions) => {
@@ -262,7 +316,10 @@ async fn export_tax_csv(
      Extension(ctx): Extension<AuthContext>,
      Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
     let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
     let transactions = match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
@@ -505,7 +562,10 @@ async fn export_tax_pdf(
      Extension(ctx): Extension<AuthContext>,
      Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
-    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let year = match query.resolved_year() {
+        Ok(y) => y,
+        Err(e) => return e.into_response(),
+    };
     let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
     let estimation = match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {

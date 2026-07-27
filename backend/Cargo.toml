@@ -10,7 +10,7 @@ axum = { version = "0.8", features = ["multipart", "ws"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "limit"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "limit", "catch-panic"] }
 # Streaming primitives used by the CSV export. `bytes::Bytes` is the
 # wire type axum's `Body::from_stream` wants; `tokio-stream` gives
 # us `wrappers::ReceiverStream` so an mpsc channel can feed the

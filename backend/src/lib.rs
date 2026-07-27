@@ -2,6 +2,7 @@ pub mod config;
 pub mod api;
 pub mod db;
 pub mod models;
+pub mod panic_guard;
 pub mod services;
 
 use std::sync::Arc;

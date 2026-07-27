@@ -2899,3 +2899,57 @@ async fn export_mx_summary_echoes_the_summary_figures() {
         "year rate is reported for auditability: {csv}"
     );
 }
+
+/// An out-of-range `?year=` must be REJECTED, not panicked on.
+///
+/// Every tax computation builds its bounds with
+/// `NaiveDate::from_ymd_opt(year, 1, 1).unwrap()`, and chrono returns `None`
+/// outside roughly ±262143. Before the guard, `?year=300000` unwound through
+/// the handler: with no CatchPanicLayer mounted the connection was dropped, so
+/// an authenticated caller got no status code at all — a failure mode that
+/// looks like a network fault and gets debugged as one.
+///
+/// Covers both routers merged under /api/tax: the JSON endpoints (which
+/// resolve the year via `TaxQuery::resolved_year`) and the export pack (via
+/// `year_or_current`), since they had separate copies of the bug.
+#[tokio::test]
+async fn out_of_range_year_is_rejected_instead_of_panicking() {
+    let Some((app, pool, _lock)) = try_setup().await else {
+        eprintln!("SKIP: {TEST_DB_VAR} not set");
+        return;
+    };
+    let (token, _user_id) = bootstrap(&app, &pool).await;
+
+    // Past chrono's representable range in both directions, plus i32
+    // saturation — the shapes a probe or a typo actually produces.
+    for year in ["300000", "-300000", "2147483647"] {
+        for path in [
+            "/api/tax/summary",
+            "/api/tax/transactions",
+            "/api/tax/fbar",
+            "/api/tax/export",
+            "/api/tax/export/fbar",
+            "/api/tax/export/8949",
+        ] {
+            let uri = format!("{path}?year={year}");
+            let res = app
+                .clone()
+                .oneshot(req(Method::GET, &uri, None, Some(&token)))
+                .await
+                .expect("request completed — a panic here would drop the connection");
+            assert_eq!(
+                res.status(),
+                StatusCode::BAD_REQUEST,
+                "{uri} should answer 400, not panic or silently return data"
+            );
+        }
+    }
+
+    // And the guard must not have made legitimate years unreachable.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/summary?year=2026", None, Some(&token)))
+        .await
+        .expect("request completed");
+    assert_eq!(res.status(), StatusCode::OK, "a normal year still works");
+}

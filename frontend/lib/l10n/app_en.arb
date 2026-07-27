@@ -827,6 +827,7 @@
     }
   },
   "dashSyncComplete": "Sync complete",
+  "dashSyncStillRunning": "Sync is taking longer than usual — it keeps running in the background",
   "dashSyncFailed": "Sync failed: {error}",
   "dashSyncedAt": "Synced {when}",
   "dashSyncNow": "Sync now",

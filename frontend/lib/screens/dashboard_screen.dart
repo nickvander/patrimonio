@@ -4673,6 +4673,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       // backend task keeps running regardless.
       final deadline = DateTime.now().add(const Duration(minutes: 8));
       final done = Completer<void>();
+      // Whether the poll loop ended because the cap expired with work still
+      // in flight — in that case "Sync complete" would be a lie: nothing
+      // completed, we just stopped watching. The backend reaper flips a
+      // genuinely wedged institution to 'error' at 30 min regardless.
+      var hitDeadline = false;
       Timer? poll;
       void finish() {
         poll?.cancel();
@@ -4692,11 +4697,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ? 0
                 : (doneCount > _syncTotal ? _syncTotal : doneCount);
           });
-          if (syncing == 0 || DateTime.now().isAfter(deadline)) finish();
+          if (syncing == 0) {
+            finish();
+          } else if (DateTime.now().isAfter(deadline)) {
+            hitDeadline = true;
+            finish();
+          }
         } catch (_) {
           // Transient poll failure (e.g. briefly backgrounded and the socket
           // dropped) — keep polling; the backend sync is unaffected.
-          if (DateTime.now().isAfter(deadline)) finish();
+          if (DateTime.now().isAfter(deadline)) {
+            hitDeadline = true;
+            finish();
+          }
         }
       });
 
@@ -4704,7 +4717,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text(l.dashSyncComplete),
+          content:
+              Text(hitDeadline ? l.dashSyncStillRunning : l.dashSyncComplete),
           duration: const Duration(seconds: 2),
         ),
       );

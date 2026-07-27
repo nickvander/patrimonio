@@ -717,6 +717,7 @@
     }
   },
   "dashSyncComplete": "Sincronización completa",
+  "dashSyncStillRunning": "La sincronización está tardando más de lo normal; sigue ejecutándose en segundo plano",
   "dashSyncFailed": "Falló la sincronización: {error}",
   "dashSyncedAt": "Sincronizado {when}",
   "dashSyncNow": "Sincronizar",

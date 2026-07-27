@@ -1,7 +1,46 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-26 (audit batch + desktop button sizing)
+> **Last updated:** 2026-07-27 (sync reaper + panic backstop)
 > **Branch:** `main`.
+
+## 2026-07-27 — Sync reaper + year-panic fix (audit item 7 + one tail finding)
+
+Finished across three sessions — the first two were killed by the kernel OOM
+killer (11GB VM; a 3.5GB Gradle and a 3.4GB emulator each pushed it over
+while other builds ran — the tmux scope died with them; lesson recorded in
+agent memory: serialize heavy jobs). Not disk: 10G free throughout.
+
+* **Stuck-`syncing` reaper (item 7, backend).** New nullable
+  `institutions.sync_started_at` (migration `2026072601`, partial index on
+  the syncing rows). `update_sync_status` stamps it on 'syncing' and clears
+  it on every terminal state; `mark_syncable_syncing` (the trigger-time
+  pre-stamp) stamps it too, so a run that wedges before reaching a queued
+  institution still ages out. `sync::reap_stale_syncs(db, boot)`: at boot,
+  ANY 'syncing' row is reaped (a detached run cannot outlive the process);
+  a 5-minute cron watchdog reaps rows older than 30 min and abstains from
+  NULL stamps. Reaped rows land in `error` with a human `last_sync_error`,
+  not silently back to `pending`. 3 regression tests
+  (`sync_reaper_test.rs`).
+* **"Sync complete" honesty (item 7, frontend).** `runSync`'s 8-minute
+  spinner cap previously fired the "Sync complete" toast unconditionally;
+  hitting the deadline with institutions still syncing now shows "Sync is
+  taking longer than usual — it keeps running in the background"
+  (`dashSyncStillRunning`, en + es).
+* **`?year=300000` panic (tail finding).** Every tax/export handler now
+  validates `?year=` (1900–2200 via shared `MIN_TAX_YEAR`/`MAX_TAX_YEAR`)
+  → 400 instead of a `from_ymd_opt(...).unwrap()` panic. Regression test
+  covers both routers and the i32 extremes.
+* **`CatchPanicLayer` backstop.** A handler panic used to unwind through
+  hyper and sever the connection (no status code at all — looks like a
+  network fault). New `panic_guard::layer()` mounted OUTERMOST in main.rs:
+  logs the payload, answers a generic 500 (no internals leaked, §1).
+  Extracted to the lib so it's unit-testable
+  (`a_handler_panic_becomes_a_generic_500`).
+
+Gates: clippy clean, backend 277 lib + all integration suites green (incl.
+the 3 reaper tests + the year test), `flutter analyze` at the 18-info
+baseline, `flutter test` 771 passing. **Committed locally; not pushed, not
+deployed to thelab, no APK cut.**
 
 ## 2026-07-26 (late) — Audit batch landed, plus desktop button sizing
 
@@ -29,12 +68,10 @@ Gates: clippy clean, backend suite green (276 unit + 136 integration + the
 rest, 0 failures), `flutter analyze` at its 18-info baseline, `flutter test`
 771 passing (up from 751 — 20 new regression tests).
 
-**Still open from the audit, not started:** item 7 ("Sync complete" fires
-unconditionally after the 8-minute deadline; institutions stuck in `syncing`
-never recover without a reaper), the tail findings (truncated filtered totals,
-`import_cleanup` claiming "No recent imports" on a load failure, unvalidated
-`?year=300000` panicking with no `CatchPanicLayer`, FBAR per-account
-contribution using an exact-date lookup), the four items needing a product
+**Still open from the audit** (item 7 and the `?year` panic closed 2026-07-27,
+see above): the remaining tail findings (truncated filtered totals,
+`import_cleanup` claiming "No recent imports" on a load failure, FBAR
+per-account contribution using an exact-date lookup), the four items needing a product
 call (FBAR unverified badge + FinCEN peak-balance method, description-keyed
 import dedup, the FIRE chart drawing the mean rather than the fetched p50, no
 off-machine backup), and the feature shortlist led by manual purchase-lot

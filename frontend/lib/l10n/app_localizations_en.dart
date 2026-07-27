@@ -2512,6 +2512,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashSyncComplete => 'Sync complete';
 
   @override
+  String get dashSyncStillRunning =>
+      'Sync is taking longer than usual — it keeps running in the background';
+
+  @override
   String dashSyncFailed(Object error) {
     return 'Sync failed: $error';
   }

@@ -83,6 +83,13 @@ const SYNCABLE_TYPES: &[&str] = &["plaid", "coinbase", "coinbase_oauth", "bitso"
 /// client polling `/dashboard/sync-status` sees the in-progress state the
 /// instant the trigger responds — with no race against the background task
 /// having started to flip rows yet. Returns the number of rows marked.
+///
+/// Also stamps `sync_started_at`: without it, a run that wedges before the
+/// loop reaches a pre-stamped institution leaves that row NULL-stamped, and
+/// the age-based watchdog in [`reap_stale_syncs`] abstains from NULL rows —
+/// only a restart would ever clear it. The loop re-stamps each institution
+/// as it actually starts it, so the age the watchdog measures is the later
+/// (more generous) of the two.
 pub async fn mark_syncable_syncing(
     db: &PgPool,
     user_id: uuid::Uuid,
@@ -91,7 +98,7 @@ pub async fn mark_syncable_syncing(
     let types: Vec<&str> = SYNCABLE_TYPES.to_vec();
     let res = match only_ids {
         Some(ids) => sqlx::query(
-            "UPDATE institutions SET sync_status = 'syncing' \
+            "UPDATE institutions SET sync_status = 'syncing', sync_started_at = NOW() \
              WHERE user_id = $1 AND id = ANY($2) AND integration_type = ANY($3)",
         )
         .bind(user_id)
@@ -100,7 +107,7 @@ pub async fn mark_syncable_syncing(
         .execute(db)
         .await?,
         None => sqlx::query(
-            "UPDATE institutions SET sync_status = 'syncing' \
+            "UPDATE institutions SET sync_status = 'syncing', sync_started_at = NOW() \
              WHERE user_id = $1 AND integration_type = ANY($2)",
         )
         .bind(user_id)
@@ -910,12 +917,82 @@ async fn run_fx_sweep(db: &PgPool, user_filter: Option<uuid::Uuid>) {
 }
 
 async fn update_sync_status(db: &PgPool, inst_id: uuid::Uuid, status: &str, error: Option<&str>) {
-    let _ = sqlx::query("UPDATE institutions SET sync_status = $1, last_sync_error = $2 WHERE id = $3")
-        .bind(status)
-        .bind(error)
-        .bind(inst_id)
-        .execute(db)
-        .await;
+    // Entering 'syncing' stamps the start; every terminal status clears it, so
+    // a non-NULL sync_started_at means "a run is genuinely in flight" and the
+    // reaper below has an age to measure. Without this the row could sit in
+    // 'syncing' forever with nothing to distinguish stuck from busy.
+    let _ = sqlx::query(
+        "UPDATE institutions \
+         SET sync_status = $1, last_sync_error = $2, \
+             sync_started_at = CASE WHEN $1 = 'syncing' THEN NOW() ELSE NULL END \
+         WHERE id = $3",
+    )
+    .bind(status)
+    .bind(error)
+    .bind(inst_id)
+    .execute(db)
+    .await;
+}
+
+/// How long a single institution's sync may sit in 'syncing' before the
+/// watchdog calls it dead.
+///
+/// Generous on purpose: the client's own "sync complete" deadline is 8
+/// minutes, and a slow Plaid item with a long transactions backfill can
+/// legitimately run for several. This is the backstop for a wedged run, not a
+/// timeout — a real sync that finishes late still writes its own terminal
+/// status.
+const STALE_SYNC_AFTER_MINUTES: i64 = 30;
+
+/// Clear institutions stuck in `sync_status = 'syncing'`.
+///
+/// Two distinct failure modes, both of which left the Settings card spinning
+/// forever with a manual re-sync as the only escape:
+///
+/// 1. **The process restarted mid-sync** (deploy, OOM, crash). The detached
+///    sync task dies with it, so nothing ever writes the terminal status.
+///    Anything still 'syncing' when we boot is stale *by definition* — a run
+///    cannot outlive the process — so `boot = true` reaps regardless of age,
+///    including rows stamped by an older binary that never set
+///    `sync_started_at`.
+/// 2. **A run wedged** on an upstream call without the process dying. Here age
+///    is the only signal, so `boot = false` reaps only rows older than
+///    [`STALE_SYNC_AFTER_MINUTES`] and leaves NULL-stamped rows alone (a
+///    concurrent run may just not have stamped yet).
+///
+/// Lands as `error` with an explanatory `last_sync_error` rather than
+/// silently reverting to `pending`: the sync genuinely did not complete, and
+/// the UI already surfaces `last_sync_error`. Returns the number reaped.
+pub async fn reap_stale_syncs(db: &PgPool, boot: bool) -> Result<u64> {
+    let sql = if boot {
+        "UPDATE institutions \
+         SET sync_status = 'error', sync_started_at = NULL, \
+             last_sync_error = 'Sync was interrupted (the server restarted). Run it again.' \
+         WHERE sync_status = 'syncing'"
+    } else {
+        "UPDATE institutions \
+         SET sync_status = 'error', sync_started_at = NULL, \
+             last_sync_error = 'Sync stopped responding and was cancelled. Run it again.' \
+         WHERE sync_status = 'syncing' \
+           AND sync_started_at IS NOT NULL \
+           AND sync_started_at < NOW() - ($1 || ' minutes')::interval"
+    };
+    let res = if boot {
+        sqlx::query(sql).execute(db).await?
+    } else {
+        sqlx::query(sql)
+            .bind(STALE_SYNC_AFTER_MINUTES.to_string())
+            .execute(db)
+            .await?
+    };
+    let n = res.rows_affected();
+    if n > 0 {
+        tracing::warn!(
+            "Reaped {n} institution(s) stuck in 'syncing' ({})",
+            if boot { "server restart" } else { "watchdog" }
+        );
+    }
+    Ok(n)
 }
 
 fn plaid_error_status(payload: &serde_json::Value) -> Option<&'static str> {

@@ -24,7 +24,7 @@
 
 use axum::{
     extract::{Extension, Query, State},
-    http::header,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
@@ -60,9 +60,29 @@ struct ExportQuery {
     lang: Option<String>,
 }
 
-fn year_or_current(q: &ExportQuery) -> i32 {
-    q.year
-        .unwrap_or_else(|| chrono::Utc::now().naive_utc().year())
+/// The requested export year, defaulting to the current one, rejected with
+/// 400 when out of range.
+///
+/// Same panic as the sibling tax endpoints: these exports feed
+/// `TaxService::*` which build their date bounds with
+/// `NaiveDate::from_ymd_opt(year, 1, 1).unwrap()`, and chrono returns `None`
+/// outside ±262143 — so `?year=300000` panicked mid-handler instead of
+/// answering. Bounds are shared with `api::tax` so the two can't diverge.
+fn year_or_current(q: &ExportQuery) -> Result<i32, ApiError> {
+    let year = q
+        .year
+        .unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    if !(crate::api::tax::MIN_TAX_YEAR..=crate::api::tax::MAX_TAX_YEAR).contains(&year) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            &format!(
+                "year must be between {} and {}",
+                crate::api::tax::MIN_TAX_YEAR,
+                crate::api::tax::MAX_TAX_YEAR
+            ),
+        ));
+    }
+    Ok(year)
 }
 
 /// Always-two-decimals money cell for the CSVs — `round_dp(2).to_string()`
@@ -124,7 +144,7 @@ async fn export_fbar_worksheet(
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<ExportQuery>,
 ) -> Result<Response, ApiError> {
-    let year = year_or_current(&q);
+    let year = year_or_current(&q)?;
     let es = q.lang.as_deref() == Some("es");
     let t = |en: &'static str, es_s: &'static str| if es { es_s } else { en };
 
@@ -306,7 +326,7 @@ async fn export_form_8949_csv(
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<ExportQuery>,
 ) -> Result<Response, ApiError> {
-    let year = year_or_current(&q);
+    let year = year_or_current(&q)?;
     let disposals = TaxService::get_lot_disposals(&state.db, year, ctx.user_id)
         .await
         .map_err(internal)?;
@@ -423,7 +443,7 @@ async fn export_schedule_b_csv(
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<ExportQuery>,
 ) -> Result<Response, ApiError> {
-    let year = year_or_current(&q);
+    let year = year_or_current(&q)?;
     let start = format!("{year}-01-01");
     let end = format!("{year}-12-31");
 
@@ -566,7 +586,7 @@ async fn export_mx_summary_csv(
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<ExportQuery>,
 ) -> Result<Response, ApiError> {
-    let year = year_or_current(&q);
+    let year = year_or_current(&q)?;
     let status = resolve_filing_status(&state, ctx.user_id, q.status.clone()).await;
     let est = TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id)
         .await

@@ -4172,6 +4172,12 @@ abstract class AppLocalizations {
   /// **'Sync complete'**
   String get dashSyncComplete;
 
+  /// No description provided for @dashSyncStillRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync is taking longer than usual — it keeps running in the background'**
+  String get dashSyncStillRunning;
+
   /// No description provided for @dashSyncFailed.
   ///
   /// In en, this message translates to:
