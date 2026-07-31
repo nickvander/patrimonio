@@ -1,7 +1,78 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-27 (sync reaper + panic backstop)
+> **Last updated:** 2026-07-30 (notifications retire themselves)
 > **Branch:** `main`.
+
+## 2026-07-30 — Condition-backed notifications now retire themselves
+
+Reported from the phone: a CetesDirecto statement had just been imported, but
+the bell still read *"CetesDirecto statement import overdue — data is 45 days
+old"*, dated Jul 23. The dashboard banner had cleared correctly; only the bell
+was wrong.
+
+Root cause: `user_notifications` was **insert-only**. The staleness cron wrote
+a row once per episode and nothing ever took it back, so a stored reminder —
+frozen text making a claim about the present — outlived the condition
+indefinitely. The unread badge counted it too. `loan_due` had the identical
+shape: paying an installment cleared the lending tab while the bell kept
+asking for the money.
+
+* **`staleness::resolve_stale_import_notifications`** (backend). Runs on every
+  `GET /api/notifications`. For each manual institution it either deletes the
+  reminder (fresh data / muted / snoozed — i.e. the sweep would no longer
+  write one) or keeps it with the day count **re-dated to today**, so a
+  reminder raised at 45 days says 52 a week later instead of lying. The
+  writer and the resolver now share one `StalenessPrefs::should_notify`
+  predicate and one `manual_institution_freshness` query, so "stale" can't
+  mean two things. Invariant: an `import_stale` row exists exactly while the
+  institution would banner.
+* **Deletes on proof, never on a join gap.** A row whose institution can't be
+  attributed (deleted, or renamed before `link_id` existed) is left alone —
+  otherwise any missing join would read as "resolved" and eat the inbox. New
+  rows carry `link_kind='institution'` + `link_id`, so renames resolve from
+  here on; the resolver backfills it onto surviving old rows.
+* **`notifications::sync_loan_due_notifications`** (renamed from
+  `record_…`). Same read pass now deletes `loan_due` rows the current data no
+  longer warrants — paid, skipped, linked to a real transaction, rescheduled,
+  loan closed or deleted, lead window shortened — by reconciling against the
+  writer's own desired set rather than enumerating cases. Still idempotent
+  next to `dedupe_key`: an installment that reverts to unpaid re-alerts.
+* FX crossings are untouched: those are events, not conditions.
+* No frontend change needed — a successful mutation already clears the whole
+  dashboard cache, so the next load re-reads the reconciled inbox.
+
+### "Since your last visit" now means a visit
+
+Noticed in the same screenshot: *"143 new transactions — Since your last
+visit · Jul 13"* on Jul 30. The summary anchored on `users.previous_login_at`,
+which only moves when the user actually authenticates — on a phone that stays
+signed in for weeks, that is not a visit by any reading. It fed both the
+Overview banner and two bell rows.
+
+* Migration `2026073101` adds `users.last_visit_at` + `previous_visit_at`.
+  `GET /dashboard/since-last-login` rolls them in one `UPDATE … RETURNING`:
+  a gap of more than `VISIT_GAP_HOURS` (4) ends a visit, so the old
+  `last_visit_at` becomes the anchor; inside the window the anchor holds
+  still, so refreshing doesn't erase the summary you're reading. A deliberate
+  write on a GET — listing what changed since the last visit *is* the visit.
+* Existing users are seeded from `MAX(user_sessions.last_seen_at)` (bumped on
+  every authenticated request, so it's a real activity signal) rather than
+  from the login, with both columns set to it: the first post-deploy load
+  reports nothing new and every visit after that is measured honestly.
+  Seeding the anchor from `previous_login_at` would have replayed the exact
+  staleness the migration exists to end.
+* The wire field stays `previous_login_at` — it's the key the web banner and
+  the shipped APK dismiss on, and renaming it would silently un-dismiss
+  banners on every client that hasn't updated. `previous_login_at` itself is
+  unchanged; it still backs the security screen's session flag and is the
+  fallback anchor for a user with no recorded visit.
+
+Gates: clippy clean, full backend suite green (277 lib + 138 dashboard + all
+other suites, 0 failures) including 8 new regression tests — retire-on-import,
+re-dating, retire-on-mute, don't-touch-unattributable, settled installment,
+rescheduled installment, visit-not-login anchor, anchor-holds-within-a-visit.
+`flutter analyze` at the 18-info baseline, `flutter test` 771 passing (no
+frontend change was needed for either fix).
 
 ## 2026-07-27 — Sync reaper + year-panic fix (audit item 7 + one tail finding)
 
