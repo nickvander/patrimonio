@@ -108,8 +108,15 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         .layer(axum::middleware::from_fn(
             patrimonio::api::session::require_owner,
         ));
-    let account_mgmt =
-        Router::new().nest("/api/auth", patrimonio::api::session::protected_router());
+    // Notifications sit outside require_owner in main.rs (a read-only
+    // member must be able to read their own inbox) — mirror that, since
+    // listing the inbox is what retires resolved reminders.
+    let account_mgmt = Router::new()
+        .nest("/api/auth", patrimonio::api::session::protected_router())
+        .nest(
+            "/api/notifications",
+            patrimonio::api::notifications::router(),
+        );
     let protected = business
         .merge(account_mgmt)
         .layer(from_fn_with_state(
@@ -661,5 +668,191 @@ async fn archived_accounts_do_not_keep_an_institution_on_the_radar() {
     assert_eq!(
         recorded, 0,
         "an institution with only archived accounts must not nag"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// resolve_stale_import_notifications — retiring reminders that stopped
+// being true. Regression guard for the reported bug: importing a
+// CetesDirecto statement cleared the dashboard banner, but the bell kept
+// repeating "CetesDirecto data is 45 days old" indefinitely, because
+// nothing ever took a written reminder back.
+// ---------------------------------------------------------------------------
+
+/// The single `import_stale` row's body, for asserting on its day count.
+async fn stale_notification_body(pool: &PgPool, user_id: uuid::Uuid) -> String {
+    sqlx::query_scalar(
+        "SELECT body FROM user_notifications WHERE user_id = $1 AND kind = 'import_stale'",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("one import_stale row")
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_fresh_import_retires_the_reminder_on_the_next_inbox_read() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) =
+        seed_institution_account(&pool, user_id, "CetesDirecto", "manual", 45).await;
+
+    record_staleness_notifications(&pool).await.expect("sweep");
+    assert_eq!(stale_notification_count(&pool, user_id).await, 1);
+
+    // The bell shows it while it is true…
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = body_json(res.into_body()).await;
+    assert_eq!(json["notifications"].as_array().unwrap().len(), 1);
+    assert_eq!(json["unread_count"], 1);
+
+    // …the user imports a statement (import confirm bumps updated_at)…
+    age_account(&pool, acct, 0).await;
+
+    // …and the very next read retires it, badge included.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    let json = body_json(res.into_body()).await;
+    assert_eq!(
+        json["notifications"].as_array().unwrap().len(),
+        0,
+        "a reminder that is no longer true must not survive the import: {json}"
+    );
+    assert_eq!(
+        json["unread_count"], 0,
+        "retiring the row also de-badges the bell: {json}"
+    );
+    assert_eq!(stale_notification_count(&pool, user_id).await, 0);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_still_stale_reminder_is_re_dated_rather_than_frozen() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) =
+        seed_institution_account(&pool, user_id, "CetesDirecto", "manual", 45).await;
+
+    record_staleness_notifications(&pool).await.expect("sweep");
+    assert!(
+        stale_notification_body(&pool, user_id).await.contains("45 days old"),
+        "sanity: the reminder was raised at 45 days"
+    );
+
+    // A week passes with no import. The row must still be there — it is
+    // still true — but saying 52, not the number it was born with.
+    age_account(&pool, acct, 52).await;
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = body_json(res.into_body()).await;
+    assert_eq!(
+        json["notifications"].as_array().unwrap().len(),
+        1,
+        "still stale → still reminded: {json}"
+    );
+    let body = json["notifications"][0]["body"].as_str().unwrap();
+    assert!(
+        body.contains("52 days old"),
+        "the day count tracks today, not the day the reminder was written: {body}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn muting_retires_an_already_written_reminder() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_institution_account(&pool, user_id, "CetesDirecto", "manual", 45).await;
+
+    record_staleness_notifications(&pool).await.expect("sweep");
+    assert_eq!(stale_notification_count(&pool, user_id).await, 1);
+
+    // "Remind me" toggled off AFTER the reminder was already in the inbox:
+    // the sweep would no longer write it, so it must not linger either.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/settings/import_staleness_muted",
+            Some(&serde_json::json!([inst.to_string()])),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    let json = body_json(res.into_body()).await;
+    assert_eq!(
+        json["notifications"].as_array().unwrap().len(),
+        0,
+        "muting an institution clears its outstanding bell row: {json}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn resolution_never_touches_a_row_it_cannot_attribute() {
+    // The resolver deletes on proof that the condition ended, never on a
+    // failure to find the institution — otherwise any join gap (a deleted
+    // or renamed institution, a row written by an older build) would read
+    // as "resolved" and silently eat the user's inbox.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+
+    // No institution named Revolut exists at all.
+    sqlx::query(
+        "INSERT INTO user_notifications (user_id, kind, title, body) \
+         VALUES ($1, 'import_stale', 'Revolut statement import overdue', 'Revolut data is 38 days old.')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // …and an unrelated event row, which is not condition-backed at all.
+    sqlx::query(
+        "INSERT INTO user_notifications (user_id, kind, title, body) \
+         VALUES ($1, 'fx_alert', 'USD/MXN crossed 17.5', 'body')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    let json = body_json(res.into_body()).await;
+    assert_eq!(
+        json["notifications"].as_array().unwrap().len(),
+        2,
+        "unattributable and event-style rows both survive: {json}"
     );
 }

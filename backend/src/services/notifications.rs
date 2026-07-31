@@ -17,6 +17,12 @@
 //! NOTHING`, so re-listing the inbox never resurrects read notifications
 //! as new unread ones. A rescheduled installment gets a NEW due date and
 //! therefore a new dedupe key, which correctly re-alerts.
+//!
+//! Generation-on-read is also generation-on-*retire*: the same pass deletes
+//! `loan_due` rows the current data no longer warrants (paid, skipped,
+//! rescheduled, loan closed). A reminder is a claim about the present, and
+//! nothing else would ever take it back — see the sibling
+//! `staleness::resolve_stale_import_notifications` for import reminders.
 
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -37,14 +43,27 @@ pub const LOAN_LEAD_SETTING_KEY: &str = "lending_reminder_lead_days";
 /// can't drift apart.
 pub const DEFAULT_LOAN_LEAD_DAYS: i64 = 7;
 
-/// Record a `user_notifications` row (kind = `loan_due`) for every active
-/// loan installment of `user_id` that is due within the user's configured
-/// lead window (or already overdue). Returns rows actually inserted.
+/// Reconcile the caller's `loan_due` inbox rows with the installments that
+/// actually warrant a reminder right now: insert the missing ones, delete
+/// the ones that no longer belong. Returns rows inserted.
+///
+/// Insert-only was the original design and it left reminders behind — the
+/// row is frozen text ("Installment #1 … is due on 2026-07-15"), so paying
+/// the installment cleared it from the lending tab while the bell kept
+/// asking for it forever. Deleting whatever is no longer in the desired set
+/// retires every such case at once (paid, skipped, linked to a real
+/// transaction, rescheduled to a new date, loan closed or deleted, lead
+/// window shortened) without this function having to enumerate them —
+/// the writer's own query defines what "warranted" means.
+///
+/// Deletion is safe next to `dedupe_key`: if the installment goes back to
+/// unpaid, the next read re-inserts it rather than the dedupe key
+/// permanently suppressing it.
 ///
 /// Title/body are stored in English with the concrete numbers embedded,
 /// matching the fx_alert / import_stale precedent; the notifications
 /// center renders locale-aware icons/links off `kind`.
-pub async fn record_loan_due_notifications(db: &PgPool, user_id: Uuid) -> Result<usize> {
+pub async fn sync_loan_due_notifications(db: &PgPool, user_id: Uuid) -> Result<usize> {
     // Lead days from settings (JSON number); default 7, clamp 0..=60 —
     // same policy as loans::list_reminders.
     let lead_days: i64 = sqlx::query_scalar::<_, serde_json::Value>(
@@ -100,6 +119,7 @@ pub async fn record_loan_due_notifications(db: &PgPool, user_id: Uuid) -> Result
     .await?;
 
     let mut recorded = 0usize;
+    let mut wanted: Vec<String> = Vec::with_capacity(rows.len());
     for row in rows {
         let payment_id: Uuid = row.try_get("payment_id")?;
         let loan_id: Uuid = row.try_get("loan_id")?;
@@ -113,6 +133,7 @@ pub async fn record_loan_due_notifications(db: &PgPool, user_id: Uuid) -> Result
         // re-listing is a no-op, while rescheduling the installment
         // (new due date) re-alerts.
         let dedupe_key = format!("loan_due:{payment_id}:{due_date}");
+        wanted.push(dedupe_key.clone());
         let title = format!("Repayment from {borrower} due {due_date}");
         // Presentation rounding only; the inbox row is human-readable
         // copy, not a money field the client sums.
@@ -145,5 +166,21 @@ pub async fn record_loan_due_notifications(db: &PgPool, user_id: Uuid) -> Result
         .rows_affected();
         recorded += inserted as usize;
     }
+
+    // Retire the rest. `<> ALL` over an empty array is TRUE in Postgres,
+    // which is exactly right: nothing is due, so no loan_due row survives.
+    // Scoped to rows this function owns (kind + a non-NULL dedupe_key), so
+    // event-style rows from other writers are never touched.
+    sqlx::query(
+        "DELETE FROM user_notifications \
+         WHERE user_id = $1 AND kind = $2 \
+           AND dedupe_key IS NOT NULL AND dedupe_key <> ALL($3)",
+    )
+    .bind(user_id)
+    .bind(LOAN_DUE_NOTIFICATION_KIND)
+    .bind(&wanted)
+    .execute(db)
+    .await?;
+
     Ok(recorded)
 }

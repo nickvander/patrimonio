@@ -2,11 +2,16 @@
 //!
 //! `GET /` lists the caller's `user_notifications` rows (all sources in
 //! one list: FX alert crossings, import-staleness reminders, loan payment
-//! due reminders) plus the true unread count for the bell badge. Loan due
-//! reminders are generated-on-read here (see
-//! `services::notifications::record_loan_due_notifications`) — the due
-//! window moves with the calendar, so listing the inbox is the natural
-//! moment to materialise them; the dedupe key makes that idempotent.
+//! due reminders) plus the true unread count for the bell badge.
+//!
+//! Listing is also when the two *condition-backed* kinds are reconciled
+//! against live data (see `services::notifications::sync_loan_due_notifications`
+//! and `services::staleness::resolve_stale_import_notifications`): the due
+//! window moves with the calendar and an import can clear a staleness
+//! reminder at any moment, so the natural place to materialise the ones
+//! that now apply — and retire the ones that no longer do — is the read
+//! path. Both are idempotent. FX crossings are events, not conditions:
+//! they happened, and they stay.
 //!
 //! `POST /read` stamps `read_at` — either specific ids or everything —
 //! so read state follows the account across devices (the old bell kept
@@ -27,7 +32,8 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::api::session::{internal, ApiError, AuthContext};
-use crate::services::notifications::record_loan_due_notifications;
+use crate::services::notifications::sync_loan_due_notifications;
+use crate::services::staleness::resolve_stale_import_notifications;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -74,10 +80,22 @@ async fn list_notifications(
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<NotificationsResponse>, ApiError> {
-    // Generated-on-read: materialise loan due reminders inside the lead
-    // window before listing, so they appear in the same inbox with real
-    // read state. Idempotent via dedupe_key.
-    record_loan_due_notifications(&state.db, ctx.user_id)
+    // Reconcile-on-read, before listing, so the inbox describes the world
+    // as it is right now rather than as some past cron run found it:
+    //
+    // * import-staleness reminders whose institution has since been
+    //   imported (or muted/snoozed) are retired, and the ones still stale
+    //   have their day count re-dated — a stored reminder is a claim about
+    //   the present, and nothing else ever takes it back;
+    // * loan due reminders inside the lead window are materialised, and
+    //   the settled/rescheduled ones deleted. Idempotent via dedupe_key.
+    //
+    // Both run before the unread count below, so retiring a reminder
+    // de-badges the bell in the same round-trip.
+    resolve_stale_import_notifications(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
+    sync_loan_due_notifications(&state.db, ctx.user_id)
         .await
         .map_err(internal)?;
 

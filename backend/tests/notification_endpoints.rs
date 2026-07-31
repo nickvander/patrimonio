@@ -432,6 +432,95 @@ async fn mark_read_specific_ids_only() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn settled_installment_retires_its_reminder() {
+    // Sibling of the import-staleness resolver: a due reminder is a claim
+    // about the present. Paying the installment used to clear it from the
+    // lending tab while the bell kept asking for the money forever.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, uid) = bootstrap(&app, &pool).await;
+    let (_loan_id, payment_id) = seed_loan_with_installment(&pool, uid, 3).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = body_json(res.into_body()).await;
+    assert_eq!(json["notifications"].as_array().unwrap().len(), 1);
+
+    // Ana pays.
+    sqlx::query("UPDATE loan_payments SET status = 'paid', paid_amount = 250 WHERE id = $1")
+        .bind(payment_id)
+        .execute(&pool)
+        .await
+        .expect("settle installment");
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    let json = body_json(res.into_body()).await;
+    assert_eq!(
+        json["notifications"].as_array().unwrap().len(),
+        0,
+        "a settled installment must not keep nagging: {json}"
+    );
+    assert_eq!(json["unread_count"], 0, "and the badge clears too: {json}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn rescheduling_replaces_the_reminder_instead_of_stacking_one() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, uid) = bootstrap(&app, &pool).await;
+    let (_loan_id, payment_id) = seed_loan_with_installment(&pool, uid, 3).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Moved a few days later — still inside the lead window, so it still
+    // warrants a reminder, but the old date must not linger alongside it.
+    // Read the new date back from the DB rather than recomputing it here,
+    // so the assertion can't drift on the server's date/timezone.
+    let new_due: String = sqlx::query_scalar(
+        "UPDATE loan_payments SET due_date = CURRENT_DATE + 5 WHERE id = $1 \
+         RETURNING due_date::text",
+    )
+    .bind(payment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("reschedule installment");
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/notifications", None, Some(&cookie)))
+        .await
+        .unwrap();
+    let json = body_json(res.into_body()).await;
+    let list = json["notifications"].as_array().unwrap();
+    assert_eq!(
+        list.len(),
+        1,
+        "one installment, one reminder — the stale date is retired: {json}"
+    );
+    assert!(
+        list[0]["title"].as_str().unwrap().contains(&new_due),
+        "the surviving reminder carries the NEW due date: {json}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn notifications_are_user_scoped() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
         return;

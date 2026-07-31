@@ -20,6 +20,17 @@
 //! episode: a second cron run stays silent, and a fresh import re-arms the
 //! reminder because the dedup window is keyed on the institution's
 //! last-data timestamp.
+//!
+//! Writing the row is only half the contract. A stored reminder is a claim
+//! about the *present* ("CetesDirecto data is 45 days old"), so it has to be
+//! retired when that stops being true — otherwise importing a statement
+//! clears the dashboard banner while the bell keeps repeating the old number
+//! forever. [`resolve_stale_import_notifications`] runs on every inbox read
+//! and, for each manual institution, either deletes its reminder (fresh data
+//! landed / muted / snoozed — i.e. the sweep would no longer create one) or
+//! refreshes the day count in a reminder that is still true. The invariant:
+//! **an `import_stale` row exists exactly while the institution would banner,
+//! and its body always names today's age.**
 
 use std::collections::{HashMap, HashSet};
 
@@ -160,16 +171,22 @@ pub fn threshold_from_setting(value: Option<&serde_json::Value>) -> i64 {
     }
 }
 
-/// Import-only (`integration_type = 'manual'`) institutions of `user_id`
-/// whose freshest account data is older than `threshold_days` days.
+/// Every import-only (`integration_type = 'manual'`) institution of
+/// `user_id` with the age of its freshest data, oldest first.
 ///
 /// An institution's freshness is the MAX over its non-archived accounts of
 /// GREATEST(account.updated_at, last transaction insert time): one freshly
-/// imported account is enough to consider the institution current.
-pub async fn stale_import_institutions(
+/// imported account is enough to consider the institution current. This is
+/// the same expression `/api/dashboard/overview` stamps onto each manual
+/// account as `last_data_at`, so the banner and the bell can never disagree
+/// about how old an institution is.
+///
+/// Unfiltered on purpose: the reminder writer wants the ones past the
+/// threshold, the resolver wants the ones that dropped back under it, and
+/// deriving both from one query keeps them from drifting.
+pub async fn manual_institution_freshness(
     db: &PgPool,
     user_id: Uuid,
-    threshold_days: i64,
 ) -> Result<Vec<StaleInstitution>> {
     let rows = sqlx::query(
         r#"
@@ -187,13 +204,10 @@ pub async fn stale_import_institutions(
         ) tx ON TRUE
         WHERE i.user_id = $1 AND i.integration_type = 'manual'
         GROUP BY i.id, i.name
-        HAVING MAX(GREATEST(a.updated_at, tx.last_tx_at))
-               < NOW() - ($2 * INTERVAL '1 day')
         ORDER BY MAX(GREATEST(a.updated_at, tx.last_tx_at)) ASC
         "#,
     )
     .bind(user_id)
-    .bind(threshold_days)
     .fetch_all(db)
     .await?;
 
@@ -205,10 +219,30 @@ pub async fn stale_import_institutions(
             institution_id: row.try_get("id")?,
             name: row.try_get("name")?,
             last_data_at,
-            days_stale: (now - last_data_at).num_days(),
+            // Clock skew (a server timestamp slightly ahead of ours) reads
+            // as 0 days, never negative — same guard as the frontend's
+            // `accountDataAgeDays`.
+            days_stale: (now - last_data_at).num_days().max(0),
         });
     }
     Ok(out)
+}
+
+/// The reminder's title. Embeds the institution name, and is the key the
+/// dedup check and the resolver match rows on for reminders written before
+/// `link_id` was populated — keep the two in one place so they can't drift.
+pub fn staleness_title(institution: &str) -> String {
+    format!("{institution} statement import overdue")
+}
+
+/// The reminder's body. Stored in English with the concrete number embedded,
+/// matching the fx_alert precedent; a future notifications center can
+/// re-render locale-aware copy off `kind`.
+pub fn staleness_body(institution: &str, days_stale: i64) -> String {
+    format!(
+        "{institution} data is {days_stale} days old. \
+         Import a fresh statement to keep balances accurate."
+    )
 }
 
 /// One `app_settings` value for `user_id`, or None when unset. Small helper
@@ -226,6 +260,136 @@ async fn fetch_setting(
     .bind(key)
     .fetch_optional(db)
     .await?)
+}
+
+/// One user's three staleness preferences, read together because every
+/// caller needs all three to answer the single question below.
+struct StalenessPrefs {
+    threshold_days: i64,
+    snoozes: HashMap<Uuid, StalenessSnooze>,
+    muted: HashSet<Uuid>,
+}
+
+impl StalenessPrefs {
+    async fn load(db: &PgPool, user_id: Uuid) -> Result<Self> {
+        Ok(Self {
+            threshold_days: threshold_from_setting(
+                fetch_setting(db, user_id, STALENESS_SETTING_KEY)
+                    .await?
+                    .as_ref(),
+            ),
+            snoozes: snoozes_from_setting(
+                fetch_setting(db, user_id, STALENESS_SNOOZE_SETTING_KEY)
+                    .await?
+                    .as_ref(),
+            ),
+            muted: muted_from_setting(
+                fetch_setting(db, user_id, STALENESS_MUTE_SETTING_KEY)
+                    .await?
+                    .as_ref(),
+            ),
+        })
+    }
+
+    /// Whether `inst` should have a reminder in the inbox right now.
+    ///
+    /// The single source of truth for both directions: the writer inserts
+    /// when this is true, the resolver deletes when it is false. That is
+    /// what keeps the bell in lockstep with the dashboard banner — a fresh
+    /// import (data newer than the threshold) flips it to false, and so do
+    /// a Settings mute and an active banner snooze.
+    ///
+    /// The age test is whole days (`days_stale >= threshold`) rather than an
+    /// interval in SQL, so the boundary means exactly what the frontend
+    /// banner's `age >= thresholdDays` means.
+    fn should_notify(&self, inst: &StaleInstitution, now: DateTime<Utc>) -> bool {
+        inst.days_stale >= self.threshold_days
+            && !self.muted.contains(&inst.institution_id)
+            && !self
+                .snoozes
+                .get(&inst.institution_id)
+                .is_some_and(|s| s.suppresses(inst.last_data_at, now))
+    }
+}
+
+/// Retire the caller's `import_stale` reminders that no longer describe
+/// reality, and re-date the ones that still do. Returns rows deleted.
+///
+/// Called on every `GET /api/notifications`, because a stored reminder is a
+/// claim about the present: after an import the dashboard banner recomputes
+/// and disappears, but the bell row is frozen text that would otherwise keep
+/// insisting the data is 45 days old for good.
+///
+/// For each manual institution exactly one of two things happens:
+///
+/// * [`StalenessPrefs::should_notify`] is false (fresh data landed, or the
+///   user muted/snoozed it) → its reminder is **deleted**, which also fixes
+///   the unread badge, and — because the writer's dedup only skips rows
+///   newer than `last_data_at` — leaves the next real staleness episode free
+///   to re-notify.
+/// * it is still true → the reminder is **kept**, with its body refreshed to
+///   today's day count (a reminder raised at 45 days says 52 a week later)
+///   and `link_id` backfilled so a later rename still resolves it.
+///
+/// Rows we cannot attribute to a live institution (a deleted one, or a
+/// pre-`link_id` row whose institution was renamed) are deliberately left
+/// alone: deleting on "no match" would make any gap in the join look like a
+/// resolution.
+pub async fn resolve_stale_import_notifications(db: &PgPool, user_id: Uuid) -> Result<u64> {
+    let prefs = StalenessPrefs::load(db, user_id).await?;
+    let now = Utc::now();
+
+    let (keep, resolved): (Vec<_>, Vec<_>) = manual_institution_freshness(db, user_id)
+        .await?
+        .into_iter()
+        .partition(|inst| prefs.should_notify(inst, now));
+
+    // Delete by id OR title: reminders written before this change carry a
+    // NULL link_id and can only be matched on the title they embedded.
+    let resolved_ids: Vec<String> = resolved
+        .iter()
+        .map(|i| i.institution_id.to_string())
+        .collect();
+    let resolved_titles: Vec<String> = resolved.iter().map(|i| staleness_title(&i.name)).collect();
+    let kept_ids: Vec<String> = keep.iter().map(|i| i.institution_id.to_string()).collect();
+
+    let deleted = sqlx::query(
+        "DELETE FROM user_notifications \
+         WHERE user_id = $1 AND kind = $2 \
+           AND (link_id = ANY($3) OR title = ANY($4)) \
+           AND (link_id IS NULL OR link_id <> ALL($5))",
+    )
+    .bind(user_id)
+    .bind(STALENESS_NOTIFICATION_KIND)
+    .bind(&resolved_ids)
+    .bind(&resolved_titles)
+    // Guard for two institutions sharing a name: a row that identifies
+    // itself as one we're keeping is never collateral of the other's title.
+    .bind(&kept_ids)
+    .execute(db)
+    .await?
+    .rows_affected();
+
+    for inst in keep {
+        let title = staleness_title(&inst.name);
+        let body = staleness_body(&inst.name, inst.days_stale);
+        let link_id = inst.institution_id.to_string();
+        sqlx::query(
+            "UPDATE user_notifications \
+                SET body = $4, link_kind = 'institution', link_id = $5 \
+             WHERE user_id = $1 AND kind = $2 AND title = $3 \
+               AND (body IS DISTINCT FROM $4 OR link_id IS DISTINCT FROM $5)",
+        )
+        .bind(user_id)
+        .bind(STALENESS_NOTIFICATION_KIND)
+        .bind(&title)
+        .bind(&body)
+        .bind(&link_id)
+        .execute(db)
+        .await?;
+    }
+
+    Ok(deleted)
 }
 
 /// Record a `user_notifications` row for every (user, manual institution)
@@ -257,37 +421,18 @@ pub async fn record_staleness_notifications(db: &PgPool) -> Result<usize> {
     for user_row in user_rows {
         let user_id: Uuid = user_row.try_get("user_id")?;
 
-        let threshold_days =
-            threshold_from_setting(fetch_setting(db, user_id, STALENESS_SETTING_KEY).await?.as_ref());
-        let snoozes = snoozes_from_setting(
-            fetch_setting(db, user_id, STALENESS_SNOOZE_SETTING_KEY)
-                .await?
-                .as_ref(),
-        );
-        let muted = muted_from_setting(
-            fetch_setting(db, user_id, STALENESS_MUTE_SETTING_KEY)
-                .await?
-                .as_ref(),
-        );
+        let prefs = StalenessPrefs::load(db, user_id).await?;
 
-        for inst in stale_import_institutions(db, user_id, threshold_days).await? {
-            // Permanently muted ("Remind me" off in Settings): never notify.
-            if muted.contains(&inst.institution_id) {
+        for inst in manual_institution_freshness(db, user_id).await? {
+            // Under the threshold, permanently muted ("Remind me" off in
+            // Settings), or actively snoozed (banner dismissed <7 days ago
+            // with no data since): stay silent. An expired snooze — or one
+            // whose data_as_of predates a fresh import — falls through and
+            // notifies. The resolver applies the same test in reverse.
+            if !prefs.should_notify(&inst, now) {
                 continue;
             }
-            // Actively snoozed (banner dismissed <7 days ago, no data since):
-            // stay silent for the window. An expired snooze — or one whose
-            // data_as_of predates a fresh import — falls through and notifies.
-            if snoozes
-                .get(&inst.institution_id)
-                .is_some_and(|s| s.suppresses(inst.last_data_at, now))
-            {
-                continue;
-            }
-            // Title/body stored in English with the concrete numbers embedded,
-            // matching the fx_alert precedent; a future notifications center
-            // can re-render locale-aware copy off `kind`.
-            let title = format!("{} statement import overdue", inst.name);
+            let title = staleness_title(&inst.name);
             let already_notified: bool = sqlx::query_scalar(
                 "SELECT EXISTS(
                      SELECT 1 FROM user_notifications
@@ -305,18 +450,20 @@ pub async fn record_staleness_notifications(db: &PgPool) -> Result<usize> {
                 continue;
             }
 
-            let body = format!(
-                "{} data is {} days old. Import a fresh statement to keep balances accurate.",
-                inst.name, inst.days_stale,
-            );
+            let body = staleness_body(&inst.name, inst.days_stale);
+            // `link_id` records WHICH institution this is about, so the
+            // resolver can retire the row even after a rename (the title
+            // alone would no longer match).
             sqlx::query(
-                "INSERT INTO user_notifications (user_id, kind, title, body) \
-                 VALUES ($1, $2, $3, $4)",
+                "INSERT INTO user_notifications \
+                     (user_id, kind, title, body, link_kind, link_id) \
+                 VALUES ($1, $2, $3, $4, 'institution', $5)",
             )
             .bind(user_id)
             .bind(STALENESS_NOTIFICATION_KIND)
             .bind(&title)
             .bind(&body)
+            .bind(inst.institution_id.to_string())
             .execute(db)
             .await?;
             recorded += 1;
