@@ -1963,6 +1963,142 @@ async fn since_last_login_counts_new_transactions() {
     assert!(body["previous_login_at"].as_str().is_some());
 }
 
+/// Insert a transaction whose `created_at` (what the summary counts by,
+/// as opposed to the bank's `date`) sits `hours_ago` in the past.
+async fn seed_tx_created_hours_ago(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    hours_ago: i32,
+) {
+    sqlx::query(
+        "INSERT INTO transactions \
+             (account_id, date, description, amount, currency, source, user_id, created_at) \
+         VALUES ($1, CURRENT_DATE, $2, 10.00, 'USD', 'manual', $3, NOW() - $4 * INTERVAL '1 hour')",
+    )
+    .bind(account_id)
+    .bind(description)
+    .bind(user_id)
+    .bind(hours_ago)
+    .execute(pool)
+    .await
+    .expect("seed backdated tx");
+}
+
+async fn since_last_login_body(app: &Router, token: &str) -> Value {
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/since-last-login",
+            None,
+            Some(token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    body_json(res.into_body()).await
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn since_last_login_anchors_on_the_last_visit_not_the_last_login() {
+    // Regression guard for the reported bug: a session survives for weeks,
+    // so anchoring on `previous_login_at` told a user who opens the app
+    // every day "143 new transactions since your last visit · Jul 13".
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+
+    // Signed in a month ago, last actually looked at the dashboard
+    // yesterday — the shape of a phone that stays logged in.
+    sqlx::query(
+        "UPDATE users SET previous_login_at = NOW() - INTERVAL '30 days', \
+                          last_visit_at = NOW() - INTERVAL '1 day' \
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Landed a week ago (before yesterday's visit — already seen) and an
+    // hour ago (genuinely new).
+    seed_tx_created_hours_ago(&pool, user_id, account, "seen last week", 24 * 7).await;
+    seed_tx_created_hours_ago(&pool, user_id, account, "actually new", 1).await;
+
+    let body = since_last_login_body(&app, &token).await;
+    assert_eq!(
+        body["new_transactions"], 1,
+        "only what arrived since the last VISIT counts — anchoring on the \
+         30-day-old login would have reported both: {body}"
+    );
+    let anchor = body["previous_login_at"].as_str().expect("anchor present");
+    let anchor = chrono::DateTime::parse_from_rfc3339(anchor).expect("rfc3339 anchor");
+    let age_hours = (chrono::Utc::now() - anchor.with_timezone(&chrono::Utc)).num_hours();
+    assert!(
+        (20..30).contains(&age_hours),
+        "the anchor is yesterday's visit, not the month-old login: {age_hours}h"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn reloading_within_a_visit_does_not_move_the_anchor() {
+    // The summary must not evaporate while the user is reading it: a
+    // second dashboard load in the same sitting is the same visit.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+
+    sqlx::query(
+        "UPDATE users SET previous_login_at = NOW() - INTERVAL '30 days', \
+                          last_visit_at = NOW() - INTERVAL '1 day' \
+         WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // Arrived 6h ago: new relative to yesterday's visit, but older than
+    // the 5h-ago visit the anchor advances to at the end of this test.
+    seed_tx_created_hours_ago(&pool, user_id, account, "actually new", 6).await;
+
+    let first = since_last_login_body(&app, &token).await;
+    let second = since_last_login_body(&app, &token).await;
+    assert_eq!(
+        first["previous_login_at"], second["previous_login_at"],
+        "a refresh inside the visit window keeps the same anchor: \
+         {first} vs {second}"
+    );
+    assert_eq!(
+        second["new_transactions"], 1,
+        "…and therefore still reports what's new: {second}"
+    );
+
+    // Only once the gap has passed does the anchor advance to the visit
+    // that just ended.
+    sqlx::query("UPDATE users SET last_visit_at = NOW() - INTERVAL '5 hours' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let third = since_last_login_body(&app, &token).await;
+    assert_ne!(
+        third["previous_login_at"], second["previous_login_at"],
+        "a gap starts a new visit and moves the anchor: {third}"
+    );
+    assert_eq!(
+        third["new_transactions"], 0,
+        "nothing has arrived since that visit ended: {third}"
+    );
+}
+
 // =====================================================================
 // /api/dashboard/subscriptions/ignore + /ignored
 // =====================================================================

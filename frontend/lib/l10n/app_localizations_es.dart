@@ -3670,7 +3670,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get hiddenNoBanners => 'No hay avisos descartados por ahora.';
 
   @override
-  String get hiddenSinceLastLogin => 'Desde el último inicio de sesión';
+  String get hiddenSinceLastLogin => 'Desde tu última visita';
 
   @override
   String hiddenHiddenForVisit(Object date) {

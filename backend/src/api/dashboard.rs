@@ -3350,11 +3350,27 @@ struct CashFlowPoint {
     transferred: f64,
 }
 
+/// How long a gap in dashboard activity ends one visit and starts the next.
+///
+/// Long enough that flipping between tabs, pulling to refresh, or coming
+/// back after lunch stays a single visit (so the summary you were reading
+/// doesn't reset itself out from under you); short enough that "this
+/// morning" and "this evening" count as two, which is the granularity the
+/// banner's "what happened while you were away" framing implies.
+const VISIT_GAP_HOURS: i32 = 4;
+
 #[derive(Serialize)]
 struct SinceLastLogin {
-    /// ISO-8601 timestamp of the prior login (the anchor). `None` when
-    /// this is the user's very first session — the banner stays hidden
-    /// in that case so a fresh user doesn't see "0 since never".
+    /// ISO-8601 timestamp of the anchor: when the visit BEFORE this one
+    /// ended. `None` when the user has no recorded visit and has never
+    /// logged in twice — the banner stays hidden in that case so a fresh
+    /// user doesn't see "0 since never".
+    ///
+    /// Still named `previous_login_at` on the wire: it is the key the web
+    /// banner and the shipped APK dismiss on (`Preferences
+    /// .dismissSinceLastLoginFor`), and renaming it would silently
+    /// un-dismiss banners on every client that hasn't updated. The name is
+    /// a fossil of the old login anchor; the meaning is the visit anchor.
     #[serde(skip_serializing_if = "Option::is_none")]
     previous_login_at: Option<String>,
     /// Count of new transactions across all of this user's accounts
@@ -3380,25 +3396,55 @@ struct BalanceMove {
     delta_usd: f64,
 }
 
-/// "What changed since your last visit." Anchors on `users.previous_login_at`
-/// (the second-most-recent login). When the user has never logged in twice
-/// the entire response is suppressed so a fresh user doesn't see a useless
-/// "0 since never" banner.
+/// "What changed since your last visit." Anchors on the end of the previous
+/// VISIT (`users.previous_visit_at`), falling back to `previous_login_at` for
+/// a user with no recorded visit yet. When there is neither, the entire
+/// response is suppressed so a fresh user doesn't see a useless "0 since
+/// never" banner.
+///
+/// Anchoring on the login was wrong for the way the app is actually used:
+/// a session survives for weeks, so a phone that is opened daily still
+/// reported everything since the last time its owner typed a password —
+/// "143 new transactions since your last visit · Jul 13" on Jul 30. The
+/// anchor now tracks visits, which is what the copy claims and what the
+/// bell's "new transactions" / "largest move" rows mean too (they render
+/// this same payload).
+///
+/// This GET has a deliberate write: listing what changed since the last
+/// visit IS the visit, so it is the honest place to record one. The roll is
+/// a single UPDATE … RETURNING, so two devices loading the dashboard at once
+/// can't interleave a read with a write and both claim the same anchor.
 async fn since_last_login(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<SinceLastLogin> {
+    // Start a new visit only after a real gap; otherwise hold the anchor
+    // still, so a refresh (or the second dashboard load of the same
+    // sitting) doesn't wipe the summary the user is in the middle of
+    // reading. `previous_login_at` covers users migrated before visits
+    // were tracked and users who have logged in twice but never been
+    // seen here.
     let anchor_row = sqlx::query(
-        "SELECT previous_login_at FROM users WHERE id = $1",
+        "UPDATE users \
+            SET previous_visit_at = CASE \
+                    WHEN last_visit_at IS NULL THEN previous_visit_at \
+                    WHEN last_visit_at < NOW() - ($2 * INTERVAL '1 hour') \
+                        THEN last_visit_at \
+                    ELSE previous_visit_at \
+                END, \
+                last_visit_at = NOW() \
+          WHERE id = $1 \
+      RETURNING COALESCE(previous_visit_at, previous_login_at) AS anchor",
     )
     .bind(ctx.user_id)
+    .bind(VISIT_GAP_HOURS)
     .fetch_optional(&state.db)
     .await
     .ok()
     .flatten();
 
-    let anchor: Option<chrono::DateTime<chrono::Utc>> = anchor_row
-        .and_then(|r| r.try_get::<chrono::DateTime<chrono::Utc>, _>("previous_login_at").ok());
+    let anchor: Option<chrono::DateTime<chrono::Utc>> =
+        anchor_row.and_then(|r| r.try_get::<chrono::DateTime<chrono::Utc>, _>("anchor").ok());
 
     let Some(anchor) = anchor else {
         return Json(SinceLastLogin {

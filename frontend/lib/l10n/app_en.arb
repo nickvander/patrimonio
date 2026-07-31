@@ -1458,7 +1458,7 @@
   "hiddenNoSubscriptions": "No subscriptions are currently hidden. When you dismiss a row with × on the Recurring charges card it shows up here.",
   "hiddenBanners": "Banners",
   "hiddenNoBanners": "No banners are currently dismissed.",
-  "hiddenSinceLastLogin": "Since last login",
+  "hiddenSinceLastLogin": "Since your last visit",
   "hiddenHiddenForVisit": "Hidden for the visit starting {date}",
   "hiddenShowAgain": "Show again",
   "hiddenFxTransferPairs": "FX-transfer pairs",

@@ -3638,7 +3638,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hiddenNoBanners => 'No banners are currently dismissed.';
 
   @override
-  String get hiddenSinceLastLogin => 'Since last login';
+  String get hiddenSinceLastLogin => 'Since your last visit';
 
   @override
   String hiddenHiddenForVisit(Object date) {

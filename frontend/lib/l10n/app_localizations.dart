@@ -6015,7 +6015,7 @@ abstract class AppLocalizations {
   /// No description provided for @hiddenSinceLastLogin.
   ///
   /// In en, this message translates to:
-  /// **'Since last login'**
+  /// **'Since your last visit'**
   String get hiddenSinceLastLogin;
 
   /// No description provided for @hiddenHiddenForVisit.

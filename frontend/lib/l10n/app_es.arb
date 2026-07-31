@@ -1209,7 +1209,7 @@
   "hiddenNoSubscriptions": "No hay suscripciones ocultas por ahora. Cuando descartas una fila con la × en la tarjeta de Cargos recurrentes, aparece aquí.",
   "hiddenBanners": "Avisos",
   "hiddenNoBanners": "No hay avisos descartados por ahora.",
-  "hiddenSinceLastLogin": "Desde el último inicio de sesión",
+  "hiddenSinceLastLogin": "Desde tu última visita",
   "hiddenHiddenForVisit": "Oculto para la visita que inició el {date}",
   "hiddenShowAgain": "Mostrar de nuevo",
   "hiddenFxTransferPairs": "Pares de transferencias en divisas",
