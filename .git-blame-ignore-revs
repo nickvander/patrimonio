@@ -1,4 +1,4 @@
-# Commits that only moved whitespace around. `git blame` should look straight
+# Pure formatter runs — no behaviour change. `git blame` should look straight
 # through them to whoever last changed the code for a real reason.
 #
 # Enable it once per clone (it is a local setting, not a repo one):
@@ -10,3 +10,7 @@
 # style(frontend): dart format the tree — 197 of 252 Dart files, formatter
 # output verbatim, no behaviour change.
 b262467aae54927b4cfc915ac0d0cd7a26f7dece
+
+# style(backend): cargo fmt the tree — 79 of 97 Rust files, rustfmt output
+# verbatim, audited token by token, no behaviour change.
+206cd986fe7c2fe3ccbf6339c136f98c4ba57d3e

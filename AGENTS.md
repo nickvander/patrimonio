@@ -118,21 +118,18 @@ swiftshader — that's the emulator's own UI, not the app.)
 The skills are guidance; their machine-checkable subset is enforced so nothing
 regresses silently:
 
-- **CI** (`.github/workflows/test.yml`) runs on every push/PR: `cargo clippy
-  --all-targets -- -D warnings`, `dart format --set-exit-if-changed`, `flutter
-  analyze`, both full test suites, and `flutter build apk --release` (Android
-  build gate — catches R8/Gradle breakage; launch crashes still need the
-  emulator smoke test in Testing above).
-- **The Dart tree is formatter-clean and gated**, so `dart format` is safe to
-  run on a file you're editing and format-on-save won't bury your change in
-  reflow. Before `b262467` it wasn't: 197 of 252 files reformatted, and a
-  ~70-line chart fix produced an 828-line diff. That commit is listed in
-  `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile
-  .git-blame-ignore-revs` once per clone so `git blame` looks through it.
-- ⚠ **The Rust tree is NOT rustfmt-clean** (79 of 97 files, ~1090 hunks) and has
-  no `cargo fmt` gate for that reason. Until it gets the same one-shot sweep,
-  **do not run `cargo fmt` on a file you're editing** — you'll reflow the whole
-  file and bury the real change, exactly the trap the frontend just escaped.
+- **CI** (`.github/workflows/test.yml`) runs on every push/PR: `cargo fmt
+  --check`, `cargo clippy --all-targets -- -D warnings`, `dart format
+  --set-exit-if-changed`, `flutter analyze`, both full test suites, and
+  `flutter build apk --release` (Android build gate — catches R8/Gradle breakage;
+  launch crashes still need the emulator smoke test in Testing above).
+- **Both trees are formatter-clean and gated**, so `cargo fmt` / `dart format`
+  are safe to run on a file you're editing and format-on-save won't bury your
+  change in reflow. Neither was, until the sweeps: the Dart tree reformatted 197
+  of 252 files (a ~70-line chart fix produced an 828-line diff), the Rust tree 79
+  of 97. Both sweep commits are listed in `.git-blame-ignore-revs`; run `git
+  config blame.ignoreRevsFile .git-blame-ignore-revs` once per clone so `git
+  blame` looks through them.
 - **Frontend analyzer:** `cancel_subscriptions` / `close_sinks` are promoted to
   build-breaking **errors** (undisposed stream/sink fails the build).
 - **Regression tests** pin the specific bugs we've fixed (l10n transpositions,

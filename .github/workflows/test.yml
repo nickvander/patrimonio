@@ -61,7 +61,7 @@ jobs:
       # after 1.88), so an unpinned local toolchain would miss what CI flags.
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
@@ -71,11 +71,13 @@ jobs:
       # The stricter panic/unwrap restriction lints are documented guidance in
       # .agent/skills/rust-backend/rust-conventions.md rather than gated here
       # (the existing codebase carries too much pre-existing debt to deny them).
-      # NO `cargo fmt --check` here yet: the backend tree is NOT rustfmt-clean
-      # (79 of 97 files, ~1090 hunks as of b262467), so gating it would fail
-      # every build. It carries the same hazard the frontend just shed — see
-      # AGENTS.md "Enforcement" — and wants the same one-shot sweep before this
-      # gate can be turned on.
+      # The backend tree is rustfmt-clean (swept in the commit that added this
+      # step); gating it keeps `cargo fmt` and format-on-save from burying a
+      # real change in reflow, the same way the frontend's dart format gate
+      # does. `components: rustfmt` above is what makes this available.
+      - name: cargo fmt (the tree is rustfmt-clean; keep it that way)
+        working-directory: backend
+        run: cargo fmt --check
       - name: cargo clippy (warnings are errors)
         working-directory: backend
         run: cargo clippy --all-targets -- -D warnings
