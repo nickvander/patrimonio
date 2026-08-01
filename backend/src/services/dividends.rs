@@ -66,7 +66,11 @@ pub struct DividendStats {
 
 impl DividendStats {
     fn stale() -> Self {
-        DividendStats { annual_rate: 0.0, per_year: 0, est_next_ex_date: None }
+        DividendStats {
+            annual_rate: 0.0,
+            per_year: 0,
+            est_next_ex_date: None,
+        }
     }
 }
 
@@ -137,7 +141,11 @@ pub fn derive_dividend_stats(points: &[(NaiveDate, f64)], today: NaiveDate) -> D
         .unwrap_or(1);
 
     let age_days = (today - last_date).num_days();
-    let grace_days = if per_year == 1 && points.len() >= 2 { 455 } else { 365 };
+    let grace_days = if per_year == 1 && points.len() >= 2 {
+        455
+    } else {
+        365
+    };
     if age_days > grace_days {
         return DividendStats::stale();
     }
@@ -146,7 +154,11 @@ pub fn derive_dividend_stats(points: &[(NaiveDate, f64)], today: NaiveDate) -> D
     // cycle when available). Averaging smooths a raise mid-cycle; using only
     // the last cycle keeps a raise from being diluted by two-year-old rates.
     let n = (per_year as usize).min(points.len());
-    let avg_amount: f64 = points[points.len() - n..].iter().map(|(_, a)| *a).sum::<f64>() / n as f64;
+    let avg_amount: f64 = points[points.len() - n..]
+        .iter()
+        .map(|(_, a)| *a)
+        .sum::<f64>()
+        / n as f64;
     let annual_rate = ((per_year as f64 * avg_amount) * 10000.0).round() / 10000.0;
 
     // Next ex-date estimate: one cadence step after the last ex-date, rolled
@@ -213,7 +225,10 @@ pub async fn fetch_dividends(symbol: &str) -> Result<DividendInfo> {
         per_year: stats.per_year,
         history: points
             .iter()
-            .map(|(d, a)| DividendEvent { ex_date: d.to_string(), amount_per_share: *a })
+            .map(|(d, a)| DividendEvent {
+                ex_date: d.to_string(),
+                amount_per_share: *a,
+            })
             .collect(),
     })
 }
@@ -290,7 +305,11 @@ fn cache_key(symbol: &str) -> String {
 /// unparsable) reads as "no envelope" — the caller degrades to a live fetch.
 async fn read_envelope(redis: &redis::Client, key: &str) -> Option<CacheEnvelope> {
     let mut conn = redis.get_multiplexed_async_connection().await.ok()?;
-    let raw: Option<String> = redis::cmd("GET").arg(key).query_async(&mut conn).await.ok()?;
+    let raw: Option<String> = redis::cmd("GET")
+        .arg(key)
+        .query_async(&mut conn)
+        .await
+        .ok()?;
     raw.and_then(|s| serde_json::from_str(&s).ok())
 }
 
@@ -353,7 +372,9 @@ where
     match decide(read_envelope(redis, &key).await, now(), bypass_fresh) {
         CacheAction::ServeFresh(info) => return Ok(info),
         CacheAction::ServeNegative => {
-            return Err(anyhow!("dividend fetch for {symbol} recently failed (negative cache)"))
+            return Err(anyhow!(
+                "dividend fetch for {symbol} recently failed (negative cache)"
+            ))
         }
         CacheAction::Fetch { .. } => {}
     }
@@ -361,20 +382,28 @@ where
     let result = {
         // Coalesce concurrent fills: take (or create) this symbol's lock —
         // the map mutex is held only for the map op, never across an await.
-        let lock = FETCH_LOCKS.lock().unwrap().entry(key.clone()).or_default().clone();
+        let lock = FETCH_LOCKS
+            .lock()
+            .unwrap()
+            .entry(key.clone())
+            .or_default()
+            .clone();
         let _guard = lock.lock().await;
         // Re-read: the coalescing winner has usually filled the cache.
         match decide(read_envelope(redis, &key).await, now(), bypass_fresh) {
             CacheAction::ServeFresh(info) => Ok(info),
-            CacheAction::ServeNegative => {
-                Err(anyhow!("dividend fetch for {symbol} recently failed (negative cache)"))
-            }
+            CacheAction::ServeNegative => Err(anyhow!(
+                "dividend fetch for {symbol} recently failed (negative cache)"
+            )),
             CacheAction::Fetch { stale } => {
                 tracing::debug!("dividends: miss, fetching {symbol}");
                 match fetch(symbol.to_string()).await {
                     Ok(info) => {
-                        let env =
-                            CacheEnvelope { fetched_at: now(), ok: true, info: Some(info.clone()) };
+                        let env = CacheEnvelope {
+                            fetched_at: now(),
+                            ok: true,
+                            info: Some(info.clone()),
+                        };
                         write_envelope(redis, &key, &env).await;
                         Ok(info)
                     }
@@ -388,7 +417,11 @@ where
                             Ok(info)
                         }
                         None => {
-                            let env = CacheEnvelope { fetched_at: now(), ok: false, info: None };
+                            let env = CacheEnvelope {
+                                fetched_at: now(),
+                                ok: false,
+                                info: None,
+                            };
                             write_envelope(redis, &key, &env).await;
                             Err(e)
                         }
@@ -400,7 +433,10 @@ where
 
     // Opportunistically drop the lock entry once we're its last holder.
     let mut locks = FETCH_LOCKS.lock().unwrap();
-    if locks.get(&key).is_some_and(|l| std::sync::Arc::strong_count(l) == 1) {
+    if locks
+        .get(&key)
+        .is_some_and(|l| std::sync::Arc::strong_count(l) == 1)
+    {
         locks.remove(&key);
     }
     drop(locks);
@@ -457,7 +493,10 @@ mod tests {
         let today = d("2026-07-06");
         let points = history(today, 1, 90, 9, 0.25);
         assert_eq!(
-            points.iter().filter(|(dt, _)| *dt > today - Duration::days(365)).count(),
+            points
+                .iter()
+                .filter(|(dt, _)| *dt > today - Duration::days(365))
+                .count(),
             5
         );
         let stats = derive_dividend_stats(&points, today);
@@ -514,7 +553,10 @@ mod tests {
         // keep projecting the dead rate.
         let today = d("2026-07-06");
         let points = history(today, 400, 91, 8, 0.25);
-        assert_eq!(derive_dividend_stats(&points, today), DividendStats::stale());
+        assert_eq!(
+            derive_dividend_stats(&points, today),
+            DividendStats::stale()
+        );
     }
 
     #[test]
@@ -583,11 +625,19 @@ mod tests {
     }
 
     fn ok_env(fetched_at: i64, symbol: &str) -> CacheEnvelope {
-        CacheEnvelope { fetched_at, ok: true, info: Some(sample_info(symbol)) }
+        CacheEnvelope {
+            fetched_at,
+            ok: true,
+            info: Some(sample_info(symbol)),
+        }
     }
 
     fn err_env(fetched_at: i64) -> CacheEnvelope {
-        CacheEnvelope { fetched_at, ok: false, info: None }
+        CacheEnvelope {
+            fetched_at,
+            ok: false,
+            info: None,
+        }
     }
 
     /// The additive `Deserialize` derive must round-trip losslessly, and
@@ -653,7 +703,10 @@ mod tests {
     fn decide_fresh_negative_errs_without_fetch() {
         let now = 1_000_000_000;
         let env = err_env(now - CACHE_NEGATIVE_SECS + 1);
-        assert!(matches!(decide(Some(env), now, false), CacheAction::ServeNegative));
+        assert!(matches!(
+            decide(Some(env), now, false),
+            CacheAction::ServeNegative
+        ));
     }
 
     /// An expired failure marker (>= 1 h) retries live, with nothing to
@@ -662,13 +715,19 @@ mod tests {
     fn decide_expired_negative_refetches_without_fallback() {
         let now = 1_000_000_000;
         let env = err_env(now - CACHE_NEGATIVE_SECS);
-        assert!(matches!(decide(Some(env), now, false), CacheAction::Fetch { stale: None }));
+        assert!(matches!(
+            decide(Some(env), now, false),
+            CacheAction::Fetch { stale: None }
+        ));
     }
 
     /// No envelope at all: plain miss.
     #[test]
     fn decide_missing_envelope_fetches() {
-        assert!(matches!(decide(None, 1_000, false), CacheAction::Fetch { stale: None }));
+        assert!(matches!(
+            decide(None, 1_000, false),
+            CacheAction::Fetch { stale: None }
+        ));
     }
 
     /// Bypass skips BOTH fresh-serve branches but keeps the stale
@@ -690,8 +749,15 @@ mod tests {
     #[test]
     fn decide_ok_envelope_without_info_fetches() {
         let now = 1_000_000_000;
-        let env = CacheEnvelope { fetched_at: now - 10, ok: true, info: None };
-        assert!(matches!(decide(Some(env), now, false), CacheAction::Fetch { stale: None }));
+        let env = CacheEnvelope {
+            fetched_at: now - 10,
+            ok: true,
+            info: None,
+        };
+        assert!(matches!(
+            decide(Some(env), now, false),
+            CacheAction::Fetch { stale: None }
+        ));
     }
 
     // =================================================================
@@ -721,7 +787,9 @@ mod tests {
     /// workflow was created to prevent (see .github/workflows/test.yml).
     async fn test_redis() -> Option<redis::Client> {
         let configured = test_redis_url();
-        let url = configured.clone().unwrap_or_else(|| DEV_REDIS_URL.to_string());
+        let url = configured
+            .clone()
+            .unwrap_or_else(|| DEV_REDIS_URL.to_string());
         let reachable = async {
             let client = redis::Client::open(url.clone()).ok()?;
             let mut conn = client.get_multiplexed_async_connection().await.ok()?;
@@ -747,7 +815,11 @@ mod tests {
 
     async fn get_raw(client: &redis::Client, key: &str) -> Option<String> {
         let mut conn = client.get_multiplexed_async_connection().await.ok()?;
-        redis::cmd("GET").arg(key).query_async(&mut conn).await.ok()?
+        redis::cmd("GET")
+            .arg(key)
+            .query_async(&mut conn)
+            .await
+            .ok()?
     }
 
     /// Miss → one live fetch, envelope written with the retention TTL,
@@ -770,7 +842,9 @@ mod tests {
                 Ok(sample_info(&s))
             }
         };
-        let got = fetch_dividends_cached_with(&client, symbol, false, fetch).await.unwrap();
+        let got = fetch_dividends_cached_with(&client, symbol, false, fetch)
+            .await
+            .unwrap();
         assert_eq!(got.per_year, 4);
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
@@ -780,7 +854,11 @@ mod tests {
         assert!(env.ok);
         assert_eq!(env.info.unwrap().per_year, 4);
         let mut conn = client.get_multiplexed_async_connection().await.unwrap();
-        let ttl: i64 = redis::cmd("TTL").arg(&key).query_async(&mut conn).await.unwrap();
+        let ttl: i64 = redis::cmd("TTL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
         assert!(ttl > CACHE_RETENTION_SECS - 60 && ttl <= CACHE_RETENTION_SECS);
 
         // Second call: fresh hit, no new fetch.
@@ -794,7 +872,11 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(again.per_year, 4);
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "fresh hit must not re-fetch");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "fresh hit must not re-fetch"
+        );
 
         del_key(&client, &key).await;
     }
@@ -849,15 +931,23 @@ mod tests {
                 Err(anyhow!("unresolvable"))
             }
         };
-        assert!(fetch_dividends_cached_with(&client, symbol, false, &fetch).await.is_err());
+        assert!(fetch_dividends_cached_with(&client, symbol, false, &fetch)
+            .await
+            .is_err());
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         let env: CacheEnvelope =
             serde_json::from_str(&get_raw(&client, &key).await.unwrap()).unwrap();
         assert!(!env.ok);
 
         // Negative-fresh: Err again, but with NO second live attempt.
-        assert!(fetch_dividends_cached_with(&client, symbol, false, &fetch).await.is_err());
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "negative cache must suppress the refetch");
+        assert!(fetch_dividends_cached_with(&client, symbol, false, &fetch)
+            .await
+            .is_err());
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "negative cache must suppress the refetch"
+        );
 
         del_key(&client, &key).await;
     }
@@ -872,7 +962,12 @@ mod tests {
         };
         let symbol = "ZZTEST-B1-BYPASS";
         let key = cache_key(symbol);
-        write_envelope(&client, &key, &ok_env(chrono::Utc::now().timestamp() - 10, symbol)).await;
+        write_envelope(
+            &client,
+            &key,
+            &ok_env(chrono::Utc::now().timestamp() - 10, symbol),
+        )
+        .await;
 
         // Success path: live info (different rate) replaces the envelope.
         let mut live = sample_info(symbol);
@@ -928,7 +1023,11 @@ mod tests {
         );
         assert_eq!(a.unwrap().per_year, 4);
         assert_eq!(b.unwrap().per_year, 4);
-        assert_eq!(calls.load(Ordering::SeqCst), 1, "concurrent cold calls must coalesce");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "concurrent cold calls must coalesce"
+        );
         // The lock-map entry was pruned once the last holder released it.
         assert!(!FETCH_LOCKS.lock().unwrap().contains_key(&key));
 
@@ -940,9 +1039,12 @@ mod tests {
     async fn redis_down_degrades_to_live_fetch() {
         // Nothing listens on this port.
         let client = redis::Client::open("redis://127.0.0.1:1/").unwrap();
-        let got = fetch_dividends_cached_with(&client, "ZZTEST-B1-NOREDIS", false, |s: String| async move {
-            Ok(sample_info(&s))
-        })
+        let got = fetch_dividends_cached_with(
+            &client,
+            "ZZTEST-B1-NOREDIS",
+            false,
+            |s: String| async move { Ok(sample_info(&s)) },
+        )
         .await
         .unwrap();
         assert_eq!(got.per_year, 4);

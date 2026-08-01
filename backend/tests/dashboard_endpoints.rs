@@ -116,8 +116,11 @@ async fn try_setup(
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");
     let webauthn = std::sync::Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
-            .expect("webauthn builder"),
+        patrimonio::api::passkeys::build_webauthn(
+            &config.frontend_base_url,
+            &config.android_apk_cert_sha256,
+        )
+        .expect("webauthn builder"),
     );
     let state = AppState {
         db: pool.clone(),
@@ -193,8 +196,7 @@ fn set_cookie_value(headers: &axum::http::HeaderMap) -> Option<String> {
 }
 
 fn cookie_header(token: &str) -> HeaderValue {
-    HeaderValue::from_str(&format!("{SESSION_COOKIE}={token}"))
-        .expect("valid cookie header")
+    HeaderValue::from_str(&format!("{SESSION_COOKIE}={token}")).expect("valid cookie header")
 }
 
 /// Build a request with the right cookie + CSRF header + JSON body.
@@ -202,12 +204,7 @@ fn cookie_header(token: &str) -> HeaderValue {
 /// `X-Requested-With`, so every POST/PATCH/PUT/DELETE we send needs
 /// the header — bake it in by default to avoid forgetting in
 /// individual tests.
-fn req(
-    method: Method,
-    uri: &str,
-    body: Option<&Value>,
-    cookie: Option<&str>,
-) -> Request<Body> {
+fn req(method: Method, uri: &str, body: Option<&Value>, cookie: Option<&str>) -> Request<Body> {
     let needs_csrf = matches!(
         method,
         Method::POST | Method::PATCH | Method::DELETE | Method::PUT,
@@ -221,7 +218,9 @@ fn req(
     }
     if let Some(b) = body {
         builder = builder.header(header::CONTENT_TYPE, "application/json");
-        builder.body(Body::from(serde_json::to_vec(b).unwrap())).unwrap()
+        builder
+            .body(Body::from(serde_json::to_vec(b).unwrap()))
+            .unwrap()
     } else {
         builder.body(Body::empty()).unwrap()
     }
@@ -387,7 +386,8 @@ async fn update_webhook_200_with_zero_when_no_items_linked() {
 #[tokio::test]
 #[serial_test::serial]
 async fn update_webhook_unauthenticated_is_401() {
-    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup(true, Some("https://example.com")).await)
+    let Some((app, _pool, _lock)) =
+        skip_if_no_db(try_setup(true, Some("https://example.com")).await)
     else {
         return;
     };
@@ -407,7 +407,8 @@ async fn update_webhook_unauthenticated_is_401() {
 #[tokio::test]
 #[serial_test::serial]
 async fn update_webhook_without_csrf_header_is_403() {
-    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(true, Some("https://example.com")).await)
+    let Some((app, pool, _lock)) =
+        skip_if_no_db(try_setup(true, Some("https://example.com")).await)
     else {
         return;
     };
@@ -519,10 +520,7 @@ async fn upload_with_no_files_is_400() {
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     let body = body_json(res.into_body()).await;
     assert_eq!(body["status"], "error");
-    assert!(body["message"]
-        .as_str()
-        .unwrap_or("")
-        .contains("No files"));
+    assert!(body["message"].as_str().unwrap_or("").contains("No files"));
 }
 
 // =====================================================================
@@ -626,7 +624,10 @@ async fn transactions_listing_includes_user_notes_and_user_category() {
     // the per-account feed's shape so both edit surfaces see one contract.
     for r in rows {
         let obj = r.as_object().unwrap();
-        assert!(obj.contains_key("user_notes"), "user_notes key on every row");
+        assert!(
+            obj.contains_key("user_notes"),
+            "user_notes key on every row"
+        );
         assert!(
             obj.contains_key("user_category"),
             "user_category key on every row"
@@ -683,7 +684,10 @@ async fn split_creates_children_and_hides_parent_in_listing() {
     let parent_visible = rows
         .iter()
         .any(|r| r["id"].as_str().unwrap_or_default() == parent.to_string());
-    assert!(!parent_visible, "parent should be hidden once it has children");
+    assert!(
+        !parent_visible,
+        "parent should be hidden once it has children"
+    );
     let child_count = rows
         .iter()
         .filter(|r| r["parent_id"].as_str().unwrap_or_default() == parent.to_string())
@@ -911,13 +915,11 @@ async fn put_replace_splits_rejects_total_mismatch() {
 
     // Original children should still be there. The validation runs
     // before the BEGIN ... DELETE ... INSERT block.
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM transactions WHERE parent_id = $1",
-    )
-    .bind(parent)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE parent_id = $1")
+        .bind(parent)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(count, 2);
 }
 
@@ -967,13 +969,12 @@ async fn edit_split_via_unsplit_then_resplit() {
     assert_eq!(body["removed"], 2);
 
     // Children should be gone, parent visible again.
-    let children: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM transactions WHERE parent_id = $1",
-    )
-    .bind(parent)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let children: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE parent_id = $1")
+            .bind(parent)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(children, 0);
 
     // Re-split with new amounts (60/40 instead of 50/50).
@@ -1217,7 +1218,11 @@ async fn single_update_transaction_sets_category_ok() {
         ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "single inline edit must 200, not 500");
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "single inline edit must 200, not 500"
+    );
     assert_eq!(tx_category(&pool, t1).await.as_deref(), Some("Dining"));
 }
 
@@ -1760,9 +1765,12 @@ async fn account_transactions_pages_with_limit_and_offset() {
     }
 
     // No params → legacy behavior: the whole history, newest first.
-    let all =
-        account_tx_descriptions(&app, &token, &format!("/api/accounts/{account}/transactions"))
-            .await;
+    let all = account_tx_descriptions(
+        &app,
+        &token,
+        &format!("/api/accounts/{account}/transactions"),
+    )
+    .await;
     assert_eq!(all, vec!["T0", "T1", "T2", "T3", "T4"]);
 
     // limit alone → first page, newest first.
@@ -1921,13 +1929,11 @@ async fn since_last_login_counts_new_transactions() {
     let (_inst, account) = seed_account(&pool, user_id).await;
 
     // Fake a previous login 24h ago.
-    sqlx::query(
-        "UPDATE users SET previous_login_at = NOW() - INTERVAL '24 hours' WHERE id = $1",
-    )
-    .bind(user_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE users SET previous_login_at = NOW() - INTERVAL '24 hours' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     // Seed two transactions — both created_at NOW(), so after the anchor.
     seed_tx(&pool, user_id, account, "After anchor 1", "10.00").await;
     seed_tx(&pool, user_id, account, "After anchor 2", "20.00").await;
@@ -2293,7 +2299,10 @@ async fn fx_transfers_listing_populates_spot_rate() {
     let entry = &arr[0];
     let implied = entry["implied_fx_rate"].as_f64().unwrap();
     let spot = entry["spot_fx_rate"].as_f64();
-    assert!((implied - 19.5).abs() < 0.001, "implied 19.50 expected, got {implied}");
+    assert!(
+        (implied - 19.5).abs() < 0.001,
+        "implied 19.50 expected, got {implied}"
+    );
     assert!(
         spot.is_some() && (spot.unwrap() - 19.62).abs() < 0.001,
         "spot rate 19.62 expected, got {spot:?}"
@@ -2431,7 +2440,12 @@ async fn net_worth_history_carries_infrequently_snapshotted_accounts_forward() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/net-worth-history", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/net-worth-history",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -2564,10 +2578,7 @@ async fn read_only_user_can_get_but_not_mutate() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
     let body = body_json(res.into_body()).await;
-    assert!(body["error"]
-        .as_str()
-        .unwrap_or("")
-        .contains("read-only"));
+    assert!(body["error"].as_str().unwrap_or("").contains("read-only"));
 }
 
 #[tokio::test]
@@ -2633,10 +2644,7 @@ async fn owner_role_passes_require_owner() {
 // Belt-and-suspenders for the predicate threading; catches any
 // future query that forgets the user_id filter.
 
-async fn seed_owner(
-    pool: &PgPool,
-    username: &str,
-) -> (uuid::Uuid, String) {
+async fn seed_owner(pool: &PgPool, username: &str) -> (uuid::Uuid, String) {
     let user_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO users (username, email, password_hash, role) \
          VALUES ($1, $2, 'doesnt-matter', 'owner') RETURNING id",
@@ -2689,7 +2697,10 @@ async fn cross_tenant_isolation_dashboard() {
         .iter()
         .filter_map(|r| r["id"].as_str().map(String::from))
         .collect();
-    assert!(ids.contains(&a_tx.to_string()), "Alice should see her own tx");
+    assert!(
+        ids.contains(&a_tx.to_string()),
+        "Alice should see her own tx"
+    );
     assert!(
         !ids.contains(&b_tx.to_string()),
         "Alice MUST NOT see Bob's tx — predicate leak"
@@ -2708,7 +2719,10 @@ async fn cross_tenant_isolation_dashboard() {
         .iter()
         .filter_map(|r| r["id"].as_str().map(String::from))
         .collect();
-    assert!(acct_ids.contains(&b_acct.to_string()), "Bob sees own account");
+    assert!(
+        acct_ids.contains(&b_acct.to_string()),
+        "Bob sees own account"
+    );
     assert!(
         !acct_ids.contains(&a_acct.to_string()),
         "Bob MUST NOT see Alice's account"
@@ -2809,7 +2823,12 @@ async fn cross_tenant_isolation_sessions_list() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/auth/sessions", None, Some(&alice_token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/auth/sessions",
+            None,
+            Some(&alice_token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -2818,7 +2837,12 @@ async fn cross_tenant_isolation_sessions_list() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/auth/sessions", None, Some(&bob_token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/auth/sessions",
+            None,
+            Some(&bob_token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -2983,7 +3007,15 @@ async fn loan_record_payment_reduces_outstanding_and_is_idempotent() {
     .await;
 
     // An incoming repayment of 400.
-    let repay_tx = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "400.00", "2026-02-15").await;
+    let repay_tx = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "400.00",
+        "2026-02-15",
+    )
+    .await;
     let res = app
         .clone()
         .oneshot(req(
@@ -2999,12 +3031,20 @@ async fn loan_record_payment_reduces_outstanding_and_is_idempotent() {
     // Outstanding is now 600.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!((l["outstanding"].as_f64().unwrap() - 600.0).abs() < 0.01,
-        "expected 600 outstanding, got {}", l["outstanding"]);
+    assert!(
+        (l["outstanding"].as_f64().unwrap() - 600.0).abs() < 0.01,
+        "expected 600 outstanding, got {}",
+        l["outstanding"]
+    );
     assert!((l["total_repaid"].as_f64().unwrap() - 400.0).abs() < 0.01);
 
     // Linking the SAME transaction again is rejected (409) — a
@@ -3052,17 +3092,29 @@ async fn loan_cash_payment_without_transaction() {
         ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED, "cash payment must succeed");
+    assert_eq!(
+        res.status(),
+        StatusCode::CREATED,
+        "cash payment must succeed"
+    );
 
     // Outstanding drops to 750.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!((l["outstanding"].as_f64().unwrap() - 750.0).abs() < 0.01,
-        "expected 750 outstanding after cash payment, got {}", l["outstanding"]);
+    assert!(
+        (l["outstanding"].as_f64().unwrap() - 750.0).abs() < 0.01,
+        "expected 750 outstanding after cash payment, got {}",
+        l["outstanding"]
+    );
     assert!((l["total_repaid"].as_f64().unwrap() - 250.0).abs() < 0.01);
 
     // A cash payment with no amount is rejected (400).
@@ -3076,8 +3128,11 @@ async fn loan_cash_payment_without_transaction() {
         ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST,
-        "a cash payment with no amount must 400");
+    assert_eq!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "a cash payment with no amount must 400"
+    );
 }
 
 #[tokio::test]
@@ -3090,11 +3145,36 @@ async fn loan_disbursement_and_repayment_excluded_from_cash_flow() {
     let (_inst, acct) = seed_account(&pool, user_id).await;
 
     // The disbursement outflow + a normal expense in the same month.
-    let disb_tx = seed_tx_dated(&pool, user_id, acct, "Wire to Jose", "-1000.00", "2026-03-10").await;
-    let _grocery = seed_tx_dated(&pool, user_id, acct, "Supermarket", "-200.00", "2026-03-11").await;
+    let disb_tx = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Wire to Jose",
+        "-1000.00",
+        "2026-03-10",
+    )
+    .await;
+    let _grocery =
+        seed_tx_dated(&pool, user_id, acct, "Supermarket", "-200.00", "2026-03-11").await;
     // A repayment inflow + a normal paycheck inflow in another month.
-    let repay_tx = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "500.00", "2026-04-10").await;
-    let _paycheck = seed_tx_dated(&pool, user_id, acct, "ACME Payroll", "3000.00", "2026-04-15").await;
+    let repay_tx = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "500.00",
+        "2026-04-10",
+    )
+    .await;
+    let _paycheck = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "ACME Payroll",
+        "3000.00",
+        "2026-04-15",
+    )
+    .await;
 
     let loan_id = create_loan(
         &app,
@@ -3113,29 +3193,50 @@ async fn loan_disbursement_and_repayment_excluded_from_cash_flow() {
     // 500 + 3000 = 3500.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let trends = body_json(res.into_body()).await;
-    let march = trends.as_array().unwrap().iter()
-        .find(|p| p["month"] == "2026-03").cloned().unwrap();
-    assert!((march["spending"].as_f64().unwrap() - 1200.0).abs() < 0.01,
-        "pre-link March spending should be 1200, got {}", march["spending"]);
+    let march = trends
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["month"] == "2026-03")
+        .cloned()
+        .unwrap();
+    assert!(
+        (march["spending"].as_f64().unwrap() - 1200.0).abs() < 0.01,
+        "pre-link March spending should be 1200, got {}",
+        march["spending"]
+    );
 
     // Link disbursement + record repayment.
-    let res = app.clone().oneshot(req(
-        Method::POST,
-        &format!("/api/loans/{loan_id}/disbursement"),
-        Some(&serde_json::json!({"transaction_id": disb_tx.to_string()})),
-        Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/disbursement"),
+            Some(&serde_json::json!({"transaction_id": disb_tx.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let res = app.clone().oneshot(req(
-        Method::POST,
-        &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay_tx.to_string()})),
-        Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay_tx.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // AFTER linking: the disbursement drops out of March spending
@@ -3143,17 +3244,36 @@ async fn loan_disbursement_and_repayment_excluded_from_cash_flow() {
     // (3500 → 3000).
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let trends = body_json(res.into_body()).await;
     let arr = trends.as_array().unwrap();
-    let march = arr.iter().find(|p| p["month"] == "2026-03").cloned().unwrap();
-    let april = arr.iter().find(|p| p["month"] == "2026-04").cloned().unwrap();
-    assert!((march["spending"].as_f64().unwrap() - 200.0).abs() < 0.01,
-        "post-link March spending should exclude the disbursement (200), got {}", march["spending"]);
-    assert!((april["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
-        "post-link April income should exclude the repayment (3000), got {}", april["income"]);
+    let march = arr
+        .iter()
+        .find(|p| p["month"] == "2026-03")
+        .cloned()
+        .unwrap();
+    let april = arr
+        .iter()
+        .find(|p| p["month"] == "2026-04")
+        .cloned()
+        .unwrap();
+    assert!(
+        (march["spending"].as_f64().unwrap() - 200.0).abs() < 0.01,
+        "post-link March spending should exclude the disbursement (200), got {}",
+        march["spending"]
+    );
+    assert!(
+        (april["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
+        "post-link April income should exclude the repayment (3000), got {}",
+        april["income"]
+    );
 }
 
 /// Cash flow must count genuine income/spending only — not securities trades
@@ -3172,33 +3292,91 @@ async fn cash_flow_excludes_investment_trades_and_transfers() {
     // In one month: a securities buy, an internal transfer in, a dividend, and
     // a real grocery expense. Only the dividend (income) and grocery (spending)
     // are household cash flow.
-    seed_tx_dated_cat(&pool, user_id, acct, "Buy 5 VOO @ 665.20", "-3326.00", "2026-03-05", "Investment").await;
-    seed_tx_dated_cat(&pool, user_id, acct, "ACH deposit from checking", "10000.00", "2026-03-06", "Transfer").await;
-    seed_tx_dated_cat(&pool, user_id, acct, "Dividend received - AAPL", "46.80", "2026-03-07", "Income").await;
-    seed_tx_dated_cat(&pool, user_id, acct, "Supermarket", "-200.00", "2026-03-08", "Food").await;
+    seed_tx_dated_cat(
+        &pool,
+        user_id,
+        acct,
+        "Buy 5 VOO @ 665.20",
+        "-3326.00",
+        "2026-03-05",
+        "Investment",
+    )
+    .await;
+    seed_tx_dated_cat(
+        &pool,
+        user_id,
+        acct,
+        "ACH deposit from checking",
+        "10000.00",
+        "2026-03-06",
+        "Transfer",
+    )
+    .await;
+    seed_tx_dated_cat(
+        &pool,
+        user_id,
+        acct,
+        "Dividend received - AAPL",
+        "46.80",
+        "2026-03-07",
+        "Income",
+    )
+    .await;
+    seed_tx_dated_cat(
+        &pool,
+        user_id,
+        acct,
+        "Supermarket",
+        "-200.00",
+        "2026-03-08",
+        "Food",
+    )
+    .await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let trends = body_json(res.into_body()).await;
-    let march = trends.as_array().unwrap().iter()
-        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+    let march = trends
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["month"] == "2026-03")
+        .cloned()
+        .unwrap();
 
     // Income = dividend only (transfer-in excluded); spending = grocery only
     // (investment buy excluded).
-    assert!((march["income"].as_f64().unwrap() - 46.80).abs() < 0.01,
-        "March income should exclude the $10k transfer, leaving the $46.80 dividend, got {}", march["income"]);
-    assert!((march["spending"].as_f64().unwrap() - 200.0).abs() < 0.01,
-        "March spending should exclude the $3,326 VOO buy, leaving the $200 grocery, got {}", march["spending"]);
+    assert!(
+        (march["income"].as_f64().unwrap() - 46.80).abs() < 0.01,
+        "March income should exclude the $10k transfer, leaving the $46.80 dividend, got {}",
+        march["income"]
+    );
+    assert!(
+        (march["spending"].as_f64().unwrap() - 200.0).abs() < 0.01,
+        "March spending should exclude the $3,326 VOO buy, leaving the $200 grocery, got {}",
+        march["spending"]
+    );
 
     // The peeled-off money is still visible as context: the VOO buy shows as
     // net invested (+3326) and the ACH deposit as net transferred in (+10000).
-    assert!((march["invested"].as_f64().unwrap() - 3326.0).abs() < 0.01,
-        "March invested should surface the VOO buy (3326), got {}", march["invested"]);
-    assert!((march["transferred"].as_f64().unwrap() - 10000.0).abs() < 0.01,
-        "March transferred should surface the ACH deposit (10000), got {}", march["transferred"]);
+    assert!(
+        (march["invested"].as_f64().unwrap() - 3326.0).abs() < 0.01,
+        "March invested should surface the VOO buy (3326), got {}",
+        march["invested"]
+    );
+    assert!(
+        (march["transferred"].as_f64().unwrap() - 10000.0).abs() < 0.01,
+        "March transferred should surface the ACH deposit (10000), got {}",
+        march["transferred"]
+    );
 }
 
 /// A positive inflow into a credit-card (liability) account — a payment,
@@ -3223,23 +3401,63 @@ async fn cash_flow_excludes_credit_card_inflows_from_income() {
     .expect("seed credit account");
 
     // Real payroll into checking; a CC payment inflow + a card purchase on the card.
-    seed_tx_dated(&pool, user_id, checking, "ACME Payroll", "3000.00", "2026-03-15").await;
-    seed_tx_dated(&pool, user_id, card, "Payment Thank You-Mobile", "800.00", "2026-03-16").await;
-    seed_tx_dated(&pool, user_id, card, "Grocery Store", "-120.00", "2026-03-17").await;
+    seed_tx_dated(
+        &pool,
+        user_id,
+        checking,
+        "ACME Payroll",
+        "3000.00",
+        "2026-03-15",
+    )
+    .await;
+    seed_tx_dated(
+        &pool,
+        user_id,
+        card,
+        "Payment Thank You-Mobile",
+        "800.00",
+        "2026-03-16",
+    )
+    .await;
+    seed_tx_dated(
+        &pool,
+        user_id,
+        card,
+        "Grocery Store",
+        "-120.00",
+        "2026-03-17",
+    )
+    .await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let trends = body_json(res.into_body()).await;
-    let march = trends.as_array().unwrap().iter()
-        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+    let march = trends
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["month"] == "2026-03")
+        .cloned()
+        .unwrap();
 
-    assert!((march["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
-        "CC payment inflow must not count as income (payroll only), got {}", march["income"]);
-    assert!((march["spending"].as_f64().unwrap() - 120.0).abs() < 0.01,
-        "card purchase should still count as spending, got {}", march["spending"]);
+    assert!(
+        (march["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
+        "CC payment inflow must not count as income (payroll only), got {}",
+        march["income"]
+    );
+    assert!(
+        (march["spending"].as_f64().unwrap() - 120.0).abs() < 0.01,
+        "card purchase should still count as spending, got {}",
+        march["spending"]
+    );
 }
 
 /// A tax refund is a return of the user's own overpaid tax, not earned income,
@@ -3252,7 +3470,15 @@ async fn cash_flow_excludes_tax_refund_from_income() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, checking) = seed_account(&pool, user_id).await;
 
-    seed_tx_dated(&pool, user_id, checking, "ACME Payroll", "3000.00", "2026-03-15").await;
+    seed_tx_dated(
+        &pool,
+        user_id,
+        checking,
+        "ACME Payroll",
+        "3000.00",
+        "2026-03-15",
+    )
+    .await;
     // A federal tax refund as Plaid tags it: INCOME / INCOME_TAX_REFUND.
     sqlx::query(
         "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id, category, category_detailed) \
@@ -3266,15 +3492,28 @@ async fn cash_flow_excludes_tax_refund_from_income() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let trends = body_json(res.into_body()).await;
-    let march = trends.as_array().unwrap().iter()
-        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+    let march = trends
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["month"] == "2026-03")
+        .cloned()
+        .unwrap();
 
-    assert!((march["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
-        "tax refund must not count as income (payroll only), got {}", march["income"]);
+    assert!(
+        (march["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
+        "tax refund must not count as income (payroll only), got {}",
+        march["income"]
+    );
 }
 
 /// A user re-categorization (user_category) overrides the raw Plaid category in
@@ -3290,7 +3529,15 @@ async fn cash_flow_honors_user_category_override() {
     let (_inst, checking) = seed_account(&pool, user_id).await;
 
     // Plain payroll baseline.
-    seed_tx_dated(&pool, user_id, checking, "ACME Payroll", "1000.00", "2026-03-12").await;
+    seed_tx_dated(
+        &pool,
+        user_id,
+        checking,
+        "ACME Payroll",
+        "1000.00",
+        "2026-03-12",
+    )
+    .await;
     // (a) A raw INCOME row the user re-tagged as a Transfer → excluded from income.
     // (b) A raw TRANSFER_IN row the user re-tagged as Income → counted as income.
     for (amount, category, user_cat, day) in [
@@ -3314,12 +3561,22 @@ async fn cash_flow_honors_user_category_override() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let trends = body_json(res.into_body()).await;
-    let march = trends.as_array().unwrap().iter()
-        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+    let march = trends
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["month"] == "2026-03")
+        .cloned()
+        .unwrap();
 
     // 1000 payroll + 700 (TRANSFER_IN re-tagged Income); the 500 re-tagged Transfer is excluded.
     assert!((march["income"].as_f64().unwrap() - 1700.0).abs() < 0.01,
@@ -3467,23 +3724,33 @@ async fn spending_insights_recent_vs_trailing_average() {
 
     assert_eq!(body["lookback"], 3);
     // recent_month is the most recent *complete* calendar month (last month).
-    let expected_recent: String =
-        sqlx::query_scalar("SELECT TO_CHAR(DATE_TRUNC('month', CURRENT_DATE) - interval '1 month', 'YYYY-MM')")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let expected_recent: String = sqlx::query_scalar(
+        "SELECT TO_CHAR(DATE_TRUNC('month', CURRENT_DATE) - interval '1 month', 'YYYY-MM')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(body["recent_month"], expected_recent);
 
     let cats = body["categories"].as_array().unwrap();
     // FOOD has the largest trailing spend → ranked first.
     assert_eq!(cats[0]["category"], "FOOD_AND_DRINK");
     let food = &cats[0];
-    assert!((food["recent"].as_f64().unwrap() - 400.0).abs() < 0.01,
-        "recent should be 400 (current month's 999 excluded), got {}", food["recent"]);
-    assert!((food["previous_avg"].as_f64().unwrap() - 200.0).abs() < 0.01,
-        "previous_avg should be 200, got {}", food["previous_avg"]);
-    assert!((food["trailing_avg"].as_f64().unwrap() - 250.0).abs() < 0.01,
-        "trailing_avg should be 250, got {}", food["trailing_avg"]);
+    assert!(
+        (food["recent"].as_f64().unwrap() - 400.0).abs() < 0.01,
+        "recent should be 400 (current month's 999 excluded), got {}",
+        food["recent"]
+    );
+    assert!(
+        (food["previous_avg"].as_f64().unwrap() - 200.0).abs() < 0.01,
+        "previous_avg should be 200, got {}",
+        food["previous_avg"]
+    );
+    assert!(
+        (food["trailing_avg"].as_f64().unwrap() - 250.0).abs() < 0.01,
+        "trailing_avg should be 250, got {}",
+        food["trailing_avg"]
+    );
 
     let merch = cats
         .iter()
@@ -3560,7 +3827,12 @@ async fn portfolio_value_history_sums_only_investment_accounts() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/portfolio-value-history", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/portfolio-value-history",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -3568,10 +3840,16 @@ async fn portfolio_value_history_sums_only_investment_accounts() {
     let pts = body.as_array().unwrap();
     assert_eq!(pts.len(), 2, "two snapshot dates, got {pts:#?}");
     assert_eq!(pts[0]["date"], "2026-04-01");
-    assert!((pts[0]["value_usd"].as_f64().unwrap() - 5000.0).abs() < 0.01,
-        "Apr should be the investment account only (5000), got {}", pts[0]["value_usd"]);
-    assert!((pts[1]["value_usd"].as_f64().unwrap() - 6000.0).abs() < 0.01,
-        "May should be 6000, got {}", pts[1]["value_usd"]);
+    assert!(
+        (pts[0]["value_usd"].as_f64().unwrap() - 5000.0).abs() < 0.01,
+        "Apr should be the investment account only (5000), got {}",
+        pts[0]["value_usd"]
+    );
+    assert!(
+        (pts[1]["value_usd"].as_f64().unwrap() - 6000.0).abs() < 0.01,
+        "May should be 6000, got {}",
+        pts[1]["value_usd"]
+    );
 }
 
 /// Partial-sync regression: accounts snapshot on different days, so a date's
@@ -3636,19 +3914,30 @@ async fn portfolio_value_history_carries_unsynced_accounts_forward() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/portfolio-value-history", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/portfolio-value-history",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res.into_body()).await;
     let pts = body.as_array().unwrap();
     assert_eq!(pts.len(), 2, "two snapshot dates, got {pts:#?}");
-    assert!((pts[0]["value_usd"].as_f64().unwrap() - 379_000.0).abs() < 0.01,
-        "day 1 sums both accounts, got {}", pts[0]["value_usd"]);
+    assert!(
+        (pts[0]["value_usd"].as_f64().unwrap() - 379_000.0).abs() < 0.01,
+        "day 1 sums both accounts, got {}",
+        pts[0]["value_usd"]
+    );
     // The trailing point must include B's carried-forward $81,000 — not
     // just A's fresh snapshot.
-    assert!((pts[1]["value_usd"].as_f64().unwrap() - 379_993.70).abs() < 0.01,
-        "trailing point must carry account B forward, got {}", pts[1]["value_usd"]);
+    assert!(
+        (pts[1]["value_usd"].as_f64().unwrap() - 379_993.70).abs() < 0.01,
+        "trailing point must carry account B forward, got {}",
+        pts[1]["value_usd"]
+    );
 }
 
 #[tokio::test]
@@ -3685,7 +3974,12 @@ async fn allocation_merges_cash_holdings_with_cash_accounts() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/allocation",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -3696,7 +3990,9 @@ async fn allocation_merges_cash_holdings_with_cash_accounts() {
     // asset_class key (contract C2): the 'cash' holding classifies as 'cash'
     // (merging with the checking account) and 'equity' as 'equity'.
     assert!(
-        !rows.iter().any(|r| r["category"] == "cash" || r["category"] == "equity"),
+        !rows
+            .iter()
+            .any(|r| r["category"] == "cash" || r["category"] == "equity"),
         "categories should be human display labels, got {rows:#?}"
     );
     // Both the money-market holding (VMFXX) and the checking account sit under a
@@ -3709,9 +4005,17 @@ async fn allocation_merges_cash_holdings_with_cash_accounts() {
         .collect();
     // VMFXX is a short all-caps symbol, so the endpoint surfaces it as the
     // symbol rather than the long fund name.
-    assert!(cash_subs.contains(&"VMFXX"), "MM holding under Cash: {cash_subs:?}");
-    assert!(cash_subs.contains(&"Checking"), "checking under Cash: {cash_subs:?}");
-    assert!(rows.iter().all(|r| r["asset_class"] != "cash" || r["category"] == "Cash"));
+    assert!(
+        cash_subs.contains(&"VMFXX"),
+        "MM holding under Cash: {cash_subs:?}"
+    );
+    assert!(
+        cash_subs.contains(&"Checking"),
+        "checking under Cash: {cash_subs:?}"
+    );
+    assert!(rows
+        .iter()
+        .all(|r| r["asset_class"] != "cash" || r["category"] == "Cash"));
     // The equity holding lands under the canonical 'equity' key with its
     // human display label.
     let equity = rows
@@ -3787,7 +4091,15 @@ async fn emergency_fund_runway_from_cash_and_spend() {
 
     // Two months of spending: $1,000 + $1,000 over 2 distinct months → $1,000/mo.
     seed_categorized_expense(&pool, user_id, cash_acct, "FOOD_AND_DRINK", "-1000.00", 0).await;
-    seed_categorized_expense(&pool, user_id, cash_acct, "GENERAL_MERCHANDISE", "-1000.00", 1).await;
+    seed_categorized_expense(
+        &pool,
+        user_id,
+        cash_acct,
+        "GENERAL_MERCHANDISE",
+        "-1000.00",
+        1,
+    )
+    .await;
     // An income row + an internal transfer must NOT reduce the runway.
     sqlx::query(
         "INSERT INTO transactions (account_id, date, description, amount, currency, category, source, user_id) \
@@ -3802,7 +4114,12 @@ async fn emergency_fund_runway_from_cash_and_spend() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/emergency-fund", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/emergency-fund",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -3850,7 +4167,11 @@ async fn benchmark_comparison_contribution_weighted() {
         "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
          VALUES ($1,'VTI','Vanguard','USD',10,2400,$2) RETURNING id",
     )
-    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
          VALUES ($1,$2,$3,'2026-01-01',10,100,'USD',1.0,'l1')",
@@ -3859,7 +4180,12 @@ async fn benchmark_comparison_contribution_weighted() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/benchmark-comparison", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/benchmark-comparison",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -3913,7 +4239,11 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
         "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
          VALUES ($1,'VOO','Vanguard S&P 500','USD',10,2400,$2) RETURNING id",
     )
-    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
          VALUES ($1,$2,$3, CURRENT_DATE - 60, 10, 100.0033, 'USD', 1.0, 'voo1')",
@@ -3926,7 +4256,11 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
         "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
          VALUES ($1,'AAPL','Apple','USD',5,550,$2) RETURNING id",
     )
-    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) VALUES \
          ($1,$2,$3, CURRENT_DATE - 60, 2, 50, 'USD', 1.0, 'aapl1'), \
@@ -3939,14 +4273,22 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
         "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
          VALUES ($1,'FXAIX','Fidelity 500','USD',100,25000,$2)",
     )
-    .bind(acct).bind(user_id).execute(&pool).await.unwrap();
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     // Untracked holding: has a lot, but its cost is 0 → the lot is skipped,
     // so the holding contributed zero counted lots.
     let crypto: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
          VALUES ($1,'BTC','Bitcoin','USD',1,100,$2) RETURNING id",
     )
-    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
          VALUES ($1,$2,$3, CURRENT_DATE - 10, 1, 0, 'USD', 1.0, 'btc1')",
@@ -3959,7 +4301,11 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
          VALUES ($1,'EMPTY','Sold Out','USD',0,0,$2), \
                 ($1,'GONE','Deleted','USD',3,999,$2)",
     )
-    .bind(acct).bind(user_id).execute(&pool).await.unwrap();
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     sqlx::query("UPDATE holdings SET deleted_at = NOW() WHERE symbol = 'GONE' AND user_id = $1")
         .bind(user_id)
         .execute(&pool)
@@ -3968,7 +4314,12 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/benchmark-comparison", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/benchmark-comparison",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -3979,8 +4330,14 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
     let total_invested = body["invested_usd"].as_f64().unwrap();
     let total_value = body["your_value_usd"].as_f64().unwrap();
     let total_bench = body["benchmark_value_usd"].as_f64().unwrap();
-    assert!((total_invested - 1280.033).abs() < 0.01, "invested total, got {total_invested}");
-    assert!((total_value - 2950.0).abs() < 0.01, "value total, got {total_value}");
+    assert!(
+        (total_invested - 1280.033).abs() < 0.01,
+        "invested total, got {total_invested}"
+    );
+    assert!(
+        (total_value - 2950.0).abs() < 0.01,
+        "value total, got {total_value}"
+    );
 
     // Per-symbol rows: sorted by invested_usd DESC → VOO before AAPL.
     let symbols = body["symbols"].as_array().unwrap();
@@ -3992,11 +4349,17 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
 
     // VOO: exact 2dp presentation (1000.033 → 1000.03), 5000→6000 = ×1.2.
     assert_eq!(voo_row["lot_count"].as_i64().unwrap(), 1);
-    assert!((voo_row["invested_usd"].as_f64().unwrap() - 1000.03).abs() < 1e-9,
-        "VOO invested must be rounded to exactly 1000.03, got {}", voo_row["invested_usd"]);
+    assert!(
+        (voo_row["invested_usd"].as_f64().unwrap() - 1000.03).abs() < 1e-9,
+        "VOO invested must be rounded to exactly 1000.03, got {}",
+        voo_row["invested_usd"]
+    );
     assert!((voo_row["your_value_usd"].as_f64().unwrap() - 2400.0).abs() < 1e-9);
-    assert!((voo_row["benchmark_value_usd"].as_f64().unwrap() - 1200.04).abs() < 1e-9,
-        "VOO benchmark: 1000.033 × 1.2 = 1200.0396 → 1200.04, got {}", voo_row["benchmark_value_usd"]);
+    assert!(
+        (voo_row["benchmark_value_usd"].as_f64().unwrap() - 1200.04).abs() < 1e-9,
+        "VOO benchmark: 1000.033 × 1.2 = 1200.0396 → 1200.04, got {}",
+        voo_row["benchmark_value_usd"]
+    );
     assert_eq!(voo_row["first_acquired"], d60.as_str());
     assert_eq!(voo_row["last_acquired"], d60.as_str());
 
@@ -4004,15 +4367,16 @@ async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
     assert_eq!(aapl_row["lot_count"].as_i64().unwrap(), 2);
     assert!((aapl_row["invested_usd"].as_f64().unwrap() - 280.0).abs() < 1e-9);
     assert!((aapl_row["your_value_usd"].as_f64().unwrap() - 550.0).abs() < 1e-9);
-    assert!((aapl_row["benchmark_value_usd"].as_f64().unwrap() - 316.36).abs() < 1e-9,
-        "AAPL benchmark, got {}", aapl_row["benchmark_value_usd"]);
+    assert!(
+        (aapl_row["benchmark_value_usd"].as_f64().unwrap() - 316.36).abs() < 1e-9,
+        "AAPL benchmark, got {}",
+        aapl_row["benchmark_value_usd"]
+    );
     assert_eq!(aapl_row["first_acquired"], d60.as_str());
     assert_eq!(aapl_row["last_acquired"], d30.as_str());
 
     // The rows must reproduce the totals (modulo the per-row 2dp rounding).
-    let sum = |field: &str| -> f64 {
-        symbols.iter().map(|s| s[field].as_f64().unwrap()).sum()
-    };
+    let sum = |field: &str| -> f64 { symbols.iter().map(|s| s[field].as_f64().unwrap()).sum() };
     assert!((sum("invested_usd") - total_invested).abs() < 0.01);
     assert!((sum("your_value_usd") - total_value).abs() < 0.01);
     assert!((sum("benchmark_value_usd") - total_bench).abs() < 0.01);
@@ -4085,7 +4449,12 @@ async fn portfolio_twr_divides_out_contributions() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/portfolio-twr", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/portfolio-twr",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -4112,7 +4481,11 @@ async fn portfolio_twr_divides_out_contributions() {
     );
     // Daily growth index: starts at 1.0, ends at ~1.21 / ~1.10.
     let points = body["points"].as_array().unwrap();
-    assert!(points.len() > 50, "expected a daily series, got {}", points.len());
+    assert!(
+        points.len() > 50,
+        "expected a daily series, got {}",
+        points.len()
+    );
     let last = points.last().unwrap();
     assert!((last["twr"].as_f64().unwrap() - 1.21).abs() < 0.005);
     assert!((last["sp"].as_f64().unwrap() - 1.10).abs() < 0.005);
@@ -4164,7 +4537,12 @@ async fn tax_summary_splits_short_and_long_term_from_lots() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/summary?year=2026&status=Single", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let status = res.status();
@@ -4240,15 +4618,15 @@ async fn tax_csv_export_includes_realized_gains_and_st_lt_summary() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(
-        res.headers().get(header::CONTENT_TYPE).unwrap(),
-        "text/csv"
-    );
+    assert_eq!(res.headers().get(header::CONTENT_TYPE).unwrap(), "text/csv");
     let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
 
     // The Form 8949-style section + per-disposal detail.
-    assert!(csv.contains("Realized capital gains (lot disposals)"), "csv:\n{csv}");
+    assert!(
+        csv.contains("Realized capital gains (lot disposals)"),
+        "csv:\n{csv}"
+    );
     assert!(csv.contains("Date acquired"), "header present");
     assert!(csv.contains("VTI"), "disposal symbol present");
     assert!(csv.contains("Short-term"), "ST term label present");
@@ -4316,7 +4694,7 @@ async fn account_balance_history_returns_monthly_closing() {
     insert("2026-03-05", "-100.00", "900.00").await;
     insert("2026-03-20", "-50.00", "850.00").await; // latest in March
     insert("2026-04-10", "200.00", "1050.00").await; // latest in April
-    // A row with no balance_after must be ignored.
+                                                     // A row with no balance_after must be ignored.
     seed_tx_dated(&pool, user_id, acct, "no balance", "-10.00", "2026-04-15").await;
 
     let res = app
@@ -4435,7 +4813,11 @@ async fn account_balance_history_falls_back_to_snapshots() {
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res.into_body()).await;
     let arr = body.as_array().unwrap();
-    assert_eq!(arr.len(), 1, "statement account: only its balance_after month");
+    assert_eq!(
+        arr.len(),
+        1,
+        "statement account: only its balance_after month"
+    );
     assert_eq!(arr[0]["month"], "2026-05");
     assert!((arr[0]["balance"].as_f64().unwrap() - 980.0).abs() < 0.01);
 }
@@ -4502,7 +4884,12 @@ async fn realized_gains_summary_and_long_term_flag() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/realized-gains", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/realized-gains",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -4553,9 +4940,18 @@ async fn loan_suggest_disbursement_matches_and_rejects() {
     let (_inst, acct) = seed_account(&pool, user_id).await;
 
     // Case 1 (TP): exact -5000 on origination date, name in description.
-    let good = seed_tx_dated(&pool, user_id, acct, "ZELLE TO JOSE RAMIREZ", "-5000.00", "2026-01-15").await;
+    let good = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "ZELLE TO JOSE RAMIREZ",
+        "-5000.00",
+        "2026-01-15",
+    )
+    .await;
     // Case 4 (TN): wrong amount, same day.
-    let _wrong_amount = seed_tx_dated(&pool, user_id, acct, "Coffee", "-250.00", "2026-01-15").await;
+    let _wrong_amount =
+        seed_tx_dated(&pool, user_id, acct, "Coffee", "-250.00", "2026-01-15").await;
     // Case 8 (TN): right amount, far date (59 days out → outside ±7).
     let _far = seed_tx_dated(&pool, user_id, acct, "Other", "-5000.00", "2026-03-15").await;
     // Case 9 (TN): an INFLOW of the right magnitude can't be a disbursement.
@@ -4587,9 +4983,16 @@ async fn loan_suggest_disbursement_matches_and_rejects() {
     let suggestions = body_json(res.into_body()).await;
     let arr = suggestions.as_array().unwrap();
     // Only the exact-amount same-day outflow should be suggested.
-    assert_eq!(arr.len(), 1, "exactly one disbursement suggestion expected, got {arr:?}");
+    assert_eq!(
+        arr.len(),
+        1,
+        "exactly one disbursement suggestion expected, got {arr:?}"
+    );
     assert_eq!(arr[0]["transaction_id"].as_str().unwrap(), good.to_string());
-    assert!(arr[0]["confidence"].as_i64().unwrap() >= 80, "exact+name should be high confidence");
+    assert!(
+        arr[0]["confidence"].as_i64().unwrap() >= 80,
+        "exact+name should be high confidence"
+    );
     assert_eq!(arr[0]["name_matched"], true);
 }
 
@@ -4601,16 +5004,30 @@ async fn loan_suggest_excludes_already_linked_disbursement() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
-    let tx = seed_tx_dated(&pool, user_id, acct, "Wire to Jose", "-5000.00", "2026-01-15").await;
+    let tx = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Wire to Jose",
+        "-5000.00",
+        "2026-01-15",
+    )
+    .await;
 
     // Loan A links the tx as its disbursement.
     let loan_a = create_loan(&app, &token, &serde_json::json!({
         "borrower_name": "Jose", "principal": 5000.0, "currency": "USD", "origination_date": "2026-01-15"
     })).await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_a}/disbursement"),
-        Some(&serde_json::json!({"transaction_id": tx.to_string()})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_a}/disbursement"),
+            Some(&serde_json::json!({"transaction_id": tx.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 
     // Loan B (same borrower/amount) must NOT see that tx suggested —
@@ -4618,12 +5035,22 @@ async fn loan_suggest_excludes_already_linked_disbursement() {
     let loan_b = create_loan(&app, &token, &serde_json::json!({
         "borrower_name": "Jose", "principal": 5000.0, "currency": "USD", "origination_date": "2026-01-15"
     })).await;
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_b}/suggestions/disbursement"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_b}/suggestions/disbursement"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let suggestions = body_json(res.into_body()).await;
-    assert_eq!(suggestions.as_array().unwrap().len(), 0,
-        "an already-linked disbursement must not be suggested for another loan");
+    assert_eq!(
+        suggestions.as_array().unwrap().len(),
+        0,
+        "an already-linked disbursement must not be suggested for another loan"
+    );
 }
 
 #[tokio::test]
@@ -4641,23 +5068,51 @@ async fn loan_cross_tenant_isolation() {
     let (_bob_id, bob_token) = seed_owner(&pool, "bob").await;
 
     // Bob cannot GET Alice's loan.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&bob_token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NOT_FOUND, "Bob must not read Alice's loan");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "Bob must not read Alice's loan"
+    );
 
     // Bob cannot DELETE Alice's loan.
-    let res = app.clone().oneshot(req(
-        Method::DELETE, &format!("/api/loans/{loan_id}"), None, Some(&bob_token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NOT_FOUND, "Bob must not delete Alice's loan");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::DELETE,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "Bob must not delete Alice's loan"
+    );
 
     // Bob's own loan list is empty.
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans", None, Some(&bob_token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans", None, Some(&bob_token)))
+        .await
+        .unwrap();
     let arr = body_json(res.into_body()).await;
-    assert_eq!(arr.as_array().unwrap().len(), 0, "Bob sees none of Alice's loans");
+    assert_eq!(
+        arr.as_array().unwrap().len(),
+        0,
+        "Bob sees none of Alice's loans"
+    );
 }
 
 // =====================================================================
@@ -4699,15 +5154,26 @@ async fn loan_exact_installment_payment_is_marked_paid() {
     let (token, _user) = bootstrap(&app, &pool).await;
     // 12,400 / 12 = 1033.333… → installments of 1033.33 with the tail row
     // absorbing the residual. The repeating cent is the whole point.
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 12400.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"),
-        Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 12400.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     let rows = loan_payment_rows(&app, &token, loan_id).await;
@@ -4715,16 +5181,24 @@ async fn loan_exact_installment_payment_is_marked_paid() {
     assert!((first_due - 1033.33).abs() < 0.001, "got {first_due}");
 
     // Pay it to the cent.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": first_due, "paid_date": "2026-02-15"})),
-        Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": first_due, "paid_date": "2026-02-15"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     let rows = loan_payment_rows(&app, &token, loan_id).await;
-    assert_eq!(rows[0]["status"].as_str(), Some("paid"),
-        "an exactly-paid installment must not read as partial");
+    assert_eq!(
+        rows[0]["status"].as_str(),
+        Some("paid"),
+        "an exactly-paid installment must not read as partial"
+    );
     assert_eq!(rows.len(), 12, "no phantom installment appended");
 }
 
@@ -4740,27 +5214,46 @@ async fn loan_partial_then_exact_topup_leaves_no_phantom_installment() {
         return;
     };
     let (token, _user) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 12400.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"),
-        Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 12400.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    app.clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
     for amount in [500.0, 533.33] {
-        let res = app.clone().oneshot(req(
-            Method::POST, &format!("/api/loans/{loan_id}/payments"),
-            Some(&serde_json::json!({"amount": amount, "paid_date": "2026-02-15"})),
-            Some(&token),
-        )).await.unwrap();
+        let res = app
+            .clone()
+            .oneshot(req(
+                Method::POST,
+                &format!("/api/loans/{loan_id}/payments"),
+                Some(&serde_json::json!({"amount": amount, "paid_date": "2026-02-15"})),
+                Some(&token),
+            ))
+            .await
+            .unwrap();
         assert_eq!(res.status(), StatusCode::CREATED, "payment of {amount}");
     }
 
     let rows = loan_payment_rows(&app, &token, loan_id).await;
-    assert_eq!(rows.len(), 12, "phantom 0.00 installment appended: {rows:#?}");
+    assert_eq!(
+        rows.len(),
+        12,
+        "phantom 0.00 installment appended: {rows:#?}"
+    );
     assert_eq!(rows[0]["status"].as_str(), Some("paid"));
     let paid = rows[0]["paid_amount"].as_f64().unwrap();
     assert!((paid - 1033.33).abs() < 0.001, "got {paid}");
@@ -4796,35 +5289,63 @@ async fn loan_schedule_generates_and_sums_to_principal() {
         return;
     };
     let (token, _user) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "simple",
-        "interest_rate": 0.06, "term_months": 12, "payment_frequency": "monthly"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "simple",
+            "interest_rate": 0.06, "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
 
     // Generate the schedule.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
     let body = body_json(res.into_body()).await;
     assert_eq!(body["installments"].as_i64().unwrap(), 12);
 
     // Payments list shows 12 rows; scheduled_principal sums to 1200.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/payments"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let payments = body_json(res.into_body()).await;
     let rows = payments.as_array().unwrap();
     assert_eq!(rows.len(), 12);
-    let sum_principal: f64 = rows.iter()
-        .map(|r| r["scheduled_principal"].as_f64().unwrap()).sum();
-    assert!((sum_principal - 1200.0).abs() < 0.001,
-        "scheduled principal must sum to 1200, got {sum_principal}");
+    let sum_principal: f64 = rows
+        .iter()
+        .map(|r| r["scheduled_principal"].as_f64().unwrap())
+        .sum();
+    assert!(
+        (sum_principal - 1200.0).abs() < 0.001,
+        "scheduled principal must sum to 1200, got {sum_principal}"
+    );
     // Simple 6% → total interest 72.
-    let sum_interest: f64 = rows.iter()
-        .map(|r| r["scheduled_interest"].as_f64().unwrap()).sum();
-    assert!((sum_interest - 72.0).abs() < 0.01, "interest should be 72, got {sum_interest}");
+    let sum_interest: f64 = rows
+        .iter()
+        .map(|r| r["scheduled_interest"].as_f64().unwrap())
+        .sum();
+    assert!(
+        (sum_interest - 72.0).abs() < 0.01,
+        "interest should be 72, got {sum_interest}"
+    );
 }
 
 #[tokio::test]
@@ -4835,27 +5356,64 @@ async fn loan_schedule_regen_refused_when_payment_reconciled() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
     // Generate, then reconcile a repayment.
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
-    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "100.00", "2026-02-15").await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
-    )).await.unwrap();
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let repay = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "100.00",
+        "2026-02-15",
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // Regen must now be refused with 409.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CONFLICT, "regen with a reconciled payment must 409");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::CONFLICT,
+        "regen with a reconciled payment must 409"
+    );
 }
 
 #[tokio::test]
@@ -4866,13 +5424,25 @@ async fn loan_schedule_open_ended_rejected() {
     };
     let (token, _user) = bootstrap(&app, &pool).await;
     // No term_months / payment_frequency → open-ended.
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 500.0, "currency": "USD",
-        "origination_date": "2026-01-15"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 500.0, "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
@@ -4883,36 +5453,73 @@ async fn loan_write_off_zeroes_outstanding_default_keeps_it() {
         return;
     };
     let (token, _user) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
-        "origination_date": "2026-01-15"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
 
     // Default keeps outstanding.
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"status": "defaulted"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"status": "defaulted"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!((l["outstanding"].as_f64().unwrap() - 1000.0).abs() < 0.01,
-        "defaulted keeps outstanding, got {}", l["outstanding"]);
+    assert!(
+        (l["outstanding"].as_f64().unwrap() - 1000.0).abs() < 0.01,
+        "defaulted keeps outstanding, got {}",
+        l["outstanding"]
+    );
 
     // Write-off zeroes it.
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"status": "written_off"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"status": "written_off"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!(l["outstanding"].as_f64().unwrap().abs() < 0.01,
-        "written_off zeroes outstanding, got {}", l["outstanding"]);
+    assert!(
+        l["outstanding"].as_f64().unwrap().abs() < 0.01,
+        "written_off zeroes outstanding, got {}",
+        l["outstanding"]
+    );
 }
 
 #[tokio::test]
@@ -4922,57 +5529,100 @@ async fn loan_reminders_upcoming_overdue_and_exclusions() {
         return;
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 300.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 3, "payment_frequency": "monthly"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 300.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 3, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
 
     // Hand-place three installments with controlled due dates relative
     // to CURRENT_DATE: one in 3 days (upcoming), one in 40 days (outside
     // default lead 7 → excluded), one 2 days ago (overdue).
-    sqlx::query("DELETE FROM loan_payments WHERE loan_id = $1").bind(loan_id).execute(&pool).await.unwrap();
+    sqlx::query("DELETE FROM loan_payments WHERE loan_id = $1")
+        .bind(loan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     for (n, offset) in [(1i32, 3i64), (2, 40), (3, -2)] {
         sqlx::query(
             "INSERT INTO loan_payments (user_id, loan_id, installment_number, due_date, \
              scheduled_amount, scheduled_principal, status) \
              VALUES ($1, $2, $3, CURRENT_DATE + ($4)::int, 100.00, 100.00, 'scheduled')",
         )
-        .bind(user_id).bind(loan_id).bind(n).bind(offset as i32)
-        .execute(&pool).await.unwrap();
+        .bind(user_id)
+        .bind(loan_id)
+        .bind(n)
+        .bind(offset as i32)
+        .execute(&pool)
+        .await
+        .unwrap();
     }
 
     // Default lead 7: expect installment 1 (upcoming) + installment 3
     // (overdue); installment 2 (40d out) excluded.
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/reminders", None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans/reminders", None, Some(&token)))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let reminders = body_json(res.into_body()).await;
     let arr = reminders.as_array().unwrap();
     assert_eq!(arr.len(), 2, "expected upcoming + overdue, got {arr:?}");
     let has_upcoming = arr.iter().any(|r| r["days_until"].as_i64().unwrap() > 0);
     let has_overdue = arr.iter().any(|r| r["days_overdue"].as_i64().unwrap() > 0);
-    assert!(has_upcoming && has_overdue, "both an upcoming and an overdue reminder");
+    assert!(
+        has_upcoming && has_overdue,
+        "both an upcoming and an overdue reminder"
+    );
 
     // Widen lead to 60 → installment 2 now appears too (3 total).
-    set_setting(&pool, user_id, "lending_reminder_lead_days", serde_json::json!(60)).await;
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/reminders", None, Some(&token),
-    )).await.unwrap();
+    set_setting(
+        &pool,
+        user_id,
+        "lending_reminder_lead_days",
+        serde_json::json!(60),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans/reminders", None, Some(&token)))
+        .await
+        .unwrap();
     let reminders = body_json(res.into_body()).await;
-    assert_eq!(reminders.as_array().unwrap().len(), 3, "lead 60 surfaces the 40-day-out installment");
+    assert_eq!(
+        reminders.as_array().unwrap().len(),
+        3,
+        "lead 60 surfaces the 40-day-out installment"
+    );
 
     // Write off the loan → no reminders (loan not active).
-    let _ = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"status": "written_off"})), Some(&token),
-    )).await.unwrap();
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/reminders", None, Some(&token),
-    )).await.unwrap();
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"status": "written_off"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans/reminders", None, Some(&token)))
+        .await
+        .unwrap();
     let reminders = body_json(res.into_body()).await;
-    assert_eq!(reminders.as_array().unwrap().len(), 0, "written-off loan yields no reminders");
+    assert_eq!(
+        reminders.as_array().unwrap().len(),
+        0,
+        "written-off loan yields no reminders"
+    );
 }
 
 #[tokio::test]
@@ -4994,14 +5644,43 @@ async fn loan_reminders_cross_tenant_isolated() {
         "INSERT INTO loan_payments (user_id, loan_id, installment_number, due_date, \
          scheduled_amount, scheduled_principal, status) \
          VALUES ($1, $2, 1, CURRENT_DATE - 2, 100.00, 100.00, 'scheduled')",
-    ).bind(alice_id).bind(loan_id).execute(&pool).await.unwrap();
+    )
+    .bind(alice_id)
+    .bind(loan_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // Alice sees 1 reminder; Bob sees none.
-    let res = app.clone().oneshot(req(Method::GET, "/api/loans/reminders", None, Some(&alice_token))).await.unwrap();
-    assert_eq!(body_json(res.into_body()).await.as_array().unwrap().len(), 1);
-    let res = app.clone().oneshot(req(Method::GET, "/api/loans/reminders", None, Some(&bob_token))).await.unwrap();
-    assert_eq!(body_json(res.into_body()).await.as_array().unwrap().len(), 0,
-        "Bob must not see Alice's reminders");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/reminders",
+            None,
+            Some(&alice_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(res.into_body()).await.as_array().unwrap().len(),
+        1
+    );
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/reminders",
+            None,
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(res.into_body()).await.as_array().unwrap().len(),
+        0,
+        "Bob must not see Alice's reminders"
+    );
 }
 
 #[tokio::test]
@@ -5037,15 +5716,22 @@ async fn loan_list_collection_path_contract() {
         ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED, "POST /api/loans must 201");
+    assert_eq!(
+        res.status(),
+        StatusCode::CREATED,
+        "POST /api/loans must 201"
+    );
     // Documented axum behavior: the trailing-slash form does NOT match.
     let res = app
         .clone()
         .oneshot(req(Method::GET, "/api/loans/", None, Some(&token)))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::NOT_FOUND,
-        "trailing-slash /api/loans/ 404s under axum nest — clients use the no-slash form");
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "trailing-slash /api/loans/ 404s under axum nest — clients use the no-slash form"
+    );
 }
 
 #[tokio::test]
@@ -5056,21 +5742,40 @@ async fn loan_interest_only_and_monthly_rate_schedule() {
     };
     let (token, _user) = bootstrap(&app, &pool).await;
     // 1% per MONTH, interest-only, 6 months on $10,000.
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 10000.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "interest_only",
-        "interest_rate": 0.01, "rate_period": "monthly",
-        "term_months": 6, "payment_frequency": "monthly"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 10000.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "interest_only",
+            "interest_rate": 0.01, "rate_period": "monthly",
+            "term_months": 6, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
 
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/payments"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let rows = body_json(res.into_body()).await;
     let arr = rows.as_array().unwrap();
     assert_eq!(arr.len(), 6);
@@ -5080,13 +5785,23 @@ async fn loan_interest_only_and_monthly_rate_schedule() {
         assert!(r["scheduled_principal"].as_f64().unwrap().abs() < 0.01);
     }
     // Final row: full principal balloon.
-    assert!((arr[5]["scheduled_principal"].as_f64().unwrap() - 10000.0).abs() < 0.01,
-        "interest-only balloon should return full principal, got {}", arr[5]["scheduled_principal"]);
+    assert!(
+        (arr[5]["scheduled_principal"].as_f64().unwrap() - 10000.0).abs() < 0.01,
+        "interest-only balloon should return full principal, got {}",
+        arr[5]["scheduled_principal"]
+    );
 
     // The loan echoes back rate_period for the UI.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
     assert_eq!(l["rate_period"], "monthly");
     assert_eq!(l["interest_type"], "interest_only");
@@ -5112,21 +5827,39 @@ async fn loan_partial_payment_tops_up_same_installment() {
 
     // Interest-free loan: $1,200 over 12 months → $100 principal/month,
     // each installment's scheduled_amount is exactly 100.
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // Partial: $40 against installment 1 (cash, no tx).
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": 40.0, "paid_date": "2026-02-15"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 40.0, "paid_date": "2026-02-15"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // After the partial: installment 1 is 'partial' with paid_amount 40;
@@ -5135,37 +5868,71 @@ async fn loan_partial_payment_tops_up_same_installment() {
     let i1 = &rows[0];
     let i2 = &rows[1];
     assert_eq!(i1["installment_number"].as_i64().unwrap(), 1);
-    assert_eq!(i1["status"], "partial", "installment 1 should be partial after $40");
+    assert_eq!(
+        i1["status"], "partial",
+        "installment 1 should be partial after $40"
+    );
     assert!((i1["paid_amount"].as_f64().unwrap() - 40.0).abs() < 0.01);
-    assert!(i2["paid_amount"].is_null(), "installment 2 must be untouched by the partial");
+    assert!(
+        i2["paid_amount"].is_null(),
+        "installment 2 must be untouched by the partial"
+    );
 
     // Remainder: $60 → fully covers installment 1's $100 schedule.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": 60.0, "paid_date": "2026-02-20"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 60.0, "paid_date": "2026-02-20"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     let rows = loan_payments(&app, &token, loan_id).await;
     let i1 = &rows[0];
     let i2 = &rows[1];
     // Installment 1 is now fully paid: status='paid', paid_amount == 100.
-    assert_eq!(i1["status"], "paid", "installment 1 must be paid after the remainder");
-    assert!((i1["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
-        "installment 1 paid_amount should equal the $100 schedule, got {}", i1["paid_amount"]);
+    assert_eq!(
+        i1["status"], "paid",
+        "installment 1 must be paid after the remainder"
+    );
+    assert!(
+        (i1["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "installment 1 paid_amount should equal the $100 schedule, got {}",
+        i1["paid_amount"]
+    );
     // CRITICAL: the remainder did NOT spill into installment 2.
     assert_eq!(i2["installment_number"].as_i64().unwrap(), 2);
-    assert!(i2["paid_amount"].is_null(),
-        "remainder must NOT spill into installment 2 — got paid_amount {}", i2["paid_amount"]);
-    assert_eq!(i2["status"], "scheduled", "installment 2 must still be scheduled");
+    assert!(
+        i2["paid_amount"].is_null(),
+        "remainder must NOT spill into installment 2 — got paid_amount {}",
+        i2["paid_amount"]
+    );
+    assert_eq!(
+        i2["status"], "scheduled",
+        "installment 2 must still be scheduled"
+    );
 
     // Outstanding dropped by exactly $100 (1200 - 100).
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!((l["outstanding"].as_f64().unwrap() - 1100.0).abs() < 0.01,
-        "outstanding should be 1100 after one full installment, got {}", l["outstanding"]);
+    assert!(
+        (l["outstanding"].as_f64().unwrap() - 1100.0).abs() < 0.01,
+        "outstanding should be 1100 after one full installment, got {}",
+        l["outstanding"]
+    );
     assert!((l["total_repaid"].as_f64().unwrap() - 100.0).abs() < 0.01);
 }
 
@@ -5173,7 +5940,12 @@ async fn loan_partial_payment_tops_up_same_installment() {
 async fn loan_payments(app: &Router, token: &str, loan_id: uuid::Uuid) -> Value {
     let res = app
         .clone()
-        .oneshot(req(Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(token)))
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/payments"),
+            None,
+            Some(token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -5195,37 +5967,74 @@ async fn loan_update_principal_regenerates_schedule() {
         return;
     };
     let (token, _user) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
     // Bump the principal to $2,400.
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"principal": 2400.0})), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "update with valid principal must 200");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"principal": 2400.0})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "update with valid principal must 200"
+    );
 
     // Schedule regenerated: still 12 rows, Σ scheduled_principal == 2400.
     let rows = loan_payments(&app, &token, loan_id).await;
     let arr = rows.as_array().unwrap();
     assert_eq!(arr.len(), 12, "schedule still has 12 installments");
-    let sum_principal: f64 = arr.iter().map(|r| r["scheduled_principal"].as_f64().unwrap()).sum();
-    assert!((sum_principal - 2400.0).abs() < 0.01,
-        "scheduled principal must sum to the new 2400, got {sum_principal}");
+    let sum_principal: f64 = arr
+        .iter()
+        .map(|r| r["scheduled_principal"].as_f64().unwrap())
+        .sum();
+    assert!(
+        (sum_principal - 2400.0).abs() < 0.01,
+        "scheduled principal must sum to the new 2400, got {sum_principal}"
+    );
 
     // The loan view's total_scheduled tracks the new principal too.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!((l["total_scheduled"].as_f64().unwrap() - 2400.0).abs() < 0.01,
-        "total_scheduled should follow the regenerated schedule, got {}", l["total_scheduled"]);
+    assert!(
+        (l["total_scheduled"].as_f64().unwrap() - 2400.0).abs() < 0.01,
+        "total_scheduled should follow the regenerated schedule, got {}",
+        l["total_scheduled"]
+    );
 }
 
 /// update_loan with principal <= 0 returns 400 (not a 500 surfacing the
@@ -5237,22 +6046,47 @@ async fn loan_update_nonpositive_principal_is_400() {
         return;
     };
     let (token, _user) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
-        "origination_date": "2026-01-15"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
 
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"principal": 0.0})), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST, "principal 0 must 400, not 500");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"principal": 0.0})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "principal 0 must 400, not 500"
+    );
 
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"principal": -50.0})), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST, "negative principal must 400");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"principal": -50.0})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "negative principal must 400"
+    );
 }
 
 /// A schedule-affecting edit (principal) on a loan WITH a reconciled
@@ -5266,36 +6100,81 @@ async fn loan_update_terms_rejected_after_reconcile() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     // Reconcile a real repayment.
-    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "100.00", "2026-02-15").await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
-    )).await.unwrap();
+    let repay = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "100.00",
+        "2026-02-15",
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // Changing principal now must 409.
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"principal": 5000.0})), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CONFLICT,
-        "schedule-affecting edit after reconcile must 409");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"principal": 5000.0})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::CONFLICT,
+        "schedule-affecting edit after reconcile must 409"
+    );
 
     // A non-schedule field (notes) is still editable on the same loan.
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({"notes": "called borrower"})), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "non-schedule edit stays allowed after reconcile");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({"notes": "called borrower"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "non-schedule edit stays allowed after reconcile"
+    );
 }
 
 /// Regression for the spurious-409 bug: the edit dialog re-sends
@@ -5312,40 +6191,85 @@ async fn loan_update_unchanged_principal_after_reconcile_ok() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
-    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "100.00", "2026-02-15").await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let repay = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "100.00",
+        "2026-02-15",
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // Edit ONLY the borrower name, but resend the unchanged principal /
     // interest_type exactly as the dialog does. Must succeed.
-    let res = app.clone().oneshot(req(
-        Method::PATCH, &format!("/api/loans/{loan_id}"),
-        Some(&serde_json::json!({
-            "borrower_name": "Jose Ramirez",
-            "principal": 1200.0,
-            "interest_type": "none"
-        })), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::OK,
-        "resending an UNCHANGED principal must not 409 a reconciled loan");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/loans/{loan_id}"),
+            Some(&serde_json::json!({
+                "borrower_name": "Jose Ramirez",
+                "principal": 1200.0,
+                "interest_type": "none"
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "resending an UNCHANGED principal must not 409 a reconciled loan"
+    );
 
     // The name change actually persisted.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert_eq!(l["borrower_name"], "Jose Ramirez", "borrower rename must persist");
+    assert_eq!(
+        l["borrower_name"], "Jose Ramirez",
+        "borrower rename must persist"
+    );
 }
 
 /// B1, the real (tx-linked) bug path: a PARTIAL payment that is
@@ -5361,40 +6285,84 @@ async fn loan_tx_linked_partial_tops_up_same_installment() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
     // Partial of $40 reconciled against a real $40 transaction → the row
     // now carries a non-NULL actual_tx_id (the case the old selector
     // skipped).
-    let tx40 = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "40.00", "2026-02-15").await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": tx40.to_string()})), Some(&token),
-    )).await.unwrap();
+    let tx40 = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "40.00",
+        "2026-02-15",
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": tx40.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
     let rows = loan_payments(&app, &token, loan_id).await;
-    assert_eq!(rows[0]["status"], "partial", "installment 1 should be partial after the $40 tx");
+    assert_eq!(
+        rows[0]["status"], "partial",
+        "installment 1 should be partial after the $40 tx"
+    );
 
     // Remainder $60 (cash). Must top up installment 1, not spill to 2.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": 60.0, "paid_date": "2026-02-20"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 60.0, "paid_date": "2026-02-20"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     let rows = loan_payments(&app, &token, loan_id).await;
-    assert_eq!(rows[0]["status"], "paid", "installment 1 must be paid after the remainder");
-    assert!((rows[0]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
-        "installment 1 should total $100, got {}", rows[0]["paid_amount"]);
-    assert!(rows[1]["paid_amount"].is_null(),
-        "remainder must NOT spill into installment 2 — got {}", rows[1]["paid_amount"]);
+    assert_eq!(
+        rows[0]["status"], "paid",
+        "installment 1 must be paid after the remainder"
+    );
+    assert!(
+        (rows[0]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "installment 1 should total $100, got {}",
+        rows[0]["paid_amount"]
+    );
+    assert!(
+        rows[1]["paid_amount"].is_null(),
+        "remainder must NOT spill into installment 2 — got {}",
+        rows[1]["paid_amount"]
+    );
 }
 
 /// POST /schedule on a loan id that doesn't exist (or isn't ours) must
@@ -5408,10 +6376,21 @@ async fn loan_generate_schedule_unknown_id_is_404() {
     };
     let (token, _user) = bootstrap(&app, &pool).await;
     let bogus = uuid::Uuid::new_v4();
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{bogus}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NOT_FOUND, "schedule on an unknown loan must 404, not 500");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{bogus}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "schedule on an unknown loan must 404, not 500"
+    );
 }
 
 // =====================================================================
@@ -5429,37 +6408,80 @@ async fn loan_scheduled_repayment_records_interest_split() {
 
     // Interest-only loan: $10,000 @ 1%/month, 6 months. Each scheduled
     // installment's interest is $100; principal balloons at the end.
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 10000.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "interest_only",
-        "interest_rate": 0.01, "rate_period": "monthly",
-        "term_months": 6, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 10000.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "interest_only",
+            "interest_rate": 0.01, "rate_period": "monthly",
+            "term_months": 6, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
     // Reconcile a $100 inflow against the first installment → it's all
     // interest (interest-only), no principal.
-    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "100.00", "2026-02-15").await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
-    )).await.unwrap();
+    let repay = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "100.00",
+        "2026-02-15",
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // The loan's interest_earned reflects the $100.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!((l["interest_earned"].as_f64().unwrap() - 100.0).abs() < 0.01,
-        "interest-only first payment is all interest, got {}", l["interest_earned"]);
+    assert!(
+        (l["interest_earned"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "interest-only first payment is all interest, got {}",
+        l["interest_earned"]
+    );
 
     // Interest-income report: $100 interest, $0 principal this year.
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/interest-income?year=2026", None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/interest-income?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let report = body_json(res.into_body()).await;
     assert!((report["total_interest"].as_f64().unwrap() - 100.0).abs() < 0.01);
@@ -5482,32 +6504,63 @@ async fn loan_open_ended_us_rule_interest_first() {
     // Open-ended (no schedule) loan: $1,000 @ 12%/year simple. A
     // repayment one year later accrues ~$120 interest; US Rule applies
     // it interest-first.
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "simple",
-        "interest_rate": 0.12, "rate_period": "annual"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "simple",
+            "interest_rate": 0.12, "rate_period": "annual"
+        }),
+    )
+    .await;
 
     // A $300 inflow ~365 days after origination.
-    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "300.00", "2027-01-15").await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
-    )).await.unwrap();
+    let repay = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "300.00",
+        "2027-01-15",
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // ~$120 interest accrued (1000 * 0.12 * 1yr), allocated first; the
     // rest (~$180) is principal.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
     let earned = l["interest_earned"].as_f64().unwrap();
-    assert!((earned - 120.0).abs() < 1.0, "US-rule interest-first ~120, got {earned}");
+    assert!(
+        (earned - 120.0).abs() < 1.0,
+        "US-rule interest-first ~120, got {earned}"
+    );
     // Outstanding dropped by the principal portion (~180), not the full 300.
     let outstanding = l["outstanding"].as_f64().unwrap();
-    assert!((outstanding - 820.0).abs() < 1.5,
-        "outstanding should drop by principal portion only (~820), got {outstanding}");
+    assert!(
+        (outstanding - 820.0).abs() < 1.5,
+        "outstanding should drop by principal portion only (~820), got {outstanding}"
+    );
 }
 
 #[tokio::test]
@@ -5518,21 +6571,49 @@ async fn loan_zero_interest_repayment_is_all_principal() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 500.0, "currency": "USD",
-        "origination_date": "2026-01-15"
-    })).await; // interest_type defaults to none
-    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "200.00", "2026-03-15").await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
-    )).await.unwrap();
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/interest-income", None, Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 500.0, "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await; // interest_type defaults to none
+    let repay = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "200.00",
+        "2026-03-15",
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/interest-income",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let report = body_json(res.into_body()).await;
-    assert!(report["total_interest"].as_f64().unwrap().abs() < 0.01,
-        "0% loan generates no interest income");
+    assert!(
+        report["total_interest"].as_f64().unwrap().abs() < 0.01,
+        "0% loan generates no interest income"
+    );
     assert!((report["total_principal"].as_f64().unwrap() - 200.0).abs() < 0.01);
 }
 
@@ -5544,26 +6625,57 @@ async fn loan_interest_income_csv_export() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose Ramirez", "principal": 1000.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "simple",
-        "interest_rate": 0.12, "rate_period": "annual"
-    })).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose Ramirez", "principal": 1000.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "simple",
+            "interest_rate": 0.12, "rate_period": "annual"
+        }),
+    )
+    .await;
     let repay = seed_tx_dated(&pool, user_id, acct, "Zelle", "300.00", "2026-07-15").await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
-    )).await.unwrap();
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/interest-income/export?year=2026", None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/interest-income/export?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let ct = res.headers().get("content-type").unwrap().to_str().unwrap().to_string();
-    assert!(ct.contains("text/csv"), "expected CSV content-type, got {ct}");
-    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
+    let ct = res
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        ct.contains("text/csv"),
+        "expected CSV content-type, got {ct}"
+    );
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64)
+        .await
+        .unwrap();
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(csv.starts_with("borrower,currency,date,amount_paid,principal,interest,running_balance"));
+    assert!(
+        csv.starts_with("borrower,currency,date,amount_paid,principal,interest,running_balance")
+    );
     assert!(csv.contains("Jose Ramirez"), "borrower row present");
     assert!(csv.contains("300.00"), "payment amount present");
 }
@@ -5586,15 +6698,41 @@ async fn loan_interest_income_cross_tenant_isolated() {
         "INSERT INTO loan_payments (user_id, loan_id, installment_number, paid_amount, paid_date, \
          principal_portion, interest_portion, balance_after, status) \
          VALUES ($1, $2, 1, 200.00, '2026-06-01', 150.00, 50.00, 850.00, 'paid')",
-    ).bind(alice_id).bind(loan_id).execute(&pool).await.unwrap();
+    )
+    .bind(alice_id)
+    .bind(loan_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
-    let res = app.clone().oneshot(req(Method::GET, "/api/loans/interest-income", None, Some(&alice_token))).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/interest-income",
+            None,
+            Some(&alice_token),
+        ))
+        .await
+        .unwrap();
     let r = body_json(res.into_body()).await;
     assert!((r["total_interest"].as_f64().unwrap() - 50.0).abs() < 0.01);
     // Bob sees nothing.
-    let res = app.clone().oneshot(req(Method::GET, "/api/loans/interest-income", None, Some(&bob_token))).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/interest-income",
+            None,
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
     let r = body_json(res.into_body()).await;
-    assert!(r["total_interest"].as_f64().unwrap().abs() < 0.01, "Bob must not see Alice's interest income");
+    assert!(
+        r["total_interest"].as_f64().unwrap().abs() < 0.01,
+        "Bob must not see Alice's interest income"
+    );
 }
 
 // =====================================================================
@@ -5608,19 +6746,38 @@ async fn loan_compound_single_balloon_schedule() {
         return;
     };
     let (token, _user) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "compound",
-        "interest_rate": 0.10, "rate_period": "annual",
-        "term_months": 24, "payment_frequency": "monthly"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "compound",
+            "interest_rate": 0.10, "rate_period": "annual",
+            "term_months": 24, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/payments"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let rows = body_json(res.into_body()).await;
     let arr = rows.as_array().unwrap();
     assert_eq!(arr.len(), 1, "compound is a single balloon");
@@ -5638,26 +6795,50 @@ async fn loan_interest_accrued_is_informational() {
     let (token, _user) = bootstrap(&app, &pool).await;
     // 12% annual simple, open-ended, originated ~today minus enough to
     // accrue. Use a clearly-past origination so accrual is non-trivial.
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
-        "origination_date": "2026-01-01", "interest_type": "simple",
-        "interest_rate": 0.12, "rate_period": "annual"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+            "origination_date": "2026-01-01", "interest_type": "simple",
+            "interest_rate": 0.12, "rate_period": "annual"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
     // interest_accrued is present and >= 0 (exact value depends on
     // today's date relative to origination).
     assert!(l["interest_accrued"].as_f64().unwrap() >= 0.0);
     // A 0% loan accrues nothing.
-    let zero = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Ana", "principal": 500.0, "currency": "USD",
-        "origination_date": "2026-01-01"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{zero}"), None, Some(&token),
-    )).await.unwrap();
+    let zero = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Ana", "principal": 500.0, "currency": "USD",
+            "origination_date": "2026-01-01"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{zero}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
     assert!(l["interest_accrued"].as_f64().unwrap().abs() < 0.01);
 }
@@ -5670,18 +6851,35 @@ async fn loan_below_market_flag_over_threshold() {
     };
     let (token, _user) = bootstrap(&app, &pool).await;
     // 0% loan over the $10k de-minimis → flagged.
-    let _big = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "BigFriend", "principal": 25000.0, "currency": "USD",
-        "origination_date": "2026-01-01"
-    })).await;
+    let _big = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "BigFriend", "principal": 25000.0, "currency": "USD",
+            "origination_date": "2026-01-01"
+        }),
+    )
+    .await;
     // 0% loan under the threshold → not flagged.
-    let _small = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "SmallFriend", "principal": 500.0, "currency": "USD",
-        "origination_date": "2026-01-01"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/interest-income", None, Some(&token),
-    )).await.unwrap();
+    let _small = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "SmallFriend", "principal": 500.0, "currency": "USD",
+            "origination_date": "2026-01-01"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/interest-income",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let report = body_json(res.into_body()).await;
     let flagged = report["below_market_loans"].as_array().unwrap();
     assert_eq!(flagged.len(), 1, "only the >$10k 0% loan is flagged");
@@ -5704,15 +6902,35 @@ async fn loan_interest_summary_csv_by_borrower_year() {
         "INSERT INTO loan_payments (user_id, loan_id, installment_number, paid_amount, paid_date, \
          principal_portion, interest_portion, balance_after, status) \
          VALUES ($1, $2, 1, 200.00, '2026-06-01', 150.00, 50.00, 850.00, 'paid')",
-    ).bind(user_id).bind(loan_id).execute(&pool).await.unwrap();
+    )
+    .bind(user_id)
+    .bind(loan_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
-    let res = app.clone().oneshot(req(
-        Method::GET, "/api/loans/interest-income/summary", None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/loans/interest-income/summary",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let ct = res.headers().get("content-type").unwrap().to_str().unwrap().to_string();
+    let ct = res
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     assert!(ct.contains("text/csv"));
-    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64)
+        .await
+        .unwrap();
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(csv.starts_with("borrower,currency,year,interest_received,principal_received"));
     assert!(csv.contains("2026"));
@@ -5727,33 +6945,67 @@ async fn loan_agreement_html_renders_and_is_scoped() {
         return;
     };
     let (token, _user) = bootstrap(&app, &pool).await;
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose Ramirez", "principal": 5000.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "simple",
-        "interest_rate": 0.06, "rate_period": "annual",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}/agreement"), None, Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose Ramirez", "principal": 5000.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "simple",
+            "interest_rate": 0.06, "rate_period": "annual",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/agreement"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let ct = res.headers().get("content-type").unwrap().to_str().unwrap().to_string();
+    let ct = res
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     assert!(ct.contains("text/html"), "agreement is HTML, got {ct}");
-    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64)
+        .await
+        .unwrap();
     let html = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(html.contains("Promissory Note"));
     assert!(html.contains("Jose Ramirez"));
     // Sectioned layout (the output redesign).
     assert!(html.contains("<h2>Parties</h2>"), "Parties section present");
-    assert!(html.contains("<h2>Loan terms</h2>"), "Loan terms section present");
+    assert!(
+        html.contains("<h2>Loan terms</h2>"),
+        "Loan terms section present"
+    );
     assert!(html.contains("Status as of"), "Status section present");
 
     // Cross-tenant: a different owner can't fetch it.
     let (_bob, bob_token) = seed_owner(&pool, "bob").await;
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}/agreement"), None, Some(&bob_token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NOT_FOUND, "agreement must be owner-scoped");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/agreement"),
+            None,
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "agreement must be owner-scoped"
+    );
 }
 
 /// Regression: the agreement printable double-counted interest in its
@@ -5771,29 +7023,55 @@ async fn loan_agreement_paid_matches_loan_view_with_interest() {
     let (token, _user) = bootstrap(&app, &pool).await;
     // $120 principal + $20 agreed flat interest, modeled as a custom
     // schedule (one $140 row; interest inferred as rows − principal).
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose Ramirez", "principal": 120.0, "currency": "USD",
-        "origination_date": "2026-01-15"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule/custom"),
-        Some(&serde_json::json!({ "rows": [{ "due_date": "2026-12-15", "amount": 140.0 }] })),
-        Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::CREATED, "custom schedule should 201");
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose Ramirez", "principal": 120.0, "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule/custom"),
+            Some(&serde_json::json!({ "rows": [{ "due_date": "2026-12-15", "amount": 140.0 }] })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::CREATED,
+        "custom schedule should 201"
+    );
     // One $70 cash repayment — carries a non-zero interest portion, which
     // is exactly what the old code double-counted.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({ "amount": 70.0, "paid_date": "2026-06-01" })),
-        Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({ "amount": 70.0, "paid_date": "2026-06-01" })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED, "cash payment should 201");
 
     // The app's source of truth: Repaid $70, owed $70.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
     assert!((l["total_repaid"].as_f64().unwrap() - 70.0).abs() < 0.01);
     assert!((l["total_owed"].as_f64().unwrap() - 70.0).abs() < 0.01);
@@ -5804,11 +7082,20 @@ async fn loan_agreement_paid_matches_loan_view_with_interest() {
 
     // The agreement must show the SAME figures: PAID $70.00 / REMAINING
     // $70.00, "$70.00 of $140.00 paid · 50%" — not $80 / $60 / 57%.
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}/agreement"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/agreement"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64)
+        .await
+        .unwrap();
     let html = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(
         html.contains(r#"<div class="k">Paid</div><div class="val">$70.00</div>"#),
@@ -5842,21 +7129,39 @@ async fn loan_overpay_spills_across_installments() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, _acct) = seed_account(&pool, user_id).await;
 
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     // One $250 cash payment → spills 100 + 100 + 50.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": 250.0, "paid_date": "2026-02-15"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 250.0, "paid_date": "2026-02-15"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     let rows = loan_payments(&app, &token, loan_id).await;
@@ -5865,12 +7170,19 @@ async fn loan_overpay_spills_across_installments() {
     assert_eq!(rows[1]["status"], "paid", "installment 2 fully paid");
     assert!((rows[1]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01);
     assert_eq!(rows[2]["status"], "partial", "installment 3 partial");
-    assert!((rows[2]["paid_amount"].as_f64().unwrap() - 50.0).abs() < 0.01,
-        "installment 3 should hold the $50 remainder, got {}", rows[2]["paid_amount"]);
+    assert!(
+        (rows[2]["paid_amount"].as_f64().unwrap() - 50.0).abs() < 0.01,
+        "installment 3 should hold the $50 remainder, got {}",
+        rows[2]["paid_amount"]
+    );
     // 4-12 untouched.
     for r in rows.as_array().unwrap().iter().skip(3) {
-        assert!(r["paid_amount"].is_null(),
-            "installment {} must be untouched, got {}", r["installment_number"], r["paid_amount"]);
+        assert!(
+            r["paid_amount"].is_null(),
+            "installment {} must be untouched, got {}",
+            r["installment_number"],
+            r["paid_amount"]
+        );
         assert_eq!(r["status"], "scheduled");
     }
 
@@ -5878,19 +7190,35 @@ async fn loan_overpay_spills_across_installments() {
     // bounded by its scheduled_amount (the spill never overfills a row).
     for r in rows.as_array().unwrap().iter() {
         if let Some(p) = r["paid_amount"].as_f64() {
-            assert!(p <= r["scheduled_amount"].as_f64().unwrap() + 0.01,
-                "paid_amount must never exceed scheduled_amount, row {}", r["installment_number"]);
+            assert!(
+                p <= r["scheduled_amount"].as_f64().unwrap() + 0.01,
+                "paid_amount must never exceed scheduled_amount, row {}",
+                r["installment_number"]
+            );
         }
     }
 
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!((l["outstanding"].as_f64().unwrap() - 950.0).abs() < 0.01,
-        "outstanding should be 950 after $250 spill, got {}", l["outstanding"]);
-    assert!((l["total_repaid"].as_f64().unwrap() - 250.0).abs() < 0.01,
-        "total_repaid should be 250, got {}", l["total_repaid"]);
+    assert!(
+        (l["outstanding"].as_f64().unwrap() - 950.0).abs() < 0.01,
+        "outstanding should be 950 after $250 spill, got {}",
+        l["outstanding"]
+    );
+    assert!(
+        (l["total_repaid"].as_f64().unwrap() - 250.0).abs() < 0.01,
+        "total_repaid should be 250, got {}",
+        l["total_repaid"]
+    );
 }
 
 /// A tx-linked overpay: the bank tx attaches to the FIRST touched
@@ -5906,49 +7234,106 @@ async fn loan_overpay_tx_attaches_to_first_row_and_unreconciles() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, acct) = seed_account(&pool, user_id).await;
 
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
     // $250 inflow reconciled → spills 100 + 100 + 50.
-    let tx = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "250.00", "2026-02-15").await;
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"transaction_id": tx.to_string()})), Some(&token),
-    )).await.unwrap();
+    let tx = seed_tx_dated(
+        &pool,
+        user_id,
+        acct,
+        "Zelle from Jose",
+        "250.00",
+        "2026-02-15",
+    )
+    .await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": tx.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     let rows = loan_payments(&app, &token, loan_id).await;
     // First touched row carries the tx; rows 2 & 3 do not.
-    assert_eq!(rows[0]["actual_tx_id"].as_str(), Some(tx.to_string().as_str()),
-        "first installment must carry the bank tx");
-    assert!(rows[1]["actual_tx_id"].is_null(),
-        "spilled installment 2 must have NULL actual_tx_id");
-    assert!(rows[2]["actual_tx_id"].is_null(),
-        "spilled installment 3 must have NULL actual_tx_id");
+    assert_eq!(
+        rows[0]["actual_tx_id"].as_str(),
+        Some(tx.to_string().as_str()),
+        "first installment must carry the bank tx"
+    );
+    assert!(
+        rows[1]["actual_tx_id"].is_null(),
+        "spilled installment 2 must have NULL actual_tx_id"
+    );
+    assert!(
+        rows[2]["actual_tx_id"].is_null(),
+        "spilled installment 3 must have NULL actual_tx_id"
+    );
     let first_row_id = rows[0]["id"].as_str().unwrap().to_string();
 
     // Unreconcile: DELETE the first (tx-bearing) row. It removes exactly
     // that row's $100 principal; the spilled $150 stays recorded.
-    let res = app.clone().oneshot(req(
-        Method::DELETE, &format!("/api/loans/payments/{first_row_id}"), None, Some(&token),
-    )).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NO_CONTENT, "unreconcile deletes the row");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::DELETE,
+            &format!("/api/loans/payments/{first_row_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NO_CONTENT,
+        "unreconcile deletes the row"
+    );
 
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
     // 250 repaid − 100 removed = 150 still repaid → outstanding 1050.
-    assert!((l["total_repaid"].as_f64().unwrap() - 150.0).abs() < 0.01,
-        "after unreconcile total_repaid should be 150, got {}", l["total_repaid"]);
-    assert!((l["outstanding"].as_f64().unwrap() - 1050.0).abs() < 0.01,
-        "after unreconcile outstanding should be 1050, got {}", l["outstanding"]);
+    assert!(
+        (l["total_repaid"].as_f64().unwrap() - 150.0).abs() < 0.01,
+        "after unreconcile total_repaid should be 150, got {}",
+        l["total_repaid"]
+    );
+    assert!(
+        (l["outstanding"].as_f64().unwrap() - 1050.0).abs() < 0.01,
+        "after unreconcile outstanding should be 1050, got {}",
+        l["outstanding"]
+    );
 }
 
 /// Regression: an EXACT-FIT single payment ($100) still fully pays just
@@ -5963,20 +7348,38 @@ async fn loan_exact_fit_and_underfill_single_installment() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, _acct) = seed_account(&pool, user_id).await;
 
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
     // Exact fit: $100 → installment 1 paid, installment 2 untouched.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": 100.0, "paid_date": "2026-02-15"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 100.0, "paid_date": "2026-02-15"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
     let rows = loan_payments(&app, &token, loan_id).await;
     assert_eq!(rows[0]["status"], "paid");
@@ -5984,15 +7387,24 @@ async fn loan_exact_fit_and_underfill_single_installment() {
     assert!(rows[1]["paid_amount"].is_null(), "exact fit must not spill");
 
     // Under-fill: $30 → installment 2 partial, installment 3 untouched.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": 30.0, "paid_date": "2026-03-15"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 30.0, "paid_date": "2026-03-15"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
     let rows = loan_payments(&app, &token, loan_id).await;
     assert_eq!(rows[1]["status"], "partial");
     assert!((rows[1]["paid_amount"].as_f64().unwrap() - 30.0).abs() < 0.01);
-    assert!(rows[2]["paid_amount"].is_null(), "under-fill must not spill");
+    assert!(
+        rows[2]["paid_amount"].is_null(),
+        "under-fill must not spill"
+    );
 }
 
 /// Overpay BEYOND the whole schedule: $1,300 on a $1,200 schedule pays
@@ -6008,43 +7420,84 @@ async fn loan_overpay_beyond_schedule_appends_surplus_row() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, _acct) = seed_account(&pool, user_id).await;
 
-    let loan_id = create_loan(&app, &token, &serde_json::json!({
-        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
-        "origination_date": "2026-01-15", "interest_type": "none",
-        "term_months": 12, "payment_frequency": "monthly"
-    })).await;
-    let _ = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
-    )).await.unwrap();
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+            "origination_date": "2026-01-15", "interest_type": "none",
+            "term_months": 12, "payment_frequency": "monthly"
+        }),
+    )
+    .await;
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/schedule"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
 
     // $1,300 → 12 × $100 + a $100 surplus row.
-    let res = app.clone().oneshot(req(
-        Method::POST, &format!("/api/loans/{loan_id}/payments"),
-        Some(&serde_json::json!({"amount": 1300.0, "paid_date": "2026-02-15"})), Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 1300.0, "paid_date": "2026-02-15"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
 
     let rows = loan_payments(&app, &token, loan_id).await;
     // All 12 scheduled installments paid.
     for r in rows.as_array().unwrap().iter().take(12) {
-        assert_eq!(r["status"], "paid",
-            "installment {} must be paid", r["installment_number"]);
+        assert_eq!(
+            r["status"], "paid",
+            "installment {} must be paid",
+            r["installment_number"]
+        );
         assert!((r["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01);
     }
     // A 13th appended manual row holds the $100 surplus.
-    assert_eq!(rows.as_array().unwrap().len(), 13, "a surplus row is appended");
+    assert_eq!(
+        rows.as_array().unwrap().len(),
+        13,
+        "a surplus row is appended"
+    );
     assert_eq!(rows[12]["status"], "paid");
-    assert!((rows[12]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
-        "surplus row should hold $100, got {}", rows[12]["paid_amount"]);
+    assert!(
+        (rows[12]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "surplus row should hold $100, got {}",
+        rows[12]["paid_amount"]
+    );
 
-    let res = app.clone().oneshot(req(
-        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
-    )).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let l = body_json(res.into_body()).await;
-    assert!(l["outstanding"].as_f64().unwrap().abs() < 0.01,
-        "outstanding must be 0 after over-payoff, got {}", l["outstanding"]);
-    assert!((l["total_repaid"].as_f64().unwrap() - 1300.0).abs() < 0.01,
-        "total_repaid should be 1300, got {}", l["total_repaid"]);
+    assert!(
+        l["outstanding"].as_f64().unwrap().abs() < 0.01,
+        "outstanding must be 0 after over-payoff, got {}",
+        l["outstanding"]
+    );
+    assert!(
+        (l["total_repaid"].as_f64().unwrap() - 1300.0).abs() < 0.01,
+        "total_repaid should be 1300, got {}",
+        l["total_repaid"]
+    );
 }
 
 // =====================================================================
@@ -6092,12 +7545,35 @@ async fn continuity_report_lists_imported_accounts_with_institution() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (_inst, account) = seed_account(&pool, user_id).await;
-    seed_imported_tx(&pool, user_id, account, "2026-01-31", "100.00", "1100.00", "2026-01.pdf").await;
-    seed_imported_tx(&pool, user_id, account, "2026-02-28", "50.00", "1150.00", "2026-02.pdf").await;
+    seed_imported_tx(
+        &pool,
+        user_id,
+        account,
+        "2026-01-31",
+        "100.00",
+        "1100.00",
+        "2026-01.pdf",
+    )
+    .await;
+    seed_imported_tx(
+        &pool,
+        user_id,
+        account,
+        "2026-02-28",
+        "50.00",
+        "1150.00",
+        "2026-02.pdf",
+    )
+    .await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/imports/continuity", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/imports/continuity",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let status = res.status();
@@ -6107,9 +7583,21 @@ async fn continuity_report_lists_imported_accounts_with_institution() {
     let accounts = body["accounts"].as_array().expect("accounts array");
     // Broken query -> errored -> unwrap_or_default -> []. A populated row whose
     // institution_name came from the JOIN is the regression signal.
-    assert_eq!(accounts.len(), 1, "expected the one imported account, got: {body}");
-    assert_eq!(accounts[0]["institution_name"], serde_json::json!("Test Bank"), "{body}");
-    assert_eq!(accounts[0]["statement_count"], serde_json::json!(2), "{body}");
+    assert_eq!(
+        accounts.len(),
+        1,
+        "expected the one imported account, got: {body}"
+    );
+    assert_eq!(
+        accounts[0]["institution_name"],
+        serde_json::json!("Test Bank"),
+        "{body}"
+    );
+    assert_eq!(
+        accounts[0]["statement_count"],
+        serde_json::json!(2),
+        "{body}"
+    );
 }
 
 // =====================================================================
@@ -6209,24 +7697,89 @@ async fn holdings_day_change_from_stored_closes_and_coverage() {
     let brok = seed_typed_account(&pool, user_id, inst, "Brokerage", "brokerage", "2090.00").await;
 
     // Covered: GOOG, two fresh closes 100 -> 102 (+2%).
-    seed_holding(&pool, user_id, brok, "GOOG", "Alphabet", "equity", "10", Some("102"), "1020", Some("900")).await;
+    seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "GOOG",
+        "Alphabet",
+        "equity",
+        "10",
+        Some("102"),
+        "1020",
+        Some("900"),
+    )
+    .await;
     seed_close(&pool, "GOOG", 1, "100").await;
     seed_close(&pool, "GOOG", 0, "102").await;
     // Null paths: 401k-trust style row (no closes at all)…
-    seed_holding(&pool, user_id, brok, "VANG TARGET RET 2045", "Vanguard Target 2045 Trust", "", "47", None, "470", None).await;
+    seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "VANG TARGET RET 2045",
+        "Vanguard Target 2045 Trust",
+        "",
+        "47",
+        None,
+        "470",
+        None,
+    )
+    .await;
     // …cash sleeve (fresh closes exist but the row is cash)…
-    seed_holding(&pool, user_id, brok, "CUR:USD", "US Dollar", "cash", "200", Some("1"), "200", None).await;
+    seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "CUR:USD",
+        "US Dollar",
+        "cash",
+        "200",
+        Some("1"),
+        "200",
+        None,
+    )
+    .await;
     // …stale series (latest close 8 days old)…
-    seed_holding(&pool, user_id, brok, "MSFT", "Microsoft", "equity", "1", Some("300"), "300", None).await;
+    seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "MSFT",
+        "Microsoft",
+        "equity",
+        "1",
+        Some("300"),
+        "300",
+        None,
+    )
+    .await;
     seed_close(&pool, "MSFT", 9, "290").await;
     seed_close(&pool, "MSFT", 8, "300").await;
     // …and a single-close symbol.
-    seed_holding(&pool, user_id, brok, "NVDA", "NVIDIA", "equity", "1", Some("100"), "100", None).await;
+    seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "NVDA",
+        "NVIDIA",
+        "equity",
+        "1",
+        Some("100"),
+        "100",
+        None,
+    )
+    .await;
     seed_close(&pool, "NVDA", 0, "100").await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6236,8 +7789,14 @@ async fn holdings_day_change_from_stored_closes_and_coverage() {
     let by_symbol = |s: &str| holdings.iter().find(|h| h["symbol"] == s).unwrap();
 
     let goog = by_symbol("GOOG");
-    assert!((goog["day_change_pct"].as_f64().unwrap() - 2.0).abs() < 1e-6, "{goog}");
-    assert!((goog["day_change_usd"].as_f64().unwrap() - 20.4).abs() < 1e-6, "{goog}");
+    assert!(
+        (goog["day_change_pct"].as_f64().unwrap() - 2.0).abs() < 1e-6,
+        "{goog}"
+    );
+    assert!(
+        (goog["day_change_usd"].as_f64().unwrap() - 20.4).abs() < 1e-6,
+        "{goog}"
+    );
     let today = chrono::Utc::now().date_naive().to_string();
     assert_eq!(goog["price_as_of"].as_str().unwrap(), today);
     // Round-1 regression guard: asset_class untouched.
@@ -6276,8 +7835,32 @@ async fn instrument_detail_contract_ranges_opaque_and_404() {
     let brok = seed_typed_account(&pool, user_id, inst, "Robinhood", "brokerage", "5085.80").await;
     let k401 = seed_typed_account(&pool, user_id, inst, "Employer 401k", "401k", "12000.00").await;
 
-    let nvda = seed_holding(&pool, user_id, brok, "NVDA", "NVIDIA Corp", "equity", "29.5", Some("172.40"), "5085.80", Some("3100")).await;
-    seed_holding(&pool, user_id, k401, "VANG TARGET RET 2045", "Vanguard Target Retirement 2045 Trust", "", "100", None, "12000", None).await;
+    let nvda = seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "NVDA",
+        "NVIDIA Corp",
+        "equity",
+        "29.5",
+        Some("172.40"),
+        "5085.80",
+        Some("3100"),
+    )
+    .await;
+    seed_holding(
+        &pool,
+        user_id,
+        k401,
+        "VANG TARGET RET 2045",
+        "Vanguard Target Retirement 2045 Trust",
+        "",
+        "100",
+        None,
+        "12000",
+        None,
+    )
+    .await;
     sqlx::query(
         "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
          VALUES ($1, $2, $3, '2024-03-01', 10, 88.10, 'USD', 1.0, 'lot-nvda')",
@@ -6299,7 +7882,12 @@ async fn instrument_detail_contract_ranges_opaque_and_404() {
     // Case-insensitive match + default 1y range.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/instruments/nvda", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/instruments/nvda",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6332,7 +7920,11 @@ async fn instrument_detail_contract_ranges_opaque_and_404() {
     assert_eq!(lots.len(), 1);
     assert_eq!(lots[0]["acquired_at"], "2024-03-01");
     assert!((lots[0]["usd_cost"].as_f64().unwrap() - 881.0).abs() < 1e-9);
-    assert_eq!(body["prices"].as_array().unwrap().len(), 4, "1y default: all four closes");
+    assert_eq!(
+        body["prices"].as_array().unwrap().len(),
+        4,
+        "1y default: all four closes"
+    );
 
     // Ranges narrow the series.
     for (range, want_points) in [("1m", 2), ("3m", 3), ("max", 4)] {
@@ -6379,7 +7971,12 @@ async fn instrument_detail_contract_ranges_opaque_and_404() {
     // Unheld symbol: 404 with the C-A error shape.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/instruments/TSLA", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/instruments/TSLA",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
@@ -6425,36 +8022,119 @@ async fn dividend_detail_payments_matched_conservatively() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (inst, _acct) = seed_account(&pool, user_id).await;
     let holder = seed_typed_account(&pool, user_id, inst, "Fidelity HSA", "hsa", "1000.00").await;
-    let other = seed_typed_account(&pool, user_id, inst, "Other Brokerage", "brokerage", "1000.00").await;
+    let other = seed_typed_account(
+        &pool,
+        user_id,
+        inst,
+        "Other Brokerage",
+        "brokerage",
+        "1000.00",
+    )
+    .await;
 
     // ZZTQ deliberately unresolvable on Yahoo — the live dividend fetch
     // degrades to none and the payments section still populates.
-    seed_holding(&pool, user_id, holder, "ZZTQ", "ZZ Test Corp", "equity", "10", Some("100"), "1000", None).await;
+    seed_holding(
+        &pool,
+        user_id,
+        holder,
+        "ZZTQ",
+        "ZZ Test Corp",
+        "equity",
+        "10",
+        Some("100"),
+        "1000",
+        None,
+    )
+    .await;
 
     // Matches: positive + INCOME_DIVIDENDS + ticker as a whole word, in the
     // holding account.
-    seed_dividend_tx(&pool, user_id, holder, "Dividend received: ZZTQ", "105.60", Some("INCOME_DIVIDENDS"), 0).await;
+    seed_dividend_tx(
+        &pool,
+        user_id,
+        holder,
+        "Dividend received: ZZTQ",
+        "105.60",
+        Some("INCOME_DIVIDENDS"),
+        0,
+    )
+    .await;
     // Matches: no category, but the Spanish "dividendo" wording + ticker.
-    seed_dividend_tx(&pool, user_id, holder, "Dividendo ZZTQ pagado", "33.00", None, 30).await;
+    seed_dividend_tx(
+        &pool,
+        user_id,
+        holder,
+        "Dividendo ZZTQ pagado",
+        "33.00",
+        None,
+        30,
+    )
+    .await;
     // No match: ticker only as a substring (ZZTQX).
-    seed_dividend_tx(&pool, user_id, holder, "ZZTQX distribution", "50.00", Some("INCOME_DIVIDENDS"), 1).await;
+    seed_dividend_tx(
+        &pool,
+        user_id,
+        holder,
+        "ZZTQX distribution",
+        "50.00",
+        Some("INCOME_DIVIDENDS"),
+        1,
+    )
+    .await;
     // No match: negative amount (a reversal).
-    seed_dividend_tx(&pool, user_id, holder, "ZZTQ dividend reversal", "-105.60", Some("INCOME_DIVIDENDS"), 2).await;
+    seed_dividend_tx(
+        &pool,
+        user_id,
+        holder,
+        "ZZTQ dividend reversal",
+        "-105.60",
+        Some("INCOME_DIVIDENDS"),
+        2,
+    )
+    .await;
     // No match: right wording, WRONG account (doesn't hold ZZTQ).
-    seed_dividend_tx(&pool, user_id, other, "ZZTQ dividend", "75.00", Some("INCOME_DIVIDENDS"), 3).await;
+    seed_dividend_tx(
+        &pool,
+        user_id,
+        other,
+        "ZZTQ dividend",
+        "75.00",
+        Some("INCOME_DIVIDENDS"),
+        3,
+    )
+    .await;
     // No match: dividend wording without the ticker.
-    seed_dividend_tx(&pool, user_id, holder, "Quarterly dividend payment", "12.00", None, 4).await;
+    seed_dividend_tx(
+        &pool,
+        user_id,
+        holder,
+        "Quarterly dividend payment",
+        "12.00",
+        None,
+        4,
+    )
+    .await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/dividends/ZZTQ", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/dividends/ZZTQ",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res.into_body()).await;
 
     let payments = body["payments"].as_array().expect("payments array");
-    assert_eq!(payments.len(), 2, "exactly the two conservative matches: {payments:#?}");
+    assert_eq!(
+        payments.len(),
+        2,
+        "exactly the two conservative matches: {payments:#?}"
+    );
     // Newest first.
     assert!((payments[0]["amount_usd"].as_f64().unwrap() - 105.60).abs() < 0.001);
     assert_eq!(payments[0]["account_name"], "Fidelity HSA");
@@ -6462,11 +8142,37 @@ async fn dividend_detail_payments_matched_conservatively() {
 
     // Regex-unsafe symbol (':' outside [A-Za-z0-9.-]): matching is skipped
     // entirely — empty payments even with a would-be-matching row present.
-    seed_holding(&pool, user_id, holder, "ZZ:WEIRD", "Weird Pseudo", "equity", "1", Some("1"), "1", None).await;
-    seed_dividend_tx(&pool, user_id, holder, "ZZ:WEIRD dividend", "9.00", Some("INCOME_DIVIDENDS"), 5).await;
+    seed_holding(
+        &pool,
+        user_id,
+        holder,
+        "ZZ:WEIRD",
+        "Weird Pseudo",
+        "equity",
+        "1",
+        Some("1"),
+        "1",
+        None,
+    )
+    .await;
+    seed_dividend_tx(
+        &pool,
+        user_id,
+        holder,
+        "ZZ:WEIRD dividend",
+        "9.00",
+        Some("INCOME_DIVIDENDS"),
+        5,
+    )
+    .await;
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/dividends/ZZ%3AWEIRD", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/dividends/ZZ%3AWEIRD",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6539,7 +8245,12 @@ async fn realized_gains_account_context_and_taxable_subtotal() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/realized-gains", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/realized-gains",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6593,10 +8304,19 @@ async fn holdings_and_lots_csv_exports() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (inst, _acct) = seed_account(&pool, user_id).await;
-    let brok = seed_typed_account(&pool, user_id, inst, "Main Brokerage", "brokerage", "1000").await;
+    let brok =
+        seed_typed_account(&pool, user_id, inst, "Main Brokerage", "brokerage", "1000").await;
     let acme = seed_holding(
-        &pool, user_id, brok,
-        "ACME", "Acme \"Widgets\", Inc", "equity", "10", Some("100"), "1000", Some("800"),
+        &pool,
+        user_id,
+        brok,
+        "ACME",
+        "Acme \"Widgets\", Inc",
+        "equity",
+        "10",
+        Some("100"),
+        "1000",
+        Some("800"),
     )
     .await;
     sqlx::query(
@@ -6613,7 +8333,12 @@ async fn holdings_and_lots_csv_exports() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6650,7 +8375,12 @@ async fn holdings_and_lots_csv_exports() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings/lots/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6664,11 +8394,18 @@ async fn holdings_and_lots_csv_exports() {
     assert!(dispo.contains("patrimonio_lots_"), "{dispo}");
     let body = body_text(res.into_body()).await;
     let lines: Vec<&str> = body.trim_end().split('\n').collect();
-    assert_eq!(lines[0], "symbol,account,acquired_at,qty,cost_per_unit,currency,usd_cost");
+    assert_eq!(
+        lines[0],
+        "symbol,account,acquired_at,qty,cost_per_unit,currency,usd_cost"
+    );
     // The qty-0 depletion marker is filtered — one active lot only.
     assert_eq!(lines.len(), 2, "header + one active lot: {body}");
     assert!(lines[1].contains("2024-01-15"), "{}", lines[1]);
-    assert!(lines[1].ends_with(",800.00"), "usd_cost (2dp money): {}", lines[1]);
+    assert!(
+        lines[1].ends_with(",800.00"),
+        "usd_cost (2dp money): {}",
+        lines[1]
+    );
 }
 
 /// C-E: realized-gains CSV honors the year filter, carries the C-C account
@@ -6690,7 +8427,12 @@ async fn realized_gains_csv_export_year_filter_and_auth() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/realized-gains/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/realized-gains/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6707,10 +8449,18 @@ async fn realized_gains_csv_export_year_filter_and_auth() {
     assert_eq!(lines[0], "sell_date,symbol,name,account,account_type,tax_advantaged,qty_sold,proceeds_usd,cost_usd,realized_pnl_usd,holding_days,long_term");
     assert_eq!(lines.len(), 4, "header + all three disposals: {body}");
     let schd_line = lines.iter().find(|l| l.contains("SCHD")).unwrap();
-    assert!(schd_line.contains("\"roth\",true"), "C-C context in CSV: {schd_line}");
+    assert!(
+        schd_line.contains("\"roth\",true"),
+        "C-C context in CSV: {schd_line}"
+    );
 
     // Year filter: only the prior-year row, and the year lands in the filename.
-    let prior_year = chrono::Utc::now().format("%Y").to_string().parse::<i32>().unwrap() - 1;
+    let prior_year = chrono::Utc::now()
+        .format("%Y")
+        .to_string()
+        .parse::<i32>()
+        .unwrap()
+        - 1;
     let res = app
         .clone()
         .oneshot(req(
@@ -6741,7 +8491,12 @@ async fn realized_gains_csv_export_year_filter_and_auth() {
     // Unauthenticated: same rejection as the transactions export.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/realized-gains/export", None, None))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/realized-gains/export",
+            None,
+            None,
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
@@ -6763,11 +8518,28 @@ async fn allocation_unclassified_band_for_holdingsless_investment_account() {
     seed_typed_account(&pool, user_id, inst, "CETES", "investment", "12000.00").await;
     // Investment account WITH holdings — must NOT produce a band.
     let brok = seed_typed_account(&pool, user_id, inst, "Brokerage", "brokerage", "6000.00").await;
-    seed_holding(&pool, user_id, brok, "VTI", "Vanguard Total Market", "equity", "10", Some("600"), "6000", None).await;
+    seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "VTI",
+        "Vanguard Total Market",
+        "equity",
+        "10",
+        Some("600"),
+        "6000",
+        None,
+    )
+    .await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/allocation",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6815,7 +8587,15 @@ async fn allocation_bonds_account_type_classifies_as_bonds() {
     .await
     .expect("seed CETES account");
     // Balance-only AMBIGUOUS type — must stay unclassified.
-    seed_typed_account(&pool, user_id, inst, "Mystery Brokerage", "brokerage", "5000.00").await;
+    seed_typed_account(
+        &pool,
+        user_id,
+        inst,
+        "Mystery Brokerage",
+        "brokerage",
+        "5000.00",
+    )
+    .await;
 
     // A newer 'api' rate AND an older 'manual' override: the shared
     // latest_usd_mxn_rate picks the manual row (18.0); the old inline query
@@ -6831,7 +8611,12 @@ async fn allocation_bonds_account_type_classifies_as_bonds() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/allocation",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -6839,7 +8624,10 @@ async fn allocation_bonds_account_type_classifies_as_bonds() {
     let rows = body.as_array().unwrap();
 
     // CETES → Bonds, converted at the manual 18.0 rate: 180000 / 18 = 10000.
-    let bonds: Vec<_> = rows.iter().filter(|r| r["asset_class"] == "bonds").collect();
+    let bonds: Vec<_> = rows
+        .iter()
+        .filter(|r| r["asset_class"] == "bonds")
+        .collect();
     assert_eq!(bonds.len(), 1, "exactly the CETES band: {rows:#?}");
     assert_eq!(bonds[0]["category"], "Bonds");
     assert_eq!(bonds[0]["sub_category"], "CETES Directo");
@@ -6878,17 +8666,50 @@ async fn asset_class_override_matrix_and_precedence_everywhere() {
     let ira = seed_typed_account(&pool, user_id, inst, "IRA", "ira", "3000.00").await;
 
     // Same instrument in TWO accounts — one edit must cover both.
-    seed_holding(&pool, user_id, brok, "VTI", "Vanguard Total Market", "etf", "10", Some("600"), "6000", None).await;
-    seed_holding(&pool, user_id, ira, "VTI", "Vanguard Total Market", "etf", "5", Some("600"), "3000", None).await;
+    seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "VTI",
+        "Vanguard Total Market",
+        "etf",
+        "10",
+        Some("600"),
+        "6000",
+        None,
+    )
+    .await;
+    seed_holding(
+        &pool,
+        user_id,
+        ira,
+        "VTI",
+        "Vanguard Total Market",
+        "etf",
+        "5",
+        Some("600"),
+        "3000",
+        None,
+    )
+    .await;
     // Fresh close so /instruments/VTI never reaches for Yahoo in the test.
     seed_close(&pool, "VTI", 0, "600").await;
 
     let alloc_total = |rows: &Value| -> f64 {
-        rows.as_array().unwrap().iter().map(|r| r["value"].as_f64().unwrap()).sum()
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["value"].as_f64().unwrap())
+            .sum()
     };
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/allocation",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let total_before = alloc_total(&body_json(res.into_body()).await);
@@ -6918,7 +8739,12 @@ async fn asset_class_override_matrix_and_precedence_everywhere() {
     // Holdings: BOTH rows (brokerage + IRA) carry the override.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -6929,12 +8755,20 @@ async fn asset_class_override_matrix_and_precedence_everywhere() {
         .filter(|h| h["symbol"] == "VTI")
         .collect();
     assert_eq!(vti_rows.len(), 2);
-    assert!(vti_rows.iter().all(|h| h["asset_class"] == "bonds"), "{vti_rows:?}");
+    assert!(
+        vti_rows.iter().all(|h| h["asset_class"] == "bonds"),
+        "{vti_rows:?}"
+    );
 
     // Allocation: the VTI band moved to bonds wholesale; total unchanged.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/allocation",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -6945,13 +8779,23 @@ async fn asset_class_override_matrix_and_precedence_everywhere() {
         .expect("VTI band");
     assert_eq!(vti_band["asset_class"], "bonds");
     assert!((vti_band["value"].as_f64().unwrap() - 9000.0).abs() < 0.01);
-    assert!(!rows.iter().any(|r| r["asset_class"] == "equity" && r["sub_category"] == "VTI"));
-    assert!((alloc_total(&body) - total_before).abs() < 0.01, "dimension total unchanged");
+    assert!(!rows
+        .iter()
+        .any(|r| r["asset_class"] == "equity" && r["sub_category"] == "VTI"));
+    assert!(
+        (alloc_total(&body) - total_before).abs() < 0.01,
+        "dimension total unchanged"
+    );
 
     // CSV export classifies with the same precedence.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let csv = body_text(res.into_body()).await;
@@ -6961,7 +8805,12 @@ async fn asset_class_override_matrix_and_precedence_everywhere() {
     // Instrument detail: override + source flag.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/instruments/VTI", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/instruments/VTI",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -6994,7 +8843,12 @@ async fn asset_class_override_matrix_and_precedence_everywhere() {
     );
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -7006,7 +8860,12 @@ async fn asset_class_override_matrix_and_precedence_everywhere() {
         .all(|h| h["asset_class"] == "equity"));
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/instruments/VTI", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/instruments/VTI",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -7054,8 +8913,32 @@ async fn seed_soft_delete_portfolio(
     inst: uuid::Uuid,
 ) -> (uuid::Uuid, uuid::Uuid) {
     let brok = seed_typed_account(pool, user_id, inst, "Brokerage", "brokerage", "1600.00").await;
-    let nvda = seed_holding(pool, user_id, brok, "NVDA", "NVIDIA Corp", "equity", "10", Some("100"), "1000", Some("800")).await;
-    seed_holding(pool, user_id, brok, "VTI", "Vanguard Total Market", "etf", "10", Some("60"), "600", Some("500")).await;
+    let nvda = seed_holding(
+        pool,
+        user_id,
+        brok,
+        "NVDA",
+        "NVIDIA Corp",
+        "equity",
+        "10",
+        Some("100"),
+        "1000",
+        Some("800"),
+    )
+    .await;
+    seed_holding(
+        pool,
+        user_id,
+        brok,
+        "VTI",
+        "Vanguard Total Market",
+        "etf",
+        "10",
+        Some("60"),
+        "600",
+        Some("500"),
+    )
+    .await;
 
     let nvda_lot: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
@@ -7085,13 +8968,12 @@ async fn seed_soft_delete_portfolio(
     .unwrap();
     // VTI keeps a this-year disposal so the surfaces stay non-empty while
     // NVDA sits in the undo window.
-    let vti: uuid::Uuid = sqlx::query_scalar(
-        "SELECT id FROM holdings WHERE user_id = $1 AND symbol = 'VTI'",
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .unwrap();
+    let vti: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM holdings WHERE user_id = $1 AND symbol = 'VTI'")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
     sqlx::query(
         "INSERT INTO lot_disposals \
          (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
@@ -7156,7 +9038,12 @@ async fn holding_soft_delete_excluded_everywhere_then_restore_byte_identical() {
     let before = fetch_all(&app, &token, &surfaces).await;
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings/lots/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let lots_csv_before = body_text(res.into_body()).await;
@@ -7185,28 +9072,55 @@ async fn holding_soft_delete_excluded_everywhere_then_restore_byte_identical() {
     // Holdings: row gone, totals down to VTI only.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
-    assert!(!body["holdings"].as_array().unwrap().iter().any(|h| h["symbol"] == "NVDA"));
-    assert!((body["total_value_usd"].as_f64().unwrap() - 600.0).abs() < 0.01, "{}", body["total_value_usd"]);
+    assert!(!body["holdings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|h| h["symbol"] == "NVDA"));
+    assert!(
+        (body["total_value_usd"].as_f64().unwrap() - 600.0).abs() < 0.01,
+        "{}",
+        body["total_value_usd"]
+    );
 
     // Allocation: the NVDA equity band vanished; VTI (equity, still live)
     // remains, so no unclassified band appears for this account.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/allocation",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
-    assert!(!body.as_array().unwrap().iter().any(|r| r["sub_category"] == "NVDA"));
+    assert!(!body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["sub_category"] == "NVDA"));
 
     // Realized gains: NVDA's disposals (both years) hidden — the list, the
     // taxable subtotal, ytd, and by_year all shrink to VTI's 300.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/realized-gains", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/realized-gains",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -7215,12 +9129,21 @@ async fn holding_soft_delete_excluded_everywhere_then_restore_byte_identical() {
     assert!((body["summary"]["ytd_realized_usd"].as_f64().unwrap() - 300.0).abs() < 0.001);
     assert!((body["summary"]["total_realized_usd"].as_f64().unwrap() - 300.0).abs() < 0.001);
     let by_year = body["by_year"].as_array().unwrap();
-    assert_eq!(by_year.len(), 1, "prior-year band was NVDA-only: {by_year:?}");
+    assert_eq!(
+        by_year.len(),
+        1,
+        "prior-year band was NVDA-only: {by_year:?}"
+    );
 
     // Realized-gains CSV: no NVDA rows either.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/realized-gains/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/realized-gains/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let csv = body_text(res.into_body()).await;
@@ -7228,7 +9151,12 @@ async fn holding_soft_delete_excluded_everywhere_then_restore_byte_identical() {
     // Lots CSV: the ghost's lot is invisible.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings/lots/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let csv = body_text(res.into_body()).await;
@@ -7259,16 +9187,29 @@ async fn holding_soft_delete_excluded_everywhere_then_restore_byte_identical() {
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
-    assert!((body["short_term_gains"].as_f64().unwrap() - 300.0).abs() < 0.01, "{}", body["short_term_gains"]);
+    assert!(
+        (body["short_term_gains"].as_f64().unwrap() - 300.0).abs() < 0.01,
+        "{}",
+        body["short_term_gains"]
+    );
 
     // Account panel + balance: recomputed without the ghost.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, &format!("/api/accounts/{brok}/holdings"), None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/accounts/{brok}/holdings"),
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
-    assert!(!body.as_array().unwrap().iter().any(|h| h["symbol"] == "NVDA"));
+    assert!(!body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|h| h["symbol"] == "NVDA"));
     let balance: Decimal = sqlx::query_scalar("SELECT current_balance FROM accounts WHERE id = $1")
         .bind(brok)
         .fetch_one(&pool)
@@ -7296,11 +9237,20 @@ async fn holding_soft_delete_excluded_everywhere_then_restore_byte_identical() {
     // Every captured surface is byte-identical to its pre-delete snapshot.
     let after = fetch_all(&app, &token, &surfaces).await;
     for (i, (b, a)) in before.iter().zip(after.iter()).enumerate() {
-        assert_eq!(b, a, "surface {} ({}) changed across delete→restore", i, surfaces[i]);
+        assert_eq!(
+            b, a,
+            "surface {} ({}) changed across delete→restore",
+            i, surfaces[i]
+        );
     }
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/holdings/lots/export",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(body_text(res.into_body()).await, lots_csv_before);
@@ -7324,7 +9274,19 @@ async fn soft_delete_purge_on_readd_and_lazy_24h_sweep() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let (inst, _acct) = seed_account(&pool, user_id).await;
     let brok = seed_typed_account(&pool, user_id, inst, "Brokerage", "brokerage", "1000.00").await;
-    let voo = seed_holding(&pool, user_id, brok, "VOO", "Vanguard S&P 500", "etf", "2", Some("500"), "1000", None).await;
+    let voo = seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "VOO",
+        "Vanguard S&P 500",
+        "etf",
+        "2",
+        Some("500"),
+        "1000",
+        None,
+    )
+    .await;
     // Fresh close so create_holding's pricing path never reaches for Yahoo.
     seed_close(&pool, "VOO", 0, "500").await;
     seed_close(&pool, "ZZOLD", 0, "10").await;
@@ -7376,14 +9338,24 @@ async fn soft_delete_purge_on_readd_and_lazy_24h_sweep() {
 
     // Lazy sweep: a ghost older than 24 h is hard-deleted (cascade takes its
     // lots) by the NEXT holdings write for this user.
-    let old = seed_holding(&pool, user_id, brok, "ZZOLD", "Old Ghost", "equity", "1", Some("10"), "10", None).await;
-    sqlx::query(
-        "UPDATE holdings SET deleted_at = now() - interval '25 hours' WHERE id = $1",
+    let old = seed_holding(
+        &pool,
+        user_id,
+        brok,
+        "ZZOLD",
+        "Old Ghost",
+        "equity",
+        "1",
+        Some("10"),
+        "10",
+        None,
     )
-    .bind(old)
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
+    sqlx::query("UPDATE holdings SET deleted_at = now() - interval '25 hours' WHERE id = $1")
+        .bind(old)
+        .execute(&pool)
+        .await
+        .unwrap();
     let res = app
         .clone()
         .oneshot(req(
@@ -7415,7 +9387,19 @@ async fn restore_holding_404s_for_wrong_user_and_double_restore() {
     let (token_a, user_a) = bootstrap(&app, &pool).await;
     let (inst, _acct) = seed_account(&pool, user_a).await;
     let brok = seed_typed_account(&pool, user_a, inst, "Brokerage", "brokerage", "1000.00").await;
-    let voo = seed_holding(&pool, user_a, brok, "VOO", "Vanguard S&P 500", "etf", "2", Some("500"), "1000", None).await;
+    let voo = seed_holding(
+        &pool,
+        user_a,
+        brok,
+        "VOO",
+        "Vanguard S&P 500",
+        "etf",
+        "2",
+        Some("500"),
+        "1000",
+        None,
+    )
+    .await;
 
     let res = app
         .clone()
@@ -7456,13 +9440,12 @@ async fn restore_holding_404s_for_wrong_user_and_double_restore() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
     let body = body_json(res.into_body()).await;
     assert_eq!(body["error"], "nothing to restore");
-    let still_deleted: bool = sqlx::query_scalar(
-        "SELECT deleted_at IS NOT NULL FROM holdings WHERE id = $1",
-    )
-    .bind(voo)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let still_deleted: bool =
+        sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM holdings WHERE id = $1")
+            .bind(voo)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(still_deleted);
 
     // Owner restores fine; the SECOND restore finds nothing.
@@ -7543,7 +9526,12 @@ async fn accounts_summary_converts_mxn_to_usd_not_raw_sum() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/accounts/summary", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/accounts/summary",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -7572,11 +9560,7 @@ async fn accounts_summary_converts_mxn_to_usd_not_raw_sum() {
 
 /// Insert an institution + account with an explicit currency; returns the
 /// account id.
-async fn seed_account_currency(
-    pool: &PgPool,
-    user_id: uuid::Uuid,
-    currency: &str,
-) -> uuid::Uuid {
+async fn seed_account_currency(pool: &PgPool, user_id: uuid::Uuid, currency: &str) -> uuid::Uuid {
     let inst_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO institutions (name, institution_type, country, integration_type, sync_status, user_id) \
          VALUES ('Bank', 'bank', 'MX', 'manual', 'ok', $1) RETURNING id",
@@ -7633,18 +9617,23 @@ async fn transactions_currency_sign_and_search_filters() {
     let usd = seed_account_currency(&pool, user_id, "USD").await;
 
     // The repayment we want the picker to find.
-    let repayment =
-        seed_tx_currency(&pool, user_id, mxn, "SPEI RECIBIDO LUIS OJEDA", "3500.00", "MXN").await;
+    let repayment = seed_tx_currency(
+        &pool,
+        user_id,
+        mxn,
+        "SPEI RECIBIDO LUIS OJEDA",
+        "3500.00",
+        "MXN",
+    )
+    .await;
     // Same-currency inflow that does NOT match the search.
     let other_mxn_inflow =
         seed_tx_currency(&pool, user_id, mxn, "OXXO reembolso", "200.00", "MXN").await;
     // Wrong sign (MXN outflow) — must never appear as a repayment candidate.
-    let mxn_outflow =
-        seed_tx_currency(&pool, user_id, mxn, "CFE pago", "-1000.00", "MXN").await;
+    let mxn_outflow = seed_tx_currency(&pool, user_id, mxn, "CFE pago", "-1000.00", "MXN").await;
     // Right sign, wrong currency — reconciling it would 400, so it must be
     // filtered out before the user can pick it.
-    let usd_inflow =
-        seed_tx_currency(&pool, user_id, usd, "PAYCHECK LUIS", "500.00", "USD").await;
+    let usd_inflow = seed_tx_currency(&pool, user_id, usd, "PAYCHECK LUIS", "500.00", "USD").await;
 
     // currency=MXN & sign=inflow → the two MXN inflows only.
     let res = app
@@ -7658,7 +9647,10 @@ async fn transactions_currency_sign_and_search_filters() {
         .await
         .unwrap();
     let ids = tx_ids(body_json(res.into_body()).await);
-    assert!(ids.contains(&repayment.to_string()), "MXN inflow must be listed");
+    assert!(
+        ids.contains(&repayment.to_string()),
+        "MXN inflow must be listed"
+    );
     assert!(
         ids.contains(&other_mxn_inflow.to_string()),
         "other MXN inflow must be listed"
@@ -7713,8 +9705,7 @@ async fn transactions_exclude_linked_hides_reconciled_repayment() {
     let mxn = seed_account_currency(&pool, user_id, "MXN").await;
     let linked =
         seed_tx_currency(&pool, user_id, mxn, "SPEI RECIBIDO LUIS", "3500.00", "MXN").await;
-    let free =
-        seed_tx_currency(&pool, user_id, mxn, "SPEI RECIBIDO OTRO", "3500.00", "MXN").await;
+    let free = seed_tx_currency(&pool, user_id, mxn, "SPEI RECIBIDO OTRO", "3500.00", "MXN").await;
 
     // Reconcile `linked` to a loan payment.
     let loan_id: uuid::Uuid = sqlx::query_scalar(
@@ -7871,14 +9862,21 @@ async fn projection_defaults_per_row_fx_and_errors() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/projections/defaults", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/projections/defaults",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res.into_body()).await;
 
     let income = body["annual_income"].as_f64().expect("annual_income f64");
-    let expenses = body["annual_expenses"].as_f64().expect("annual_expenses f64");
+    let expenses = body["annual_expenses"]
+        .as_f64()
+        .expect("annual_expenses f64");
     let contribution = body["monthly_contribution"]
         .as_f64()
         .expect("monthly_contribution f64");
@@ -7930,7 +9928,12 @@ async fn projection_defaults_months_of_data_partial_months() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/projections/defaults", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/projections/defaults",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -7949,7 +9952,10 @@ async fn projection_defaults_months_of_data_partial_months() {
     let expenses = body["annual_expenses"].as_f64().unwrap();
     let contribution = body["monthly_contribution"].as_f64().unwrap();
     assert!((income - 36000.0).abs() < 0.01, "annual_income {income}");
-    assert!((expenses - 3600.0).abs() < 0.01, "annual_expenses {expenses}");
+    assert!(
+        (expenses - 3600.0).abs() < 0.01,
+        "annual_expenses {expenses}"
+    );
     assert!(
         (contribution - 2700.0).abs() < 0.01,
         "monthly_contribution {contribution}"
@@ -7996,7 +10002,12 @@ async fn cash_flow_trends_converts_each_month_at_its_own_fx_rate() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -8019,8 +10030,14 @@ async fn cash_flow_trends_converts_each_month_at_its_own_fx_rate() {
         "month A spending {sp_a}: expected 105.00 at its own rate 20 \
          (latest-rate bug would give 100.00)"
     );
-    assert!((inc_b - 476.19).abs() < 0.01, "month B income {inc_b}: expected 476.19 at rate 21");
-    assert!((sp_b - 50.00).abs() < 0.01, "month B spending {sp_b}: expected 50.00 at rate 21");
+    assert!(
+        (inc_b - 476.19).abs() < 0.01,
+        "month B income {inc_b}: expected 476.19 at rate 21"
+    );
+    assert!(
+        (sp_b - 50.00).abs() < 0.01,
+        "month B spending {sp_b}: expected 50.00 at rate 21"
+    );
 }
 
 /// Regression: /api/dashboard/emergency-fund's trailing-12-month spend
@@ -8063,7 +10080,12 @@ async fn emergency_fund_spend_per_row_fx_cash_at_latest_rate() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/emergency-fund", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/emergency-fund",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -8201,10 +10223,19 @@ async fn cash_flow_trends_no_data_is_200_empty_array() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/trends",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "empty data must stay a 200, not a 500");
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "empty data must stay a 200, not a 500"
+    );
     let body = body_json(res.into_body()).await;
     assert_eq!(
         body,
@@ -8226,15 +10257,40 @@ async fn emergency_fund_no_data_is_200_zero_runway() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/emergency-fund", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/emergency-fund",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "empty data must stay a 200, not a 500");
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "empty data must stay a 200, not a 500"
+    );
     let body = body_json(res.into_body()).await;
-    assert_eq!(body["liquid_cash_usd"].as_f64(), Some(0.0), "no accounts → $0 cash: {body}");
-    assert_eq!(body["monthly_spend_usd"].as_f64(), Some(0.0), "no spend → $0/mo: {body}");
-    assert_eq!(body["months_covered"].as_f64(), Some(0.0), "no spend signal → 0 months: {body}");
-    assert_eq!(body["months_of_data"].as_i64(), Some(0), "no history → 0 months of data: {body}");
+    assert_eq!(
+        body["liquid_cash_usd"].as_f64(),
+        Some(0.0),
+        "no accounts → $0 cash: {body}"
+    );
+    assert_eq!(
+        body["monthly_spend_usd"].as_f64(),
+        Some(0.0),
+        "no spend → $0/mo: {body}"
+    );
+    assert_eq!(
+        body["months_covered"].as_f64(),
+        Some(0.0),
+        "no spend signal → 0 months: {body}"
+    );
+    assert_eq!(
+        body["months_of_data"].as_i64(),
+        Some(0),
+        "no history → 0 months of data: {body}"
+    );
 }
 
 /// All four upgraded chart endpoints still require auth: unauthenticated
@@ -8257,7 +10313,11 @@ async fn dashboard_chart_endpoints_unauthenticated_are_401() {
             .oneshot(req(Method::GET, uri, None, None))
             .await
             .unwrap();
-        assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{uri} without a session must 401");
+        assert_eq!(
+            res.status(),
+            StatusCode::UNAUTHORIZED,
+            "{uri} without a session must 401"
+        );
     }
 }
 
@@ -8408,11 +10468,12 @@ async fn mark_syncable_syncing_scopes_to_syncable_types_and_user() {
         return;
     };
     let (_cookie, user_a) = bootstrap(&app, &pool).await;
-    let user_b: uuid::Uuid =
-        sqlx::query_scalar("INSERT INTO users (username, password_hash) VALUES ('other', 'x') RETURNING id")
-            .fetch_one(&pool)
-            .await
-            .expect("seed second user");
+    let user_b: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (username, password_hash) VALUES ('other', 'x') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("seed second user");
 
     let plaid = seed_inst(&pool, user_a, "plaid", "synced").await;
     let coinbase = seed_inst(&pool, user_a, "coinbase", "error").await;
@@ -8425,7 +10486,10 @@ async fn mark_syncable_syncing_scopes_to_syncable_types_and_user() {
     let marked = patrimonio::services::sync::mark_syncable_syncing(&pool, user_a, &None)
         .await
         .expect("mark syncable");
-    assert_eq!(marked, 4, "only user A's 4 syncable institutions are marked");
+    assert_eq!(
+        marked, 4,
+        "only user A's 4 syncable institutions are marked"
+    );
 
     for id in [plaid, coinbase, cbo, bitso] {
         assert_eq!(sync_status_of(&pool, id).await, "syncing");
@@ -8443,5 +10507,8 @@ async fn mark_syncable_syncing_scopes_to_syncable_types_and_user() {
         patrimonio::services::sync::mark_syncable_syncing(&pool, user_a, &Some(vec![coinbase]))
             .await
             .expect("mark subset");
-    assert_eq!(marked_one, 1, "only the one requested institution is marked");
+    assert_eq!(
+        marked_one, 1,
+        "only the one requested institution is marked"
+    );
 }

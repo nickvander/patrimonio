@@ -105,10 +105,7 @@ fn classify(desc: &str, amount: Decimal) -> (Option<String>, Option<String>) {
     if d.contains("interest") {
         // Net interest paid — savings yield. Already net of withholding on
         // these statements, so it's a plain interest-income credit.
-        return (
-            Some("INCOME".into()),
-            Some("INCOME_INTEREST_EARNED".into()),
-        );
+        return (Some("INCOME".into()), Some("INCOME_INTEREST_EARNED".into()));
     }
     // Internal pocket moves and SPEI transfers: a transfer in/out by sign.
     if d.contains("instant access savings")
@@ -226,7 +223,10 @@ fn savings_block(
     desc = day_re.replace(&desc, "").to_string();
     desc = year_re.replace_all(&desc, " ").to_string();
     desc = money.replace_all(&desc, "").to_string();
-    desc = Regex::new(r"\d+\.\d{2}%").unwrap().replace_all(&desc, "").to_string();
+    desc = Regex::new(r"\d+\.\d{2}%")
+        .unwrap()
+        .replace_all(&desc, "")
+        .to_string();
     let description = clean_desc(&desc);
     if description.is_empty() {
         return None;
@@ -334,7 +334,10 @@ fn parse_personal(text: &str) -> Result<Vec<ParsedTransaction>> {
         };
 
         let rest = &c[4];
-        let monies: Vec<Decimal> = money.captures_iter(rest).filter_map(|m| dec(&m[1])).collect();
+        let monies: Vec<Decimal> = money
+            .captures_iter(rest)
+            .filter_map(|m| dec(&m[1]))
+            .collect();
         if monies.is_empty() {
             continue;
         }

@@ -1,34 +1,38 @@
-use lopdf::Document;
 use crate::models::import::ParsedTransaction;
-use anyhow::{Result, anyhow};
-use tracing::{info, debug};
-use regex::Regex;
+use anyhow::{anyhow, Result};
 use chrono::{Datelike, NaiveDate};
+use lopdf::Document;
+use regex::Regex;
 use rust_decimal::Decimal;
 use std::str::FromStr;
+use tracing::{debug, info};
 
 pub fn parse(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
     let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {e}"))?;
     let mut full_text = String::new();
-    
+
     let pages = doc.get_pages();
     let mut page_keys: Vec<_> = pages.keys().collect();
     page_keys.sort();
-    
+
     for page_num in &page_keys {
         if let Ok(text) = doc.extract_text(&[**page_num]) {
             full_text.push_str(&text);
             full_text.push('\n');
         }
     }
-    
-    info!("Extracted {} characters from Banamex PDF ({} pages)", full_text.len(), page_keys.len());
-    
+
+    info!(
+        "Extracted {} characters from Banamex PDF ({} pages)",
+        full_text.len(),
+        page_keys.len()
+    );
+
     // Check if this might be a browser printout instead of an official statement
     if full_text.contains("FIREFOX") && full_text.contains("ABOUT:BLANK") {
         return Err(anyhow!("This appears to be a web browser printout. Please download the official PDF statement from your bank."));
     }
-    
+
     parse_text(&full_text)
 }
 
@@ -53,13 +57,16 @@ fn parse_month(s: &str) -> Option<u32> {
 
 pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     let upper_text = text.to_uppercase();
-    
+
     // Find section start
     let detail_headers = [
-        "DETALLE DE MOVIMIENTOS", "DETALLE DE OPERACIONES", 
-        "DETALLE DE CUENTA", "MOVIMIENTOS DEL PERIODO", "MOVIMIENTOS DEL MES",
+        "DETALLE DE MOVIMIENTOS",
+        "DETALLE DE OPERACIONES",
+        "DETALLE DE CUENTA",
+        "MOVIMIENTOS DEL PERIODO",
+        "MOVIMIENTOS DEL MES",
     ];
-    
+
     let mut target_text = upper_text.as_str();
     for header in detail_headers {
         if let Some(pos) = upper_text.find(header) {
@@ -80,7 +87,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     // Strategy: Collect lines into "records" starting with a day+month pair.
     // A new record starts when we see a line that's just 1-2 digits (the day)
     // AND the next line is a valid month name.
-    
+
     // Filter out the Spanish "DE" connector that some Banamex
     // statements use between day and month ("23 DE ENERO"). When
     // lopdf splits fields onto their own lines this appears as a
@@ -102,11 +109,11 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
 
     // First pass: identify record boundaries (indices where a new record starts)
     let mut record_starts: Vec<(usize, u32, u32)> = Vec::new(); // (line_idx, day, month)
-    
+
     for i in 0..lines.len().saturating_sub(1) {
         let line = lines[i];
         let next_line = lines[i + 1];
-        
+
         if day_re.is_match(line) {
             if let Some(month_num) = parse_month(next_line) {
                 let day: u32 = line.parse().unwrap_or(1);
@@ -114,9 +121,12 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             }
         }
     }
-    
-    info!("Found {} potential transaction records", record_starts.len());
-    
+
+    info!(
+        "Found {} potential transaction records",
+        record_starts.len()
+    );
+
     // Extract year from header text (e.g., "PERÍODO DEL ... AL ... DEL 2025")
     let mut current_year = chrono::Utc::now().year();
     let year_re = Regex::new(r"(20\d{2})").unwrap();
@@ -127,13 +137,20 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             info!("Extracted year {} from statement header", current_year);
         }
     }
-    
+
     let mut transactions = Vec::new();
-    
+
     let blacklist = [
-        "SALDO ANTERIOR", "SALDO ACTUAL", "TOTAL DE", "RESUMEN", 
-        "SALDO AL", "GAT NOMINAL", "GAT REAL", "CANTIDADES EXPRESADAS",
-        "SALDO FINAL", "SALDO PROMEDIO",
+        "SALDO ANTERIOR",
+        "SALDO ACTUAL",
+        "TOTAL DE",
+        "RESUMEN",
+        "SALDO AL",
+        "GAT NOMINAL",
+        "GAT REAL",
+        "CANTIDADES EXPRESADAS",
+        "SALDO FINAL",
+        "SALDO PROMEDIO",
     ];
 
     let mut previous_saldo: Option<Decimal> = None;
@@ -144,20 +161,24 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         } else {
             lines.len()
         };
-        
+
         let record_lines = &lines[(start + 2)..end];
-        
+
         let mut desc_parts: Vec<&str> = Vec::new();
         let mut amounts: Vec<Decimal> = Vec::new();
-        
+
         for &line in record_lines {
-            if line.is_empty() { continue; }
+            if line.is_empty() {
+                continue;
+            }
 
             let cleaned = line.replace("$", "").trim().to_string();
             // A line that was just "$" (the lopdf extractor often
             // emits the currency marker alone) collapses to empty
             // here and would otherwise pollute the description.
-            if cleaned.is_empty() { continue; }
+            if cleaned.is_empty() {
+                continue;
+            }
             if let Some(cap) = amount_re.captures(&format!("${cleaned}")) {
                 let amount_str = cap[1].replace(",", "");
                 if let Ok(amt) = Decimal::from_str(&amount_str) {
@@ -172,38 +193,55 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                     continue;
                 }
             }
-            
-            if line.starts_with("CAJA") || line.starts_with("HORA") 
-                || line.starts_with("SUC") || line.starts_with("AUT")
+
+            if line.starts_with("CAJA")
+                || line.starts_with("HORA")
+                || line.starts_with("SUC")
+                || line.starts_with("AUT")
                 || line.contains("AUT ") && line.contains("HORA")
             {
                 continue;
             }
-            
+
             desc_parts.push(line);
         }
-        
+
         let desc = desc_parts.join(" ");
-        if desc.is_empty() { continue; }
-        
+        if desc.is_empty() {
+            continue;
+        }
+
         if blacklist.iter().any(|&k| desc.contains(k)) {
             debug!("Skipping blacklisted: '{}'", desc);
             continue;
         }
-        
-        if amounts.is_empty() { continue; }
-        
+
+        if amounts.is_empty() {
+            continue;
+        }
+
         let transaction_amount = amounts[0].abs();
-        
+
         let date = NaiveDate::from_ymd_opt(current_year, month, day)
             .unwrap_or_else(|| NaiveDate::from_ymd_opt(current_year, 1, 1).unwrap());
-        
-        let spending = ["COMPRA", "RETIRO", "PAGO", "COMISION", "CARGO", "IVA", "TRASPASO"];
-        let income = ["DEPOSITO", "ABONO", "TRANSFERENCIA", "INTERESES", "DEVOLUCION", "NOMINA", "RECIBIDO", "SUELDO"];
-        
+
+        let spending = [
+            "COMPRA", "RETIRO", "PAGO", "COMISION", "CARGO", "IVA", "TRASPASO",
+        ];
+        let income = [
+            "DEPOSITO",
+            "ABONO",
+            "TRANSFERENCIA",
+            "INTERESES",
+            "DEVOLUCION",
+            "NOMINA",
+            "RECIBIDO",
+            "SUELDO",
+        ];
+
         let is_spending = spending.iter().any(|k| desc.contains(k));
         let is_income = income.iter().any(|k| desc.contains(k));
-        
+
         let mut determined_sign = false;
         let mut amount = transaction_amount;
 
@@ -232,9 +270,16 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                 amount = -transaction_amount;
             }
         }
-        
-        debug!("TX: {}/{} '{}' = {} ({} amounts found)", day, month, desc, amount, amounts.len());
-        
+
+        debug!(
+            "TX: {}/{} '{}' = {} ({} amounts found)",
+            day,
+            month,
+            desc,
+            amount,
+            amounts.len()
+        );
+
         transactions.push(ParsedTransaction {
             date,
             description: desc,
@@ -248,13 +293,19 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             from_ocr: false,
         });
     }
-    
-    info!("Parsed {} transactions from Banamex PDF", transactions.len());
-    
+
+    info!(
+        "Parsed {} transactions from Banamex PDF",
+        transactions.len()
+    );
+
     if transactions.is_empty() {
         let snippet: String = target_text.lines().take(30).collect::<Vec<_>>().join("\n");
-        info!("No transactions found. First 30 lines of section:\n---\n{}\n---", snippet);
+        info!(
+            "No transactions found. First 30 lines of section:\n---\n{}\n---",
+            snippet
+        );
     }
-    
+
     Ok(transactions)
 }

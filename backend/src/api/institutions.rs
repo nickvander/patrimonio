@@ -2,16 +2,16 @@ use axum::{
     extract::{Extension, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
 use crate::api::session::AuthContext;
-use crate::AppState;
 use crate::services::encryption;
-use tracing::{info, error};
+use crate::AppState;
+use tracing::{error, info};
 
 /// User-facing institution CRUD + sync. Mounted under the
 /// authenticated router in main.rs.
@@ -170,29 +170,36 @@ async fn list_institutions(
         FROM institutions
         WHERE user_id = $1
         ORDER BY name
-        "#
+        "#,
     )
     .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
-    let institutions = rows.iter().map(|row| {
-        InstitutionResponse {
+    let institutions = rows
+        .iter()
+        .map(|row| InstitutionResponse {
             id: row.get::<uuid::Uuid, _>("id").to_string(),
             name: row.get("name"),
             institution_type: row.get("institution_type"),
             country: row.get("country"),
             integration_type: row.get("integration_type"),
-            last_synced_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
-                .ok().map(|d| d.to_rfc3339()),
-            sync_status: row.try_get::<String, _>("sync_status")
+            last_synced_at: row
+                .try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
+                .ok()
+                .map(|d| d.to_rfc3339()),
+            sync_status: row
+                .try_get::<String, _>("sync_status")
                 .unwrap_or_else(|_| "pending".to_string()),
             last_sync_error: row.try_get("last_sync_error").ok(),
-            created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
-                .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-        }
-    }).collect();
+            created_at: row
+                .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+                .ok()
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_default(),
+        })
+        .collect();
 
     Json(institutions)
 }
@@ -209,7 +216,7 @@ async fn create_institution(
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id, name, institution_type, country, integration_type,
                   last_synced_at, sync_status, created_at
-        "#
+        "#,
     )
     .bind(&req.name)
     .bind(&req.institution_type)
@@ -222,7 +229,11 @@ async fn create_institution(
         Ok(row) => row,
         Err(e) => {
             tracing::error!("Failed to create institution: {}", e);
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create institution", None);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create institution",
+                None,
+            );
         }
     };
 
@@ -232,14 +243,21 @@ async fn create_institution(
         institution_type: row.get("institution_type"),
         country: row.get("country"),
         integration_type: row.get("integration_type"),
-        last_synced_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
-            .ok().map(|d| d.to_rfc3339()),
-        sync_status: row.try_get::<String, _>("sync_status")
+        last_synced_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
+            .ok()
+            .map(|d| d.to_rfc3339()),
+        sync_status: row
+            .try_get::<String, _>("sync_status")
             .unwrap_or_else(|_| "pending".to_string()),
         last_sync_error: None,
-        created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
-            .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-    }).into_response()
+        created_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+            .ok()
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_default(),
+    })
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -325,8 +343,11 @@ async fn create_link_token(
     };
 
     let client = reqwest::Client::new();
-    let url = format!("https://{}.plaid.com/link/token/create", state.config.plaid_env);
-    
+    let url = format!(
+        "https://{}.plaid.com/link/token/create",
+        state.config.plaid_env
+    );
+
     let mut payload = serde_json::json!({
         "client_id": client_id,
         "secret": secret,
@@ -358,15 +379,15 @@ async fn create_link_token(
         payload["webhook"] = serde_json::Value::String(webhook.clone());
     }
 
-    let response = match client.post(&url)
-        .json(&payload)
-        .send()
-        .await
-    {
+    let response = match client.post(&url).json(&payload).send().await {
         Ok(response) => response,
         Err(e) => {
             tracing::error!("Failed to call Plaid /link/token/create: {}", e);
-            return json_error(StatusCode::BAD_GATEWAY, "Plaid link token request failed", Some(&e.to_string()));
+            return json_error(
+                StatusCode::BAD_GATEWAY,
+                "Plaid link token request failed",
+                Some(&e.to_string()),
+            );
         }
     };
 
@@ -375,7 +396,11 @@ async fn create_link_token(
         Ok(value) => value,
         Err(e) => {
             tracing::error!("Failed to parse Plaid link token response: {}", e);
-            return json_error(StatusCode::BAD_GATEWAY, "Plaid returned an invalid response", Some(&e.to_string()));
+            return json_error(
+                StatusCode::BAD_GATEWAY,
+                "Plaid returned an invalid response",
+                Some(&e.to_string()),
+            );
         }
     };
 
@@ -397,7 +422,13 @@ async fn create_reconnect_token(
     let platform = params.and_then(|p| p.0.platform);
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
         (Some(client_id), Some(secret)) => (client_id, secret),
-        _ => return json_error(StatusCode::SERVICE_UNAVAILABLE, "Plaid is not configured", None),
+        _ => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Plaid is not configured",
+                None,
+            )
+        }
     };
 
     // Ownership predicate prevents reconnecting another user's
@@ -405,12 +436,12 @@ async fn create_reconnect_token(
     // a victim's institution UUID could mint a Plaid Link token
     // bound to the victim's bank session.
     let row = match sqlx::query(
-        "SELECT plaid_access_token_enc FROM institutions WHERE id = $1 AND user_id = $2"
+        "SELECT plaid_access_token_enc FROM institutions WHERE id = $1 AND user_id = $2",
     )
-        .bind(id)
-        .bind(ctx.user_id)
-        .fetch_one(&state.db)
-        .await
+    .bind(id)
+    .bind(ctx.user_id)
+    .fetch_one(&state.db)
+    .await
     {
         Ok(row) => row,
         Err(_) => return json_error(StatusCode::NOT_FOUND, "Institution not found", None),
@@ -418,22 +449,43 @@ async fn create_reconnect_token(
 
     let enc_token: Vec<u8> = match row.try_get("plaid_access_token_enc") {
         Ok(t) => t,
-        Err(_) => return json_error(StatusCode::BAD_REQUEST, "Institution has no Plaid token", None),
+        Err(_) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "Institution has no Plaid token",
+                None,
+            )
+        }
     };
 
     let enc_key = match state.config.encryption_key.as_ref() {
         Some(k) => k,
-        None => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Encryption not configured", None),
+        None => {
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Encryption not configured",
+                None,
+            )
+        }
     };
 
     let access_token = match encryption::decrypt(enc_key, &enc_token) {
         Ok(t) => t,
-        Err(_) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to decrypt token", None),
+        Err(_) => {
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to decrypt token",
+                None,
+            )
+        }
     };
 
     let client = reqwest::Client::new();
-    let url = format!("https://{}.plaid.com/link/token/create", state.config.plaid_env);
-    
+    let url = format!(
+        "https://{}.plaid.com/link/token/create",
+        state.config.plaid_env
+    );
+
     // Plaid /link/token/create in update mode still requires country_codes
     // and language. Match the values used by the new-link flow above.
     let mut payload = serde_json::json!({
@@ -459,7 +511,13 @@ async fn create_reconnect_token(
 
     let response = match client.post(&url).json(&payload).send().await {
         Ok(r) => r,
-        Err(e) => return json_error(StatusCode::BAD_GATEWAY, "Plaid request failed", Some(&e.to_string())),
+        Err(e) => {
+            return json_error(
+                StatusCode::BAD_GATEWAY,
+                "Plaid request failed",
+                Some(&e.to_string()),
+            )
+        }
     };
 
     let res: serde_json::Value = response.json().await.unwrap_or_default();
@@ -484,23 +542,26 @@ async fn exchange_public_token(
     };
 
     let client = reqwest::Client::new();
-    let url = format!("https://{}.plaid.com/item/public_token/exchange", state.config.plaid_env);
-    
+    let url = format!(
+        "https://{}.plaid.com/item/public_token/exchange",
+        state.config.plaid_env
+    );
+
     let payload = serde_json::json!({
         "client_id": client_id,
         "secret": secret,
         "public_token": req.public_token
     });
 
-    let response = match client.post(&url)
-        .json(&payload)
-        .send()
-        .await
-    {
+    let response = match client.post(&url).json(&payload).send().await {
         Ok(response) => response,
         Err(e) => {
             tracing::error!("Failed to call Plaid /item/public_token/exchange: {}", e);
-            return json_error(StatusCode::BAD_GATEWAY, "Plaid token exchange request failed", Some(&e.to_string()));
+            return json_error(
+                StatusCode::BAD_GATEWAY,
+                "Plaid token exchange request failed",
+                Some(&e.to_string()),
+            );
         }
     };
 
@@ -508,16 +569,24 @@ async fn exchange_public_token(
         Ok(value) => value,
         Err(e) => {
             tracing::error!("Failed to parse Plaid token exchange response: {}", e);
-            return json_error(StatusCode::BAD_GATEWAY, "Plaid returned an invalid response", Some(&e.to_string()));
+            return json_error(
+                StatusCode::BAD_GATEWAY,
+                "Plaid returned an invalid response",
+                Some(&e.to_string()),
+            );
         }
     };
 
     if let Some(err) = res["error_message"].as_str() {
         tracing::error!("Plaid Exchange Error: {}", err);
-        return (axum::http::StatusCode::BAD_REQUEST, axum::response::Json(serde_json::json!({
-            "error": "Plaid API error",
-            "details": err
-        }))).into_response();
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            axum::response::Json(serde_json::json!({
+                "error": "Plaid API error",
+                "details": err
+            })),
+        )
+            .into_response();
     }
 
     let access_token = match res["access_token"].as_str() {
@@ -526,9 +595,13 @@ async fn exchange_public_token(
             // Log server-side only; the raw Plaid exchange response must not
             // be echoed to the client.
             tracing::error!("Plaid response missing access_token: {:?}", res);
-            return (axum::http::StatusCode::BAD_REQUEST, axum::response::Json(serde_json::json!({
-                "error": "Missing access_token"
-            }))).into_response();
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                axum::response::Json(serde_json::json!({
+                    "error": "Missing access_token"
+                })),
+            )
+                .into_response();
         }
     };
     let item_id = res["item_id"].as_str().unwrap_or("unknown_item");
@@ -547,7 +620,11 @@ async fn exchange_public_token(
         Ok(token) => token,
         Err(e) => {
             tracing::error!("Failed to encrypt Plaid access token: {}", e);
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt Plaid token", None);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to encrypt Plaid token",
+                None,
+            );
         }
     };
 
@@ -586,8 +663,12 @@ async fn exchange_public_token(
                 // transactions have landed so they appear immediately,
                 // without the user hitting "sync all".
                 use crate::services::realtime::RealtimeEvent;
-                realtime.publish(user_id, RealtimeEvent::AccountsChanged).await;
-                realtime.publish(user_id, RealtimeEvent::TransactionsChanged).await;
+                realtime
+                    .publish(user_id, RealtimeEvent::AccountsChanged)
+                    .await;
+                realtime
+                    .publish(user_id, RealtimeEvent::TransactionsChanged)
+                    .await;
             }
             Err(e) => tracing::error!("Immediate Plaid sync failed for new institution: {}", e),
         }
@@ -599,14 +680,21 @@ async fn exchange_public_token(
         institution_type: row.get("institution_type"),
         country: row.get("country"),
         integration_type: row.get("integration_type"),
-        last_synced_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
-            .ok().map(|d| d.to_rfc3339()),
-        sync_status: row.try_get::<String, _>("sync_status")
+        last_synced_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
+            .ok()
+            .map(|d| d.to_rfc3339()),
+        sync_status: row
+            .try_get::<String, _>("sync_status")
             .unwrap_or_else(|_| "pending".to_string()),
         last_sync_error: None,
-        created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
-            .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-    }).into_response()
+        created_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+            .ok()
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_default(),
+    })
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -634,21 +722,29 @@ async fn link_crypto_institution(
             );
         }
     };
-    
+
     // Log the underlying crypto error server-side but never return it to the
     // client — a raw encryption/library error string on a 500 is an info leak.
     let key_enc = match encryption::encrypt(enc_key, &req.api_key) {
         Ok(value) => value,
         Err(e) => {
             error!("Failed to encrypt API key: {}", e);
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API key", None);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to encrypt API key",
+                None,
+            );
         }
     };
     let secret_enc = match encryption::encrypt(enc_key, &req.api_secret) {
         Ok(value) => value,
         Err(e) => {
             error!("Failed to encrypt API secret: {}", e);
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API secret", None);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to encrypt API secret",
+                None,
+            );
         }
     };
     let pass_enc = match req.api_pass {
@@ -656,7 +752,11 @@ async fn link_crypto_institution(
             Ok(value) => Some(value),
             Err(e) => {
                 error!("Failed to encrypt API passphrase: {}", e);
-                return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API passphrase", None);
+                return json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to encrypt API passphrase",
+                    None,
+                );
             }
         },
         None => None,
@@ -694,8 +794,12 @@ async fn link_crypto_institution(
         match crate::services::sync::sync_user_institutions(&db, &config, user_id, None).await {
             Ok(()) => {
                 use crate::services::realtime::RealtimeEvent;
-                realtime.publish(user_id, RealtimeEvent::AccountsChanged).await;
-                realtime.publish(user_id, RealtimeEvent::TransactionsChanged).await;
+                realtime
+                    .publish(user_id, RealtimeEvent::AccountsChanged)
+                    .await;
+                realtime
+                    .publish(user_id, RealtimeEvent::TransactionsChanged)
+                    .await;
             }
             Err(e) => tracing::error!("Immediate crypto sync failed for new institution: {}", e),
         }
@@ -707,14 +811,21 @@ async fn link_crypto_institution(
         institution_type: row.get("institution_type"),
         country: row.get("country"),
         integration_type: row.get("integration_type"),
-        last_synced_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
-            .ok().map(|d| d.to_rfc3339()),
-        sync_status: row.try_get::<String, _>("sync_status")
+        last_synced_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
+            .ok()
+            .map(|d| d.to_rfc3339()),
+        sync_status: row
+            .try_get::<String, _>("sync_status")
             .unwrap_or_else(|_| "pending".to_string()),
         last_sync_error: None,
-        created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
-            .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-    }).into_response()
+        created_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+            .ok()
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_default(),
+    })
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -831,14 +942,12 @@ async fn plaid_webhook(
     // background sync touches only the one item Plaid is telling us
     // about — `sync_all_institutions` was correct but wasteful: with
     // a dozen linked banks every webhook used to hit every Plaid API.
-    let inst_row = sqlx::query(
-        "SELECT id FROM institutions WHERE plaid_item_id = $1",
-    )
-    .bind(&req.item_id)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten();
+    let inst_row = sqlx::query("SELECT id FROM institutions WHERE plaid_item_id = $1")
+        .bind(&req.item_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
 
     // Only kick a sync for the codes that signal new data. Status-only
     // codes (ITEM_LOGIN_REQUIRED, PENDING_EXPIRATION) already updated
@@ -900,19 +1009,22 @@ async fn delete_institution(
     // holdings/balance_snapshots; without this filter, an attacker
     // who knew a victim's institution UUID could nuke their entire
     // tree of financial data.
-    let result =
-        sqlx::query("DELETE FROM institutions WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(ctx.user_id)
-            .execute(&state.db)
-            .await;
+    let result = sqlx::query("DELETE FROM institutions WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await;
 
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to delete institution: {}", e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete institution", None)
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to delete institution",
+                None,
+            )
         }
     }
 }
@@ -939,11 +1051,13 @@ async fn update_webhooks_all(
 ) -> Response {
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
         (Some(client_id), Some(secret)) => (client_id, secret),
-        _ => return json_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Plaid is not configured",
-            Some("Set PLAID_CLIENT_ID and PLAID_SECRET"),
-        ),
+        _ => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Plaid is not configured",
+                Some("Set PLAID_CLIENT_ID and PLAID_SECRET"),
+            )
+        }
     };
 
     let webhook_url = match &state.config.plaid_webhook_url {
@@ -957,11 +1071,13 @@ async fn update_webhooks_all(
 
     let enc_key = match state.config.encryption_key.as_ref() {
         Some(k) => k,
-        None => return json_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Encryption not configured",
-            None,
-        ),
+        None => {
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Encryption not configured",
+                None,
+            )
+        }
     };
 
     let rows = match sqlx::query(
@@ -973,15 +1089,20 @@ async fn update_webhooks_all(
     .await
     {
         Ok(rows) => rows,
-        Err(e) => return json_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to list institutions",
-            Some(&e.to_string()),
-        ),
+        Err(e) => {
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list institutions",
+                Some(&e.to_string()),
+            )
+        }
     };
 
     let client = reqwest::Client::new();
-    let url = format!("https://{}.plaid.com/item/webhook/update", state.config.plaid_env);
+    let url = format!(
+        "https://{}.plaid.com/item/webhook/update",
+        state.config.plaid_env
+    );
 
     let mut updated = 0usize;
     let mut failed = 0usize;
@@ -1032,7 +1153,10 @@ async fn update_webhooks_all(
             }
         };
         let status = response.status();
-        let body = response.json::<serde_json::Value>().await.unwrap_or(serde_json::Value::Null);
+        let body = response
+            .json::<serde_json::Value>()
+            .await
+            .unwrap_or(serde_json::Value::Null);
         if status.is_success() {
             updated += 1;
             results.push(serde_json::json!({ "id": id, "name": name, "ok": true }));
@@ -1057,5 +1181,6 @@ async fn update_webhooks_all(
         "failed": failed,
         "webhook_url": webhook_url,
         "results": results,
-    })).into_response()
+    }))
+    .into_response()
 }

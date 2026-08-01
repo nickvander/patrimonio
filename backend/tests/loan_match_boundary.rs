@@ -150,7 +150,10 @@ async fn same_day_repayment_is_suggested() {
     .await
     .expect("suggest_repayments");
 
-    let ids: Vec<String> = suggestions.iter().map(|s| s.transaction_id.clone()).collect();
+    let ids: Vec<String> = suggestions
+        .iter()
+        .map(|s| s.transaction_id.clone())
+        .collect();
     assert!(
         ids.contains(&on_boundary.to_string()),
         "same-day repayment must be suggested (inclusive lower bound); got {ids:?}"
@@ -203,7 +206,10 @@ async fn no_schedule_lump_sum_payoff_is_suggested() {
     )
     .await
     .expect("suggest_repayments");
-    let ids: Vec<String> = with_target.iter().map(|s| s.transaction_id.clone()).collect();
+    let ids: Vec<String> = with_target
+        .iter()
+        .map(|s| s.transaction_id.clone())
+        .collect();
     assert!(
         ids.contains(&payoff.to_string()),
         "a nameless, non-round payoff matching the outstanding balance must be suggested; got {ids:?}"
@@ -223,8 +229,10 @@ async fn no_schedule_lump_sum_payoff_is_suggested() {
     )
     .await
     .expect("suggest_repayments");
-    let ids: Vec<String> =
-        without_target.iter().map(|s| s.transaction_id.clone()).collect();
+    let ids: Vec<String> = without_target
+        .iter()
+        .map(|s| s.transaction_id.clone())
+        .collect();
     assert!(
         !ids.contains(&payoff.to_string()),
         "without a payoff target a nameless non-round inflow must not be suggested; got {ids:?}"

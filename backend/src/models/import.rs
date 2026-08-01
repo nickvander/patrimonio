@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use rust_decimal::Decimal;
 use chrono::NaiveDate;
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ParsedTransaction {
@@ -93,7 +93,10 @@ mod tests {
         let json = serde_json::to_string(&tx).unwrap();
         assert!(json.contains("INCOME_INTEREST_EARNED"));
         let back: ParsedTransaction = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
+        assert_eq!(
+            back.category_detailed.as_deref(),
+            Some("INCOME_INTEREST_EARNED")
+        );
     }
 
     #[test]

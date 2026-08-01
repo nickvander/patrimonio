@@ -1,5 +1,4 @@
 use anyhow::Result;
-use tokio_cron_scheduler::{Job, JobScheduler};
 use axum::{
     extract::{ConnectInfo, State},
     http::{
@@ -11,10 +10,11 @@ use axum::{
     routing::get,
     Router,
 };
-use std::net::SocketAddr;
 use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio_cron_scheduler::{Job, JobScheduler};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -25,8 +25,10 @@ use patrimonio::{config::AppConfig, AppState};
 async fn main() -> Result<()> {
     // Initialize tracing (logging)
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "patrimonio=debug,tower_http=debug".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "patrimonio=debug,tower_http=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -47,8 +49,10 @@ async fn main() -> Result<()> {
              in your .env and rebuild the postgres volume."
         );
     }
-    if !config.cookie_secure && !config.frontend_base_url.starts_with("http://localhost")
-        && !config.frontend_base_url.starts_with("http://127.0.0.1") {
+    if !config.cookie_secure
+        && !config.frontend_base_url.starts_with("http://localhost")
+        && !config.frontend_base_url.starts_with("http://127.0.0.1")
+    {
         tracing::warn!(
             "COOKIE_SECURE is false but FRONTEND_BASE_URL ({}) is not localhost — \
              session cookies will travel unencrypted. Set COOKIE_SECURE=true.",
@@ -104,7 +108,9 @@ async fn main() -> Result<()> {
     let cors = build_cors_layer(&config.allowed_origins);
 
     // Initialize Cron Scheduler for daily balance snapshots
-    let sched = JobScheduler::new().await.expect("Failed to create cron scheduler");
+    let sched = JobScheduler::new()
+        .await
+        .expect("Failed to create cron scheduler");
     let cron_db = db.clone();
 
     sched.add(
@@ -173,9 +179,7 @@ async fn main() -> Result<()> {
             Job::new_async("0 */5 * * * *", move |_uuid, mut _l| {
                 let db = reaper_db.clone();
                 Box::pin(async move {
-                    if let Err(e) =
-                        patrimonio::services::sync::reap_stale_syncs(&db, false).await
-                    {
+                    if let Err(e) = patrimonio::services::sync::reap_stale_syncs(&db, false).await {
                         tracing::warn!("Stale-sync watchdog failed: {e}");
                     }
                 })
@@ -245,7 +249,10 @@ async fn main() -> Result<()> {
         // Passkey login (discoverable; no session needed to start the
         // ceremony). Register endpoints are mounted under the
         // protected router below.
-        .nest("/api/auth/passkeys", patrimonio::api::passkeys::public_router())
+        .nest(
+            "/api/auth/passkeys",
+            patrimonio::api::passkeys::public_router(),
+        )
         // Digital Asset Links for the native Android app: binds the APK
         // signing cert to this domain so Android allows passkey
         // ceremonies for our rp_id. Public by design (Google's servers
@@ -259,7 +266,10 @@ async fn main() -> Result<()> {
         // cookie. The handler itself refuses to do anything unless a
         // signed `Plaid-Verification` header is present — see
         // institutions::plaid_webhook for the full guard.
-        .nest("/api/institutions", patrimonio::api::institutions::webhook_router());
+        .nest(
+            "/api/institutions",
+            patrimonio::api::institutions::webhook_router(),
+        );
 
     // Two-tier protected routing for multi-user roles.
     //
@@ -466,10 +476,7 @@ fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
 
 /// Health check endpoint
 async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
-    let db_ok = sqlx::query("SELECT 1")
-        .execute(&state.db)
-        .await
-        .is_ok();
+    let db_ok = sqlx::query("SELECT 1").execute(&state.db).await.is_ok();
 
     Json(HealthResponse {
         status: if db_ok { "ok" } else { "degraded" }.to_string(),

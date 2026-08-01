@@ -64,11 +64,29 @@ fn money(d: Decimal) -> String {
 }
 
 fn month_num(name: &str) -> Option<u32> {
-    Some(match name.to_lowercase().chars().take(3).collect::<String>().as_str() {
-        "jan" => 1, "feb" => 2, "mar" => 3, "apr" => 4, "may" => 5, "jun" => 6,
-        "jul" => 7, "aug" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dec" => 12,
-        _ => return None,
-    })
+    Some(
+        match name
+            .to_lowercase()
+            .chars()
+            .take(3)
+            .collect::<String>()
+            .as_str()
+        {
+            "jan" => 1,
+            "feb" => 2,
+            "mar" => 3,
+            "apr" => 4,
+            "may" => 5,
+            "jun" => 6,
+            "jul" => 7,
+            "aug" => 8,
+            "sep" => 9,
+            "oct" => 10,
+            "nov" => 11,
+            "dec" => 12,
+            _ => return None,
+        },
+    )
 }
 
 /// "Your Stock Plan Account Value: $85,348.32" — the period-end total.
@@ -82,9 +100,10 @@ pub fn parse_account_value(text: &str) -> Option<Decimal> {
 /// The statement period's END date, from the "Month D, YYYY - Month D, YYYY"
 /// header (monthly or year-end).
 pub fn parse_period_end(text: &str) -> Option<NaiveDate> {
-    let c = Regex::new(r"(?i)[A-Za-z]+\s+\d{1,2},\s+\d{4}\s*-\s*([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})")
-        .unwrap()
-        .captures(text)?;
+    let c =
+        Regex::new(r"(?i)[A-Za-z]+\s+\d{1,2},\s+\d{4}\s*-\s*([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})")
+            .unwrap()
+            .captures(text)?;
     let month = month_num(&c[1])?;
     let day: u32 = c[2].parse().ok()?;
     let year: i32 = c[3].parse().ok()?;
@@ -137,7 +156,11 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     // in `balance_after` (→ net-worth snapshot) and here for human eyes.
     let tx = ParsedTransaction {
         date: end,
-        description: format!("Stock plan value {} ({})", money(value), end.format("%b %Y")),
+        description: format!(
+            "Stock plan value {} ({})",
+            money(value),
+            end.format("%b %Y")
+        ),
         amount: Decimal::ZERO,
         currency: "USD".to_string(),
         category: None,
@@ -199,7 +222,10 @@ www.netbenefits.com
     fn money_formats_with_commas() {
         assert_eq!(money(Decimal::from_str("85348.32").unwrap()), "$85,348.32");
         assert_eq!(money(Decimal::from_str("0.07").unwrap()), "$0.07");
-        assert_eq!(money(Decimal::from_str("1234567.80").unwrap()), "$1,234,567.80");
+        assert_eq!(
+            money(Decimal::from_str("1234567.80").unwrap()),
+            "$1,234,567.80"
+        );
     }
 
     #[test]

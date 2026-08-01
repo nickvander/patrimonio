@@ -1,32 +1,32 @@
-pub mod healthequity;
-pub mod fidelity_stockplan;
-pub mod nu_mexico;
-pub mod nu_mexico_pdf;
 pub mod banamex;
+pub mod banamex_layout;
+pub mod banamex_pdf;
+pub mod banorte_layout;
+pub mod bbva_layout;
 pub mod cetes;
 pub mod cetes_pdf;
-pub mod banamex_pdf;
-pub mod banamex_layout;
-pub mod bbva_layout;
-pub mod santander_layout;
-pub mod banorte_layout;
-pub mod scotiabank_layout;
-pub mod hsbc_layout;
-pub mod revolut;
 pub mod column_table;
-pub mod layout_util;
+pub mod fidelity_stockplan;
 pub mod generic_pdf;
+pub mod healthequity;
+pub mod hsbc_layout;
+pub mod layout_util;
+pub mod nu_mexico;
+pub mod nu_mexico_pdf;
+pub mod revolut;
+pub mod santander_layout;
+pub mod scotiabank_layout;
 
 #[cfg(test)]
 mod tests;
 
 use crate::models::import::ParsedTransaction;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use lopdf::Document;
-use tracing::{debug, info};
+use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::fs;
+use tracing::{debug, info};
 
 /// Decrypt a password-protected PDF using qpdf.
 ///
@@ -261,19 +261,36 @@ pub(crate) fn polish_description(raw: &str) -> String {
     //    after it. Compare case-insensitive. Bilingual list because
     //    Mexican CSV exports sometimes mix English + Spanish.
     let generic_prefixes: &[&str] = &[
-        "MISCELLANEOUS DEBIT ", "MISC DEBIT ", "MISC CREDIT ",
-        "ACH DEBIT ", "ACH CREDIT ", "ACH ", "POS DEBIT ", "POS PURCHASE ",
-        "POS ", "DEBIT CARD ", "ELECTRONIC PAYMENT ",
-        "ONLINE TRANSFER ", "ONLINE PAYMENT ",
-        "BILL PAYMENT ", "BILL PAY ",
-        "WIRE TRANSFER ", "WIRE ",
-        "DIRECT DEBIT ", "DIRECT DEPOSIT ",
+        "MISCELLANEOUS DEBIT ",
+        "MISC DEBIT ",
+        "MISC CREDIT ",
+        "ACH DEBIT ",
+        "ACH CREDIT ",
+        "ACH ",
+        "POS DEBIT ",
+        "POS PURCHASE ",
+        "POS ",
+        "DEBIT CARD ",
+        "ELECTRONIC PAYMENT ",
+        "ONLINE TRANSFER ",
+        "ONLINE PAYMENT ",
+        "BILL PAYMENT ",
+        "BILL PAY ",
+        "WIRE TRANSFER ",
+        "WIRE ",
+        "DIRECT DEBIT ",
+        "DIRECT DEPOSIT ",
         // Spanish equivalents — `COMPRA` and `RETIRO` are sign hints in
         // banamex_pdf.rs (kept by the parser to determine debit/credit),
         // so by the time we get here the sign is already settled and
         // the prefix is just noise for display.
-        "COMPRA ", "RETIRO ", "ABONO ", "CARGO ", "DEPOSITO ",
-        "TRASPASO ", "PAGO ",
+        "COMPRA ",
+        "RETIRO ",
+        "ABONO ",
+        "CARGO ",
+        "DEPOSITO ",
+        "TRASPASO ",
+        "PAGO ",
     ];
     let upper = s.to_uppercase();
     for prefix in generic_prefixes {
@@ -379,10 +396,14 @@ fn unreadable_reason(text: &str) -> Option<String> {
     None
 }
 
-pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<&str>) -> Result<Vec<ParsedTransaction>> {
+pub fn detect_and_parse(
+    file_name: &str,
+    original_data: &[u8],
+    password: Option<&str>,
+) -> Result<Vec<ParsedTransaction>> {
     let mut data_vec = original_data.to_vec();
     let lower_name = file_name.to_lowercase();
-    
+
     // Decrypt if password is provided and it's a PDF
     if lower_name.ends_with(".pdf") {
         if let Some(pwd) = password {
@@ -392,9 +413,9 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             }
         }
     }
-    
+
     let data = &data_vec;
-    
+
     // 1. CSV Detection & Parsing
     if lower_name.ends_with(".csv") {
         // Try filename keyword first
@@ -422,11 +443,12 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             return polish_all(banamex::parse_csv(data));
         }
     }
-    
+
     // 2. PDF Detection & Parsing
     if lower_name.ends_with(".pdf") {
         // First check if it is encrypted and we don't have a password
-        let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF for detection: {e}"))?;
+        let doc = Document::load_mem(data)
+            .map_err(|e| anyhow!("Failed to load PDF for detection: {e}"))?;
         if doc.trailer.get(b"Encrypt").is_ok() {
             return Err(anyhow!("PASSWORD_REQUIRED"));
         }
@@ -499,14 +521,27 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             if !dir.is_empty() {
                 let safe: String = file_name
                     .chars()
-                    .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' { c } else { '_' })
+                    .map(|c| {
+                        if c.is_alphanumeric() || c == '.' || c == '-' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
                     .collect();
                 let _ = std::fs::create_dir_all(&dir);
                 let path = std::path::Path::new(&dir).join(format!("{safe}.txt"));
                 if let Err(e) = std::fs::write(&path, best.as_bytes()) {
-                    tracing::warn!("IMPORT_DEBUG_DUMP_DIR write failed for {}: {}", file_name, e);
+                    tracing::warn!(
+                        "IMPORT_DEBUG_DUMP_DIR write failed for {}: {}",
+                        file_name,
+                        e
+                    );
                 } else {
-                    info!("debug-dumped extracted text for '{}' to {:?}", file_name, path);
+                    info!(
+                        "debug-dumped extracted text for '{}' to {:?}",
+                        file_name, path
+                    );
                 }
             }
         }
@@ -554,7 +589,10 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         // counterparties like "NU MEXICO" / "STP" that could otherwise
         // misroute the file to the Nu or broad-Banamex parser.
         if revolut::looks_like(&sample_text) {
-            try_rows!(revolut::parse_text(&best).unwrap_or_default(), "revolut-layout");
+            try_rows!(
+                revolut::parse_text(&best).unwrap_or_default(),
+                "revolut-layout"
+            );
             try_rows!(revolut::parse(data).unwrap_or_default(), "revolut-lopdf");
         }
 
@@ -570,7 +608,10 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             || sample_text.contains("DETALLE DE MOVIMIENTOS EN TU CUENTA")
             || sample_text.contains("DETALLE DE MOVIMIENTOS DE TUS CAJITAS");
         if looks_nu {
-            try_rows!(nu_mexico_pdf::parse_text(&best).unwrap_or_default(), "nu-layout");
+            try_rows!(
+                nu_mexico_pdf::parse_text(&best).unwrap_or_default(),
+                "nu-layout"
+            );
             try_rows!(nu_mexico_pdf::parse(data).unwrap_or_default(), "nu-lopdf");
         }
 
@@ -584,7 +625,10 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             || sample_text.contains("MOVIMIENTOS DEL PERIODO")
             || (sample_text.contains("NACIONAL FINANCIERA") && sample_text.contains("CETES"));
         if looks_cetes {
-            try_rows!(cetes_pdf::parse_text(&best).unwrap_or_default(), "cetes-layout");
+            try_rows!(
+                cetes_pdf::parse_text(&best).unwrap_or_default(),
+                "cetes-layout"
+            );
             try_rows!(cetes_pdf::parse(data).unwrap_or_default(), "cetes-lopdf");
         }
 
@@ -600,7 +644,10 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
                 banamex_layout::parse_text(&best).unwrap_or_default(),
                 "banamex-layout"
             );
-            try_rows!(banamex_pdf::parse(data).unwrap_or_default(), "banamex-lopdf");
+            try_rows!(
+                banamex_pdf::parse(data).unwrap_or_default(),
+                "banamex-lopdf"
+            );
         }
 
         // BBVA México (BBVA Bancomer): the "Detalle de Movimientos
@@ -681,7 +728,10 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             || sample_text.contains("NU BANK")
         {
             // Primary: the column parser over the richer pdftotext/OCR text.
-            try_rows!(nu_mexico_pdf::parse_text(&best).unwrap_or_default(), "nu-layout");
+            try_rows!(
+                nu_mexico_pdf::parse_text(&best).unwrap_or_default(),
+                "nu-layout"
+            );
             // Fallback: the in-process lopdf extraction.
             try_rows!(nu_mexico_pdf::parse(data).unwrap_or_default(), "nu-lopdf");
         }
@@ -696,14 +746,20 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
                 banamex_layout::parse_text(&best).unwrap_or_default(),
                 "broad-banamex-layout"
             );
-            try_rows!(banamex_pdf::parse(data).unwrap_or_default(), "broad-banamex-lopdf");
+            try_rows!(
+                banamex_pdf::parse(data).unwrap_or_default(),
+                "broad-banamex-lopdf"
+            );
         }
 
         // Generic heuristic fallback: pull date/description/amount runs out
         // of the richer text. Catches unsupported banks (and known banks
         // the dedicated parser missed). The import preview lets the user
         // vet these before confirming.
-        try_rows!(generic_pdf::parse_text(&best).unwrap_or_default(), "generic");
+        try_rows!(
+            generic_pdf::parse_text(&best).unwrap_or_default(),
+            "generic"
+        );
 
         // There WAS readable text, but nothing parsed as a transaction —
         // most likely an unsupported layout. Ask for a sample rather than
@@ -889,9 +945,25 @@ fn nu_period_end(text: &str) -> Option<String> {
         .ok()?
         .captures(text)?;
     let day: u32 = c[1].parse().ok()?;
-    let month = match c[2].to_lowercase().chars().take(3).collect::<String>().as_str() {
-        "ene" => 1, "feb" => 2, "mar" => 3, "abr" => 4, "may" => 5, "jun" => 6,
-        "jul" => 7, "ago" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dic" => 12,
+    let month = match c[2]
+        .to_lowercase()
+        .chars()
+        .take(3)
+        .collect::<String>()
+        .as_str()
+    {
+        "ene" => 1,
+        "feb" => 2,
+        "mar" => 3,
+        "abr" => 4,
+        "may" => 5,
+        "jun" => 6,
+        "jul" => 7,
+        "ago" => 8,
+        "sep" => 9,
+        "oct" => 10,
+        "nov" => 11,
+        "dic" => 12,
         _ => return None,
     };
     let year: i32 = c[3].parse().ok()?;
@@ -935,7 +1007,8 @@ fn revolut_period_end(text: &str) -> Option<String> {
     // Personal: "From April 1, 2026 to April 30, 2026"; savings:
     // "Period: Jun 1, 2026 – Jun 15, 2026". Take the LAST end-date so a
     // multi-month personal PDF reports its newest period.
-    let re = regex::Regex::new(r"(?i)(?:to|–|-)\s+([A-Z][a-z]{2})\s+(\d{1,2}),\s+(20\d{2})").ok()?;
+    let re =
+        regex::Regex::new(r"(?i)(?:to|–|-)\s+([A-Z][a-z]{2})\s+(\d{1,2}),\s+(20\d{2})").ok()?;
     let c = re.captures_iter(text).last()?;
     let month = revolut::month_num(&c[1])?;
     let day: u32 = c[2].parse().ok()?;
@@ -948,7 +1021,10 @@ fn healthequity_account_info(text: &str) -> AccountInfo {
     let bal = healthequity::parse_total_account_value(text)
         .and_then(|d| d.to_string().parse::<f64>().ok());
     // Holder sits to the LEFT of "Account Number:" on the same layout row.
-    let holder = re_cap(r"(?im)^\s*([A-Za-z][^\n]*?\S)\s{2,}Account Number:\s*\d", text);
+    let holder = re_cap(
+        r"(?im)^\s*([A-Za-z][^\n]*?\S)\s{2,}Account Number:\s*\d",
+        text,
+    );
     let acct = re_cap(r"(?i)Account Number:\s*(\d+)", text);
     let masked = acct
         .as_deref()
@@ -1009,7 +1085,10 @@ fn fidelity_stockplan_account_info(text: &str) -> AccountInfo {
     let bal = fidelity_stockplan::parse_account_value(text)
         .and_then(|d| d.to_string().parse::<f64>().ok());
     // Holder appears as "NAME - STOCK PLAN ACCOUNT" on the per-account pages.
-    let holder = re_cap(r"(?im)^\s*([A-Z][A-Z .'-]{3,}?)\s+-\s+STOCK PLAN ACCOUNT", text);
+    let holder = re_cap(
+        r"(?im)^\s*([A-Z][A-Z .'-]{3,}?)\s+-\s+STOCK PLAN ACCOUNT",
+        text,
+    );
     let participant = re_cap(r"(?i)Participant Number:\s*([A-Z0-9]+)", text);
     let masked = participant
         .as_deref()
@@ -1031,8 +1110,8 @@ fn fidelity_stockplan_account_info(text: &str) -> AccountInfo {
 }
 
 fn cetes_account_info(text: &str) -> AccountInfo {
-    let bal = cetes_pdf::parse_portfolio_total(text)
-        .and_then(|d| d.to_string().parse::<f64>().ok());
+    let bal =
+        cetes_pdf::parse_portfolio_total(text).and_then(|d| d.to_string().parse::<f64>().ok());
     AccountInfo {
         institution: Some("CetesDirecto".into()),
         holder_name: re_cap(r"(?i)Nombre:\s*(.+)", text),

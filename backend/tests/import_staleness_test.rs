@@ -299,7 +299,12 @@ async fn overview_reports_last_data_at_only_for_manual_accounts() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/overview", None, Some(&cookie)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/overview",
+            None,
+            Some(&cookie),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -320,8 +325,9 @@ async fn overview_reports_last_data_at_only_for_manual_accounts() {
     let last_str = manual["last_data_at"]
         .as_str()
         .expect("manual account has last_data_at");
-    let last: chrono::DateTime<chrono::Utc> =
-        chrono::DateTime::parse_from_rfc3339(last_str).unwrap().into();
+    let last: chrono::DateTime<chrono::Utc> = chrono::DateTime::parse_from_rfc3339(last_str)
+        .unwrap()
+        .into();
     let age_days = (chrono::Utc::now() - last).num_days();
     assert!(
         (9..=10).contains(&age_days),
@@ -352,16 +358,17 @@ async fn staleness_notification_once_per_episode_and_rearms_after_import() {
     seed_institution_account(&pool, user_id, "Chase", "plaid", 400).await;
 
     // First sweep records exactly one reminder…
-    let recorded = record_staleness_notifications(&pool).await.expect("sweep 1");
+    let recorded = record_staleness_notifications(&pool)
+        .await
+        .expect("sweep 1");
     assert_eq!(recorded, 1, "one stale manual institution → one row");
     assert_eq!(stale_notification_count(&pool, user_id).await, 1);
-    let (kind, title): (String, String) = sqlx::query_as(
-        "SELECT kind, title FROM user_notifications WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (kind, title): (String, String) =
+        sqlx::query_as("SELECT kind, title FROM user_notifications WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(kind, "import_stale");
     assert!(
         title.contains("CetesDirecto"),
@@ -369,13 +376,17 @@ async fn staleness_notification_once_per_episode_and_rearms_after_import() {
     );
 
     // …a second run the same day stays silent (dedup, not daily spam)…
-    let recorded = record_staleness_notifications(&pool).await.expect("sweep 2");
+    let recorded = record_staleness_notifications(&pool)
+        .await
+        .expect("sweep 2");
     assert_eq!(recorded, 0, "same episode must not re-notify");
     assert_eq!(stale_notification_count(&pool, user_id).await, 1);
 
     // …a fresh import (updated_at = now) ends the episode: still silent…
     age_account(&pool, acct, 0).await;
-    let recorded = record_staleness_notifications(&pool).await.expect("sweep 3");
+    let recorded = record_staleness_notifications(&pool)
+        .await
+        .expect("sweep 3");
     assert_eq!(recorded, 0, "fresh data → nothing stale");
     assert_eq!(stale_notification_count(&pool, user_id).await, 1);
 
@@ -394,7 +405,9 @@ async fn staleness_notification_once_per_episode_and_rearms_after_import() {
     .await
     .unwrap();
     age_account(&pool, acct, 45).await;
-    let recorded = record_staleness_notifications(&pool).await.expect("sweep 4");
+    let recorded = record_staleness_notifications(&pool)
+        .await
+        .expect("sweep 4");
     assert_eq!(recorded, 1, "new staleness episode re-arms the reminder");
     assert_eq!(stale_notification_count(&pool, user_id).await, 2);
 }
@@ -515,7 +528,9 @@ async fn snoozed_institution_is_silent_until_expiry_then_notifies_again() {
     .await
     .expect("expire snooze");
 
-    let recorded = record_staleness_notifications(&pool).await.expect("sweep 2");
+    let recorded = record_staleness_notifications(&pool)
+        .await
+        .expect("sweep 2");
     assert_eq!(recorded, 1, "expired snooze + still stale → reminder fires");
     assert_eq!(stale_notification_count(&pool, user_id).await, 1);
 }
@@ -562,7 +577,9 @@ async fn fresh_import_invalidates_an_active_snooze() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(
-        record_staleness_notifications(&pool).await.expect("sweep 1"),
+        record_staleness_notifications(&pool)
+            .await
+            .expect("sweep 1"),
         0,
         "snoozed → silent"
     );
@@ -571,7 +588,9 @@ async fn fresh_import_invalidates_an_active_snooze() {
     // already 1-day-stale again: last_data_at is now NEWER than the
     // snooze's data_as_of, so the snooze no longer applies.
     age_account(&pool, acct, 2).await;
-    let recorded = record_staleness_notifications(&pool).await.expect("sweep 2");
+    let recorded = record_staleness_notifications(&pool)
+        .await
+        .expect("sweep 2");
     assert_eq!(
         recorded, 1,
         "data newer than the snooze's data_as_of = new episode → reminder fires"
@@ -619,7 +638,9 @@ async fn muted_institution_never_notifies_but_others_still_do() {
 
     // Mute is permanent: later sweeps stay silent for the muted one even
     // as it gets more stale (dedup never enters the picture).
-    let recorded = record_staleness_notifications(&pool).await.expect("sweep 2");
+    let recorded = record_staleness_notifications(&pool)
+        .await
+        .expect("sweep 2");
     assert_eq!(recorded, 0);
     assert_eq!(stale_notification_count(&pool, user_id).await, 1);
 }
@@ -635,7 +656,12 @@ async fn overview_accounts_carry_the_institution_id_snoozes_are_keyed_on() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/dashboard/overview", None, Some(&cookie)))
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/overview",
+            None,
+            Some(&cookie),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -656,8 +682,7 @@ async fn archived_accounts_do_not_keep_an_institution_on_the_radar() {
         return;
     };
     let (_cookie, user_id) = bootstrap(&app, &pool).await;
-    let (_inst, acct) =
-        seed_institution_account(&pool, user_id, "Banamex", "manual", 40).await;
+    let (_inst, acct) = seed_institution_account(&pool, user_id, "Banamex", "manual", 40).await;
     sqlx::query("UPDATE accounts SET archived_at = NOW() WHERE id = $1")
         .bind(acct)
         .execute(&pool)
@@ -748,7 +773,9 @@ async fn a_still_stale_reminder_is_re_dated_rather_than_frozen() {
 
     record_staleness_notifications(&pool).await.expect("sweep");
     assert!(
-        stale_notification_body(&pool, user_id).await.contains("45 days old"),
+        stale_notification_body(&pool, user_id)
+            .await
+            .contains("45 days old"),
         "sanity: the reminder was raised at 45 days"
     );
 
@@ -781,7 +808,8 @@ async fn muting_retires_an_already_written_reminder() {
         return;
     };
     let (cookie, user_id) = bootstrap(&app, &pool).await;
-    let (inst, _acct) = seed_institution_account(&pool, user_id, "CetesDirecto", "manual", 45).await;
+    let (inst, _acct) =
+        seed_institution_account(&pool, user_id, "CetesDirecto", "manual", 45).await;
 
     record_staleness_notifications(&pool).await.expect("sweep");
     assert_eq!(stale_notification_count(&pool, user_id).await, 1);

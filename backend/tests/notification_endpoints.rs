@@ -262,7 +262,14 @@ async fn inbox_lists_all_sources_newest_first_with_unread_count() {
 
     // Rows as written by the fx-center and staleness features.
     seed_notification(&pool, uid, "fx_alert", "USD/MXN crossed 17.5", 60).await;
-    seed_notification(&pool, uid, "import_stale", "BBVA statement import overdue", 5).await;
+    seed_notification(
+        &pool,
+        uid,
+        "import_stale",
+        "BBVA statement import overdue",
+        5,
+    )
+    .await;
 
     let res = app
         .clone()
@@ -271,7 +278,9 @@ async fn inbox_lists_all_sources_newest_first_with_unread_count() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let json = body_json(res.into_body()).await;
-    let list = json["notifications"].as_array().expect("notifications array");
+    let list = json["notifications"]
+        .as_array()
+        .expect("notifications array");
     assert_eq!(list.len(), 2, "both sources in one list: {json}");
     // Newest first.
     assert_eq!(list[0]["kind"], "import_stale");
@@ -314,7 +323,11 @@ async fn loan_due_reminder_is_generated_on_read_and_deduped() {
     assert_eq!(res.status(), StatusCode::OK);
     let json = body_json(res.into_body()).await;
     let list = json["notifications"].as_array().unwrap();
-    assert_eq!(list.len(), 1, "only the in-window installment notifies: {json}");
+    assert_eq!(
+        list.len(),
+        1,
+        "only the in-window installment notifies: {json}"
+    );
     assert_eq!(list[0]["kind"], "loan_due");
     assert_eq!(list[0]["link_kind"], "loan");
     assert_eq!(list[0]["link_id"], loan_id.to_string());
@@ -397,7 +410,14 @@ async fn mark_read_specific_ids_only() {
     };
     let (cookie, uid) = bootstrap(&app, &pool).await;
     let read_id = seed_notification(&pool, uid, "fx_alert", "USD/MXN crossed 17.5", 60).await;
-    seed_notification(&pool, uid, "import_stale", "BBVA statement import overdue", 5).await;
+    seed_notification(
+        &pool,
+        uid,
+        "import_stale",
+        "BBVA statement import overdue",
+        5,
+    )
+    .await;
 
     let res = app
         .clone()
@@ -564,13 +584,12 @@ async fn notifications_are_user_scoped() {
         .unwrap();
     let json = body_json(res.into_body()).await;
     assert_eq!(json["marked"], 0);
-    let still_unread: bool = sqlx::query_scalar(
-        "SELECT read_at IS NULL FROM user_notifications WHERE id = $1",
-    )
-    .bind(other_notif)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let still_unread: bool =
+        sqlx::query_scalar("SELECT read_at IS NULL FROM user_notifications WHERE id = $1")
+            .bind(other_notif)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(still_unread, "foreign row untouched");
 }
 

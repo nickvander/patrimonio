@@ -1,10 +1,10 @@
-use anyhow::Result;
-use sqlx::{PgPool, Row};
-use reqwest::Client;
 use crate::config::AppConfig;
 use crate::services::encryption;
-use std::collections::HashMap;
+use anyhow::Result;
 use futures_util::stream::StreamExt;
+use reqwest::Client;
+use sqlx::{PgPool, Row};
+use std::collections::HashMap;
 
 /// Max institutions synced at once. Bounds Plaid rate-limit exposure
 /// (each institution can fan out several Plaid HTTP calls) and caps the
@@ -62,11 +62,7 @@ pub async fn sync_user_institutions(
 /// wrapper for callers that already verified ownership. New code
 /// should prefer `sync_user_institutions(.., Some(vec![id]))` so the
 /// engine itself enforces the per-user filter.
-pub async fn sync_one_institution(
-    db: &PgPool,
-    config: &AppConfig,
-    id: uuid::Uuid,
-) -> Result<()> {
+pub async fn sync_one_institution(db: &PgPool, config: &AppConfig, id: uuid::Uuid) -> Result<()> {
     sync_institutions(db, config, None, Some(vec![id])).await
 }
 
@@ -97,23 +93,27 @@ pub async fn mark_syncable_syncing(
 ) -> Result<u64> {
     let types: Vec<&str> = SYNCABLE_TYPES.to_vec();
     let res = match only_ids {
-        Some(ids) => sqlx::query(
-            "UPDATE institutions SET sync_status = 'syncing', sync_started_at = NOW() \
+        Some(ids) => {
+            sqlx::query(
+                "UPDATE institutions SET sync_status = 'syncing', sync_started_at = NOW() \
              WHERE user_id = $1 AND id = ANY($2) AND integration_type = ANY($3)",
-        )
-        .bind(user_id)
-        .bind(ids)
-        .bind(&types)
-        .execute(db)
-        .await?,
-        None => sqlx::query(
-            "UPDATE institutions SET sync_status = 'syncing', sync_started_at = NOW() \
+            )
+            .bind(user_id)
+            .bind(ids)
+            .bind(&types)
+            .execute(db)
+            .await?
+        }
+        None => {
+            sqlx::query(
+                "UPDATE institutions SET sync_status = 'syncing', sync_started_at = NOW() \
              WHERE user_id = $1 AND integration_type = ANY($2)",
-        )
-        .bind(user_id)
-        .bind(&types)
-        .execute(db)
-        .await?,
+            )
+            .bind(user_id)
+            .bind(&types)
+            .execute(db)
+            .await?
+        }
     };
     Ok(res.rows_affected())
 }
@@ -907,7 +907,10 @@ async fn run_fx_sweep(db: &PgPool, user_filter: Option<uuid::Uuid>) {
                 if inserted > 0 {
                     tracing::info!(
                         "fx_transfer_link: user {} - {}/{} new links from {} candidates",
-                        uid, inserted, inserted, checked
+                        uid,
+                        inserted,
+                        inserted,
+                        checked
                     );
                 }
             }
@@ -1001,8 +1004,11 @@ fn plaid_error_status(payload: &serde_json::Value) -> Option<&'static str> {
         // NO_ACCOUNTS surfaces when Plaid loses visibility on an Item's accounts
         // (e.g. Vanguard MFA expiry). Surfacing it as reconnect_required gives
         // the user a clear "Reconnect" action rather than a generic error.
-        "ITEM_LOGIN_REQUIRED" | "ITEM_LOCKED" | "USER_PERMISSION_REVOKED"
-        | "PENDING_EXPIRATION" | "NO_ACCOUNTS" => Some("reconnect_required"),
+        "ITEM_LOGIN_REQUIRED"
+        | "ITEM_LOCKED"
+        | "USER_PERMISSION_REVOKED"
+        | "PENDING_EXPIRATION"
+        | "NO_ACCOUNTS" => Some("reconnect_required"),
         "PRODUCT_NOT_READY" => Some("pending"),
         _ => Some("error"),
     }
@@ -1148,7 +1154,7 @@ async fn upsert_plaid_transaction(
                 counterparty_logo_url = EXCLUDED.counterparty_logo_url,
                 payment_payee = COALESCE(EXCLUDED.payment_payee, transactions.payment_payee),
                 payment_payer = COALESCE(EXCLUDED.payment_payer, transactions.payment_payer)
-            "#
+            "#,
         )
         .bind(acc_id)
         .bind(tx_ext_id)
@@ -1210,9 +1216,12 @@ fn best_counterparty(arr: &serde_json::Value) -> (Option<String>, Option<String>
             // payment processors (Square/Stripe/PayPal/Toast), the issuing
             // bank, and payroll/income sources. Demoted below the neutral
             // baseline so any typed merchant wins.
-            "payment_app" | "PAYMENT_APP"
-            | "financial_institution" | "FINANCIAL_INSTITUTION"
-            | "income_source" | "INCOME_SOURCE" => 0,
+            "payment_app"
+            | "PAYMENT_APP"
+            | "financial_institution"
+            | "FINANCIAL_INSTITUTION"
+            | "income_source"
+            | "INCOME_SOURCE" => 0,
             // Untyped / unknown entries sit between merchants and known
             // middlemen — better than a processor, worse than a named shop.
             _ => 40,
@@ -1352,11 +1361,14 @@ fn plaid_security_lookup(payload: &serde_json::Value) -> HashMap<String, Securit
             let name = item["name"].as_str().unwrap_or(&symbol).to_string();
             let security_type = item["type"].as_str().unwrap_or("Investment").to_string();
 
-            securities.insert(id.to_string(), SecurityInfo {
-                symbol,
-                name,
-                security_type,
-            });
+            securities.insert(
+                id.to_string(),
+                SecurityInfo {
+                    symbol,
+                    name,
+                    security_type,
+                },
+            );
         }
     }
 
@@ -1420,7 +1432,11 @@ pub async fn process_investment_event(
     let quantity = ev["quantity"].as_f64().unwrap_or(0.0);
     let amount = ev["amount"].as_f64().unwrap_or(0.0);
     let price = ev["price"].as_f64().unwrap_or_else(|| {
-        if quantity.abs() > 0.0 { (amount / quantity).abs() } else { 0.0 }
+        if quantity.abs() > 0.0 {
+            (amount / quantity).abs()
+        } else {
+            0.0
+        }
     });
     let currency = ev["iso_currency_code"]
         .as_str()
@@ -1494,13 +1510,12 @@ pub async fn process_investment_event(
 
     // sell: FIFO-deplete this holding's lots. Use a sell-marker
     // row keyed on source_id for idempotency, so re-runs skip.
-    let marker_seen = sqlx::query(
-        "SELECT 1 FROM holding_lots WHERE holding_id = $1 AND source_id = $2"
-    )
-    .bind(holding_id)
-    .bind(source_id)
-    .fetch_optional(db)
-    .await?;
+    let marker_seen =
+        sqlx::query("SELECT 1 FROM holding_lots WHERE holding_id = $1 AND source_id = $2")
+            .bind(holding_id)
+            .bind(source_id)
+            .fetch_optional(db)
+            .await?;
     if marker_seen.is_some() {
         return Ok(()); // Already processed this sell.
     }
@@ -1529,7 +1544,9 @@ pub async fn process_investment_event(
     .fetch_all(db)
     .await?;
     for lot in lots {
-        if remaining <= 0.0 { break; }
+        if remaining <= 0.0 {
+            break;
+        }
         let lot_id: uuid::Uuid = lot.get("id");
         let lot_qty: f64 = lot
             .try_get::<rust_decimal::Decimal, _>("qty")
@@ -1544,7 +1561,9 @@ pub async fn process_investment_event(
         // Currency from the lot is conceptually relevant but operationally
         // unused — `lot_fx` already encodes the conversion. Read it for
         // future per-currency logic; prefix _ silences unused warning.
-        let _lot_ccy: String = lot.try_get("currency").unwrap_or_else(|_| "USD".to_string());
+        let _lot_ccy: String = lot
+            .try_get("currency")
+            .unwrap_or_else(|_| "USD".to_string());
         let lot_fx: f64 = lot
             .try_get::<rust_decimal::Decimal, _>("usd_fx_rate")
             .ok()
@@ -1562,7 +1581,11 @@ pub async fn process_investment_event(
         // side uses today's. Matches the accounting convention where
         // the gain is "what you got minus what you paid", both
         // measured in USD at the time of each event.
-        let cost_usd_pps = if lot_fx > 0.0 { lot_cpu / lot_fx } else { lot_cpu };
+        let cost_usd_pps = if lot_fx > 0.0 {
+            lot_cpu / lot_fx
+        } else {
+            lot_cpu
+        };
         let realized_pnl_usd = consume * (sell_usd_pps - cost_usd_pps);
         // Idempotent insert: re-running this sell with the same
         // (user_id, sell_source_id, lot_id) is a no-op. The
@@ -1701,9 +1724,14 @@ pub async fn upsert_investment_income_event(
         .as_str()
         .or_else(|| ev["unofficial_currency_code"].as_str())
         .unwrap_or("USD");
-    let description = ev["name"].as_str().filter(|s| !s.trim().is_empty()).unwrap_or(
-        if category_detailed == "INCOME_DIVIDENDS" { "Dividend" } else { "Interest" },
-    );
+    let description = ev["name"]
+        .as_str()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or(if category_detailed == "INCOME_DIVIDENDS" {
+            "Dividend"
+        } else {
+            "Interest"
+        });
 
     // Account lookup scoped by user — same cross-tenant guard as
     // upsert_plaid_transaction. Unknown account: skip silently (the next
@@ -1756,11 +1784,7 @@ pub async fn upsert_investment_income_event(
 /// on or before `acquired_at`; if none exists (fresh deployment with
 /// no FX history), fall back to the most recent rate (still better
 /// than 1.0 — at least the magnitudes line up).
-async fn lookup_usd_fx_rate(
-    db: &PgPool,
-    currency: &str,
-    acquired_at: chrono::NaiveDate,
-) -> f64 {
+async fn lookup_usd_fx_rate(db: &PgPool, currency: &str, acquired_at: chrono::NaiveDate) -> f64 {
     if currency.eq_ignore_ascii_case("USD") {
         return 1.0;
     }

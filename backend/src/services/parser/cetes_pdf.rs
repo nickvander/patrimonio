@@ -142,12 +142,11 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         // stay uncategorized — see `categorize::classify_cetes_movement`,
         // which returns BOTH (category, category_detailed) so this PDF parser
         // and the CSV parser stay in sync.
-        let (category, category_detailed) = match
-            crate::services::categorize::classify_cetes_movement(&description, amount)
-        {
-            Some((c, d)) => (Some(c), d),
-            None => (None, None),
-        };
+        let (category, category_detailed) =
+            match crate::services::categorize::classify_cetes_movement(&description, amount) {
+                Some((c, d)) => (Some(c), d),
+                None => (None, None),
+            };
 
         txs.push(ParsedTransaction {
             date,
@@ -281,11 +280,20 @@ Saldo final                                                                     
         assert!(txs[0].amount > Decimal::ZERO);
         assert!(txs[0].description.contains("PREMIO"));
         assert_eq!(txs[0].category.as_deref(), Some("INCOME"));
-        assert_eq!(txs[0].category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
+        assert_eq!(
+            txs[0].category_detailed.as_deref(),
+            Some("INCOME_INTEREST_EARNED")
+        );
 
         // RETENCION ISR is a Cargo (outflow) → withheld, non-income.
         assert!(txs[1].amount < Decimal::ZERO);
-        assert_eq!(txs[1].category.as_deref(), Some("GOVERNMENT_AND_NON_PROFIT"));
-        assert_eq!(txs[1].category_detailed.as_deref(), Some("TAX_ISR_WITHHELD"));
+        assert_eq!(
+            txs[1].category.as_deref(),
+            Some("GOVERNMENT_AND_NON_PROFIT")
+        );
+        assert_eq!(
+            txs[1].category_detailed.as_deref(),
+            Some("TAX_ISR_WITHHELD")
+        );
     }
 }

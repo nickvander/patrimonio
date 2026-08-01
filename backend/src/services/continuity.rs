@@ -235,8 +235,18 @@ mod tests {
     #[test]
     fn rows_without_balance_are_skipped() {
         let rows = vec![
-            Row { file: "a.csv".into(), date: d(2024, 1, 5), amount: dec("500.00"), balance_after: None },
-            Row { file: "b.csv".into(), date: d(2024, 3, 5), amount: dec("100.00"), balance_after: None },
+            Row {
+                file: "a.csv".into(),
+                date: d(2024, 1, 5),
+                amount: dec("500.00"),
+                balance_after: None,
+            },
+            Row {
+                file: "b.csv".into(),
+                date: d(2024, 3, 5),
+                amount: dec("100.00"),
+                balance_after: None,
+            },
         ];
         assert!(continuity_warnings(&rows).is_empty());
     }

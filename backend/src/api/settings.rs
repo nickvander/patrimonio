@@ -30,14 +30,12 @@ async fn get_setting(
     Extension(ctx): Extension<AuthContext>,
     Path(key): Path<String>,
 ) -> Result<Json<Value>, StatusCode> {
-    let row = sqlx::query(
-        "SELECT value FROM app_settings WHERE key = $1 AND user_id = $2",
-    )
-    .bind(&key)
-    .bind(ctx.user_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let row = sqlx::query("SELECT value FROM app_settings WHERE key = $1 AND user_id = $2")
+        .bind(&key)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     match row {
         Some(r) => {
             let v: Value = r

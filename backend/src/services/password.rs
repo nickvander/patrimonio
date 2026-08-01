@@ -9,8 +9,7 @@ use argon2::{Algorithm, Argon2, Params, Version};
 /// OWASP's 2024 minimum (m=19 MiB, t=2, p=1) and verifies in well under
 /// 100 ms on a modern server.
 fn argon2() -> Argon2<'static> {
-    let params = Params::new(64 * 1024, 3, 1, None)
-        .expect("argon2 params should validate");
+    let params = Params::new(64 * 1024, 3, 1, None).expect("argon2 params should validate");
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 }
 
@@ -25,8 +24,8 @@ pub fn hash_password(password: &str) -> Result<String> {
 /// Returns Ok(true) on match, Ok(false) on a definitive mismatch.
 /// Errors only when the stored hash is corrupt / unparseable.
 pub fn verify_password(password: &str, stored_hash: &str) -> Result<bool> {
-    let parsed = PasswordHash::new(stored_hash)
-        .map_err(|e| anyhow!("verify_password parse: {e}"))?;
+    let parsed =
+        PasswordHash::new(stored_hash).map_err(|e| anyhow!("verify_password parse: {e}"))?;
     match argon2().verify_password(password.as_bytes(), &parsed) {
         Ok(()) => Ok(true),
         Err(argon2::password_hash::Error::Password) => Ok(false),

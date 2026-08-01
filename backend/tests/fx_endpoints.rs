@@ -227,7 +227,12 @@ async fn fx_alert_upsert_get_delete_roundtrip() {
     // No alert configured yet → explicit null.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/fx/alert/USD/MXN", None, Some(&cookie)))
+        .oneshot(req(
+            Method::GET,
+            "/api/fx/alert/USD/MXN",
+            None,
+            Some(&cookie),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -272,7 +277,12 @@ async fn fx_alert_upsert_get_delete_roundtrip() {
     // …GET reflects the update…
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/fx/alert/USD/MXN", None, Some(&cookie)))
+        .oneshot(req(
+            Method::GET,
+            "/api/fx/alert/USD/MXN",
+            None,
+            Some(&cookie),
+        ))
         .await
         .unwrap();
     let json = body_json(res.into_body()).await;
@@ -294,7 +304,12 @@ async fn fx_alert_upsert_get_delete_roundtrip() {
     }
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/fx/alert/USD/MXN", None, Some(&cookie)))
+        .oneshot(req(
+            Method::GET,
+            "/api/fx/alert/USD/MXN",
+            None,
+            Some(&cookie),
+        ))
         .await
         .unwrap();
     let json = body_json(res.into_body()).await;
@@ -360,7 +375,12 @@ async fn fx_alert_is_user_scoped() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/fx/alert/USD/MXN", None, Some(&cookie)))
+        .oneshot(req(
+            Method::GET,
+            "/api/fx/alert/USD/MXN",
+            None,
+            Some(&cookie),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -423,13 +443,11 @@ async fn fx_crossing_records_notification_and_self_debounces() {
     assert_eq!(recorded, 1);
 
     let (kind, title, read_at): (String, String, Option<chrono::DateTime<chrono::Utc>>) =
-        sqlx::query_as(
-            "SELECT kind, title, read_at FROM user_notifications WHERE user_id = $1",
-        )
-        .bind(uid)
-        .fetch_one(&pool)
-        .await
-        .expect("notification row recorded");
+        sqlx::query_as("SELECT kind, title, read_at FROM user_notifications WHERE user_id = $1")
+            .bind(uid)
+            .fetch_one(&pool)
+            .await
+            .expect("notification row recorded");
     assert_eq!(kind, "fx_alert");
     assert!(
         title.contains("USD/MXN") && title.contains("17.5"),

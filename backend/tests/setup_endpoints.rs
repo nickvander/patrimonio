@@ -123,7 +123,11 @@ async fn get_status(app: &Router) -> Value {
         )
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "setup status should be public and OK");
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "setup status should be public and OK"
+    );
     body_json(res.into_body()).await
 }
 
@@ -181,12 +185,24 @@ async fn setup_status_keeps_english_labels_for_backward_compat() {
         // still render the server strings — they must stay non-empty.
         let label = check["label"].as_str().unwrap_or_default();
         let detail = check["detail"].as_str().unwrap_or_default();
-        assert!(!label.is_empty(), "check '{key}' must keep a fallback label");
-        assert!(!detail.is_empty(), "check '{key}' must keep a detail string");
-        assert!(check["configured"].is_boolean(), "check '{key}' configured flag");
+        assert!(
+            !label.is_empty(),
+            "check '{key}' must keep a fallback label"
+        );
+        assert!(
+            !detail.is_empty(),
+            "check '{key}' must keep a detail string"
+        );
+        assert!(
+            check["configured"].is_boolean(),
+            "check '{key}' configured flag"
+        );
         let severity = check["severity"].as_str().unwrap_or_default();
         assert!(
-            matches!(severity, "required_for_linking" | "recommended" | "optional"),
+            matches!(
+                severity,
+                "required_for_linking" | "recommended" | "optional"
+            ),
             "check '{key}' has unknown severity '{severity}' — the frontend \
              filters on these exact values"
         );

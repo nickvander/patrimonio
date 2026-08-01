@@ -472,14 +472,38 @@ fn contribution_limit(group: RetirementGroup, year: i32) -> (i32, ContributionLi
     let limit = match (group, nearest) {
         // 2025: 401k elective $23,500 + $7,500 catch-up, §415(c) overall $70,000;
         // IRA $7,000 + $1,000; HSA self-only $4,300 / family $8,550 + $1,000 (55+).
-        (RetirementGroup::Plan401k, 2025) => ContributionLimit { base: dec!(23500), catch_up: dec!(7500), overall: dec!(70000) },
-        (RetirementGroup::Ira, 2025) => ContributionLimit { base: dec!(7000), catch_up: dec!(1000), overall: dec!(7000) },
-        (RetirementGroup::Hsa, 2025) => ContributionLimit { base: dec!(4300), catch_up: dec!(1000), overall: dec!(8550) },
+        (RetirementGroup::Plan401k, 2025) => ContributionLimit {
+            base: dec!(23500),
+            catch_up: dec!(7500),
+            overall: dec!(70000),
+        },
+        (RetirementGroup::Ira, 2025) => ContributionLimit {
+            base: dec!(7000),
+            catch_up: dec!(1000),
+            overall: dec!(7000),
+        },
+        (RetirementGroup::Hsa, 2025) => ContributionLimit {
+            base: dec!(4300),
+            catch_up: dec!(1000),
+            overall: dec!(8550),
+        },
         // 2026: 401k elective $24,500 + $8,000 catch-up, §415(c) overall $72,000;
         // IRA $7,500 + $1,100; HSA self-only $4,400 / family $8,750 + $1,000 (55+).
-        (RetirementGroup::Plan401k, _) => ContributionLimit { base: dec!(24500), catch_up: dec!(8000), overall: dec!(72000) },
-        (RetirementGroup::Ira, _) => ContributionLimit { base: dec!(7500), catch_up: dec!(1100), overall: dec!(7500) },
-        (RetirementGroup::Hsa, _) => ContributionLimit { base: dec!(4400), catch_up: dec!(1000), overall: dec!(8750) },
+        (RetirementGroup::Plan401k, _) => ContributionLimit {
+            base: dec!(24500),
+            catch_up: dec!(8000),
+            overall: dec!(72000),
+        },
+        (RetirementGroup::Ira, _) => ContributionLimit {
+            base: dec!(7500),
+            catch_up: dec!(1100),
+            overall: dec!(7500),
+        },
+        (RetirementGroup::Hsa, _) => ContributionLimit {
+            base: dec!(4400),
+            catch_up: dec!(1000),
+            overall: dec!(8750),
+        },
     };
     (nearest, limit)
 }
@@ -574,33 +598,121 @@ fn pb(rate: Decimal, upto: Decimal) -> ProgressiveBracket {
 /// annual tarifas, all 11 brackets each.
 fn mx_tarifa_2025() -> Vec<TaxBracket> {
     vec![
-        TaxBracket { rate: dec!(0.0192), cutoff: dec!(8952.48), base_tax: dec!(0) },
-        TaxBracket { rate: dec!(0.0640), cutoff: dec!(75984.60), base_tax: dec!(171.84) },
-        TaxBracket { rate: dec!(0.1088), cutoff: dec!(133536.12), base_tax: dec!(4461.96) },
-        TaxBracket { rate: dec!(0.1600), cutoff: dec!(155229.84), base_tax: dec!(10723.56) },
-        TaxBracket { rate: dec!(0.1792), cutoff: dec!(185852.52), base_tax: dec!(14194.56) },
-        TaxBracket { rate: dec!(0.2136), cutoff: dec!(374837.88), base_tax: dec!(19671.84) },
-        TaxBracket { rate: dec!(0.2352), cutoff: dec!(590796.00), base_tax: dec!(48065.52) },
-        TaxBracket { rate: dec!(0.3000), cutoff: dec!(1127926.80), base_tax: dec!(98849.40) },
-        TaxBracket { rate: dec!(0.3200), cutoff: dec!(1503902.40), base_tax: dec!(259988.64) },
-        TaxBracket { rate: dec!(0.3400), cutoff: dec!(4511707.32), base_tax: dec!(380302.20) },
-        TaxBracket { rate: dec!(0.3500), cutoff: Decimal::MAX, base_tax: dec!(1402954.44) },
+        TaxBracket {
+            rate: dec!(0.0192),
+            cutoff: dec!(8952.48),
+            base_tax: dec!(0),
+        },
+        TaxBracket {
+            rate: dec!(0.0640),
+            cutoff: dec!(75984.60),
+            base_tax: dec!(171.84),
+        },
+        TaxBracket {
+            rate: dec!(0.1088),
+            cutoff: dec!(133536.12),
+            base_tax: dec!(4461.96),
+        },
+        TaxBracket {
+            rate: dec!(0.1600),
+            cutoff: dec!(155229.84),
+            base_tax: dec!(10723.56),
+        },
+        TaxBracket {
+            rate: dec!(0.1792),
+            cutoff: dec!(185852.52),
+            base_tax: dec!(14194.56),
+        },
+        TaxBracket {
+            rate: dec!(0.2136),
+            cutoff: dec!(374837.88),
+            base_tax: dec!(19671.84),
+        },
+        TaxBracket {
+            rate: dec!(0.2352),
+            cutoff: dec!(590796.00),
+            base_tax: dec!(48065.52),
+        },
+        TaxBracket {
+            rate: dec!(0.3000),
+            cutoff: dec!(1127926.80),
+            base_tax: dec!(98849.40),
+        },
+        TaxBracket {
+            rate: dec!(0.3200),
+            cutoff: dec!(1503902.40),
+            base_tax: dec!(259988.64),
+        },
+        TaxBracket {
+            rate: dec!(0.3400),
+            cutoff: dec!(4511707.32),
+            base_tax: dec!(380302.20),
+        },
+        TaxBracket {
+            rate: dec!(0.3500),
+            cutoff: Decimal::MAX,
+            base_tax: dec!(1402954.44),
+        },
     ]
 }
 
 fn mx_tarifa_2026() -> Vec<TaxBracket> {
     vec![
-        TaxBracket { rate: dec!(0.0192), cutoff: dec!(10135.11), base_tax: dec!(0) },
-        TaxBracket { rate: dec!(0.0640), cutoff: dec!(86022.11), base_tax: dec!(194.59) },
-        TaxBracket { rate: dec!(0.1088), cutoff: dec!(151176.19), base_tax: dec!(5051.37) },
-        TaxBracket { rate: dec!(0.1600), cutoff: dec!(175735.66), base_tax: dec!(12140.13) },
-        TaxBracket { rate: dec!(0.1792), cutoff: dec!(210403.69), base_tax: dec!(16069.64) },
-        TaxBracket { rate: dec!(0.2136), cutoff: dec!(424353.97), base_tax: dec!(22282.14) },
-        TaxBracket { rate: dec!(0.2352), cutoff: dec!(668840.14), base_tax: dec!(67981.92) },
-        TaxBracket { rate: dec!(0.3000), cutoff: dec!(1276925.98), base_tax: dec!(125485.07) },
-        TaxBracket { rate: dec!(0.3200), cutoff: dec!(1702567.97), base_tax: dec!(307910.81) },
-        TaxBracket { rate: dec!(0.3400), cutoff: dec!(5107703.92), base_tax: dec!(444116.23) },
-        TaxBracket { rate: dec!(0.3500), cutoff: Decimal::MAX, base_tax: dec!(1601862.46) },
+        TaxBracket {
+            rate: dec!(0.0192),
+            cutoff: dec!(10135.11),
+            base_tax: dec!(0),
+        },
+        TaxBracket {
+            rate: dec!(0.0640),
+            cutoff: dec!(86022.11),
+            base_tax: dec!(194.59),
+        },
+        TaxBracket {
+            rate: dec!(0.1088),
+            cutoff: dec!(151176.19),
+            base_tax: dec!(5051.37),
+        },
+        TaxBracket {
+            rate: dec!(0.1600),
+            cutoff: dec!(175735.66),
+            base_tax: dec!(12140.13),
+        },
+        TaxBracket {
+            rate: dec!(0.1792),
+            cutoff: dec!(210403.69),
+            base_tax: dec!(16069.64),
+        },
+        TaxBracket {
+            rate: dec!(0.2136),
+            cutoff: dec!(424353.97),
+            base_tax: dec!(22282.14),
+        },
+        TaxBracket {
+            rate: dec!(0.2352),
+            cutoff: dec!(668840.14),
+            base_tax: dec!(67981.92),
+        },
+        TaxBracket {
+            rate: dec!(0.3000),
+            cutoff: dec!(1276925.98),
+            base_tax: dec!(125485.07),
+        },
+        TaxBracket {
+            rate: dec!(0.3200),
+            cutoff: dec!(1702567.97),
+            base_tax: dec!(307910.81),
+        },
+        TaxBracket {
+            rate: dec!(0.3400),
+            cutoff: dec!(5107703.92),
+            base_tax: dec!(444116.23),
+        },
+        TaxBracket {
+            rate: dec!(0.3500),
+            cutoff: Decimal::MAX,
+            base_tax: dec!(1601862.46),
+        },
     ]
 }
 
@@ -811,9 +923,8 @@ impl TaxService {
         }
         let start = taxable_ordinary.max(dec!(0));
         let end = start + gain;
-        let band = |lo: Decimal, hi: Decimal| -> Decimal {
-            (end.min(hi) - start.max(lo)).max(dec!(0))
-        };
+        let band =
+            |lo: Decimal, hi: Decimal| -> Decimal { (end.min(hi) - start.max(lo)).max(dec!(0)) };
         let in15 = band(t.ltcg_0_top, t.ltcg_15_top);
         let in20 = band(t.ltcg_15_top, Decimal::MAX);
         in15 * dec!(0.15) + in20 * dec!(0.20)
@@ -1063,11 +1174,11 @@ impl TaxService {
             "#
         );
         let income_row = sqlx::query(&income_sql)
-        .bind(start_date)
-        .bind(end_date)
-        .bind(user_id)
-        .fetch_one(db)
-        .await?;
+            .bind(start_date)
+            .bind(end_date)
+            .bind(user_id)
+            .fetch_one(db)
+            .await?;
 
         let ordinary_income: Decimal = income_row.try_get("income_usd").unwrap_or_default();
         let ordinary_income_mxn: Decimal = income_row.try_get("income_mxn").unwrap_or_default();
@@ -1226,15 +1337,24 @@ impl TaxService {
         let total_taxable = ordinary_income + capital_gains;
         let usd_mxn_rate_used = Self::usd_mxn_year_rate(db, year).await?;
         let total_taxable_mxn = ordinary_income_mxn + capital_gains * usd_mxn_rate_used;
-        let estimated_liability_mx_mxn = Self::calculate_mx_tax(total_taxable_mxn, &tables.mx_tarifa);
+        let estimated_liability_mx_mxn =
+            Self::calculate_mx_tax(total_taxable_mxn, &tables.mx_tarifa);
         let estimated_liability_mx = if usd_mxn_rate_used > dec!(0) {
             estimated_liability_mx_mxn / usd_mxn_rate_used
         } else {
             dec!(0)
         };
 
-        let effective_rate_us = if total_taxable > dec!(0) { estimated_liability_us / total_taxable } else { dec!(0) };
-        let effective_rate_mx = if total_taxable > dec!(0) { estimated_liability_mx / total_taxable } else { dec!(0) };
+        let effective_rate_us = if total_taxable > dec!(0) {
+            estimated_liability_us / total_taxable
+        } else {
+            dec!(0)
+        };
+        let effective_rate_mx = if total_taxable > dec!(0) {
+            estimated_liability_mx / total_taxable
+        } else {
+            dec!(0)
+        };
 
         Ok(TaxEstimation {
             ordinary_income,
@@ -1328,11 +1448,11 @@ impl TaxService {
             "#
         );
         let rows = sqlx::query_as::<_, TaxableTransaction>(&tx_sql)
-        .bind(start_date)
-        .bind(end_date)
-        .bind(user_id)
-        .fetch_all(db)
-        .await?;
+            .bind(start_date)
+            .bind(end_date)
+            .bind(user_id)
+            .fetch_all(db)
+            .await?;
 
         Ok(rows)
     }
@@ -1414,18 +1534,24 @@ impl TaxService {
                 } else {
                     qty * cost_px
                 };
-                let acquired_on: Option<chrono::NaiveDate> =
-                    r.try_get::<Option<chrono::NaiveDate>, _>("acquired_on").unwrap_or(None);
-                let sold_on: Option<chrono::NaiveDate> =
-                    r.try_get::<Option<chrono::NaiveDate>, _>("sold_on").unwrap_or(None);
-                let account_type: Option<String> =
-                    r.try_get::<Option<String>, _>("account_type").unwrap_or(None);
+                let acquired_on: Option<chrono::NaiveDate> = r
+                    .try_get::<Option<chrono::NaiveDate>, _>("acquired_on")
+                    .unwrap_or(None);
+                let sold_on: Option<chrono::NaiveDate> = r
+                    .try_get::<Option<chrono::NaiveDate>, _>("sold_on")
+                    .unwrap_or(None);
+                let account_type: Option<String> = r
+                    .try_get::<Option<String>, _>("account_type")
+                    .unwrap_or(None);
                 let tax_advantaged = is_tax_advantaged_account_type(account_type.as_deref());
                 let wash_sale: bool = r.try_get("wash_sale").unwrap_or(false);
                 // Only meaningful when wash_sale is true; carried regardless so
                 // the field shape is stable for the frontend.
-                let wash_sale_safe_after: Option<String> =
-                    if wash_sale { r.try_get("wash_safe_on").ok() } else { None };
+                let wash_sale_safe_after: Option<String> = if wash_sale {
+                    r.try_get("wash_safe_on").ok()
+                } else {
+                    None
+                };
                 TaxDisposal {
                     symbol: r.try_get("symbol").unwrap_or_default(),
                     name: r.try_get("name").unwrap_or_default(),
@@ -1548,7 +1674,10 @@ impl TaxService {
 
         let getdec = |r: &sqlx::postgres::PgRow, col: &str| -> Decimal {
             r.try_get::<Decimal, _>(col)
-                .or_else(|_| r.try_get::<Option<Decimal>, _>(col).map(|o| o.unwrap_or_default()))
+                .or_else(|_| {
+                    r.try_get::<Option<Decimal>, _>(col)
+                        .map(|o| o.unwrap_or_default())
+                })
                 .unwrap_or_default()
         };
 
@@ -1565,20 +1694,33 @@ impl TaxService {
                 // Cost basis in USD via the lot's OWN historical fx.
                 let native_cost = qty * cost_px;
                 let cost_basis_usd = match lot_ccy.to_uppercase().as_str() {
-                    "MXN" => if lot_fx > Decimal::ZERO { native_cost / lot_fx } else { native_cost },
+                    "MXN" => {
+                        if lot_fx > Decimal::ZERO {
+                            native_cost / lot_fx
+                        } else {
+                            native_cost
+                        }
+                    }
                     _ => native_cost,
                 };
                 // Current value in USD via the CURRENT rate (live price is
                 // quoted in the holding's currency).
                 let native_value = qty * price;
                 let current_value_usd = match holding_ccy.to_uppercase().as_str() {
-                    "MXN" => if usd_mxn_rate > Decimal::ZERO { native_value / usd_mxn_rate } else { native_value },
+                    "MXN" => {
+                        if usd_mxn_rate > Decimal::ZERO {
+                            native_value / usd_mxn_rate
+                        } else {
+                            native_value
+                        }
+                    }
                     _ => native_value,
                 };
                 let unrealized_gain_usd = current_value_usd - cost_basis_usd;
 
-                let acquired_on: Option<chrono::NaiveDate> =
-                    r.try_get::<Option<chrono::NaiveDate>, _>("acquired_at").unwrap_or(None);
+                let acquired_on: Option<chrono::NaiveDate> = r
+                    .try_get::<Option<chrono::NaiveDate>, _>("acquired_at")
+                    .unwrap_or(None);
                 let long_term = acquired_on
                     .map(|a| Self::is_long_term(a, today))
                     .unwrap_or(false);
@@ -1606,9 +1748,7 @@ impl TaxService {
                         // Buying back any time up to today+30 keeps the wash
                         // window open; the first clear date is today+31.
                         today
-                            .checked_add_days(chrono::Days::new(
-                                (WASH_SALE_WINDOW_DAYS + 1) as u64,
-                            ))
+                            .checked_add_days(chrono::Days::new((WASH_SALE_WINDOW_DAYS + 1) as u64))
                             .map(|d| d.to_string())
                     } else {
                         None
@@ -1622,7 +1762,9 @@ impl TaxService {
                     symbol: r.try_get("symbol").unwrap_or_default(),
                     name: r.try_get("name").unwrap_or_default(),
                     account_name: r.try_get("account_name").unwrap_or_default(),
-                    account_type: r.try_get::<Option<String>, _>("account_type").unwrap_or(None),
+                    account_type: r
+                        .try_get::<Option<String>, _>("account_type")
+                        .unwrap_or(None),
                     acquired_date: r.try_get("acquired_date").ok(),
                     qty,
                     cost_basis_usd,
@@ -1732,9 +1874,9 @@ impl TaxService {
         let mut peak_carried_agg = dec!(0);
         // Evaluate the carried aggregate for the day we're leaving.
         let close_day = |day: Option<chrono::NaiveDate>,
-                             carried: &std::collections::HashMap<uuid::Uuid, Decimal>,
-                             peak_date: &mut Option<chrono::NaiveDate>,
-                             peak_agg: &mut Decimal| {
+                         carried: &std::collections::HashMap<uuid::Uuid, Decimal>,
+                         peak_date: &mut Option<chrono::NaiveDate>,
+                         peak_agg: &mut Decimal| {
             if let Some(d) = day {
                 let agg: Decimal = carried.values().copied().sum();
                 if peak_date.is_none() || agg > *peak_agg {
@@ -1808,7 +1950,11 @@ impl TaxService {
             .map(|r| {
                 let country = {
                     let c: String = r.try_get("country").unwrap_or_default();
-                    if c.is_empty() { None } else { Some(c) }
+                    if c.is_empty() {
+                        None
+                    } else {
+                        Some(c)
+                    }
                 };
                 FbarAccount {
                     account_id: r.try_get("account_id").ok(),
@@ -1831,8 +1977,7 @@ impl TaxService {
         // their aggregate). This is the compliance-safe measure: it never
         // under-reports, unlike a same-day sum that misses accounts snapshotted
         // on other days.
-        let peak_aggregate_usd: Decimal =
-            foreign_accounts.iter().map(|a| a.ytd_max_usd).sum();
+        let peak_aggregate_usd: Decimal = foreign_accounts.iter().map(|a| a.ytd_max_usd).sum();
 
         Ok(FbarStatus {
             year,
@@ -1883,21 +2028,25 @@ impl TaxService {
         let mut groups = Vec::new();
         let mut limit_year_used = year;
         for group in RetirementGroup::all() {
-            let types: Vec<String> = group.account_types().iter().map(|s| s.to_string()).collect();
+            let types: Vec<String> = group
+                .account_types()
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
             let (ly, limit) = contribution_limit(group, year);
             limit_year_used = ly;
 
             // Detect EXTERNAL contributions (exclude reinvested income, internal
             // moves, conversions) — the previous "sum all lot buys" double-counted
             // reinvested dividends and missed cash-only accounts entirely.
-            let (ytd_contributions_usd, employer_usd, backdoor, match_rollover_caveat) =
-                match group {
-                    // HSA: contributions are labeled cash transactions, not tax-lots
-                    // (HealthEquity carries no lots). "Employee/Employer Contribution".
-                    // Employer + employee both count toward the same coverage limit.
-                    RetirementGroup::Hsa => {
-                        let r = sqlx::query(
-                            r#"
+            let (ytd_contributions_usd, employer_usd, backdoor, match_rollover_caveat) = match group
+            {
+                // HSA: contributions are labeled cash transactions, not tax-lots
+                // (HealthEquity carries no lots). "Employee/Employer Contribution".
+                // Employer + employee both count toward the same coverage limit.
+                RetirementGroup::Hsa => {
+                    let r = sqlx::query(
+                        r#"
                             SELECT
                               COALESCE(SUM(CASE WHEN t.amount > 0
                                    AND t.description ILIKE '%contribution%'
@@ -1911,17 +2060,21 @@ impl TaxService {
                               AND t.date >= $2 AND t.date <= $3
                               AND LOWER(COALESCE(a.account_type, '')) = ANY($4)
                             "#,
-                        )
-                        .bind(user_id).bind(start_date).bind(end_date).bind(&types)
-                        .fetch_one(db).await?;
-                        let total: Decimal = r.try_get("total").unwrap_or_default();
-                        let employer: Decimal = r.try_get("employer").unwrap_or_default();
-                        (total, employer, false, false)
-                    }
-                    // Brokerage 401k/IRA: contributions = lot buys NET of reinvested
-                    // dividends/interest (which buy lots but are not new money).
-                    RetirementGroup::Plan401k | RetirementGroup::Ira => {
-                        let r = sqlx::query(
+                    )
+                    .bind(user_id)
+                    .bind(start_date)
+                    .bind(end_date)
+                    .bind(&types)
+                    .fetch_one(db)
+                    .await?;
+                    let total: Decimal = r.try_get("total").unwrap_or_default();
+                    let employer: Decimal = r.try_get("employer").unwrap_or_default();
+                    (total, employer, false, false)
+                }
+                // Brokerage 401k/IRA: contributions = lot buys NET of reinvested
+                // dividends/interest (which buy lots but are not new money).
+                RetirementGroup::Plan401k | RetirementGroup::Ira => {
+                    let r = sqlx::query(
                             r#"
                             WITH buys AS (
                               SELECT COALESCE(SUM(l.qty * l.cost_per_unit
@@ -1948,14 +2101,14 @@ impl TaxService {
                         )
                         .bind(user_id).bind(start_date).bind(end_date).bind(&types)
                         .fetch_one(db).await?;
-                        let buys: Decimal = r.try_get("buys").unwrap_or_default();
-                        let income: Decimal = r.try_get("income").unwrap_or_default();
-                        let net = (buys - income).max(dec!(0));
-                        // Backdoor Roth heuristic: a funded contribution while the
-                        // Traditional IRA itself received ~nothing → it was made
-                        // non-deductible and converted to Roth.
-                        let backdoor = if group == RetirementGroup::Ira && net > dec!(0) {
-                            let trad: Decimal = sqlx::query_scalar(
+                    let buys: Decimal = r.try_get("buys").unwrap_or_default();
+                    let income: Decimal = r.try_get("income").unwrap_or_default();
+                    let net = (buys - income).max(dec!(0));
+                    // Backdoor Roth heuristic: a funded contribution while the
+                    // Traditional IRA itself received ~nothing → it was made
+                    // non-deductible and converted to Roth.
+                    let backdoor = if group == RetirementGroup::Ira && net > dec!(0) {
+                        let trad: Decimal = sqlx::query_scalar(
                                 r#"SELECT COALESCE(SUM(l.qty * l.cost_per_unit
                                      / (CASE WHEN UPPER(l.currency) = 'MXN' AND l.usd_fx_rate > 0
                                              THEN l.usd_fx_rate ELSE 1 END)), 0)
@@ -1969,21 +2122,20 @@ impl TaxService {
                             )
                             .bind(user_id).bind(start_date).bind(end_date)
                             .fetch_one(db).await.unwrap_or(dec!(0));
-                            trad < dec!(100)
-                        } else {
-                            false
-                        };
-                        // 401k total bundles elective + employer + after-tax (no
-                        // transaction-level split available), so flag it as such.
-                        let caveat = group == RetirementGroup::Plan401k;
-                        (net, dec!(0), backdoor, caveat)
-                    }
-                };
+                        trad < dec!(100)
+                    } else {
+                        false
+                    };
+                    // 401k total bundles elective + employer + after-tax (no
+                    // transaction-level split available), so flag it as such.
+                    let caveat = group == RetirementGroup::Plan401k;
+                    (net, dec!(0), backdoor, caveat)
+                }
+            };
 
             let remaining_room_usd = (limit.base - ytd_contributions_usd).max(dec!(0));
             let remaining_overall_usd = (limit.overall - ytd_contributions_usd).max(dec!(0));
-            let mega_backdoor =
-                group == RetirementGroup::Plan401k && limit.overall > limit.base;
+            let mega_backdoor = group == RetirementGroup::Plan401k && limit.overall > limit.base;
             // IRA & HSA: prior-year window — tax day (~Apr 15) of year+1.
             // 401k-family: calendar-year end (Dec 31 of the contribution year).
             let (deadline, prior_year_window) = match group {
@@ -1995,7 +2147,11 @@ impl TaxService {
 
             groups.push(ContributionGroup {
                 group: group.key().to_string(),
-                account_types: group.account_types().iter().map(|s| s.to_string()).collect(),
+                account_types: group
+                    .account_types()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 ytd_contributions_usd,
                 limit_base_usd: limit.base,
                 catch_up_usd: limit.catch_up,
@@ -2549,11 +2705,20 @@ mod tests {
         let s = &t.us_single;
         // 0 / below first cutoff → lowest bracket.
         assert_eq!(TaxService::marginal_ordinary_rate(dec!(0), s), dec!(0.10));
-        assert_eq!(TaxService::marginal_ordinary_rate(dec!(-100), s), dec!(0.10));
+        assert_eq!(
+            TaxService::marginal_ordinary_rate(dec!(-100), s),
+            dec!(0.10)
+        );
         // Inside the 12% band (first cutoff 12,400, second 50,400).
-        assert_eq!(TaxService::marginal_ordinary_rate(dec!(30000), s), dec!(0.12));
+        assert_eq!(
+            TaxService::marginal_ordinary_rate(dec!(30000), s),
+            dec!(0.12)
+        );
         // Above the top cutoff → top rate.
-        assert_eq!(TaxService::marginal_ordinary_rate(dec!(2_000_000), s), dec!(0.37));
+        assert_eq!(
+            TaxService::marginal_ordinary_rate(dec!(2_000_000), s),
+            dec!(0.37)
+        );
     }
 
     #[test]

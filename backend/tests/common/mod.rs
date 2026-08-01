@@ -56,14 +56,16 @@ impl TestLockGuard {
     /// Skipping is decided earlier (when the env var is unset); once a URL is
     /// set, a bad connection must fail loudly.
     pub async fn acquire(database_url: &str) -> Option<Self> {
-        let mut conn = PgConnection::connect(database_url).await.unwrap_or_else(|e| {
-            panic!(
-                "PATRIMONIO_TEST_DATABASE_URL is set but connecting to the test DB \
+        let mut conn = PgConnection::connect(database_url)
+            .await
+            .unwrap_or_else(|e| {
+                panic!(
+                    "PATRIMONIO_TEST_DATABASE_URL is set but connecting to the test DB \
                  failed ({e}). Integration tests must NOT silently skip when a DB is \
                  configured — fix the URL/credentials (e.g. export the rotated \
                  POSTGRES_PASSWORD from .env; scripts/test.sh now does this)."
-            )
-        });
+                )
+            });
         // 0x70617472696D6F = "patrimo" — see struct docs.
         sqlx::query("SELECT pg_advisory_lock(0x70617472696D6F)")
             .execute(&mut conn)

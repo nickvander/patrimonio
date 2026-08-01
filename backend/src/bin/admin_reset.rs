@@ -46,7 +46,10 @@ async fn main() -> Result<()> {
     let yes = raw.iter().any(|a| a == "--yes" || a == "-y");
     let mut pw_opt: Option<String> = None;
     let mut positionals: Vec<String> = Vec::new();
-    let mut it = raw.iter().filter(|a| *a != "--yes" && *a != "-y").peekable();
+    let mut it = raw
+        .iter()
+        .filter(|a| *a != "--yes" && *a != "-y")
+        .peekable();
     while let Some(a) = it.next() {
         if a == "--password" {
             pw_opt = it.next().cloned();
@@ -221,7 +224,10 @@ async fn reset_password(
     let pw = pw_opt.unwrap_or_else(generate_password);
     password::validate_password_policy(&pw)
         .context("the supplied password was rejected by the policy")?;
-    if !confirm(yes, &format!("reset the password for '{uname}' (revokes all sessions)"))? {
+    if !confirm(
+        yes,
+        &format!("reset the password for '{uname}' (revokes all sessions)"),
+    )? {
         println!("aborted.");
         return Ok(());
     }

@@ -71,8 +71,14 @@ pub fn router() -> Router<AppState> {
         .route("/interest-income/summary", get(export_interest_summary))
         // Static segments before dynamic /{id} so the matcher prefers
         // them (same ordering discipline as dashboard.rs fx-transfers).
-        .route("/payments/{payment_id}", axum::routing::delete(unreconcile_payment))
-        .route("/{id}", get(get_loan).patch(update_loan).delete(delete_loan))
+        .route(
+            "/payments/{payment_id}",
+            axum::routing::delete(unreconcile_payment),
+        )
+        .route(
+            "/{id}",
+            get(get_loan).patch(update_loan).delete(delete_loan),
+        )
         .route(
             "/{id}/disbursement",
             post(link_disbursement).delete(unlink_disbursement),
@@ -390,7 +396,11 @@ fn split_interest_portion(
     }
     // Open-ended accrual: convert to an effective annual rate, accrue
     // simple interest over elapsed days on the outstanding balance.
-    let annual = if rate_period == "monthly" { rate * 12.0 } else { rate };
+    let annual = if rate_period == "monthly" {
+        rate * 12.0
+    } else {
+        rate
+    };
     let days = (paid_date - last_date).num_days().max(0) as f64;
     let accrued = balance_before * annual * (days / 365.0);
     // Allocate interest-first, capped at the payment.
@@ -476,14 +486,20 @@ async fn list_loans(
 fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     let principal = dec_to_f64(r.try_get("principal").ok());
     let rate = dec_to_f64(r.try_get("interest_rate").ok());
-    let interest_type: String = r.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
-    let rate_period: String = r.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
+    let interest_type: String = r
+        .try_get("interest_type")
+        .unwrap_or_else(|_| "none".to_string());
+    let rate_period: String = r
+        .try_get("rate_period")
+        .unwrap_or_else(|_| "annual".to_string());
     // Effective annual rate for the schedule-less simple-interest
     // approximation — a stored monthly rate is ×12.
-    let effective_annual = if rate_period == "monthly" { rate * 12.0 } else { rate };
-    let origination: chrono::NaiveDate = r
-        .try_get("origination_date")
-        .unwrap_or(today);
+    let effective_annual = if rate_period == "monthly" {
+        rate * 12.0
+    } else {
+        rate
+    };
+    let origination: chrono::NaiveDate = r.try_get("origination_date").unwrap_or(today);
     let status: String = r.try_get("status").unwrap_or_else(|_| "active".to_string());
     let total_repaid = dec_to_f64(r.try_get("total_repaid").ok());
     let total_scheduled = dec_to_f64(r.try_get("total_scheduled").ok());
@@ -523,11 +539,16 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     // accrual on the current outstanding balance from origination to
     // today, net of interest already received. Settled loans owe none.
     let interest_earned = dec_to_f64(r.try_get("interest_earned").ok());
-    let interest_accrued = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off")
-    {
+    let interest_accrued = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
         0.0
     } else {
-        let gross = accrued_interest(outstanding, effective_annual, &interest_type, origination, today);
+        let gross = accrued_interest(
+            outstanding,
+            effective_annual,
+            &interest_type,
+            origination,
+            today,
+        );
         (gross - interest_earned).max(0.0)
     };
 
@@ -577,9 +598,8 @@ async fn get_loan(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    let sql = format!(
-        "SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2"
-    );
+    let sql =
+        format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2");
     let row = sqlx::query(&sql)
         .bind(id)
         .bind(ctx.user_id)
@@ -787,8 +807,7 @@ async fn update_loan(
     // destroy them). Refuse the term edit — the user re-uploads the custom
     // schedule to change terms. Status / notes / expected_repayment_date
     // stay editable. (Mirrors the reconciled-loan 409 guard just below.)
-    let is_custom = cur_type == "custom"
-        || payload.interest_type.as_deref() == Some("custom");
+    let is_custom = cur_type == "custom" || payload.interest_type.as_deref() == Some("custom");
     if is_custom && schedule_affecting {
         return (
             StatusCode::CONFLICT,
@@ -830,8 +849,16 @@ async fn update_loan(
         "#,
     )
     .bind(payload.borrower_name)
-    .bind(payload.principal.and_then(rust_decimal::Decimal::from_f64_retain))
-    .bind(payload.interest_rate.and_then(rust_decimal::Decimal::from_f64_retain))
+    .bind(
+        payload
+            .principal
+            .and_then(rust_decimal::Decimal::from_f64_retain),
+    )
+    .bind(
+        payload
+            .interest_rate
+            .and_then(rust_decimal::Decimal::from_f64_retain),
+    )
     .bind(payload.interest_type)
     .bind(payload.status)
     .bind(payload.notes)
@@ -1035,13 +1062,15 @@ async fn owned_tx(
     user_id: uuid::Uuid,
     tx_id: uuid::Uuid,
 ) -> Option<(String, chrono::NaiveDate, f64)> {
-    let row = sqlx::query("SELECT currency, date, amount FROM transactions WHERE id = $1 AND user_id = $2")
-        .bind(tx_id)
-        .bind(user_id)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten()?;
+    let row = sqlx::query(
+        "SELECT currency, date, amount FROM transactions WHERE id = $1 AND user_id = $2",
+    )
+    .bind(tx_id)
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()?;
     let currency: String = row.try_get("currency").ok()?;
     let date: chrono::NaiveDate = row.try_get("date").ok()?;
     let amount = dec_to_f64(row.try_get("amount").ok());
@@ -1205,11 +1234,19 @@ async fn list_payments(
                     .ok()
                     .flatten()
                     .map(|d| d.to_string()),
-                status: r.try_get("status").unwrap_or_else(|_| "scheduled".to_string()),
-                tx_description: r.try_get::<Option<String>, _>("tx_description").ok().flatten(),
+                status: r
+                    .try_get("status")
+                    .unwrap_or_else(|_| "scheduled".to_string()),
+                tx_description: r
+                    .try_get::<Option<String>, _>("tx_description")
+                    .ok()
+                    .flatten(),
                 merchant_name: r.try_get::<Option<String>, _>("tx_merchant").ok().flatten(),
                 category: r.try_get::<Option<String>, _>("tx_category").ok().flatten(),
-                account_name: r.try_get::<Option<String>, _>("tx_account_name").ok().flatten(),
+                account_name: r
+                    .try_get::<Option<String>, _>("tx_account_name")
+                    .ok()
+                    .flatten(),
                 tx_amount: r
                     .try_get::<Option<rust_decimal::Decimal>, _>("tx_amount")
                     .ok()
@@ -1255,9 +1292,7 @@ async fn record_payment(
             // A repayment must be in the loan's currency. Reconciling a
             // foreign-currency inflow would silently record the wrong
             // amount (e.g. a $500 USD inflow against an MXN loan).
-            if !loan_currency.is_empty()
-                && !tx_currency.eq_ignore_ascii_case(&loan_currency)
-            {
+            if !loan_currency.is_empty() && !tx_currency.eq_ignore_ascii_case(&loan_currency) {
                 return (
                     StatusCode::BAD_REQUEST,
                     "transaction currency does not match the loan currency",
@@ -1304,13 +1339,13 @@ async fn record_payment(
     };
     let principal = dec_to_f64(loan.try_get("principal").ok());
     let rate = dec_to_f64(loan.try_get("interest_rate").ok());
-    let interest_type: String =
-        loan.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
-    let rate_period: String =
-        loan.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
-    let origination: chrono::NaiveDate = loan
-        .try_get("origination_date")
-        .unwrap_or(paid_date);
+    let interest_type: String = loan
+        .try_get("interest_type")
+        .unwrap_or_else(|_| "none".to_string());
+    let rate_period: String = loan
+        .try_get("rate_period")
+        .unwrap_or_else(|_| "annual".to_string());
+    let origination: chrono::NaiveDate = loan.try_get("origination_date").unwrap_or(paid_date);
     let principal_paid = dec_to_f64(loan.try_get("principal_paid").ok());
     let last_paid: Option<chrono::NaiveDate> = loan.try_get("last_paid").ok().flatten();
     let balance_before = (principal - principal_paid).max(0.0);
@@ -1640,11 +1675,7 @@ async fn attach_payment_tx(
         .ok()
         .flatten();
     if paid_amount.is_none() {
-        return (
-            StatusCode::CONFLICT,
-            "payment has no recorded amount",
-        )
-            .into_response();
+        return (StatusCode::CONFLICT, "payment has no recorded amount").into_response();
     }
     if already_linked.is_some() {
         return (
@@ -1800,8 +1831,9 @@ async fn suggest_disbursement(
     };
     let principal = dec_to_f64(l.try_get("principal").ok());
     let currency: String = l.try_get("currency").unwrap_or_default();
-    let origination: chrono::NaiveDate =
-        l.try_get("origination_date").unwrap_or(chrono::Utc::now().date_naive());
+    let origination: chrono::NaiveDate = l
+        .try_get("origination_date")
+        .unwrap_or(chrono::Utc::now().date_naive());
     let borrower: String = l.try_get("borrower_name").unwrap_or_default();
 
     match loan_match::suggest_disbursements(
@@ -1846,8 +1878,9 @@ async fn suggest_repayment(
     };
     let principal = dec_to_f64(l.try_get("principal").ok());
     let currency: String = l.try_get("currency").unwrap_or_default();
-    let origination: chrono::NaiveDate =
-        l.try_get("origination_date").unwrap_or(chrono::Utc::now().date_naive());
+    let origination: chrono::NaiveDate = l
+        .try_get("origination_date")
+        .unwrap_or(chrono::Utc::now().date_naive());
     let borrower: String = l.try_get("borrower_name").unwrap_or_default();
     let term_months: Option<i32> = l.try_get("term_months").ok().flatten();
     // Repayments are searched from the disbursement date (or origination
@@ -2016,16 +2049,18 @@ async fn regenerate_schedule(
 
     let principal: rust_decimal::Decimal = l.try_get("principal").unwrap_or_default();
     let rate: rust_decimal::Decimal = l.try_get("interest_rate").unwrap_or_default();
-    let interest_type: String =
-        l.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
+    let interest_type: String = l
+        .try_get("interest_type")
+        .unwrap_or_else(|_| "none".to_string());
     // CUSTOM schedules are uploaded explicitly, never derived from terms.
     // The formula builder must never touch them (that would replace the
     // uploaded rows with an equal-principal 'none' schedule).
     if interest_type == "custom" {
         return RegenOutcome::Custom;
     }
-    let rate_period: String =
-        l.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
+    let rate_period: String = l
+        .try_get("rate_period")
+        .unwrap_or_else(|_| "annual".to_string());
     let origination: chrono::NaiveDate = match l.try_get("origination_date") {
         Ok(d) => d,
         Err(_) => return RegenOutcome::DbError,
@@ -2142,13 +2177,19 @@ async fn generate_schedule(
     Path(id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     match regenerate_schedule(&state.db, id, ctx.user_id, false).await {
-        RegenOutcome::Regenerated(n) => {
-            (StatusCode::CREATED, Json(serde_json::json!({"installments": n}))).into_response()
-        }
+        RegenOutcome::Regenerated(n) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({"installments": n})),
+        )
+            .into_response(),
         RegenOutcome::NoSchedule => {
             // require_existing=false above, so this is unreachable here;
             // an empty schedule still produces Regenerated(0).
-            (StatusCode::CREATED, Json(serde_json::json!({"installments": 0}))).into_response()
+            (
+                StatusCode::CREATED,
+                Json(serde_json::json!({"installments": 0})),
+            )
+                .into_response()
         }
         RegenOutcome::Reconciled => (
             StatusCode::CONFLICT,
@@ -2160,9 +2201,11 @@ async fn generate_schedule(
             "loan has no term / payment frequency — set both to generate a schedule",
         )
             .into_response(),
-        RegenOutcome::BadFrequency => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "invalid payment frequency").into_response()
-        }
+        RegenOutcome::BadFrequency => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid payment frequency",
+        )
+            .into_response(),
         RegenOutcome::Custom => (
             StatusCode::UNPROCESSABLE_ENTITY,
             "custom-schedule loan: use POST /schedule/custom",
@@ -2255,7 +2298,11 @@ async fn set_custom_schedule(
     // Validate: non-empty, and Σamount ≥ principal (else the inferred
     // interest would be negative).
     if rows.is_empty() {
-        return (StatusCode::UNPROCESSABLE_ENTITY, "schedule has no installments").into_response();
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "schedule has no installments",
+        )
+            .into_response();
     }
     let total: Decimal = rows.iter().map(|r| r.amount).sum();
     if total < principal {
@@ -2307,7 +2354,11 @@ async fn set_custom_schedule(
             crate::services::realtime::RealtimeEvent::TransactionsChanged,
         )
         .await;
-    (StatusCode::CREATED, Json(serde_json::json!({"installments": n}))).into_response()
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({"installments": n})),
+    )
+        .into_response()
 }
 
 /// Administrative early/full payoff: close an active loan and void any
@@ -2600,7 +2651,9 @@ async fn interest_income(
     let mut by_currency: std::collections::BTreeMap<String, (f64, f64, i64)> =
         std::collections::BTreeMap::new();
     for l in &loans {
-        let e = by_currency.entry(l.currency.clone()).or_insert((0.0, 0.0, 0));
+        let e = by_currency
+            .entry(l.currency.clone())
+            .or_insert((0.0, 0.0, 0));
         e.0 += l.interest_received;
         e.1 += l.principal_received;
         e.2 += l.payments_count;
@@ -2647,7 +2700,9 @@ async fn interest_income(
     // USD-EQUIVALENT principal — otherwise a 15,000-MXN (~$830) 0% loan
     // is wrongly flagged as clearing the threshold. US+MX app: convert
     // MXN at the current rate, treat anything else as already-USD.
-    let usd_mxn = crate::api::dashboard::latest_usd_mxn_rate(&state.db).await.rate;
+    let usd_mxn = crate::api::dashboard::latest_usd_mxn_rate(&state.db)
+        .await
+        .rate;
     let below_market: Vec<serde_json::Value> = below_market_rows
         .iter()
         .filter_map(|r| {
@@ -2725,9 +2780,8 @@ async fn export_interest_income(
     // any spreadsheet). Borrower + currency lead; the two split columns are
     // named plainly; running_balance is the principal still owed after the
     // payment.
-    let mut csv = String::from(
-        "borrower,currency,date,amount_paid,principal,interest,running_balance\n",
-    );
+    let mut csv =
+        String::from("borrower,currency,date,amount_paid,principal,interest,running_balance\n");
     for r in &rows {
         let date = r
             .try_get::<chrono::NaiveDate, _>("paid_date")
@@ -2846,7 +2900,8 @@ async fn loan_agreement(
             en
         }
     };
-    let sql = format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2");
+    let sql =
+        format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2");
     let row = sqlx::query(&sql)
         .bind(id)
         .bind(ctx.user_id)
@@ -2861,17 +2916,16 @@ async fn loan_agreement(
     // Lender display name: the user's configured full name (app setting
     // 'lender_name'), else their username. Lets the agreement read
     // "Nick Van der Auwermeulen" instead of a login handle.
-    let configured_name: Option<String> = sqlx::query(
-        "SELECT value FROM app_settings WHERE key = 'lender_name' AND user_id = $1",
-    )
-    .bind(ctx.user_id)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .and_then(|r| r.try_get::<serde_json::Value, _>("value").ok())
-    .and_then(|val| val.as_str().map(|s| s.trim().to_string()))
-    .filter(|s| !s.is_empty());
+    let configured_name: Option<String> =
+        sqlx::query("SELECT value FROM app_settings WHERE key = 'lender_name' AND user_id = $1")
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|r| r.try_get::<serde_json::Value, _>("value").ok())
+            .and_then(|val| val.as_str().map(|s| s.trim().to_string()))
+            .filter(|s| !s.is_empty());
     let lender: String = match configured_name {
         Some(name) => name,
         None => sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
@@ -2967,9 +3021,7 @@ async fn loan_agreement(
     if !payments.is_empty() {
         let paid_count = payments
             .iter()
-            .filter(|p| {
-                p.try_get::<String, _>("status").ok().as_deref() == Some("paid")
-            })
+            .filter(|p| p.try_get::<String, _>("status").ok().as_deref() == Some("paid"))
             .count();
         let total_count = payments.len();
         // A plain-language caption above the grid so the schedule reads as a
@@ -3004,8 +3056,7 @@ async fn loan_agreement(
             let amt = dec_to_f64(p.try_get("scheduled_amount").ok());
             let prin = dec_to_f64(p.try_get("scheduled_principal").ok());
             let int = dec_to_f64(p.try_get("scheduled_interest").ok());
-            let paid =
-                p.try_get::<String, _>("status").ok().as_deref() == Some("paid");
+            let paid = p.try_get::<String, _>("status").ok().as_deref() == Some("paid");
             let (row_cls, status_cell) = if paid {
                 (
                     " class=\"paid\"",
@@ -3050,7 +3101,11 @@ async fn loan_agreement(
                 format!("{n} scheduled payments.")
             }
         }
-        _ => t("Open-ended (no fixed schedule).", "Abierto (sin calendario fijo).").to_string(),
+        _ => t(
+            "Open-ended (no fixed schedule).",
+            "Abierto (sin calendario fijo).",
+        )
+        .to_string(),
     };
     let paid_pct = if total_to_repay > 0.0 {
         (total_paid / total_to_repay * 100.0).clamp(0.0, 100.0)
@@ -3330,7 +3385,8 @@ async fn build_plan_rows(
                     p.try_get("scheduled_amount").unwrap_or_default(),
                     p.try_get("scheduled_principal").unwrap_or_default(),
                     p.try_get("scheduled_interest").unwrap_or_default(),
-                    p.try_get("status").unwrap_or_else(|_| "scheduled".to_string()),
+                    p.try_get("status")
+                        .unwrap_or_else(|_| "scheduled".to_string()),
                 )
             })
             .collect()
@@ -3495,7 +3551,11 @@ async fn export_schedule_csv(
         .collect::<String>()
         .trim_matches('-')
         .to_string();
-    let slug = if slug.is_empty() { "loan".to_string() } else { slug };
+    let slug = if slug.is_empty() {
+        "loan".to_string()
+    } else {
+        slug
+    };
     let filename = format!("patrimonio-payment-plan-{slug}.csv");
 
     (
@@ -3544,7 +3604,11 @@ async fn loan_payment_plan(
     let money = |x: f64| fmt_money(sym, x);
 
     // Plain-language interest description (mirrors loan_agreement's).
-    let per = if v.rate_period == "monthly" { "month" } else { "year" };
+    let per = if v.rate_period == "monthly" {
+        "month"
+    } else {
+        "year"
+    };
     let interest_desc = match v.interest_type.as_str() {
         "none" => "no interest — you pay back exactly what you borrowed".to_string(),
         "simple" => format!(
@@ -3693,7 +3757,13 @@ mod tests {
         ];
         for (itype, principal, rate, term, freq) in cases {
             let sched = crate::services::loan_schedule::generate(
-                principal, rate, "annual", itype, orig, Some(term), Some(freq),
+                principal,
+                rate,
+                "annual",
+                itype,
+                orig,
+                Some(term),
+                Some(freq),
             )
             .unwrap();
             let principals: Vec<Decimal> = sched.iter().map(|r| r.principal).collect();
@@ -3721,9 +3791,18 @@ mod tests {
     fn custom_schedule_running_balance_closes_to_zero() {
         let rows = crate::services::loan_schedule::expand_rows(
             &[
-                (chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(), d("3500")),
-                (chrono::NaiveDate::from_ymd_opt(2026, 7, 15).unwrap(), d("4000")),
-                (chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap(), d("2500")),
+                (
+                    chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
+                    d("3500"),
+                ),
+                (
+                    chrono::NaiveDate::from_ymd_opt(2026, 7, 15).unwrap(),
+                    d("4000"),
+                ),
+                (
+                    chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap(),
+                    d("2500"),
+                ),
             ],
             d("10000"),
         );

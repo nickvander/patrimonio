@@ -36,9 +36,7 @@ use serde::Deserialize;
 
 use crate::api::session::{internal, ApiError, AuthContext};
 use crate::api::tax::resolve_filing_status;
-use crate::services::tax::{
-    TaxService, AMOUNT_USD_SQL, USD_MXN_ROW_RATE_SQL,
-};
+use crate::services::tax::{TaxService, AMOUNT_USD_SQL, USD_MXN_ROW_RATE_SQL};
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -104,7 +102,11 @@ fn money_grouped(d: Decimal) -> String {
         }
         grouped.push(ch);
     }
-    let sign = if d.is_sign_negative() && !d.is_zero() { "-" } else { "" };
+    let sign = if d.is_sign_negative() && !d.is_zero() {
+        "-"
+    } else {
+        ""
+    };
     format!("{sign}{grouped}.{frac_part}")
 }
 
@@ -423,7 +425,10 @@ async fn export_form_8949_csv(
     ]);
 
     let body = wtr.into_inner().unwrap_or_default();
-    Ok(csv_attachment(&format!("patrimonio_form8949_{year}.csv"), body))
+    Ok(csv_attachment(
+        &format!("patrimonio_form8949_{year}.csv"),
+        body,
+    ))
 }
 
 // =====================================================================

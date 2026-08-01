@@ -113,13 +113,12 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
     //     during the walk below. Without this the detector would
     //     happily re-propose a pair the user explicitly told us to
     //     stop suggesting on the previous sweep.
-    let dismissed_rows = sqlx::query(
-        "SELECT source_tx_id, dest_tx_id FROM dismissed_fx_pairs WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_all(db)
-    .await
-    .unwrap_or_default();
+    let dismissed_rows =
+        sqlx::query("SELECT source_tx_id, dest_tx_id FROM dismissed_fx_pairs WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(db)
+            .await
+            .unwrap_or_default();
     let dismissed: std::collections::HashSet<(uuid::Uuid, uuid::Uuid)> = dismissed_rows
         .iter()
         .filter_map(|r| {
@@ -137,13 +136,12 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
     //     `2026061402_fx_transfer_relink.sql` backfill on deploy, so on the
     //     next sweep they get recomputed under the new matching rules rather
     //     than locking in the old cross-product pairings.
-    let existing_rows = sqlx::query(
-        "SELECT source_tx_id, dest_tx_id FROM cash_fx_transfers WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_all(db)
-    .await
-    .unwrap_or_default();
+    let existing_rows =
+        sqlx::query("SELECT source_tx_id, dest_tx_id FROM cash_fx_transfers WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(db)
+            .await
+            .unwrap_or_default();
     let mut used: std::collections::HashSet<uuid::Uuid> = std::collections::HashSet::new();
     for r in &existing_rows {
         if let Ok(s) = r.try_get::<uuid::Uuid, _>("source_tx_id") {
@@ -242,8 +240,7 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
                 ("MXN", "USD") => source_abs / dest_abs,
                 _ => continue,
             };
-            let rate_deviation =
-                ((implied_rate - reference_rate) / reference_rate).abs();
+            let rate_deviation = ((implied_rate - reference_rate) / reference_rate).abs();
 
             // Match a keyword if one is present in either tx.
             let matched_keyword = first_keyword(source).or_else(|| first_keyword(dest));
@@ -468,11 +465,43 @@ fn keywordless_pair_allowed(has_identity: bool, gap_days: i64, rate_deviation: f
 /// suffixes, and filler that would otherwise cause unrelated transfers to
 /// "share" an identity. Compared upper-cased.
 const IDENTITY_STOPWORDS: &[&str] = &[
-    "TRANSFER", "TRANSFERENCIA", "TRANSFERENCIAS", "SPEI", "PAGO", "PAGOS",
-    "DEPOSITO", "DEPÓSITO", "ABONO", "CARGO", "RETIRO", "PAYMENT", "BILL",
-    "FROM", "WITH", "THE", "AND", "PARA", "POR", "DESDE", "CASH", "ENVIO",
-    "ENVÍO", "INTERNACIONAL", "INTERBANCARIA", "INC", "LLC", "SA", "CV",
-    "SAPI", "SADECV", "BANK", "BANCO", "ACCOUNT", "CUENTA", "REF", "FOLIO",
+    "TRANSFER",
+    "TRANSFERENCIA",
+    "TRANSFERENCIAS",
+    "SPEI",
+    "PAGO",
+    "PAGOS",
+    "DEPOSITO",
+    "DEPÓSITO",
+    "ABONO",
+    "CARGO",
+    "RETIRO",
+    "PAYMENT",
+    "BILL",
+    "FROM",
+    "WITH",
+    "THE",
+    "AND",
+    "PARA",
+    "POR",
+    "DESDE",
+    "CASH",
+    "ENVIO",
+    "ENVÍO",
+    "INTERNACIONAL",
+    "INTERBANCARIA",
+    "INC",
+    "LLC",
+    "SA",
+    "CV",
+    "SAPI",
+    "SADECV",
+    "BANK",
+    "BANCO",
+    "ACCOUNT",
+    "CUENTA",
+    "REF",
+    "FOLIO",
 ];
 
 /// Significant identity tokens drawn from a transaction's name fields —
@@ -541,7 +570,10 @@ mod tests {
     fn scoring_falls_off_with_deviation() {
         // 100% of the tolerance band consumed → 0 rate pts.
         let score = score_match(RATE_TOLERANCE_PCT, 0, false, false);
-        assert!(score < 50, "loose match should score below threshold, got {score}");
+        assert!(
+            score < 50,
+            "loose match should score below threshold, got {score}"
+        );
     }
 
     #[test]

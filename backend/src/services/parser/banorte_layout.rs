@@ -200,8 +200,14 @@ Banco Mercantil del Norte S.A. R.F.C. BMN930209927
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2021, 2, 1).unwrap());
         assert_eq!(txs[0].amount, Decimal::from_str("756.72").unwrap());
         assert!(txs[0].description.contains("CONCENTRACION DE PAGOS"));
-        assert!(txs[0].description.contains("LODA850206L15"), "continuation appended");
-        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("3644255.61").unwrap()));
+        assert!(
+            txs[0].description.contains("LODA850206L15"),
+            "continuation appended"
+        );
+        assert_eq!(
+            txs[0].balance_after,
+            Some(Decimal::from_str("3644255.61").unwrap())
+        );
 
         // Commission + IVA are withdrawals (negative).
         assert_eq!(txs[1].amount, Decimal::from_str("-345.00").unwrap());

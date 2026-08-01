@@ -85,12 +85,20 @@ pub fn router() -> Router<AppState> {
 /// The dedup key for an imported transaction. MUST stay identical to the
 /// signature `confirm_handler` inserts, so a row the preview marks
 /// "already imported" is exactly the row confirm would skip.
-fn tx_signature(date: &chrono::NaiveDate, amount: &rust_decimal::Decimal, description: &str) -> String {
+fn tx_signature(
+    date: &chrono::NaiveDate,
+    amount: &rust_decimal::Decimal,
+    description: &str,
+) -> String {
     format!(
         "manual:{}:{}:{}",
         date,
         amount,
-        description.to_lowercase().chars().take(50).collect::<String>()
+        description
+            .to_lowercase()
+            .chars()
+            .take(50)
+            .collect::<String>()
     )
 }
 
@@ -426,9 +434,7 @@ async fn confirm_handler(
             .iter()
             .map(|t| t.tx.currency.to_uppercase())
             .collect();
-        if tx_currencies.len() == 1
-            && !tx_currencies.contains(&target_cur.to_uppercase())
-        {
+        if tx_currencies.len() == 1 && !tx_currencies.contains(&target_cur.to_uppercase()) {
             let tx_cur = tx_currencies.into_iter().next().unwrap();
             return (
                 StatusCode::BAD_REQUEST,
@@ -459,8 +465,7 @@ async fn confirm_handler(
             balance_after: ct.tx.balance_after,
         })
         .collect();
-    let continuity_warnings =
-        crate::services::continuity::continuity_warnings(&continuity_rows);
+    let continuity_warnings = crate::services::continuity::continuity_warnings(&continuity_rows);
 
     // Occurrence-aware external_ids: distinct same-day/same-amount/same-desc
     // rows get a `#N` suffix so the second isn't silently dropped, while the
@@ -557,10 +562,14 @@ async fn confirm_handler(
         // `polish_all`, but if the previewed tx round-tripped without a
         // category (older client, edited row), classify it here so the
         // ledger isn't left uncategorized.
-        let basis = tx.original_description.clone().unwrap_or_else(|| tx.description.clone());
-        let category = tx.category.clone().or_else(|| {
-            crate::services::categorize::categorize(&basis, tx.amount)
-        });
+        let basis = tx
+            .original_description
+            .clone()
+            .unwrap_or_else(|| tx.description.clone());
+        let category = tx
+            .category
+            .clone()
+            .or_else(|| crate::services::categorize::categorize(&basis, tx.amount));
         // The detailed category (e.g. CETES `INCOME_INTEREST_EARNED` / ISR
         // `TAX_ISR_WITHHELD`) is parser-provided and survives the preview→
         // confirm round-trip via the flattened ParsedTransaction. The
@@ -955,12 +964,10 @@ async fn upload_handler(
         let pwd_owned = password.clone();
         let name_for_task = file_name.clone();
         set.spawn_blocking(move || {
-            let result =
-                parser::detect_and_parse(&name_for_task, &file_data, pwd_owned.as_deref());
+            let result = parser::detect_and_parse(&name_for_task, &file_data, pwd_owned.as_deref());
             // Lift account-identifying metadata (CLABE, holder, suggested
             // balance/name) so the preview can pre-fill a new account.
-            let info =
-                parser::parse_account_info(&name_for_task, &file_data, pwd_owned.as_deref());
+            let info = parser::parse_account_info(&name_for_task, &file_data, pwd_owned.as_deref());
             (name_for_task, result, info)
         });
     }
@@ -1110,7 +1117,6 @@ async fn upload_handler(
         .into_response()
 }
 
-
 // ---------- import cleanup ----------
 
 /// GET /api/imports/batches — recent import batches (future imports, which
@@ -1229,13 +1235,11 @@ async fn undo_batch_handler(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<Uuid>,
 ) -> Response {
-    let res = sqlx::query(
-        "DELETE FROM transactions WHERE import_batch_id = $1 AND user_id = $2",
-    )
-    .bind(id)
-    .bind(ctx.user_id)
-    .execute(&state.db)
-    .await;
+    let res = sqlx::query("DELETE FROM transactions WHERE import_batch_id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await;
     match res {
         Ok(r) => {
             if r.rows_affected() > 0 {
@@ -1279,14 +1283,13 @@ async fn bulk_delete_handler(
     Extension(ctx): Extension<AuthContext>,
     Json(req): Json<BulkDeleteRequest>,
 ) -> Response {
-    let owns: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2)",
-    )
-    .bind(req.account_id)
-    .bind(ctx.user_id)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(false);
+    let owns: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2)")
+            .bind(req.account_id)
+            .bind(ctx.user_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(false);
     if !owns {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -1376,7 +1379,10 @@ mod tests {
             (date, amt, "STARBUCKS".to_string()),
         ]);
         let base = tx_signature(&date, &amt, "STARBUCKS");
-        assert_eq!(sigs, vec![base.clone(), format!("{base}#1"), format!("{base}#2")]);
+        assert_eq!(
+            sigs,
+            vec![base.clone(), format!("{base}#1"), format!("{base}#2")]
+        );
         // All distinct → all three survive ON CONFLICT.
         let unique: std::collections::HashSet<_> = sigs.iter().collect();
         assert_eq!(unique.len(), 3);

@@ -97,8 +97,9 @@ impl AppConfig {
             .collect();
 
         Ok(Self {
-            database_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://patrimonio:patrimonio@localhost:5432/patrimonio".to_string()),
+            database_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgres://patrimonio:patrimonio@localhost:5432/patrimonio".to_string()
+            }),
             // Default of 5 was too tight — the webapp + daily-snapshot
             // cron + manual sync each consume connections, and one
             // interactive sync alongside a dashboard load can already
@@ -115,8 +116,7 @@ impl AppConfig {
                 .parse()?,
             plaid_client_id: std::env::var("PLAID_CLIENT_ID").ok(),
             plaid_secret: std::env::var("PLAID_SECRET").ok(),
-            plaid_env: std::env::var("PLAID_ENV")
-                .unwrap_or_else(|_| "sandbox".to_string()),
+            plaid_env: std::env::var("PLAID_ENV").unwrap_or_else(|_| "sandbox".to_string()),
             exchange_rate_api_key: env_non_empty("EXCHANGE_RATE_API_KEY"),
             encryption_key,
             coinbase_client_id: env_non_empty("COINBASE_CLIENT_ID"),

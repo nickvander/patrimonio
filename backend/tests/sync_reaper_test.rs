@@ -94,7 +94,8 @@ async fn status_of(pool: &PgPool, id: Uuid) -> (String, Option<String>, bool) {
     .await
     .expect("read institution");
     (
-        row.get::<Option<String>, _>("sync_status").unwrap_or_default(),
+        row.get::<Option<String>, _>("sync_status")
+            .unwrap_or_default(),
         row.get("last_sync_error"),
         row.get("cleared"),
     )

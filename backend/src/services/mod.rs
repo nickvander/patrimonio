@@ -1,29 +1,29 @@
 // Services module - business logic
 // Stubs for now, will be fleshed out in later phases
 
-pub mod encryption;
-pub mod exchange_rate;
 pub mod benchmark;
-pub mod dividends;
-pub mod twr;
-pub mod sync;
-pub mod parser;
 pub mod categorize;
+pub mod common_passwords;
 pub mod continuity;
-pub mod projections;
 pub mod crypto;
 pub mod crypto_price;
-pub mod tax;
-pub mod password;
-pub mod sessions;
-pub mod recovery;
-pub mod totp;
-pub mod plaid_webhook_verify;
+pub mod dividends;
+pub mod encryption;
+pub mod exchange_rate;
 pub mod fx_transfer_link;
-pub mod common_passwords;
-pub mod realtime;
+pub mod holdings;
 pub mod loan_match;
 pub mod loan_schedule;
-pub mod holdings;
-pub mod staleness;
 pub mod notifications;
+pub mod parser;
+pub mod password;
+pub mod plaid_webhook_verify;
+pub mod projections;
+pub mod realtime;
+pub mod recovery;
+pub mod sessions;
+pub mod staleness;
+pub mod sync;
+pub mod tax;
+pub mod totp;
+pub mod twr;

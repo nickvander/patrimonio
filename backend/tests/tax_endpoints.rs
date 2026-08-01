@@ -97,8 +97,11 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");
     let webauthn = std::sync::Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
-            .expect("webauthn builder"),
+        patrimonio::api::passkeys::build_webauthn(
+            &config.frontend_base_url,
+            &config.android_apk_cert_sha256,
+        )
+        .expect("webauthn builder"),
     );
     let state = AppState {
         db: pool.clone(),
@@ -163,8 +166,7 @@ fn set_cookie_value(headers: &axum::http::HeaderMap) -> Option<String> {
 }
 
 fn cookie_header(token: &str) -> HeaderValue {
-    HeaderValue::from_str(&format!("{SESSION_COOKIE}={token}"))
-        .expect("valid cookie header")
+    HeaderValue::from_str(&format!("{SESSION_COOKIE}={token}")).expect("valid cookie header")
 }
 
 fn req(method: Method, uri: &str, body: Option<&Value>, cookie: Option<&str>) -> Request<Body> {
@@ -217,11 +219,7 @@ async fn bootstrap(app: &Router, pool: &PgPool) -> (String, uuid::Uuid) {
 /// string is stored verbatim so case-insensitivity of the advantaged-subtype
 /// match can be exercised (the migration normalizes to lowercase, but the
 /// predicate must not depend on that).
-async fn seed_typed_account(
-    pool: &PgPool,
-    user_id: uuid::Uuid,
-    account_type: &str,
-) -> uuid::Uuid {
+async fn seed_typed_account(pool: &PgPool, user_id: uuid::Uuid, account_type: &str) -> uuid::Uuid {
     let inst_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO institutions (name, institution_type, country, integration_type, sync_status, user_id) \
          VALUES ('Test Bank', 'bank', 'US', 'manual', 'ok', $1) RETURNING id",
@@ -291,8 +289,16 @@ async fn seed_categorized_tx(
     user_category: Option<&str>,
 ) {
     seed_categorized_tx_in(
-        pool, user_id, account_id, date, description, amount, "USD", category,
-        category_detailed, user_category,
+        pool,
+        user_id,
+        account_id,
+        date,
+        description,
+        amount,
+        "USD",
+        category,
+        category_detailed,
+        user_category,
     )
     .await;
 }
@@ -323,7 +329,14 @@ async fn seed_disposal(
     pnl: &str,
 ) {
     seed_disposal_dated(
-        pool, user_id, account_id, symbol, acquired_at, "2026-06-01", source_tag, pnl,
+        pool,
+        user_id,
+        account_id,
+        symbol,
+        acquired_at,
+        "2026-06-01",
+        source_tag,
+        pnl,
     )
     .await;
 }
@@ -433,32 +446,67 @@ async fn tax_summary_and_transactions_match_stored_income_taxonomy() {
 
     // sync.rs-shaped: Plaid PFC primary + detailed.
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "5000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "5000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
     // categorize.rs-shaped: statement import, primary only.
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-03-15", "ABONO NOMINA QUINCENA 1", "1000.00",
-        Some("INCOME"), None, None,
+        &pool,
+        user_id,
+        acct,
+        "2026-03-15",
+        "ABONO NOMINA QUINCENA 1",
+        "1000.00",
+        Some("INCOME"),
+        None,
+        None,
     )
     .await;
     // user override opting IN: auto-category is not income, user said Income.
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-04-01", "SIDE GIG TRANSFER", "250.00",
-        Some("TRANSFER_IN"), None, Some("Income"),
+        &pool,
+        user_id,
+        acct,
+        "2026-04-01",
+        "SIDE GIG TRANSFER",
+        "250.00",
+        Some("TRANSFER_IN"),
+        None,
+        Some("Income"),
     )
     .await;
     // user override opting OUT: sync said wages, user reclassified.
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-05-20", "REIMBURSED EXPENSE", "9999.00",
-        Some("INCOME"), Some("INCOME_WAGES"), Some("TRANSFER_IN"),
+        &pool,
+        user_id,
+        acct,
+        "2026-05-20",
+        "REIMBURSED EXPENSE",
+        "9999.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        Some("TRANSFER_IN"),
     )
     .await;
     // noise: ordinary spending must not count.
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-05-21", "GROCERIES REFUND", "40.00",
-        Some("FOOD_AND_DRINK"), Some("FOOD_AND_DRINK_GROCERIES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-05-21",
+        "GROCERIES REFUND",
+        "40.00",
+        Some("FOOD_AND_DRINK"),
+        Some("FOOD_AND_DRINK_GROCERIES"),
+        None,
     )
     .await;
 
@@ -544,14 +592,30 @@ async fn cetes_interest_lands_in_interest_income_not_wages() {
 
     // A CETES yield credit as the parser now stamps it (MXN, positive inflow).
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-06-01", "PREMIO CETES 260601", "2000.00", "MXN",
-        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-06-01",
+        "PREMIO CETES 260601",
+        "2000.00",
+        "MXN",
+        Some("INCOME"),
+        Some("INCOME_INTEREST_EARNED"),
+        None,
     )
     .await;
     // A plain payroll row so wage_income is non-zero and the split is visible.
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-06-02", "ACME PAYROLL", "5000.00", "USD",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-06-02",
+        "ACME PAYROLL",
+        "5000.00",
+        "USD",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
 
@@ -587,13 +651,29 @@ async fn isr_withholding_excluded_from_income_and_totalled() {
     // CETES yield (income) + the ISR the broker retained on it (an outflow,
     // tagged TAX_ISR_WITHHELD with a NON-income category).
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-06-01", "PREMIO CETES 260601", "2000.00", "MXN",
-        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-06-01",
+        "PREMIO CETES 260601",
+        "2000.00",
+        "MXN",
+        Some("INCOME"),
+        Some("INCOME_INTEREST_EARNED"),
+        None,
     )
     .await;
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-06-01", "RETENCION ISR CETES", "-200.00", "MXN",
-        Some("GOVERNMENT_AND_NON_PROFIT"), Some("TAX_ISR_WITHHELD"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-06-01",
+        "RETENCION ISR CETES",
+        "-200.00",
+        "MXN",
+        Some("GOVERNMENT_AND_NON_PROFIT"),
+        Some("TAX_ISR_WITHHELD"),
+        None,
     )
     .await;
 
@@ -646,7 +726,16 @@ async fn tax_summary_excludes_tax_advantaged_disposals() {
 
     // Taxable: one short-term (acquired 2026 → ≤1yr) and one long-term lot.
     seed_disposal(&pool, user_id, brokerage, "VTI", "2026-01-01", "st", "500").await;
-    seed_disposal(&pool, user_id, brokerage, "VXUS", "2022-01-01", "lt", "3000").await;
+    seed_disposal(
+        &pool,
+        user_id,
+        brokerage,
+        "VXUS",
+        "2022-01-01",
+        "lt",
+        "3000",
+    )
+    .await;
     // Identical-shape disposals inside wrappers: must contribute zero.
     seed_disposal(&pool, user_id, k401, "RETF", "2022-01-01", "401k", "7000").await;
     seed_disposal(&pool, user_id, hsa, "HLTH", "2022-01-01", "hsa", "777").await;
@@ -746,7 +835,10 @@ async fn tax_csv_separates_tax_advantaged_section_from_8949() {
 
     // Summary block: taxable LT only + the labeled excluded figure.
     assert!(csv.contains("Long-term gains (USD),3000.00"), "csv:\n{csv}");
-    assert!(csv.contains("Total capital gains (USD),3000.00"), "csv:\n{csv}");
+    assert!(
+        csv.contains("Total capital gains (USD),3000.00"),
+        "csv:\n{csv}"
+    );
     // The label contains a comma, so the CSV writer (correctly, per RFC 4180)
     // quotes the field.
     assert!(
@@ -790,9 +882,9 @@ fn assert_no_raw_blend(body: &Value, blend: f64) {
         "estimated_liability_mx",
         "estimated_liability_mx_mxn",
     ] {
-        let v = body[field].as_f64().unwrap_or_else(|| {
-            panic!("field {field} missing from summary: {body}")
-        });
+        let v = body[field]
+            .as_f64()
+            .unwrap_or_else(|| panic!("field {field} missing from summary: {body}"));
         assert!(
             (v - blend).abs() > 1.0,
             "{field} = {v} equals the raw mixed-currency blend {blend}"
@@ -812,13 +904,29 @@ async fn tax_summary_normalizes_mixed_currency_income_per_row() {
     // One stored rate, in effect before both transactions.
     seed_usd_mxn_rate(&pool, "2026-01-10", "17.5").await;
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-02-01", "US CONSULTING WIRE", "5000.00", "USD",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-01",
+        "US CONSULTING WIRE",
+        "5000.00",
+        "USD",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-03-01", "ABONO NOMINA MXN", "50000.00", "MXN",
-        Some("INCOME"), None, None,
+        &pool,
+        user_id,
+        acct,
+        "2026-03-01",
+        "ABONO NOMINA MXN",
+        "50000.00",
+        "MXN",
+        Some("INCOME"),
+        None,
+        None,
     )
     .await;
 
@@ -879,7 +987,10 @@ async fn tax_summary_normalizes_mixed_currency_income_per_row() {
     let rows = body.as_array().expect("array of transactions");
     assert_eq!(rows.len(), 2);
     let sum_usd: f64 = rows.iter().map(|r| r["amount_usd"].as_f64().unwrap()).sum();
-    assert!((sum_usd - usd_base).abs() < 0.01, "rows sum {sum_usd} != headline {usd_base}");
+    assert!(
+        (sum_usd - usd_base).abs() < 0.01,
+        "rows sum {sum_usd} != headline {usd_base}"
+    );
     let mxn_row = rows
         .iter()
         .find(|r| r["currency"] == "MXN")
@@ -903,7 +1014,10 @@ async fn tax_summary_normalizes_mixed_currency_income_per_row() {
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(csv.contains("Amount (USD)"), "csv:\n{csv}");
     assert!(csv.contains("Ordinary income (USD),7857.14"), "csv:\n{csv}");
-    assert!(csv.contains("Ordinary income (MXN),137500.00"), "csv:\n{csv}");
+    assert!(
+        csv.contains("Ordinary income (MXN),137500.00"),
+        "csv:\n{csv}"
+    );
     assert!(
         csv.contains("Estimated liability — MX SAT (MXN)"),
         "csv:\n{csv}"
@@ -929,14 +1043,30 @@ async fn tax_income_uses_each_rows_own_date_rate() {
     seed_usd_mxn_rate(&pool, "2026-06-15", "20.0").await;
     // 17,500 MXN at 17.5 → 1,000 USD.
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-02-01", "NOMINA FEB", "17500.00", "MXN",
-        Some("INCOME"), None, None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-01",
+        "NOMINA FEB",
+        "17500.00",
+        "MXN",
+        Some("INCOME"),
+        None,
+        None,
     )
     .await;
     // 20,000 MXN at 20.0 → 1,000 USD.
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-07-01", "NOMINA JUL", "20000.00", "MXN",
-        Some("INCOME"), None, None,
+        &pool,
+        user_id,
+        acct,
+        "2026-07-01",
+        "NOMINA JUL",
+        "20000.00",
+        "MXN",
+        Some("INCOME"),
+        None,
+        None,
     )
     .await;
 
@@ -965,13 +1095,29 @@ async fn tax_income_missing_dated_rate_falls_back_to_latest_stored() {
     // adding the raw amounts.
     seed_usd_mxn_rate(&pool, "2026-12-01", "18.0").await;
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-02-01", "US WIRE", "5000.00", "USD",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-01",
+        "US WIRE",
+        "5000.00",
+        "USD",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-02-02", "NOMINA MXN", "50000.00", "MXN",
-        Some("INCOME"), None, None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-02",
+        "NOMINA MXN",
+        "50000.00",
+        "MXN",
+        Some("INCOME"),
+        None,
+        None,
     )
     .await;
 
@@ -1001,13 +1147,29 @@ async fn tax_income_with_no_stored_rates_uses_ballpark_never_raw_sum() {
     // ballpark (same constant sync.rs uses) — magnitudes stay sane and the
     // raw MXN+USD blend can never reappear.
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-02-01", "US WIRE", "5000.00", "USD",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-01",
+        "US WIRE",
+        "5000.00",
+        "USD",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-02-02", "NOMINA MXN", "50000.00", "MXN",
-        Some("INCOME"), None, None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-02",
+        "NOMINA MXN",
+        "50000.00",
+        "MXN",
+        Some("INCOME"),
+        None,
+        None,
     )
     .await;
 
@@ -1036,8 +1198,15 @@ async fn tax_summary_subtracts_standard_deduction_before_brackets() {
     let acct = seed_typed_account(&pool, user_id, "depository").await;
 
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "50000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
 
@@ -1102,13 +1271,38 @@ async fn tax_summary_nets_losses_caps_ordinary_offset_and_reports_carryforward()
     let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
 
     seed_categorized_tx(
-        &pool, user_id, depo, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        depo,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "50000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
     // ST loss −5,000 (acquired Jan 2026, sold Jun 2026) + LT loss −2,000.
-    seed_disposal(&pool, user_id, brokerage, "STL", "2026-01-02", "stl", "-5000").await;
-    seed_disposal(&pool, user_id, brokerage, "LTL", "2022-01-01", "ltl", "-2000").await;
+    seed_disposal(
+        &pool,
+        user_id,
+        brokerage,
+        "STL",
+        "2026-01-02",
+        "stl",
+        "-5000",
+    )
+    .await;
+    seed_disposal(
+        &pool,
+        user_id,
+        brokerage,
+        "LTL",
+        "2022-01-01",
+        "ltl",
+        "-2000",
+    )
+    .await;
 
     let body = fetch_summary(&app, &token).await;
     // Raw buckets are reported un-netted.
@@ -1140,8 +1334,26 @@ async fn tax_summary_st_loss_offsets_lt_gain_through_endpoint() {
     let (token, user_id) = bootstrap(&app, &pool).await;
     let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
 
-    seed_disposal(&pool, user_id, brokerage, "STL", "2026-01-02", "stl", "-20000").await;
-    seed_disposal(&pool, user_id, brokerage, "LTG", "2022-01-01", "ltg", "80000").await;
+    seed_disposal(
+        &pool,
+        user_id,
+        brokerage,
+        "STL",
+        "2026-01-02",
+        "stl",
+        "-20000",
+    )
+    .await;
+    seed_disposal(
+        &pool,
+        user_id,
+        brokerage,
+        "LTG",
+        "2022-01-01",
+        "ltg",
+        "80000",
+    )
+    .await;
 
     let body = fetch_summary(&app, &token).await;
     // Surviving LT gain = 60,000; taxable ordinary = 0 (no income), so the
@@ -1193,14 +1405,17 @@ async fn tax_unknown_acquisition_counts_short_term_but_exports_say_unknown() {
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(csv.contains("MYST"), "csv:\n{csv}");
     assert!(csv.contains("Unknown"), "term label kept, csv:\n{csv}");
-    assert!(csv.contains("Short-term gains (USD),1000.00"), "csv:\n{csv}");
-    // T4/T5 summary lines.
-    assert!(csv.contains("Capital-loss carryforward (USD),0.00"), "csv:\n{csv}");
-    assert!(csv.contains("Bracket year used,2026"), "csv:\n{csv}");
     assert!(
-        csv.contains("Tax constants verified,yes"),
+        csv.contains("Short-term gains (USD),1000.00"),
         "csv:\n{csv}"
     );
+    // T4/T5 summary lines.
+    assert!(
+        csv.contains("Capital-loss carryforward (USD),0.00"),
+        "csv:\n{csv}"
+    );
+    assert!(csv.contains("Bracket year used,2026"), "csv:\n{csv}");
+    assert!(csv.contains("Tax constants verified,yes"), "csv:\n{csv}");
 }
 
 #[tokio::test]
@@ -1217,12 +1432,26 @@ async fn tax_term_boundary_is_calendar_year_not_day_count() {
     // calendar rule says "more than one year" — sale ON the anniversary is
     // still short-term.
     seed_disposal_dated(
-        &pool, user_id, brokerage, "ANNIV", "2023-06-01", "2024-06-01", "anniv", "700",
+        &pool,
+        user_id,
+        brokerage,
+        "ANNIV",
+        "2023-06-01",
+        "2024-06-01",
+        "anniv",
+        "700",
     )
     .await;
     // One day later: long-term.
     seed_disposal_dated(
-        &pool, user_id, brokerage, "DAYAFTER", "2023-06-01", "2024-06-02", "after", "300",
+        &pool,
+        user_id,
+        brokerage,
+        "DAYAFTER",
+        "2023-06-01",
+        "2024-06-02",
+        "after",
+        "300",
     )
     .await;
 
@@ -1281,46 +1510,98 @@ async fn tax_summary_decomposes_dividend_and_interest_income() {
     seed_usd_mxn_rate(&pool, "2026-01-10", "20.0").await;
     // Wage row (sync.rs PFC shape).
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "5000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "5000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
     // USD dividend + MXN dividend (the decomposition must reuse the same
     // per-row LATERAL FX rule as the headline: 2,000 MXN / 20 = 100 USD).
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-03-15", "VTI DIVIDEND", "800.00",
-        Some("INCOME"), Some("INCOME_DIVIDENDS"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-03-15",
+        "VTI DIVIDEND",
+        "800.00",
+        Some("INCOME"),
+        Some("INCOME_DIVIDENDS"),
+        None,
     )
     .await;
     seed_categorized_tx_in(
-        &pool, user_id, acct, "2026-04-01", "DIVIDENDO FONDO MX", "2000.00", "MXN",
-        Some("INCOME"), Some("INCOME_DIVIDENDS"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-04-01",
+        "DIVIDENDO FONDO MX",
+        "2000.00",
+        "MXN",
+        Some("INCOME"),
+        Some("INCOME_DIVIDENDS"),
+        None,
     )
     .await;
     // Interest row.
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-05-01", "BROKERAGE INTEREST", "200.00",
-        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-05-01",
+        "BROKERAGE INTEREST",
+        "200.00",
+        Some("INCOME"),
+        Some("INCOME_INTEREST_EARNED"),
+        None,
     )
     .await;
     // A dividend the user reclassified away must vanish from EVERY bucket
     // (the predicate excludes it before the decomposition CASEs run).
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-05-02", "RETURN OF CAPITAL", "999.00",
-        Some("INCOME"), Some("INCOME_DIVIDENDS"), Some("TRANSFER_IN"),
+        &pool,
+        user_id,
+        acct,
+        "2026-05-02",
+        "RETURN OF CAPITAL",
+        "999.00",
+        Some("INCOME"),
+        Some("INCOME_DIVIDENDS"),
+        Some("TRANSFER_IN"),
     )
     .await;
 
     let body = fetch_summary(&app, &token).await;
-    let f = |k: &str| body[k].as_f64().unwrap_or_else(|| panic!("{k} missing: {body}"));
+    let f = |k: &str| {
+        body[k]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{k} missing: {body}"))
+    };
 
     // Buckets: wages 5,000; dividends 800 + 100; interest 200.
-    assert!((f("wage_income") - 5000.0).abs() < 0.01, "wage_income: {body}");
-    assert!((f("dividend_income") - 900.0).abs() < 0.01, "dividend_income: {body}");
-    assert!((f("interest_income") - 200.0).abs() < 0.01, "interest_income: {body}");
+    assert!(
+        (f("wage_income") - 5000.0).abs() < 0.01,
+        "wage_income: {body}"
+    );
+    assert!(
+        (f("dividend_income") - 900.0).abs() < 0.01,
+        "dividend_income: {body}"
+    );
+    assert!(
+        (f("interest_income") - 200.0).abs() < 0.01,
+        "interest_income: {body}"
+    );
     // Decomposition is exact — the parts re-sum to the bracket input, so
     // nothing is double-counted (the 999 opt-out is in no bucket at all).
-    assert!((f("ordinary_income") - 6100.0).abs() < 0.01, "ordinary_income: {body}");
+    assert!(
+        (f("ordinary_income") - 6100.0).abs() < 0.01,
+        "ordinary_income: {body}"
+    );
     assert!(
         (f("wage_income") + f("dividend_income") + f("interest_income") - f("ordinary_income"))
             .abs()
@@ -1330,7 +1611,10 @@ async fn tax_summary_decomposes_dividend_and_interest_income() {
     assert!((f("total_taxable") - 6100.0).abs() < 0.01);
     // Bracket math input unchanged: 6,100 sits under the 2026 single
     // standard deduction → $0 liability, same as an all-wages 6,100.
-    assert!(f("estimated_liability_us").abs() < 0.01, "liability: {body}");
+    assert!(
+        f("estimated_liability_us").abs() < 0.01,
+        "liability: {body}"
+    );
 
     // CSV shows the decomposition under the ordinary-income line.
     let res = app
@@ -1351,8 +1635,14 @@ async fn tax_summary_decomposes_dividend_and_interest_income() {
         csv.contains("  of which wages & other income (USD),5000.00"),
         "csv:\n{csv}"
     );
-    assert!(csv.contains("  of which dividends (USD),900.00"), "csv:\n{csv}");
-    assert!(csv.contains("  of which interest (USD),200.00"), "csv:\n{csv}");
+    assert!(
+        csv.contains("  of which dividends (USD),900.00"),
+        "csv:\n{csv}"
+    );
+    assert!(
+        csv.contains("  of which interest (USD),200.00"),
+        "csv:\n{csv}"
+    );
 }
 
 #[tokio::test]
@@ -1432,15 +1722,20 @@ async fn plaid_investment_income_events_persist_idempotently() {
 
     // one-off sqlx row tuple, materialized once at this query_as call site
     #[allow(clippy::type_complexity)]
-    let rows: Vec<(String, rust_decimal::Decimal, Option<String>, Option<String>, String)> =
-        sqlx::query_as(
-            "SELECT external_id, amount, category, category_detailed, source \
+    let rows: Vec<(
+        String,
+        rust_decimal::Decimal,
+        Option<String>,
+        Option<String>,
+        String,
+    )> = sqlx::query_as(
+        "SELECT external_id, amount, category, category_detailed, source \
              FROM transactions WHERE user_id = $1 ORDER BY external_id",
-        )
-        .bind(user_id)
-        .fetch_all(&pool)
-        .await
-        .expect("read transactions");
+    )
+    .bind(user_id)
+    .fetch_all(&pool)
+    .await
+    .expect("read transactions");
 
     // Exactly one row per income event; nothing for the fee or the DRIP.
     assert_eq!(
@@ -1448,8 +1743,14 @@ async fn plaid_investment_income_events_persist_idempotently() {
         2,
         "expected exactly the dividend + interest rows, got: {rows:?}"
     );
-    let div = rows.iter().find(|r| r.0 == "ivt-div-1").expect("dividend row");
-    let int = rows.iter().find(|r| r.0 == "ivt-int-1").expect("interest row");
+    let div = rows
+        .iter()
+        .find(|r| r.0 == "ivt-div-1")
+        .expect("dividend row");
+    let int = rows
+        .iter()
+        .find(|r| r.0 == "ivt-int-1")
+        .expect("interest row");
     // Sign: Plaid −125.50 (cash in) → app +125.50 (inflow), so the income
     // predicate's `amount > 0` filter sees it.
     assert_eq!(div.1, Decimal::from_str("125.50").unwrap());
@@ -1514,15 +1815,36 @@ async fn tax_disposals_endpoint_returns_rows_newest_first_with_advantaged_flag()
     // Two taxable disposals on different sell dates (to assert ordering) plus
     // one inside a 401k wrapper — the endpoint returns ALL of them, flagged.
     seed_disposal_dated(
-        &pool, user_id, brokerage, "VTI", "2026-01-01", "2026-03-01", "early", "500",
+        &pool,
+        user_id,
+        brokerage,
+        "VTI",
+        "2026-01-01",
+        "2026-03-01",
+        "early",
+        "500",
     )
     .await;
     seed_disposal_dated(
-        &pool, user_id, brokerage, "VXUS", "2022-01-01", "2026-09-01", "late", "3000",
+        &pool,
+        user_id,
+        brokerage,
+        "VXUS",
+        "2022-01-01",
+        "2026-09-01",
+        "late",
+        "3000",
     )
     .await;
     seed_disposal_dated(
-        &pool, user_id, k401, "RETF", "2022-01-01", "2026-05-01", "wrap", "7000",
+        &pool,
+        user_id,
+        k401,
+        "RETF",
+        "2022-01-01",
+        "2026-05-01",
+        "wrap",
+        "7000",
     )
     .await;
 
@@ -1540,32 +1862,66 @@ async fn tax_disposals_endpoint_returns_rows_newest_first_with_advantaged_flag()
     let body = body_json(res.into_body()).await;
     assert_eq!(status, StatusCode::OK, "disposals body: {body}");
     let rows = body.as_array().expect("array of disposals");
-    assert_eq!(rows.len(), 3, "all disposals returned, taxable + wrapper: {body}");
+    assert_eq!(
+        rows.len(),
+        3,
+        "all disposals returned, taxable + wrapper: {body}"
+    );
 
     // Newest sell_date first.
-    let dates: Vec<&str> = rows.iter().map(|r| r["sell_date"].as_str().unwrap()).collect();
-    assert_eq!(dates, vec!["2026-09-01", "2026-05-01", "2026-03-01"], "{body}");
+    let dates: Vec<&str> = rows
+        .iter()
+        .map(|r| r["sell_date"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        dates,
+        vec!["2026-09-01", "2026-05-01", "2026-03-01"],
+        "{body}"
+    );
 
     // Field shape the frontend depends on, checked on the first (VXUS, LT)
     // taxable row: symbol, dates, term, proceeds/basis/signed gain (USD),
     // flags. Proceeds = 10×100 = 1000, basis = 10×60 = 600 (seed_disposal).
-    let vxus = rows.iter().find(|r| r["symbol"] == "VXUS").expect("VXUS row");
+    let vxus = rows
+        .iter()
+        .find(|r| r["symbol"] == "VXUS")
+        .expect("VXUS row");
     assert_eq!(vxus["acquired_date"], serde_json::json!("2022-01-01"));
     assert_eq!(vxus["sell_date"], serde_json::json!("2026-09-01"));
-    assert_eq!(vxus["long_term"], serde_json::json!(true), "VXUS is long-term");
-    assert!((vxus["proceeds_usd"].as_f64().unwrap() - 1000.0).abs() < 0.01, "{body}");
-    assert!((vxus["cost_usd"].as_f64().unwrap() - 600.0).abs() < 0.01, "{body}");
-    assert!((vxus["gain_usd"].as_f64().unwrap() - 3000.0).abs() < 0.01, "{body}");
+    assert_eq!(
+        vxus["long_term"],
+        serde_json::json!(true),
+        "VXUS is long-term"
+    );
+    assert!(
+        (vxus["proceeds_usd"].as_f64().unwrap() - 1000.0).abs() < 0.01,
+        "{body}"
+    );
+    assert!(
+        (vxus["cost_usd"].as_f64().unwrap() - 600.0).abs() < 0.01,
+        "{body}"
+    );
+    assert!(
+        (vxus["gain_usd"].as_f64().unwrap() - 3000.0).abs() < 0.01,
+        "{body}"
+    );
     assert_eq!(vxus["tax_advantaged"], serde_json::json!(false));
     assert_eq!(vxus["from_lots"], serde_json::json!(true));
 
     let vti = rows.iter().find(|r| r["symbol"] == "VTI").expect("VTI row");
-    assert_eq!(vti["long_term"], serde_json::json!(false), "VTI is short-term");
+    assert_eq!(
+        vti["long_term"],
+        serde_json::json!(false),
+        "VTI is short-term"
+    );
 
     // The wrapper disposal is present but flagged tax_advantaged + carries its
     // account type, so the screen can separate it — consistent with the
     // summary, which excludes it from taxable gains.
-    let retf = rows.iter().find(|r| r["symbol"] == "RETF").expect("RETF row");
+    let retf = rows
+        .iter()
+        .find(|r| r["symbol"] == "RETF")
+        .expect("RETF row");
     assert_eq!(retf["tax_advantaged"], serde_json::json!(true), "{body}");
     assert_eq!(retf["account_type"], serde_json::json!("401k"), "{body}");
 
@@ -1623,7 +1979,11 @@ async fn tax_disposals_endpoint_empty_when_no_lots() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res.into_body()).await;
-    assert_eq!(body.as_array().expect("array").len(), 0, "no disposals: {body}");
+    assert_eq!(
+        body.as_array().expect("array").len(),
+        0,
+        "no disposals: {body}"
+    );
 }
 
 // =====================================================================
@@ -1659,8 +2019,15 @@ async fn tax_summary_defaults_filing_status_from_persisted_setting() {
     // deduction AND the bracket widths, so the resolved status is observable
     // in estimated_liability_us.
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "50000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
 
@@ -1672,7 +2039,12 @@ async fn tax_summary_defaults_filing_status_from_persisted_setting() {
     // all under the 24,800 10% bracket → 1,780.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/summary?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -1718,15 +2090,27 @@ async fn tax_summary_falls_back_to_single_with_no_setting() {
     let acct = seed_typed_account(&pool, user_id, "depository").await;
 
     seed_categorized_tx(
-        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        acct,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "50000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
 
     // Neither a query param NOR a persisted setting → hardcoded Single default.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/summary?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -1754,7 +2138,12 @@ async fn tax_csv_export_honors_persisted_filing_status() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/export?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
@@ -1869,12 +2258,18 @@ async fn tax_unrealized_signs_terms_excludes_tax_advantaged_and_flags_harvest() 
     // GAIN lot, long-term (acquired well over a year ago): qty 10, cost 50,
     // price 80 → cost 500, value 800, +300, LT.
     let acq_lt = (today - chrono::Duration::days(800)).to_string();
-    seed_unrealized_lot(&pool, user_id, brokerage, "GAINLT", &acq_lt, "10", "50", "80").await;
+    seed_unrealized_lot(
+        &pool, user_id, brokerage, "GAINLT", &acq_lt, "10", "50", "80",
+    )
+    .await;
 
     // LOSS lot, short-term (acquired 100 days ago): qty 10, cost 100,
     // price 70 → cost 1000, value 700, −300, ST. No recent buy → harvestable.
     let acq_st = (today - chrono::Duration::days(100)).to_string();
-    seed_unrealized_lot(&pool, user_id, brokerage, "LOSSST", &acq_st, "10", "100", "70").await;
+    seed_unrealized_lot(
+        &pool, user_id, brokerage, "LOSSST", &acq_st, "10", "100", "70",
+    )
+    .await;
 
     // LOSS lot inside a 401k wrapper — must be EXCLUDED from the view entirely.
     seed_unrealized_lot(&pool, user_id, k401, "WRAP", &acq_st, "10", "100", "70").await;
@@ -1888,38 +2283,80 @@ async fn tax_unrealized_signs_terms_excludes_tax_advantaged_and_flags_harvest() 
         "401k lot leaked into the taxable view: {body}"
     );
 
-    let gain = lots.iter().find(|l| l["symbol"] == "GAINLT").expect("gain lot");
-    assert!((gain["cost_basis_usd"].as_f64().unwrap() - 500.0).abs() < 0.01, "{body}");
-    assert!((gain["current_value_usd"].as_f64().unwrap() - 800.0).abs() < 0.01, "{body}");
-    assert!((gain["unrealized_gain_usd"].as_f64().unwrap() - 300.0).abs() < 0.01, "{body}");
+    let gain = lots
+        .iter()
+        .find(|l| l["symbol"] == "GAINLT")
+        .expect("gain lot");
+    assert!(
+        (gain["cost_basis_usd"].as_f64().unwrap() - 500.0).abs() < 0.01,
+        "{body}"
+    );
+    assert!(
+        (gain["current_value_usd"].as_f64().unwrap() - 800.0).abs() < 0.01,
+        "{body}"
+    );
+    assert!(
+        (gain["unrealized_gain_usd"].as_f64().unwrap() - 300.0).abs() < 0.01,
+        "{body}"
+    );
     assert_eq!(gain["long_term"], serde_json::json!(true), "{body}");
     // Already long-term → no days_until / savings / wash fields.
     assert!(gain["days_until_long_term"].is_null(), "{body}");
-    assert!(gain["estimated_tax_savings_usd"].is_null(), "gains aren't harvest candidates: {body}");
+    assert!(
+        gain["estimated_tax_savings_usd"].is_null(),
+        "gains aren't harvest candidates: {body}"
+    );
     assert_eq!(gain["wash_sale_risk"], serde_json::json!(false));
 
-    let loss = lots.iter().find(|l| l["symbol"] == "LOSSST").expect("loss lot");
-    assert!((loss["unrealized_gain_usd"].as_f64().unwrap() + 300.0).abs() < 0.01, "signed loss: {body}");
+    let loss = lots
+        .iter()
+        .find(|l| l["symbol"] == "LOSSST")
+        .expect("loss lot");
+    assert!(
+        (loss["unrealized_gain_usd"].as_f64().unwrap() + 300.0).abs() < 0.01,
+        "signed loss: {body}"
+    );
     assert_eq!(loss["long_term"], serde_json::json!(false), "{body}");
     // Short lot reports days_until_long_term + the flip date. Acquired 100
     // days ago → ~266 days left (1yr + 1 day − 100). Allow slack for the
     // calendar-month arithmetic.
     let days = loss["days_until_long_term"].as_i64().expect("days present");
-    assert!((260..=270).contains(&days), "days_until_long_term={days}: {body}");
-    assert!(loss["long_term_date"].as_str().is_some(), "flip date present: {body}");
+    assert!(
+        (260..=270).contains(&days),
+        "days_until_long_term={days}: {body}"
+    );
+    assert!(
+        loss["long_term_date"].as_str().is_some(),
+        "flip date present: {body}"
+    );
     // Harvest candidate: |−300| × the Single marginal ordinary rate. With no
     // ordinary income, taxable ordinary is 0 → lowest bracket (10%) → $30.
     // It rides the unverified tables, so just assert it's the loss × that rate.
     let rate = body["ordinary_marginal_rate"].as_f64().unwrap();
-    let savings = loss["estimated_tax_savings_usd"].as_f64().expect("savings present");
-    assert!((savings - 300.0 * rate).abs() < 0.01, "savings {savings} != 300×{rate}: {body}");
+    let savings = loss["estimated_tax_savings_usd"]
+        .as_f64()
+        .expect("savings present");
+    assert!(
+        (savings - 300.0 * rate).abs() < 0.01,
+        "savings {savings} != 300×{rate}: {body}"
+    );
     // No recent same-holding buy → not a wash-sale risk.
     assert_eq!(loss["wash_sale_risk"], serde_json::json!(false), "{body}");
 
     // Subtotals + the verification gate ride through.
-    assert!((body["long_term_gain"].as_f64().unwrap() - 300.0).abs() < 0.01, "{body}");
-    assert!((body["short_term_gain"].as_f64().unwrap() + 300.0).abs() < 0.01, "{body}");
-    assert_eq!(body["constants_verified"], serde_json::json!(true), "{body}");
+    assert!(
+        (body["long_term_gain"].as_f64().unwrap() - 300.0).abs() < 0.01,
+        "{body}"
+    );
+    assert!(
+        (body["short_term_gain"].as_f64().unwrap() + 300.0).abs() < 0.01,
+        "{body}"
+    );
+    assert_eq!(
+        body["constants_verified"],
+        serde_json::json!(true),
+        "{body}"
+    );
 }
 
 #[tokio::test]
@@ -1943,7 +2380,10 @@ async fn tax_unrealized_loss_with_recent_buy_flags_wash_sale_risk() {
 
     let body = fetch_unrealized(&app, &token).await;
     let lots = body["lots"].as_array().expect("array");
-    let washme = lots.iter().find(|l| l["symbol"] == "WASHME").expect("loss lot");
+    let washme = lots
+        .iter()
+        .find(|l| l["symbol"] == "WASHME")
+        .expect("loss lot");
     assert_eq!(washme["wash_sale_risk"], serde_json::json!(true), "{body}");
     // safe_after = today + 31 days.
     let expected_safe = (today + chrono::Duration::days(31)).to_string();
@@ -1954,7 +2394,10 @@ async fn tax_unrealized_loss_with_recent_buy_flags_wash_sale_risk() {
     );
     // Still a harvest candidate (savings present) — the flag is a warning, not
     // a removal.
-    assert!(washme["estimated_tax_savings_usd"].as_f64().is_some(), "{body}");
+    assert!(
+        washme["estimated_tax_savings_usd"].as_f64().is_some(),
+        "{body}"
+    );
 }
 
 // =====================================================================
@@ -1976,7 +2419,14 @@ async fn seed_loss_disposal_with_optional_rebuy(
     rebuy_at: Option<&str>,
 ) {
     seed_disposal_dated(
-        pool, user_id, account_id, symbol, acquired_at, sell_date, symbol, pnl,
+        pool,
+        user_id,
+        account_id,
+        symbol,
+        acquired_at,
+        sell_date,
+        symbol,
+        pnl,
     )
     .await;
     if let Some(rebuy) = rebuy_at {
@@ -2005,8 +2455,15 @@ async fn tax_wash_sale_excludes_disallowed_loss_from_liability() {
 
     // Baseline ordinary income so a loss has something to offset.
     seed_categorized_tx(
-        &pool, user_id, depo, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        depo,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "50000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
 
@@ -2014,7 +2471,13 @@ async fn tax_wash_sale_excludes_disallowed_loss_from_liability() {
     // (5 days later, inside the ±30-day window) → disallowed, must NOT reduce
     // the liability.
     seed_loss_disposal_with_optional_rebuy(
-        &pool, user_id, brokerage, "WASH", "2026-01-02", "2026-06-15", "-4000",
+        &pool,
+        user_id,
+        brokerage,
+        "WASH",
+        "2026-01-02",
+        "2026-06-15",
+        "-4000",
         Some("2026-06-20"),
     )
     .await;
@@ -2044,26 +2507,51 @@ async fn tax_wash_sale_excludes_disallowed_loss_from_liability() {
     // The disposal endpoint flags the row + gives the safe-after date.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/disposals?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/disposals?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let disp = body_json(res.into_body()).await;
-    let row = disp.as_array().unwrap().iter().find(|r| r["symbol"] == "WASH").expect("WASH row");
+    let row = disp
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["symbol"] == "WASH")
+        .expect("WASH row");
     assert_eq!(row["wash_sale"], serde_json::json!(true), "{disp}");
     // safe-after = sell_date + 31: a buy on sell_date+30 is still inside the
     // inclusive window, so the first clear acquisition date is +31.
-    assert_eq!(row["wash_sale_safe_after"], serde_json::json!("2026-07-16"), "{disp}");
+    assert_eq!(
+        row["wash_sale_safe_after"],
+        serde_json::json!("2026-07-16"),
+        "{disp}"
+    );
 
     // The CSV 8949 section carries the wash-sale columns and the summary line.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/export?year=2026&status=Single", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(csv.contains("Wash sale"), "wash-sale column header: \n{csv}");
-    assert!(csv.contains("Safe to rebuy after"), "safe-after column header: \n{csv}");
+    assert!(
+        csv.contains("Wash sale"),
+        "wash-sale column header: \n{csv}"
+    );
+    assert!(
+        csv.contains("Safe to rebuy after"),
+        "safe-after column header: \n{csv}"
+    );
     // Comma in the label → the CSV writer quotes the field (RFC 4180).
     assert!(
         csv.contains("\"Wash-sale disallowed loss (USD, excluded from liability)\",-4000.00"),
@@ -2082,15 +2570,28 @@ async fn tax_non_wash_loss_reduces_liability_normally() {
     let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
 
     seed_categorized_tx(
-        &pool, user_id, depo, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        depo,
+        "2026-02-13",
+        "ACME CORP PAYROLL",
+        "50000.00",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
 
     // The SAME −4,000 loss but with NO nearby buy (rebuy far outside the
     // window, in a different month) → allowed: 3,000 offsets ordinary income.
     seed_loss_disposal_with_optional_rebuy(
-        &pool, user_id, brokerage, "CLEAN", "2026-01-02", "2026-06-15", "-4000",
+        &pool,
+        user_id,
+        brokerage,
+        "CLEAN",
+        "2026-01-02",
+        "2026-06-15",
+        "-4000",
         Some("2026-09-30"),
     )
     .await;
@@ -2190,29 +2691,44 @@ async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
     // Two foreign accounts: one by institution country (MX), one by the
     // MXN-currency fallback under an UNKNOWN-country institution. Plus a
     // US/USD account that must NOT count toward the aggregate.
-    let mx_bank = seed_account_with_country_currency(
-        &pool, user_id, "Banamex", "MX", "Cuenta MXN", "MXN",
-    )
-    .await;
+    let mx_bank =
+        seed_account_with_country_currency(&pool, user_id, "Banamex", "MX", "Cuenta MXN", "MXN")
+            .await;
     let mxn_under_unknown = seed_account_with_country_currency(
-        &pool, user_id, "Frontier ??", "", "Unknown-country MXN", "MXN",
+        &pool,
+        user_id,
+        "Frontier ??",
+        "",
+        "Unknown-country MXN",
+        "MXN",
     )
     .await;
-    let domestic = seed_account_with_country_currency(
-        &pool, user_id, "Chase", "US", "Checking", "USD",
-    )
-    .await;
+    let domestic =
+        seed_account_with_country_currency(&pool, user_id, "Chase", "US", "Checking", "USD").await;
 
     // On 2026-03-10 the two foreign accounts sum to 6,000 + 5,000 = 11,000 USD
     // (> 10k). On other days they're lower. The domestic 50k must be ignored.
     seed_snapshot(&pool, user_id, mx_bank, "2026-03-10", "MXN", "6000").await;
-    seed_snapshot(&pool, user_id, mxn_under_unknown, "2026-03-10", "MXN", "5000").await;
+    seed_snapshot(
+        &pool,
+        user_id,
+        mxn_under_unknown,
+        "2026-03-10",
+        "MXN",
+        "5000",
+    )
+    .await;
     seed_snapshot(&pool, user_id, mx_bank, "2026-02-01", "MXN", "4000").await;
     seed_snapshot(&pool, user_id, domestic, "2026-03-10", "USD", "50000").await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let status = res.status();
@@ -2230,10 +2746,7 @@ async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
     // Exactly the two foreign accounts, domestic excluded.
     let accts = body["foreign_accounts"].as_array().expect("array");
     assert_eq!(accts.len(), 2, "{body}");
-    let names: Vec<&str> = accts
-        .iter()
-        .map(|a| a["name"].as_str().unwrap())
-        .collect();
+    let names: Vec<&str> = accts.iter().map(|a| a["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"Cuenta MXN"));
     assert!(names.contains(&"Unknown-country MXN"));
     assert!(!names.contains(&"Checking"));
@@ -2256,20 +2769,29 @@ async fn fbar_classifies_by_country_not_currency_and_flags_unknown() {
 
     // US-country institution, MXN-denominated account → domestic, excluded.
     let us_mxn = seed_account_with_country_currency(
-        &pool, user_id, "Frontier US", "US", "US multi-currency MXN", "MXN",
+        &pool,
+        user_id,
+        "Frontier US",
+        "US",
+        "US multi-currency MXN",
+        "MXN",
     )
     .await;
     // Unknown-country institution, MXN account → included via the currency
     // fallback and flagged for confirmation.
     let unknown_mxn = seed_account_with_country_currency(
-        &pool, user_id, "Caja ???", "", "Cuenta misteriosa", "MXN",
+        &pool,
+        user_id,
+        "Caja ???",
+        "",
+        "Cuenta misteriosa",
+        "MXN",
     )
     .await;
     // Known-MX institution → included by country, NOT flagged.
-    let mx_bank = seed_account_with_country_currency(
-        &pool, user_id, "BBVA MX", "MX", "Cuenta MX", "MXN",
-    )
-    .await;
+    let mx_bank =
+        seed_account_with_country_currency(&pool, user_id, "BBVA MX", "MX", "Cuenta MX", "MXN")
+            .await;
 
     // The US-country MXN balance alone would cross the $10k threshold — if
     // the old currency rule leaked back in, `exceeded` flips to true and the
@@ -2280,7 +2802,12 @@ async fn fbar_classifies_by_country_not_currency_and_flags_unknown() {
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let status = res.status();
@@ -2332,21 +2859,23 @@ async fn fbar_uses_sum_of_per_account_maxes_not_same_day_aggregate() {
         return;
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
-    let a = seed_account_with_country_currency(
-        &pool, user_id, "Banamex", "MX", "Cuenta A", "MXN",
-    )
-    .await;
-    let b = seed_account_with_country_currency(
-        &pool, user_id, "Nu Mexico", "MX", "Cuenta B", "MXN",
-    )
-    .await;
+    let a = seed_account_with_country_currency(&pool, user_id, "Banamex", "MX", "Cuenta A", "MXN")
+        .await;
+    let b =
+        seed_account_with_country_currency(&pool, user_id, "Nu Mexico", "MX", "Cuenta B", "MXN")
+            .await;
     // Disjoint snapshot days — no single day holds both.
     seed_snapshot(&pool, user_id, a, "2026-03-01", "MXN", "6000").await;
     seed_snapshot(&pool, user_id, b, "2026-06-01", "MXN", "6000").await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -2376,7 +2905,12 @@ async fn fbar_below_threshold_and_empty_case() {
     // No foreign accounts/snapshots yet → graceful empty case.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -2386,16 +2920,19 @@ async fn fbar_below_threshold_and_empty_case() {
     assert!(body["foreign_accounts"].as_array().unwrap().is_empty());
 
     // One foreign account peaking at 8,000 (< 10k) → not exceeded.
-    let mx_bank = seed_account_with_country_currency(
-        &pool, user_id, "BBVA MX", "MX", "Cuenta", "MXN",
-    )
-    .await;
+    let mx_bank =
+        seed_account_with_country_currency(&pool, user_id, "BBVA MX", "MX", "Cuenta", "MXN").await;
     seed_snapshot(&pool, user_id, mx_bank, "2026-05-01", "MXN", "8000").await;
     seed_snapshot(&pool, user_id, mx_bank, "2026-06-01", "MXN", "3000").await;
 
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .unwrap();
     let body = body_json(res.into_body()).await;
@@ -2490,7 +3027,12 @@ async fn retirement_contributions_sum_per_group_with_room_and_deadline() {
     assert_eq!(body["limit_year_used"], serde_json::json!(2026));
 
     let groups = body["groups"].as_array().expect("groups array");
-    let by_key = |k: &str| groups.iter().find(|g| g["group"] == k).expect("group present");
+    let by_key = |k: &str| {
+        groups
+            .iter()
+            .find(|g| g["group"] == k)
+            .expect("group present")
+    };
 
     let k = by_key("401k");
     assert!(
@@ -2498,9 +3040,18 @@ async fn retirement_contributions_sum_per_group_with_room_and_deadline() {
         "401k YTD (2025 lot excluded): {k}"
     );
     // 2026 (unverified) base 24,500 → remaining 19,500.
-    assert!((k["limit_base_usd"].as_f64().unwrap() - 24500.0).abs() < 0.01, "{k}");
-    assert!((k["remaining_room_usd"].as_f64().unwrap() - 19500.0).abs() < 0.01, "{k}");
-    assert!((k["catch_up_usd"].as_f64().unwrap() - 8000.0).abs() < 0.01, "{k}");
+    assert!(
+        (k["limit_base_usd"].as_f64().unwrap() - 24500.0).abs() < 0.01,
+        "{k}"
+    );
+    assert!(
+        (k["remaining_room_usd"].as_f64().unwrap() - 19500.0).abs() < 0.01,
+        "{k}"
+    );
+    assert!(
+        (k["catch_up_usd"].as_f64().unwrap() - 8000.0).abs() < 0.01,
+        "{k}"
+    );
     // 401k deadline is the calendar-year end, not the prior-year window.
     assert_eq!(k["deadline"], serde_json::json!("2026-12-31"), "{k}");
     assert_eq!(k["prior_year_window"], serde_json::json!(false), "{k}");
@@ -2518,7 +3069,10 @@ async fn retirement_contributions_sum_per_group_with_room_and_deadline() {
 
     let h = by_key("hsa");
     // No HSA contributions → zero, full room, no caveat.
-    assert!((h["ytd_contributions_usd"].as_f64().unwrap()).abs() < 0.01, "{h}");
+    assert!(
+        (h["ytd_contributions_usd"].as_f64().unwrap()).abs() < 0.01,
+        "{h}"
+    );
     assert_eq!(h["match_rollover_caveat"], serde_json::json!(false), "{h}");
     assert_eq!(h["prior_year_window"], serde_json::json!(true), "{h}");
 }
@@ -2537,19 +3091,88 @@ async fn retirement_detects_hsa_cash_nets_dividends_and_flags_backdoor_megabackd
 
     // HSA: contributions are cash transactions, employer + employee both count.
     let hsa = seed_typed_account(&pool, user_id, "hsa").await;
-    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-02", "Employee Contribution for 2026", "1000", "USD", None, None, None).await;
-    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-02", "Employer Contribution for 2026", "500", "USD", None, None, None).await;
+    seed_categorized_tx_in(
+        &pool,
+        user_id,
+        hsa,
+        "2026-01-02",
+        "Employee Contribution for 2026",
+        "1000",
+        "USD",
+        None,
+        None,
+        None,
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool,
+        user_id,
+        hsa,
+        "2026-01-02",
+        "Employer Contribution for 2026",
+        "500",
+        "USD",
+        None,
+        None,
+        None,
+    )
+    .await;
     // Noise that must NOT count as a contribution:
-    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-31", "Interest for 1/1-1/31", "5", "USD", Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None).await;
-    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-02", "Investment: VFIFX", "-800", "USD", None, None, None).await;
+    seed_categorized_tx_in(
+        &pool,
+        user_id,
+        hsa,
+        "2026-01-31",
+        "Interest for 1/1-1/31",
+        "5",
+        "USD",
+        Some("INCOME"),
+        Some("INCOME_INTEREST_EARNED"),
+        None,
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool,
+        user_id,
+        hsa,
+        "2026-01-02",
+        "Investment: VFIFX",
+        "-800",
+        "USD",
+        None,
+        None,
+        None,
+    )
+    .await;
 
     // Roth IRA: a $2,000 contribution lot + a $50 reinvested dividend to net out.
     // No Traditional IRA lots → looks like a backdoor Roth.
     let roth = seed_typed_account(&pool, user_id, "roth").await;
     seed_lot_buy(&pool, user_id, roth, "VXUS", "2026-03-01", "20", "100").await;
-    seed_categorized_tx_in(&pool, user_id, roth, "2026-03-15", "Dividend", "50", "USD", Some("INCOME"), Some("INCOME_DIVIDENDS"), None).await;
+    seed_categorized_tx_in(
+        &pool,
+        user_id,
+        roth,
+        "2026-03-15",
+        "Dividend",
+        "50",
+        "USD",
+        Some("INCOME"),
+        Some("INCOME_DIVIDENDS"),
+        None,
+    )
+    .await;
 
-    let res = app.clone().oneshot(req(Method::GET, "/api/tax/contributions?year=2026", None, Some(&token))).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/contributions?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
     let status = res.status();
     let body = body_json(res.into_body()).await;
     assert_eq!(status, StatusCode::OK, "contributions body: {body}");
@@ -2558,19 +3181,42 @@ async fn retirement_detects_hsa_cash_nets_dividends_and_flags_backdoor_megabackd
 
     // HSA: $1,000 + $500 from cash; interest + the internal investment move excluded.
     let h = by_key("hsa");
-    assert!((h["ytd_contributions_usd"].as_f64().unwrap() - 1500.0).abs() < 0.01, "hsa from cash: {h}");
-    assert!((h["employer_usd"].as_f64().unwrap() - 500.0).abs() < 0.01, "hsa employer split: {h}");
-    assert!(h["overall_limit_usd"].as_f64().unwrap() > h["limit_base_usd"].as_f64().unwrap(), "hsa family>self: {h}");
+    assert!(
+        (h["ytd_contributions_usd"].as_f64().unwrap() - 1500.0).abs() < 0.01,
+        "hsa from cash: {h}"
+    );
+    assert!(
+        (h["employer_usd"].as_f64().unwrap() - 500.0).abs() < 0.01,
+        "hsa employer split: {h}"
+    );
+    assert!(
+        h["overall_limit_usd"].as_f64().unwrap() > h["limit_base_usd"].as_f64().unwrap(),
+        "hsa family>self: {h}"
+    );
 
     // IRA: $2,000 lot minus the $50 reinvested dividend = $1,950; flagged backdoor.
     let i = by_key("ira");
-    assert!((i["ytd_contributions_usd"].as_f64().unwrap() - 1950.0).abs() < 0.01, "ira nets reinvested dividend: {i}");
-    assert_eq!(i["backdoor"], serde_json::json!(true), "backdoor (roth funded, traditional empty): {i}");
+    assert!(
+        (i["ytd_contributions_usd"].as_f64().unwrap() - 1950.0).abs() < 0.01,
+        "ira nets reinvested dividend: {i}"
+    );
+    assert_eq!(
+        i["backdoor"],
+        serde_json::json!(true),
+        "backdoor (roth funded, traditional empty): {i}"
+    );
 
     // 401k: §415(c) overall ($72k 2026) exceeds the elective base → mega-backdoor.
     let k = by_key("401k");
-    assert!((k["overall_limit_usd"].as_f64().unwrap() - 72000.0).abs() < 0.01, "401k §415c overall: {k}");
-    assert_eq!(k["mega_backdoor"], serde_json::json!(true), "mega-backdoor flag: {k}");
+    assert!(
+        (k["overall_limit_usd"].as_f64().unwrap() - 72000.0).abs() < 0.01,
+        "401k §415c overall: {k}"
+    );
+    assert_eq!(
+        k["mega_backdoor"],
+        serde_json::json!(true),
+        "mega-backdoor flag: {k}"
+    );
 }
 
 // =====================================================================
@@ -2636,12 +3282,16 @@ async fn export_fbar_worksheet_lists_foreign_max_balances_and_skips_domestic() {
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
 
-    let mx_bank = seed_account_with_country_currency(
-        &pool, user_id, "Banamex", "MX", "Cuenta MXN", "MXN",
-    )
-    .await;
+    let mx_bank =
+        seed_account_with_country_currency(&pool, user_id, "Banamex", "MX", "Cuenta MXN", "MXN")
+            .await;
     let domestic = seed_account_with_country_currency(
-        &pool, user_id, "Chase", "US", "Domestic Checking", "USD",
+        &pool,
+        user_id,
+        "Chase",
+        "US",
+        "Domestic Checking",
+        "USD",
     )
     .await;
     // The foreign account's annual max is the 6,000 snapshot, not the later 4,000.
@@ -2678,7 +3328,10 @@ async fn export_fbar_worksheet_lists_foreign_max_balances_and_skips_domestic() {
         !html.contains("Domestic Checking"),
         "domestic account must not appear"
     );
-    assert!(!html.contains("50,000.00"), "domestic balance must not appear");
+    assert!(
+        !html.contains("50,000.00"),
+        "domestic balance must not appear"
+    );
 
     // Bilingual: the ?lang=es variant renders the Spanish worksheet.
     let res = app
@@ -2710,9 +3363,27 @@ async fn export_8949_buckets_short_long_and_excludes_advantaged() {
     let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
     let k401 = seed_typed_account(&pool, user_id, "401k").await;
     // Short-term: acquired within a calendar year of the 2026-06-01 sale.
-    seed_disposal(&pool, user_id, brokerage, "SHORTSYM", "2026-01-02", "st", "400").await;
+    seed_disposal(
+        &pool,
+        user_id,
+        brokerage,
+        "SHORTSYM",
+        "2026-01-02",
+        "st",
+        "400",
+    )
+    .await;
     // Long-term: acquired years earlier.
-    seed_disposal(&pool, user_id, brokerage, "LONGSYM", "2023-01-02", "lt", "400").await;
+    seed_disposal(
+        &pool,
+        user_id,
+        brokerage,
+        "LONGSYM",
+        "2023-01-02",
+        "lt",
+        "400",
+    )
+    .await;
     // Tax-advantaged: must be excluded from the 8949 entirely.
     seed_disposal(&pool, user_id, k401, "ADVSYM", "2023-01-02", "adv", "100").await;
 
@@ -2738,7 +3409,10 @@ async fn export_8949_buckets_short_long_and_excludes_advantaged() {
         part1 < short_at && short_at < part2,
         "short-term disposal must sit in Part I: {csv}"
     );
-    assert!(part2 < long_at, "long-term disposal must sit in Part II: {csv}");
+    assert!(
+        part2 < long_at,
+        "long-term disposal must sit in Part II: {csv}"
+    );
     assert!(
         !csv.contains("ADVSYM"),
         "tax-advantaged disposal must be excluded from the 8949: {csv}"
@@ -2769,22 +3443,33 @@ async fn export_schedule_b_combines_loan_and_account_interest_with_per_row_fx() 
 
     // Personal-loan interest: 100 MXN received 2026-04-01 → 5.00 USD.
     seed_loan_with_interest_payment(
-        &pool, user_id, "Jose Perez", "MXN", "2026-04-01", "1000", "100",
+        &pool,
+        user_id,
+        "Jose Perez",
+        "MXN",
+        "2026-04-01",
+        "1000",
+        "100",
     )
     .await;
     // A prior-year payment that must NOT leak into the 2026 export.
     seed_loan_with_interest_payment(
-        &pool, user_id, "Old Borrower", "MXN", "2025-04-01", "500", "50",
+        &pool,
+        user_id,
+        "Old Borrower",
+        "MXN",
+        "2025-04-01",
+        "500",
+        "50",
     )
     .await;
 
     // CETES yield: an INCOME_INTEREST_EARNED transaction on a cetesdirecto
     // account — 200 MXN → 10.00 USD (the same bucket the summary's
     // interest_income decomposition counts).
-    let cetes = seed_account_with_country_currency(
-        &pool, user_id, "cetesdirecto", "MX", "CETES", "MXN",
-    )
-    .await;
+    let cetes =
+        seed_account_with_country_currency(&pool, user_id, "cetesdirecto", "MX", "CETES", "MXN")
+            .await;
     seed_categorized_tx_in(
         &pool,
         user_id,
@@ -2842,13 +3527,27 @@ async fn export_mx_summary_echoes_the_summary_figures() {
     seed_usd_mxn_rate(&pool, "2026-01-01", "17.5").await;
     let checking = seed_typed_account(&pool, user_id, "checking").await;
     seed_categorized_tx(
-        &pool, user_id, checking, "2026-02-01", "Paycheck", "1000",
-        Some("INCOME"), Some("INCOME_WAGES"), None,
+        &pool,
+        user_id,
+        checking,
+        "2026-02-01",
+        "Paycheck",
+        "1000",
+        Some("INCOME"),
+        Some("INCOME_WAGES"),
+        None,
     )
     .await;
     seed_categorized_tx(
-        &pool, user_id, checking, "2026-03-01", "Interest", "200",
-        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+        &pool,
+        user_id,
+        checking,
+        "2026-03-01",
+        "Interest",
+        "200",
+        Some("INCOME"),
+        Some("INCOME_INTEREST_EARNED"),
+        None,
     )
     .await;
 
@@ -2948,7 +3647,12 @@ async fn out_of_range_year_is_rejected_instead_of_panicking() {
     // And the guard must not have made legitimate years unreachable.
     let res = app
         .clone()
-        .oneshot(req(Method::GET, "/api/tax/summary?year=2026", None, Some(&token)))
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2026",
+            None,
+            Some(&token),
+        ))
         .await
         .expect("request completed");
     assert_eq!(res.status(), StatusCode::OK, "a normal year still works");

@@ -140,7 +140,7 @@ async fn get_latest_rate(
         WHERE base_currency = $1 AND target_currency = $2
         ORDER BY (source = 'manual') DESC, recorded_at DESC
         LIMIT 1
-        "#
+        "#,
     )
     .bind(base.to_uppercase())
     .bind(target.to_uppercase())
@@ -153,11 +153,19 @@ async fn get_latest_rate(
         Some(row) => Json(ExchangeRateResponse {
             base: base.to_uppercase(),
             target: target.to_uppercase(),
-            rate: row.try_get::<rust_decimal::Decimal, _>("rate")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
-            recorded_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("recorded_at")
-                .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-            source: row.try_get::<String, _>("source").unwrap_or_else(|_| "api".to_string()),
+            rate: row
+                .try_get::<rust_decimal::Decimal, _>("rate")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
+            recorded_at: row
+                .try_get::<chrono::DateTime<chrono::Utc>, _>("recorded_at")
+                .ok()
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_default(),
+            source: row
+                .try_get::<String, _>("source")
+                .unwrap_or_else(|_| "api".to_string()),
         }),
         None => Json(ExchangeRateResponse {
             base: base.to_uppercase(),
@@ -192,7 +200,7 @@ async fn get_rate_history(
         WHERE base_currency = $1 AND target_currency = $2
           AND ($3::bigint IS NULL OR recorded_at >= NOW() - $3 * INTERVAL '1 day')
         ORDER BY recorded_at ASC
-        "#
+        "#,
     )
     .bind(base.to_uppercase())
     .bind(target.to_uppercase())
@@ -204,10 +212,16 @@ async fn get_rate_history(
     Json(
         rows.iter()
             .map(|r| RatePoint {
-                rate: r.try_get::<rust_decimal::Decimal, _>("rate")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
-                timestamp: r.try_get::<chrono::DateTime<chrono::Utc>, _>("recorded_at")
-                    .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
+                rate: r
+                    .try_get::<rust_decimal::Decimal, _>("rate")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0),
+                timestamp: r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("recorded_at")
+                    .ok()
+                    .map(|d| d.to_rfc3339())
+                    .unwrap_or_default(),
             })
             .collect(),
     )
@@ -292,7 +306,12 @@ async fn post_manual_rate(
             .await;
     }
 
-    tracing::info!("Stored manual exchange rate: 1 {} = {} {}", base, req.rate, target);
+    tracing::info!(
+        "Stored manual exchange rate: 1 {} = {} {}",
+        base,
+        req.rate,
+        target
+    );
 
     Ok(Json(ExchangeRateResponse {
         base,
@@ -340,7 +359,11 @@ struct FxAlertEnvelope {
     alert: Option<FxAlertDto>,
 }
 
-fn alert_dto_from_row(row: &sqlx::postgres::PgRow, base: &str, target: &str) -> Result<FxAlertDto, sqlx::Error> {
+fn alert_dto_from_row(
+    row: &sqlx::postgres::PgRow,
+    base: &str,
+    target: &str,
+) -> Result<FxAlertDto, sqlx::Error> {
     Ok(FxAlertDto {
         base: base.to_string(),
         target: target.to_string(),

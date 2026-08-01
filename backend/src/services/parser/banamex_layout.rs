@@ -33,8 +33,9 @@ use tracing::info;
 /// a sign (a first record whose opening balance wasn't captured). Same
 /// spending vocabulary `banamex_pdf` uses; a match means outflow (debit).
 fn description_is_debit(description: &str) -> bool {
-    const DEBIT_KEYWORDS: &[&str] =
-        &["COMPRA", "RETIRO", "PAGO", "COMISION", "CARGO", "IVA", "TRASPASO"];
+    const DEBIT_KEYWORDS: &[&str] = &[
+        "COMPRA", "RETIRO", "PAGO", "COMISION", "CARGO", "IVA", "TRASPASO",
+    ];
     let upper = description.to_uppercase();
     DEBIT_KEYWORDS.iter().any(|k| upper.contains(k))
 }
@@ -123,10 +124,9 @@ fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
     // (the Dec→Jan straddle). This avoids the old failure where a stray "20xx"
     // in a reference/account number (e.g. "2074") was taken as the year and
     // dated a whole statement to the future.
-    if let Some(c) =
-        Regex::new(r"FECHA DE CORTE\s+\d{1,2}\s+DE\s+(\w+)\s+DE\s+(20\d{2})")
-            .unwrap()
-            .captures(upper)
+    if let Some(c) = Regex::new(r"FECHA DE CORTE\s+\d{1,2}\s+DE\s+(\w+)\s+DE\s+(20\d{2})")
+        .unwrap()
+        .captures(upper)
     {
         if let (Some(cm), Ok(cy)) = (month_full(&c[1]), c[2].parse::<i32>()) {
             return Box::new(move |m: u32| if m > cm { cy - 1 } else { cy });
@@ -247,11 +247,11 @@ fn parse_section(lines: &[&str], resolve_year: &dyn Fn(u32) -> i32) -> Vec<Parse
 
     // Close out the current record into a transaction (or skip it).
     let flush = |day: u32,
-                     month: u32,
-                     desc: &mut Vec<String>,
-                     amounts: &mut Vec<Decimal>,
-                     prev_saldo: &mut Option<Decimal>,
-                     txs: &mut Vec<ParsedTransaction>| {
+                 month: u32,
+                 desc: &mut Vec<String>,
+                 amounts: &mut Vec<Decimal>,
+                 prev_saldo: &mut Option<Decimal>,
+                 txs: &mut Vec<ParsedTransaction>| {
         let description = desc.join(" ").trim().to_string();
         let upper_desc = description.to_uppercase();
         desc.clear();
@@ -443,7 +443,10 @@ FECHA        CONCEPTO                                    RETIROS     DEPÓSITOS 
         assert_eq!(txs[2].amount, Decimal::from_str("27000.00").unwrap());
 
         // Running balance captured (drives the account's current balance).
-        assert_eq!(txs[2].balance_after, Some(Decimal::from_str("31000.00").unwrap()));
+        assert_eq!(
+            txs[2].balance_after,
+            Some(Decimal::from_str("31000.00").unwrap())
+        );
     }
 
     // Multi-account statement: a primary MiCuenta + a secondary
@@ -475,25 +478,36 @@ Detalle de operaciones
         // The deposit's balance is 8,000 — the "0624.01" inside the footer
         // code did NOT corrupt it.
         assert_eq!(txs[0].amount, Decimal::from_str("3000.00").unwrap());
-        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("8000.00").unwrap()));
+        assert_eq!(
+            txs[0].balance_after,
+            Some(Decimal::from_str("8000.00").unwrap())
+        );
         assert_eq!(txs[0].account_label, None);
         // The 0.50% rate is not money: the interest row's amount is 2.23.
         assert_eq!(txs[1].amount, Decimal::from_str("2.23").unwrap());
         assert_eq!(txs[1].account_label, None);
-        assert!(!txs[1].description.to_uppercase().contains("DETALLE"),
-            "next section's header must not leak into the description");
+        assert!(
+            !txs[1].description.to_uppercase().contains("DETALLE"),
+            "next section's header must not leak into the description"
+        );
 
         // --- Secondary section (account_label = Cuenta secundaria) ---
         // Sign comes from this section's OWN running balance (its prev_saldo
         // was reset to 88,317.93), so the traspaso is -3,000 not garbage.
         assert_eq!(txs[2].amount, Decimal::from_str("-3000.00").unwrap());
-        assert_eq!(txs[2].balance_after, Some(Decimal::from_str("85317.93").unwrap()));
+        assert_eq!(
+            txs[2].balance_after,
+            Some(Decimal::from_str("85317.93").unwrap())
+        );
         assert_eq!(txs[2].account_label.as_deref(), Some("Cuenta secundaria"));
         assert_eq!(txs[3].amount, Decimal::from_str("12.50").unwrap());
         assert_eq!(txs[3].account_label.as_deref(), Some("Cuenta secundaria"));
 
-        assert!(txs.iter().all(|t| t.description.chars().any(|c| c.is_alphabetic())),
-            "no bare-number descriptions");
+        assert!(
+            txs.iter()
+                .all(|t| t.description.chars().any(|c| c.is_alphabetic())),
+            "no bare-number descriptions"
+        );
     }
 
     #[test]

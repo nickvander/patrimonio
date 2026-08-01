@@ -42,7 +42,11 @@ const CADENCES: [&str; 4] = ["weekly", "biweekly", "monthly", "yearly"];
 
 fn days_in_month(year: i32, month: u32) -> u32 {
     // First day of the next month minus one day; chrono has no direct API.
-    let (ny, nm) = if month == 12 { (year + 1, 1) } else { (year, month + 1) };
+    let (ny, nm) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
     NaiveDate::from_ymd_opt(ny, nm, 1)
         .and_then(|d| d.pred_opt())
         .map(|d| d.day())
@@ -109,7 +113,12 @@ fn occurrences_in_window(
 
 /// First occurrence on/after `today` — the "effective" next due date the
 /// UI shows regardless of how stale the stored seed is.
-fn effective_next_due(cadence: &str, anchor_day: u32, seed: NaiveDate, today: NaiveDate) -> NaiveDate {
+fn effective_next_due(
+    cadence: &str,
+    anchor_day: u32,
+    seed: NaiveDate,
+    today: NaiveDate,
+) -> NaiveDate {
     let mut d = seed;
     for _ in 0..2000 {
         if d >= today {
@@ -142,7 +151,10 @@ struct RecurringRuleDto {
     active: bool,
 }
 
-fn rule_dto_from_row(row: &sqlx::postgres::PgRow, today: NaiveDate) -> anyhow::Result<RecurringRuleDto> {
+fn rule_dto_from_row(
+    row: &sqlx::postgres::PgRow,
+    today: NaiveDate,
+) -> anyhow::Result<RecurringRuleDto> {
     let cadence: String = row.try_get("cadence")?;
     let anchor_day: i16 = row.try_get("anchor_day")?;
     let next_due: NaiveDate = row.try_get("next_due_date")?;
@@ -224,10 +236,16 @@ async fn create_rule(
 ) -> Result<(StatusCode, Json<RecurringRuleDto>), ApiError> {
     let description = req.description.trim();
     if description.is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "description is required"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "description is required",
+        ));
     }
     if req.amount == Decimal::ZERO {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "amount must be non-zero"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "amount must be non-zero",
+        ));
     }
     if !CADENCES.contains(&req.cadence.as_str()) {
         return Err(ApiError::new(
@@ -237,11 +255,17 @@ async fn create_rule(
     }
     let anchor_day = req.anchor_day.unwrap_or(req.next_due_date.day() as i16);
     if !(1..=31).contains(&anchor_day) {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "anchor_day must be 1-31"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "anchor_day must be 1-31",
+        ));
     }
     let currency = req.currency.trim().to_uppercase();
     if currency.is_empty() || currency.len() > 8 {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "currency is required"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "currency is required",
+        ));
     }
 
     // Verify the target account belongs to the caller before attaching a
@@ -269,7 +293,12 @@ async fn create_rule(
     .bind(ctx.user_id)
     .bind(req.account_id)
     .bind(description)
-    .bind(req.category.as_deref().map(str::trim).filter(|c| !c.is_empty()))
+    .bind(
+        req.category
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty()),
+    )
     .bind(req.amount)
     .bind(&currency)
     .bind(&req.cadence)
@@ -391,12 +420,18 @@ async fn upcoming(
     let default_to = clamped_day(today.year(), today.month(), 31); // end of current month
     let to = q.to.unwrap_or(default_to);
     if to < from {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "to must be on/after from"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "to must be on/after from",
+        ));
     }
     // DoS clamp: expansion cost scales with the window; a year is far more
     // than the cash-flow view ever asks for.
     if (to - from).num_days() > 400 {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "window too large (max 400 days)"));
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "window too large (max 400 days)",
+        ));
     }
 
     let rows = sqlx::query(&format!(
@@ -438,7 +473,10 @@ async fn upcoming(
         };
         for due in occurrences_in_window(&cadence, anchor_day.max(1) as u32, seed, from, to) {
             items.push(UpcomingItem {
-                rule_id: r.try_get::<uuid::Uuid, _>("id").map_err(internal)?.to_string(),
+                rule_id: r
+                    .try_get::<uuid::Uuid, _>("id")
+                    .map_err(internal)?
+                    .to_string(),
                 account_id: r
                     .try_get::<uuid::Uuid, _>("account_id")
                     .map_err(internal)?
@@ -453,7 +491,11 @@ async fn upcoming(
             });
         }
     }
-    items.sort_by(|a, b| a.due_date.cmp(&b.due_date).then(a.description.cmp(&b.description)));
+    items.sort_by(|a, b| {
+        a.due_date
+            .cmp(&b.due_date)
+            .then(a.description.cmp(&b.description))
+    });
 
     let mut inflows = Decimal::ZERO;
     let mut outflows = Decimal::ZERO;
@@ -490,16 +532,23 @@ mod tests {
     fn monthly_anchor_clamps_to_short_months_and_recovers() {
         // Anchor 31 seeded Jan 31: Feb clamps to 28, then March recovers
         // to 31 (no permanent drift down to 28).
-        let occ = occurrences_in_window("monthly", 31, d(2026, 1, 31), d(2026, 1, 1), d(2026, 4, 30));
+        let occ =
+            occurrences_in_window("monthly", 31, d(2026, 1, 31), d(2026, 1, 1), d(2026, 4, 30));
         assert_eq!(
             occ,
-            vec![d(2026, 1, 31), d(2026, 2, 28), d(2026, 3, 31), d(2026, 4, 30)]
+            vec![
+                d(2026, 1, 31),
+                d(2026, 2, 28),
+                d(2026, 3, 31),
+                d(2026, 4, 30)
+            ]
         );
     }
 
     #[test]
     fn biweekly_steps_fourteen_days() {
-        let occ = occurrences_in_window("biweekly", 1, d(2026, 7, 3), d(2026, 7, 1), d(2026, 7, 31));
+        let occ =
+            occurrences_in_window("biweekly", 1, d(2026, 7, 3), d(2026, 7, 1), d(2026, 7, 31));
         assert_eq!(occ, vec![d(2026, 7, 3), d(2026, 7, 17), d(2026, 7, 31)]);
     }
 
@@ -514,7 +563,8 @@ mod tests {
     #[test]
     fn yearly_leap_day_clamps() {
         // Feb-29 anchor in a leap year clamps to Feb-28 in common years.
-        let occ = occurrences_in_window("yearly", 29, d(2024, 2, 29), d(2025, 1, 1), d(2027, 12, 31));
+        let occ =
+            occurrences_in_window("yearly", 29, d(2024, 2, 29), d(2025, 1, 1), d(2027, 12, 31));
         assert_eq!(occ, vec![d(2025, 2, 28), d(2026, 2, 28), d(2027, 2, 28)]);
     }
 

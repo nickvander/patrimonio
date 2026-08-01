@@ -37,8 +37,15 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
     // 1. Bank's own fees / charges. Checked first because a "COMISION SPEI"
     //    row also contains "SPEI" — fees must win over the transfer rule.
     if has(&[
-        "COMISION", "COMISIÓN", "ANUALIDAD", "MANEJO DE CUENTA",
-        "SOBREGIRO", "COM USO TPV", "COM CHQ", "MEMBRESIA", "MEMBRESÍA",
+        "COMISION",
+        "COMISIÓN",
+        "ANUALIDAD",
+        "MANEJO DE CUENTA",
+        "SOBREGIRO",
+        "COM USO TPV",
+        "COM CHQ",
+        "MEMBRESIA",
+        "MEMBRESÍA",
     ]) {
         return cat("BANK_FEES");
     }
@@ -54,7 +61,13 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
     //    withdrawal, or a reversal) must NOT be filed as INCOME — that's how
     //    a −18,994 MXN "INTERESES" debit ended up labeled income.
     if amount > Decimal::ZERO {
-        if has(&["NOMINA", "NÓMINA", "SALARIO", "AGUINALDO", "PAGO DE PENSION"]) {
+        if has(&[
+            "NOMINA",
+            "NÓMINA",
+            "SALARIO",
+            "AGUINALDO",
+            "PAGO DE PENSION",
+        ]) {
             return cat("INCOME");
         }
         if has(&["INTERESES", "RENDIMIENTO", "DIVIDENDO"]) {
@@ -64,15 +77,30 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
 
     // 3. Taxes / government.
     if has(&[
-        "IMPUESTO", "PREDIAL", "TENENCIA", "TESORERIA", "TESORERÍA",
-        " SAT ", "MULTA", "DERECHOS VEHIC", "GOBIERNO", "RECAUDADORA",
+        "IMPUESTO",
+        "PREDIAL",
+        "TENENCIA",
+        "TESORERIA",
+        "TESORERÍA",
+        " SAT ",
+        "MULTA",
+        "DERECHOS VEHIC",
+        "GOBIERNO",
+        "RECAUDADORA",
     ]) {
         return cat("GOVERNMENT_AND_NON_PROFIT");
     }
 
     // 4. Loan / credit-card payments.
     if (has(&["TARJETA"]) && has(&["CREDITO", "CRÉDITO", "TDC"]))
-        || has(&["PAGO TDC", "PAGO TARJETA", "ABONO A CREDITO", "PRESTAMO", "PRÉSTAMO", "CREDITO HIPOTEC"])
+        || has(&[
+            "PAGO TDC",
+            "PAGO TARJETA",
+            "ABONO A CREDITO",
+            "PRESTAMO",
+            "PRÉSTAMO",
+            "CREDITO HIPOTEC",
+        ])
     {
         return cat("LOAN_PAYMENTS");
     }
@@ -96,13 +124,41 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
 
     // Utilities & telecom.
     if has(&[
-        "CFE", "TELMEX", "TELCEL", "MOVISTAR", "AT&T", "ATT ", "IZZI",
-        "TOTALPLAY", "MEGACABLE", "DISH", "SKY ", "NATURGY", "GAS NATURAL",
-        "AGUA ", "SACMEX", "SIAPA", "INTERNET",
+        "CFE",
+        "TELMEX",
+        "TELCEL",
+        "MOVISTAR",
+        "AT&T",
+        "ATT ",
+        "IZZI",
+        "TOTALPLAY",
+        "MEGACABLE",
+        "DISH",
+        "SKY ",
+        "NATURGY",
+        "GAS NATURAL",
+        "AGUA ",
+        "SACMEX",
+        "SIAPA",
+        "INTERNET",
         // More MX telecom / utilities / water boards.
-        "BAIT", "UNEFON", "VIRGIN MOBILE", "AXTEL", "VETV", "STARLINK",
-        "CESPT", "JAPAC", "SAPAL", "INTERAPAS", "CEA ", "GAS LICUADO",
-        "GASRED", "GLOBALGAS", "ZGAS", "LUZ Y FUERZA", "PREDIO",
+        "BAIT",
+        "UNEFON",
+        "VIRGIN MOBILE",
+        "AXTEL",
+        "VETV",
+        "STARLINK",
+        "CESPT",
+        "JAPAC",
+        "SAPAL",
+        "INTERAPAS",
+        "CEA ",
+        "GAS LICUADO",
+        "GASRED",
+        "GLOBALGAS",
+        "ZGAS",
+        "LUZ Y FUERZA",
+        "PREDIO",
     ]) {
         return cat("RENT_AND_UTILITIES");
     }
@@ -116,73 +172,220 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
 
     // Groceries & convenience & food.
     if has(&[
-        "OXXO", "7-ELEVEN", "7 ELEVEN", "SEVEN", "CIRCLE K", "SORIANA",
-        "WALMART", "BODEGA AURRERA", "AURRERA", "CHEDRAUI", "SUPERAMA",
-        "COSTCO", "SAMS CLUB", "SAM'S", "LA COMER", "CITY MARKET", "HEB",
-        "SUPERMERCADO", "ABARROTES", "RESTAURANTE", "UBER EATS", "RAPPI",
-        "DIDI FOOD", "STARBUCKS", "MCDONALD", "BURGER", "DOMINO", "KFC",
-        "VIPS", "SANBORNS", "TACO", "CAFE", "CAFÉ",
+        "OXXO",
+        "7-ELEVEN",
+        "7 ELEVEN",
+        "SEVEN",
+        "CIRCLE K",
+        "SORIANA",
+        "WALMART",
+        "BODEGA AURRERA",
+        "AURRERA",
+        "CHEDRAUI",
+        "SUPERAMA",
+        "COSTCO",
+        "SAMS CLUB",
+        "SAM'S",
+        "LA COMER",
+        "CITY MARKET",
+        "HEB",
+        "SUPERMERCADO",
+        "ABARROTES",
+        "RESTAURANTE",
+        "UBER EATS",
+        "RAPPI",
+        "DIDI FOOD",
+        "STARBUCKS",
+        "MCDONALD",
+        "BURGER",
+        "DOMINO",
+        "KFC",
+        "VIPS",
+        "SANBORNS",
+        "TACO",
+        "CAFE",
+        "CAFÉ",
         // More MX grocers / convenience / food.
-        "FRESKO", "SUMESA", "CALIMAX", "MERZA", "SMART AND FINAL", "S MART",
-        "TIENDAS TRES B", "BODEGA COMERCIAL", "MEGA COMERCIAL", "PANADERIA",
-        "PANADERÍA", "TORTILLERIA", "TORTILLERÍA", "CARNICERIA", "CARNICERÍA",
-        "LITTLE CAESARS", "CARLS JR", "WINGS", "TOKS", "ITALIANNI", "CHILIS",
-        "CHILI'S", "SUSHI", "PIZZA", "POLLO", "STARBUCK", "CIELITO QUERIDO",
-        "LA CASA DE TOÑO", "FISHER", "BISTRO", "CANTINA", "CERVECERIA",
-        "CERVECERÍA", "HEINEKEN", "MODELORAMA",
+        "FRESKO",
+        "SUMESA",
+        "CALIMAX",
+        "MERZA",
+        "SMART AND FINAL",
+        "S MART",
+        "TIENDAS TRES B",
+        "BODEGA COMERCIAL",
+        "MEGA COMERCIAL",
+        "PANADERIA",
+        "PANADERÍA",
+        "TORTILLERIA",
+        "TORTILLERÍA",
+        "CARNICERIA",
+        "CARNICERÍA",
+        "LITTLE CAESARS",
+        "CARLS JR",
+        "WINGS",
+        "TOKS",
+        "ITALIANNI",
+        "CHILIS",
+        "CHILI'S",
+        "SUSHI",
+        "PIZZA",
+        "POLLO",
+        "STARBUCK",
+        "CIELITO QUERIDO",
+        "LA CASA DE TOÑO",
+        "FISHER",
+        "BISTRO",
+        "CANTINA",
+        "CERVECERIA",
+        "CERVECERÍA",
+        "HEINEKEN",
+        "MODELORAMA",
     ]) {
         return cat("FOOD_AND_DRINK");
     }
 
     // Transportation (rideshare, fuel, parking, tolls, transit).
     if has(&[
-        "UBER", "DIDI", "CABIFY", "BEAT ", "GASOLIN", "PEMEX", "OXXO GAS",
-        "BP ", "SHELL", "MOBIL", "ESTACIONAMIENTO", "PARKING", "PARKIMETRO",
-        "CASETA", "PEAJE", "IAVE", "TELEVIA", "PASE ", "METRO ", "METROBUS",
+        "UBER",
+        "DIDI",
+        "CABIFY",
+        "BEAT ",
+        "GASOLIN",
+        "PEMEX",
+        "OXXO GAS",
+        "BP ",
+        "SHELL",
+        "MOBIL",
+        "ESTACIONAMIENTO",
+        "PARKING",
+        "PARKIMETRO",
+        "CASETA",
+        "PEAJE",
+        "IAVE",
+        "TELEVIA",
+        "PASE ",
+        "METRO ",
+        "METROBUS",
         "MOVILIDAD INTEGRAL",
         // More MX fuel / transit / mobility.
-        "REPSOL", "CHEVRON", "G500", "HIDROSINA", "REDCO", "ORSAN", "LOOP",
-        "GASOLINERA", "CAPUFE", "TAG ", "ECOBICI", "MIBICI", "JETTY",
-        "CUOTA", "AUTOPISTA", "PRIMERA PLUS", "SITIO ", "TAXI",
+        "REPSOL",
+        "CHEVRON",
+        "G500",
+        "HIDROSINA",
+        "REDCO",
+        "ORSAN",
+        "LOOP",
+        "GASOLINERA",
+        "CAPUFE",
+        "TAG ",
+        "ECOBICI",
+        "MIBICI",
+        "JETTY",
+        "CUOTA",
+        "AUTOPISTA",
+        "PRIMERA PLUS",
+        "SITIO ",
+        "TAXI",
     ]) {
         return cat("TRANSPORTATION");
     }
 
     // Travel.
     if has(&[
-        "AEROMEXICO", "AEROMÉXICO", "VOLARIS", "VIVA AEROBUS", "VIVAAEROBUS",
-        "INTERJET", "HOTEL", "AIRBNB", "BOOKING", "EXPEDIA", "DESPEGAR",
-        "VUELO", "AVIANCA", "AMERICAN AIR", "DELTA AIR", "UNITED AIR",
+        "AEROMEXICO",
+        "AEROMÉXICO",
+        "VOLARIS",
+        "VIVA AEROBUS",
+        "VIVAAEROBUS",
+        "INTERJET",
+        "HOTEL",
+        "AIRBNB",
+        "BOOKING",
+        "EXPEDIA",
+        "DESPEGAR",
+        "VUELO",
+        "AVIANCA",
+        "AMERICAN AIR",
+        "DELTA AIR",
+        "UNITED AIR",
     ]) {
         return cat("TRAVEL");
     }
 
     // Medical / pharmacy / health.
     if has(&[
-        "FARMACIA", "BENAVIDES", "DEL AHORRO", "SIMILARES", "HOSPITAL",
-        "CLINICA", "CLÍNICA", "DENTAL", "DENTISTA", "LABORATORIO", "MEDICA",
-        "MÉDICA", "CONSULTORIO", "OPTICA", "ÓPTICA",
+        "FARMACIA",
+        "BENAVIDES",
+        "DEL AHORRO",
+        "SIMILARES",
+        "HOSPITAL",
+        "CLINICA",
+        "CLÍNICA",
+        "DENTAL",
+        "DENTISTA",
+        "LABORATORIO",
+        "MEDICA",
+        "MÉDICA",
+        "CONSULTORIO",
+        "OPTICA",
+        "ÓPTICA",
     ]) {
         return cat("MEDICAL");
     }
 
     // Personal care / fitness.
     if has(&[
-        "GIMNASIO", "SMART FIT", "SMARTFIT", "SPORTS WORLD", "GYM ",
-        "ESTETICA", "ESTÉTICA", "SALON", "SALÓN", "BARBER", "SPA ", "PELUQ",
+        "GIMNASIO",
+        "SMART FIT",
+        "SMARTFIT",
+        "SPORTS WORLD",
+        "GYM ",
+        "ESTETICA",
+        "ESTÉTICA",
+        "SALON",
+        "SALÓN",
+        "BARBER",
+        "SPA ",
+        "PELUQ",
     ]) {
         return cat("PERSONAL_CARE");
     }
 
     // Streaming / entertainment.
     if has(&[
-        "SPOTIFY", "NETFLIX", "DISNEY", "HBO", "MAX ", "PARAMOUNT", "STAR+",
-        "YOUTUBE", "PRIME VIDEO", "CINEPOLIS", "CINÉPOLIS", "CINEMEX",
-        "STEAM", "PLAYSTATION", "XBOX", "NINTENDO", "TICKETMASTER",
+        "SPOTIFY",
+        "NETFLIX",
+        "DISNEY",
+        "HBO",
+        "MAX ",
+        "PARAMOUNT",
+        "STAR+",
+        "YOUTUBE",
+        "PRIME VIDEO",
+        "CINEPOLIS",
+        "CINÉPOLIS",
+        "CINEMEX",
+        "STEAM",
+        "PLAYSTATION",
+        "XBOX",
+        "NINTENDO",
+        "TICKETMASTER",
         // More streaming / gaming / events.
-        "CRUNCHYROLL", "VIX", "BLIM", "MUBI", "DEEZER", "APPLE MUSIC",
-        "AUDIBLE", "TWITCH", "EPIC GAMES", "RIOT GAMES", "BOLETIA",
-        "SUPERBOLETOS", "FANDANGO", "DEPORTES",
+        "CRUNCHYROLL",
+        "VIX",
+        "BLIM",
+        "MUBI",
+        "DEEZER",
+        "APPLE MUSIC",
+        "AUDIBLE",
+        "TWITCH",
+        "EPIC GAMES",
+        "RIOT GAMES",
+        "BOLETIA",
+        "SUPERBOLETOS",
+        "FANDANGO",
+        "DEPORTES",
     ]) {
         return cat("ENTERTAINMENT");
     }
@@ -190,40 +393,96 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
     // Home improvement / hardware (checked before general merchandise so
     // Home Depot / IKEA don't get filed as plain shopping).
     if has(&[
-        "HOME DEPOT", "IKEA", "TRUPER", "FERRETERIA", "FERRETERÍA",
-        "TLAPALERIA", "TLAPALERÍA", "CONSTRURAMA",
+        "HOME DEPOT",
+        "IKEA",
+        "TRUPER",
+        "FERRETERIA",
+        "FERRETERÍA",
+        "TLAPALERIA",
+        "TLAPALERÍA",
+        "CONSTRURAMA",
     ]) {
         return cat("HOME_IMPROVEMENT");
     }
 
     // Online marketplaces / department stores / general merchandise.
     if has(&[
-        "AMAZON", "MERCADO LIBRE", "MERCADOLIBRE", "MERCADO PAGO",
-        "MERCADOPAGO", "LIVERPOOL", "PALACIO DE HIERRO", "COPPEL", "ELEKTRA",
-        "SHEIN", "ALIEXPRESS", "BEST BUY", "APPLE.COM", "APPLE STORE",
+        "AMAZON",
+        "MERCADO LIBRE",
+        "MERCADOLIBRE",
+        "MERCADO PAGO",
+        "MERCADOPAGO",
+        "LIVERPOOL",
+        "PALACIO DE HIERRO",
+        "COPPEL",
+        "ELEKTRA",
+        "SHEIN",
+        "ALIEXPRESS",
+        "BEST BUY",
+        "APPLE.COM",
+        "APPLE STORE",
         "OFFICE DEPOT",
         // More marketplaces / department / apparel / electronics.
-        "TEMU", "SEARS", "SUBURBIA", "C&A", "ZARA", "BERSHKA", "PULL AND BEAR",
-        "PULL&BEAR", "NIKE", "ADIDAS", "INNOVASPORT", "MARTI", "STEREN",
-        "RADIOSHACK", "PCEL", "CYBERPUERTA", "MIXUP", "GANDHI", "SANBORN",
+        "TEMU",
+        "SEARS",
+        "SUBURBIA",
+        "C&A",
+        "ZARA",
+        "BERSHKA",
+        "PULL AND BEAR",
+        "PULL&BEAR",
+        "NIKE",
+        "ADIDAS",
+        "INNOVASPORT",
+        "MARTI",
+        "STEREN",
+        "RADIOSHACK",
+        "PCEL",
+        "CYBERPUERTA",
+        "MIXUP",
+        "GANDHI",
+        "SANBORN",
     ]) {
         return cat("GENERAL_MERCHANDISE");
     }
 
     // Cloud / software subscriptions → services.
     if has(&[
-        "GOOGLE", "MICROSOFT", "ICLOUD", "DROPBOX", "ADOBE", "GITHUB",
-        "OPENAI", "ANTHROPIC", "NOTION",
+        "GOOGLE",
+        "MICROSOFT",
+        "ICLOUD",
+        "DROPBOX",
+        "ADOBE",
+        "GITHUB",
+        "OPENAI",
+        "ANTHROPIC",
+        "NOTION",
         // More SaaS / app subscriptions.
-        "CANVA", "FIGMA", "ZOOM", "SLACK", "LINKEDIN", "CHATGPT", "CLAUDE",
-        "GODADDY", "NAMECHEAP", "CLOUDFLARE", "AWS", "DIGITALOCEAN",
+        "CANVA",
+        "FIGMA",
+        "ZOOM",
+        "SLACK",
+        "LINKEDIN",
+        "CHATGPT",
+        "CLAUDE",
+        "GODADDY",
+        "NAMECHEAP",
+        "CLOUDFLARE",
+        "AWS",
+        "DIGITALOCEAN",
     ]) {
         return cat("GENERAL_SERVICES");
     }
 
     // 6. ATM cash withdrawals → an outgoing transfer (matches Plaid's
     //    TRANSFER_OUT_WITHDRAWAL bucket; we store the primary).
-    if has(&["CAJERO", "DISPOSICION", "DISPOSICIÓN", "RETIRO EFECTIVO", "RETIRO EN"]) {
+    if has(&[
+        "CAJERO",
+        "DISPOSICION",
+        "DISPOSICIÓN",
+        "RETIRO EFECTIVO",
+        "RETIRO EN",
+    ]) {
         return cat("TRANSFER_OUT");
     }
 
@@ -250,8 +509,10 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
     //         (HSA, 401k): payroll money moving into a locked account, not
     //         spendable household income.
     if has(&[
-        "WISE PAYMENTS", "TRANSFERWISE",
-        "EMPLOYEE CONTRIBUTION", "EMPLOYER CONTRIBUTION",
+        "WISE PAYMENTS",
+        "TRANSFERWISE",
+        "EMPLOYEE CONTRIBUTION",
+        "EMPLOYER CONTRIBUTION",
     ]) {
         return Some(if amount >= Decimal::ZERO {
             "TRANSFER_IN".to_string()
@@ -262,9 +523,17 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
 
     // 7. Generic transfers / SPEI / interbank — direction from the sign.
     if has(&[
-        "SPEI", "TRASPASO", "TRANSFERENCIA", "INTERBANCARIO", "DEPOSITO DE TERCERO",
-        "DEPÓSITO DE TERCERO", "PAGO RECIBIDO", "PAGO INTERBANCARIO", "TEF ",
-        "ENVIO DE DINERO", "ENVÍO DE DINERO",
+        "SPEI",
+        "TRASPASO",
+        "TRANSFERENCIA",
+        "INTERBANCARIO",
+        "DEPOSITO DE TERCERO",
+        "DEPÓSITO DE TERCERO",
+        "PAGO RECIBIDO",
+        "PAGO INTERBANCARIO",
+        "TEF ",
+        "ENVIO DE DINERO",
+        "ENVÍO DE DINERO",
     ]) {
         return Some(if amount >= Decimal::ZERO {
             "TRANSFER_IN".to_string()
@@ -275,7 +544,13 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
 
     // 8. A bare "COMPRA" (card purchase) with no recognised merchant is
     //    still clearly retail spend.
-    if has(&["COMPRA", "PAGO CON TARJETA", "TARJETA DE DEBITO", "TARJETA DE DÉBITO", "TDD"]) {
+    if has(&[
+        "COMPRA",
+        "PAGO CON TARJETA",
+        "TARJETA DE DEBITO",
+        "TARJETA DE DÉBITO",
+        "TDD",
+    ]) {
         return cat("GENERAL_MERCHANDISE");
     }
 
@@ -383,8 +658,12 @@ pub fn classify_cetes_movement(
     // par). The accented and unaccented spellings both appear per export.
     if amount > Decimal::ZERO
         && has(&[
-            "INTERES", "INTERÉS", "RENDIMIENTO", "PREMIO",
-            "VENCIMIENTO", "LIQUIDA",
+            "INTERES",
+            "INTERÉS",
+            "RENDIMIENTO",
+            "PREMIO",
+            "VENCIMIENTO",
+            "LIQUIDA",
         ])
     {
         return Some((
@@ -436,16 +715,50 @@ pub fn is_cetes_isr_withholding(description: &str) -> bool {
 /// few words) so it doesn't over-apply across unrelated merchants.
 pub fn merchant_key(description: &str) -> String {
     const NOISE: &[&str] = &[
-        "COMPRA", "PAGO", "SPEI", "ENVIASTE", "RECIBISTE", "RECIBIDO",
-        "ABONO", "CARGO", "TRASPASO", "DEPOSITO", "DEPÓSITO", "RETIRO",
-        "TRANSFERENCIA", "CON", "TARJETA", "DEBITO", "DÉBITO", "CREDITO",
-        "CRÉDITO", "DE", "DEL", "LA", "EL", "EN", "POR", "PARA", "REF",
-        "TDD", "TDC", "MN", "MXN", "SERVICIO", "Y",
+        "COMPRA",
+        "PAGO",
+        "SPEI",
+        "ENVIASTE",
+        "RECIBISTE",
+        "RECIBIDO",
+        "ABONO",
+        "CARGO",
+        "TRASPASO",
+        "DEPOSITO",
+        "DEPÓSITO",
+        "RETIRO",
+        "TRANSFERENCIA",
+        "CON",
+        "TARJETA",
+        "DEBITO",
+        "DÉBITO",
+        "CREDITO",
+        "CRÉDITO",
+        "DE",
+        "DEL",
+        "LA",
+        "EL",
+        "EN",
+        "POR",
+        "PARA",
+        "REF",
+        "TDD",
+        "TDC",
+        "MN",
+        "MXN",
+        "SERVICIO",
+        "Y",
     ];
     let upper = description.to_uppercase();
     let cleaned: String = upper
         .chars()
-        .map(|c| if c.is_alphabetic() || c == ' ' { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphabetic() || c == ' ' {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect();
     let words: Vec<&str> = cleaned
         .split_whitespace()
@@ -470,38 +783,80 @@ mod tests {
     #[test]
     fn fees_beat_transfers() {
         // "COMISION SPEI" contains SPEI but is a fee.
-        assert_eq!(categorize("COMISION SPEI ENVIADO", neg("15.00")).as_deref(), Some("BANK_FEES"));
-        assert_eq!(categorize("COMISION MANEJO DE CUENTA", neg("37.32")).as_deref(), Some("BANK_FEES"));
-        assert_eq!(categorize("I.V.A POR COMISION", neg("5.92")).as_deref(), Some("BANK_FEES"));
+        assert_eq!(
+            categorize("COMISION SPEI ENVIADO", neg("15.00")).as_deref(),
+            Some("BANK_FEES")
+        );
+        assert_eq!(
+            categorize("COMISION MANEJO DE CUENTA", neg("37.32")).as_deref(),
+            Some("BANK_FEES")
+        );
+        assert_eq!(
+            categorize("I.V.A POR COMISION", neg("5.92")).as_deref(),
+            Some("BANK_FEES")
+        );
     }
 
     #[test]
     fn income_payroll_and_interest() {
-        assert_eq!(categorize("ABONO NOMINA QUINCENA 1", pos("12500.00")).as_deref(), Some("INCOME"));
-        assert_eq!(categorize("INTERESES GANADOS", pos("18.42")).as_deref(), Some("INCOME"));
-        assert_eq!(categorize("ABONO INTERESES", pos("12.95")).as_deref(), Some("INCOME"));
+        assert_eq!(
+            categorize("ABONO NOMINA QUINCENA 1", pos("12500.00")).as_deref(),
+            Some("INCOME")
+        );
+        assert_eq!(
+            categorize("INTERESES GANADOS", pos("18.42")).as_deref(),
+            Some("INCOME")
+        );
+        assert_eq!(
+            categorize("ABONO INTERESES", pos("12.95")).as_deref(),
+            Some("INCOME")
+        );
     }
 
     #[test]
     fn negative_interest_is_not_income() {
         // A NEGATIVE "INTERESES" row is a charge / yield-liquidation /
         // reversal, never income — must not be filed as INCOME.
-        assert_ne!(categorize("INTERESES AL %", neg("309.56")).as_deref(), Some("INCOME"));
-        assert_ne!(categorize("INTERESES AL % 02-19", neg("18994.33")).as_deref(), Some("INCOME"));
+        assert_ne!(
+            categorize("INTERESES AL %", neg("309.56")).as_deref(),
+            Some("INCOME")
+        );
+        assert_ne!(
+            categorize("INTERESES AL % 02-19", neg("18994.33")).as_deref(),
+            Some("INCOME")
+        );
         // The positive counterpart is still income.
-        assert_eq!(categorize("INTERESES AL %", pos("309.56")).as_deref(), Some("INCOME"));
+        assert_eq!(
+            categorize("INTERESES AL %", pos("309.56")).as_deref(),
+            Some("INCOME")
+        );
     }
 
     #[test]
     fn rent_only_matches_anchored_phrases() {
         // Real rent phrases → RENT_AND_UTILITIES.
-        assert_eq!(categorize("PAGO RENTA DEPTO", neg("9500.00")).as_deref(), Some("RENT_AND_UTILITIES"));
-        assert_eq!(categorize("RENTA MENSUAL CASA", neg("12000.00")).as_deref(), Some("RENT_AND_UTILITIES"));
-        assert_eq!(categorize("RENTA CASA AGOSTO", neg("8000.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        assert_eq!(
+            categorize("PAGO RENTA DEPTO", neg("9500.00")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
+        assert_eq!(
+            categorize("RENTA MENSUAL CASA", neg("12000.00")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
+        assert_eq!(
+            categorize("RENTA CASA AGOSTO", neg("8000.00")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
         // Bare-substring false positives that the old unanchored "RENTA"
         // rule wrongly caught — must NOT be rent now.
-        assert_ne!(categorize("TRANSFERENCIA SPEI RENTABILIDAD", pos("250.00")).as_deref(), Some("RENT_AND_UTILITIES"));
-        assert_ne!(categorize("ARRENTAMIENTO FINANCIERO", neg("500.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        assert_ne!(
+            categorize("TRANSFERENCIA SPEI RENTABILIDAD", pos("250.00")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
+        assert_ne!(
+            categorize("ARRENTAMIENTO FINANCIERO", neg("500.00")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
     }
 
     // Helper: unwrap the (category, detail) shape into (&str, Option<&str>).
@@ -522,7 +877,10 @@ mod tests {
         ] {
             assert_eq!(
                 cls(desc, pos(amt)),
-                Some(("INCOME".to_string(), Some("INCOME_INTEREST_EARNED".to_string()))),
+                Some((
+                    "INCOME".to_string(),
+                    Some("INCOME_INTEREST_EARNED".to_string())
+                )),
                 "{desc}"
             );
         }
@@ -534,12 +892,18 @@ mod tests {
         // They're internal transfers between cash and the holding (direction
         // from the sign) — tagged so, NOT left NULL (a NULL inflow counts as
         // income in the cash-flow view). Yield rows above still carry income.
-        assert_eq!(cls("COMPRA CETES 241003", neg("23995.12")),
-            Some(("TRANSFER_OUT".to_string(), None)));
-        assert_eq!(cls("VTASI BONDDIA PF2", pos("23995.82")),
-            Some(("TRANSFER_IN".to_string(), None)));
-        assert_eq!(cls("INGEFVO", pos("24000.00")),
-            Some(("TRANSFER_IN".to_string(), None)));
+        assert_eq!(
+            cls("COMPRA CETES 241003", neg("23995.12")),
+            Some(("TRANSFER_OUT".to_string(), None))
+        );
+        assert_eq!(
+            cls("VTASI BONDDIA PF2", pos("23995.82")),
+            Some(("TRANSFER_IN".to_string(), None))
+        );
+        assert_eq!(
+            cls("INGEFVO", pos("24000.00")),
+            Some(("TRANSFER_IN".to_string(), None))
+        );
     }
 
     #[test]
@@ -549,11 +913,17 @@ mod tests {
         // the isr_withheld_* summary. Tagged even though "INTERES" appears.
         assert_eq!(
             cls("RETENCION ISR INTERES", neg("2.50")),
-            Some(("GOVERNMENT_AND_NON_PROFIT".to_string(), Some("TAX_ISR_WITHHELD".to_string())))
+            Some((
+                "GOVERNMENT_AND_NON_PROFIT".to_string(),
+                Some("TAX_ISR_WITHHELD".to_string())
+            ))
         );
         assert_eq!(
             cls("RETSI CETES", neg("12.30")),
-            Some(("GOVERNMENT_AND_NON_PROFIT".to_string(), Some("TAX_ISR_WITHHELD".to_string())))
+            Some((
+                "GOVERNMENT_AND_NON_PROFIT".to_string(),
+                Some("TAX_ISR_WITHHELD".to_string())
+            ))
         );
         // The withholding category is NOT income, so the income predicate
         // (UPPER(category)='INCOME' OR category_detailed LIKE 'INCOME\_%')
@@ -580,36 +950,72 @@ mod tests {
 
     #[test]
     fn transfers_split_by_sign() {
-        assert_eq!(categorize("SPEI RECIBIDO BANORTE", pos("5000.00")).as_deref(), Some("TRANSFER_IN"));
-        assert_eq!(categorize("SPEI ENVIADO BBVA", neg("3200.00")).as_deref(), Some("TRANSFER_OUT"));
-        assert_eq!(categorize("TRASPASO ENTRE CUENTAS", neg("1500.00")).as_deref(), Some("TRANSFER_OUT"));
+        assert_eq!(
+            categorize("SPEI RECIBIDO BANORTE", pos("5000.00")).as_deref(),
+            Some("TRANSFER_IN")
+        );
+        assert_eq!(
+            categorize("SPEI ENVIADO BBVA", neg("3200.00")).as_deref(),
+            Some("TRANSFER_OUT")
+        );
+        assert_eq!(
+            categorize("TRASPASO ENTRE CUENTAS", neg("1500.00")).as_deref(),
+            Some("TRANSFER_OUT")
+        );
     }
 
     #[test]
     fn atm_is_outgoing_transfer() {
-        assert_eq!(categorize("DISPOSICION EFECTIVO CAJERO SUC 4857", neg("2000.00")).as_deref(), Some("TRANSFER_OUT"));
+        assert_eq!(
+            categorize("DISPOSICION EFECTIVO CAJERO SUC 4857", neg("2000.00")).as_deref(),
+            Some("TRANSFER_OUT")
+        );
     }
 
     #[test]
     fn merchant_buckets() {
-        assert_eq!(categorize("COMPRA OXXO COL DEL VALLE", neg("248.50")).as_deref(), Some("FOOD_AND_DRINK"));
-        assert_eq!(categorize("COMPRA AMAZON MX MEXICO DF", neg("1149.00")).as_deref(), Some("GENERAL_MERCHANDISE"));
-        assert_eq!(categorize("PAGO DE SERVICIO CFE", neg("1485.06")).as_deref(), Some("RENT_AND_UTILITIES"));
-        assert_eq!(categorize("UBER TRIP", neg("89.00")).as_deref(), Some("TRANSPORTATION"));
-        assert_eq!(categorize("SPOTIFY AB", neg("129.00")).as_deref(), Some("ENTERTAINMENT"));
-        assert_eq!(categorize("FARMACIA GUADALAJARA", neg("210.00")).as_deref(), Some("MEDICAL"));
+        assert_eq!(
+            categorize("COMPRA OXXO COL DEL VALLE", neg("248.50")).as_deref(),
+            Some("FOOD_AND_DRINK")
+        );
+        assert_eq!(
+            categorize("COMPRA AMAZON MX MEXICO DF", neg("1149.00")).as_deref(),
+            Some("GENERAL_MERCHANDISE")
+        );
+        assert_eq!(
+            categorize("PAGO DE SERVICIO CFE", neg("1485.06")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
+        assert_eq!(
+            categorize("UBER TRIP", neg("89.00")).as_deref(),
+            Some("TRANSPORTATION")
+        );
+        assert_eq!(
+            categorize("SPOTIFY AB", neg("129.00")).as_deref(),
+            Some("ENTERTAINMENT")
+        );
+        assert_eq!(
+            categorize("FARMACIA GUADALAJARA", neg("210.00")).as_deref(),
+            Some("MEDICAL")
+        );
     }
 
     #[test]
     fn rent_beats_transfer_mechanism() {
         // A SPEI labelled with RENTA should file as utilities/rent, not a
         // bare transfer.
-        assert_eq!(categorize("SPEI ENVIADO PAGO RENTA DEPTO", neg("9000.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        assert_eq!(
+            categorize("SPEI ENVIADO PAGO RENTA DEPTO", neg("9000.00")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
     }
 
     #[test]
     fn credit_card_payment() {
-        assert_eq!(categorize("PAGO TARJETA DE CREDITO SANTANDER", neg("4500.00")).as_deref(), Some("LOAN_PAYMENTS"));
+        assert_eq!(
+            categorize("PAGO TARJETA DE CREDITO SANTANDER", neg("4500.00")).as_deref(),
+            Some("LOAN_PAYMENTS")
+        );
     }
 
     #[test]
@@ -622,7 +1028,10 @@ mod tests {
     fn merchant_key_strips_noise_and_matches_recurring() {
         // Generic verbs/refs/punctuation dropped; the same merchant produces
         // the same key across imports so a learned category can be reused.
-        assert_eq!(merchant_key("COMPRA STARBUCKS REFORMA REF 9981"), "STARBUCKS REFORMA");
+        assert_eq!(
+            merchant_key("COMPRA STARBUCKS REFORMA REF 9981"),
+            "STARBUCKS REFORMA"
+        );
         assert_eq!(merchant_key("Pago de servicio SPOTIFY"), "SPOTIFY");
         // Single-token app-style merchant → broad, stable key.
         assert_eq!(merchant_key("Enviaste a NETFLIX"), "NETFLIX");
@@ -632,17 +1041,38 @@ mod tests {
 
     #[test]
     fn grown_rules_cover_more_merchants() {
-        assert_eq!(categorize("COMPRA TEMU", neg("300.00")).as_deref(), Some("GENERAL_MERCHANDISE"));
-        assert_eq!(categorize("PAGO BAIT RECARGA", neg("100.00")).as_deref(), Some("RENT_AND_UTILITIES"));
-        assert_eq!(categorize("CRUNCHYROLL", neg("129.00")).as_deref(), Some("ENTERTAINMENT"));
-        assert_eq!(categorize("REPSOL GASOLINERA", neg("800.00")).as_deref(), Some("TRANSPORTATION"));
-        assert_eq!(categorize("LOOP COMBUSTIBLE", neg("750.00")).as_deref(), Some("TRANSPORTATION"));
-        assert_eq!(categorize("CANVA PRO", neg("199.00")).as_deref(), Some("GENERAL_SERVICES"));
+        assert_eq!(
+            categorize("COMPRA TEMU", neg("300.00")).as_deref(),
+            Some("GENERAL_MERCHANDISE")
+        );
+        assert_eq!(
+            categorize("PAGO BAIT RECARGA", neg("100.00")).as_deref(),
+            Some("RENT_AND_UTILITIES")
+        );
+        assert_eq!(
+            categorize("CRUNCHYROLL", neg("129.00")).as_deref(),
+            Some("ENTERTAINMENT")
+        );
+        assert_eq!(
+            categorize("REPSOL GASOLINERA", neg("800.00")).as_deref(),
+            Some("TRANSPORTATION")
+        );
+        assert_eq!(
+            categorize("LOOP COMBUSTIBLE", neg("750.00")).as_deref(),
+            Some("TRANSPORTATION")
+        );
+        assert_eq!(
+            categorize("CANVA PRO", neg("199.00")).as_deref(),
+            Some("GENERAL_SERVICES")
+        );
     }
 
     #[test]
     fn bare_compra_is_merchandise() {
-        assert_eq!(categorize("COMPRA CON TARJETA DE DEBITO REF 7766", neg("532.68")).as_deref(), Some("GENERAL_MERCHANDISE"));
+        assert_eq!(
+            categorize("COMPRA CON TARJETA DE DEBITO REF 7766", neg("532.68")).as_deref(),
+            Some("GENERAL_MERCHANDISE")
+        );
     }
 
     #[test]
@@ -650,18 +1080,30 @@ mod tests {
         // Nu savings-pocket moves are internal transfers, not income/spending —
         // direction from the sign. (Regression: these landed NULL and were
         // counted as income in the cash-flow trends view.)
-        assert_eq!(categorize("de Cajita: Ahorro", pos("27000.00")).as_deref(), Some("TRANSFER_IN"));
-        assert_eq!(categorize("a Cajita: Ahorro", neg("5000.00")).as_deref(), Some("TRANSFER_OUT"));
+        assert_eq!(
+            categorize("de Cajita: Ahorro", pos("27000.00")).as_deref(),
+            Some("TRANSFER_IN")
+        );
+        assert_eq!(
+            categorize("a Cajita: Ahorro", neg("5000.00")).as_deref(),
+            Some("TRANSFER_OUT")
+        );
     }
 
     #[test]
     fn wise_and_hsa_contributions_are_transfers() {
         // Own-money cross-account moves, not income/spending.
         assert_eq!(
-            categorize("WISE PAYMENTS LIMITED Remittance transaction", pos("30000.00")).as_deref(),
-            Some("TRANSFER_IN"));
+            categorize(
+                "WISE PAYMENTS LIMITED Remittance transaction",
+                pos("30000.00")
+            )
+            .as_deref(),
+            Some("TRANSFER_IN")
+        );
         assert_eq!(
             categorize("Employee Contribution for 2026", pos("500.00")).as_deref(),
-            Some("TRANSFER_IN"));
+            Some("TRANSFER_IN")
+        );
     }
 }

@@ -39,10 +39,12 @@ async fn try_setup() -> Option<(Router, TestLockGuard)> {
         .await
         .expect("apply migrations");
 
-    sqlx::query("TRUNCATE auth_audit, user_sessions, users, recovery_codes RESTART IDENTITY CASCADE")
-        .execute(&pool)
-        .await
-        .expect("truncate");
+    sqlx::query(
+        "TRUNCATE auth_audit, user_sessions, users, recovery_codes RESTART IDENTITY CASCADE",
+    )
+    .execute(&pool)
+    .await
+    .expect("truncate");
 
     // TOTP requires ENCRYPTION_KEY. Synthesise a random 32-byte hex
     // for the test run so encrypt/decrypt actually works.
@@ -77,8 +79,11 @@ async fn try_setup() -> Option<(Router, TestLockGuard)> {
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis");
     let webauthn = std::sync::Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
-            .expect("webauthn builder"),
+        patrimonio::api::passkeys::build_webauthn(
+            &config.frontend_base_url,
+            &config.android_apk_cert_sha256,
+        )
+        .expect("webauthn builder"),
     );
     let state = AppState {
         db: pool.clone(),
@@ -88,8 +93,7 @@ async fn try_setup() -> Option<(Router, TestLockGuard)> {
         realtime: patrimonio::services::realtime::Realtime::new(),
     };
 
-    let public = Router::new()
-        .nest("/api/auth", patrimonio::api::session::public_router());
+    let public = Router::new().nest("/api/auth", patrimonio::api::session::public_router());
     let protected = Router::new()
         .nest("/api/auth", patrimonio::api::session::protected_router())
         .layer(from_fn_with_state(
@@ -139,7 +143,8 @@ fn json_req(method: Method, uri: &str, body: &Value, cookie: Option<&str>) -> Re
     if let Some(t) = cookie {
         b = b.header(header::COOKIE, cookie_header(t));
     }
-    b.body(Body::from(serde_json::to_vec(body).unwrap())).unwrap()
+    b.body(Body::from(serde_json::to_vec(body).unwrap()))
+        .unwrap()
 }
 
 fn get_req(uri: &str, cookie: Option<&str>) -> Request<Body> {
@@ -182,7 +187,9 @@ async fn bootstrap_and_login(app: &Router) -> (String, Vec<String>) {
 #[tokio::test]
 #[serial_test::serial]
 async fn recovery_code_redeems_and_resets_password() {
-    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let (_token, codes) = bootstrap_and_login(&app).await;
 
     // Wrong username + right code → 401.
@@ -283,7 +290,9 @@ async fn recovery_code_redeems_and_resets_password() {
 #[tokio::test]
 #[serial_test::serial]
 async fn regenerate_invalidates_old_codes() {
-    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let (token, original_codes) = bootstrap_and_login(&app).await;
 
     // Regenerate via the authenticated endpoint.
@@ -372,7 +381,9 @@ fn current_totp_for(secret_b32: &str) -> String {
 #[tokio::test]
 #[serial_test::serial]
 async fn totp_enroll_confirm_then_login_requires_two_steps() {
-    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let (token, _codes) = bootstrap_and_login(&app).await;
 
     // Start enrollment — get secret + provisioning URI.
@@ -515,7 +526,9 @@ async fn totp_enroll_confirm_then_login_requires_two_steps() {
 #[tokio::test]
 #[serial_test::serial]
 async fn totp_disable_requires_password() {
-    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let (token, _codes) = bootstrap_and_login(&app).await;
 
     // Enroll + confirm so totp_enabled is true.

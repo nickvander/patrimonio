@@ -60,9 +60,7 @@ pub async fn begin_enrollment(
     OsRng.fill_bytes(&mut secret_bytes);
     let secret = Secret::Raw(secret_bytes.to_vec());
 
-    let secret_base32 = secret
-        .to_encoded()
-        .to_string();
+    let secret_base32 = secret.to_encoded().to_string();
 
     let totp = build_totp(secret_bytes.to_vec(), account_label)?;
     let provisioning_uri = totp.get_url();
@@ -71,14 +69,12 @@ pub async fn begin_enrollment(
     let encrypted = encryption::encrypt(enc_key, &secret_base32)
         .map_err(|e| anyhow!("encrypt totp secret: {e}"))?;
 
-    sqlx::query(
-        "UPDATE users SET totp_secret_enc = $1, totp_enabled = false WHERE id = $2",
-    )
-    .bind(&encrypted)
-    .bind(user_id)
-    .execute(db)
-    .await
-    .map_err(|e| anyhow!("store enrollment: {e}"))?;
+    sqlx::query("UPDATE users SET totp_secret_enc = $1, totp_enabled = false WHERE id = $2")
+        .bind(&encrypted)
+        .bind(user_id)
+        .execute(db)
+        .await
+        .map_err(|e| anyhow!("store enrollment: {e}"))?;
 
     Ok(EnrollmentChallenge {
         secret_base32,
@@ -111,12 +107,7 @@ pub async fn verify_no_advance(
 /// inside its 90-second validity window (one full window per step,
 /// plus the ±1 skew). A captured code is therefore single-use even if
 /// it's still nominally valid by the clock.
-pub async fn verify(
-    db: &PgPool,
-    enc_key: &str,
-    user_id: Uuid,
-    code: &str,
-) -> Result<bool> {
+pub async fn verify(db: &PgPool, enc_key: &str, user_id: Uuid, code: &str) -> Result<bool> {
     verify_inner(db, enc_key, user_id, code, true).await
 }
 

@@ -125,7 +125,9 @@ async fn rotate_column(
         enc = col.enc_column,
         tbl = col.table,
     );
-    let rows = sqlx::query(&sql).fetch_all(pool).await
+    let rows = sqlx::query(&sql)
+        .fetch_all(pool)
+        .await
         .with_context(|| format!("select on {}.{} failed", col.table, col.enc_column))?;
 
     if rows.is_empty() {

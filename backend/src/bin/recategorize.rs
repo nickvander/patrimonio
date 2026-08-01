@@ -31,13 +31,10 @@ use patrimonio::services::categorize::{categorize, classify_cetes_movement};
 async fn main() -> Result<()> {
     let raw: Vec<String> = env::args().skip(1).collect();
     let apply = raw.iter().any(|a| a == "--apply");
-    let user_arg: Option<String> = raw
-        .iter()
-        .find(|a| !a.starts_with("--"))
-        .cloned();
+    let user_arg: Option<String> = raw.iter().find(|a| !a.starts_with("--")).cloned();
 
-    let db_url = env::var("DATABASE_URL")
-        .context("DATABASE_URL is required — point it at your Postgres")?;
+    let db_url =
+        env::var("DATABASE_URL").context("DATABASE_URL is required — point it at your Postgres")?;
     let pool = PgPoolOptions::new()
         .max_connections(4)
         .connect(&db_url)
@@ -48,7 +45,11 @@ async fn main() -> Result<()> {
     println!("Recategorizing NULL-category transactions for '{username}' ({user_id})");
     println!(
         "Mode: {}\n",
-        if apply { "APPLY (writing)" } else { "DRY-RUN (no writes) — pass --apply to write" }
+        if apply {
+            "APPLY (writing)"
+        } else {
+            "DRY-RUN (no writes) — pass --apply to write"
+        }
     );
 
     // Pull every NULL-category row with the account name (so cetesdirecto rows
@@ -109,20 +110,33 @@ async fn main() -> Result<()> {
                 let d: String = description.chars().take(46).collect();
                 entry.samples.push(d);
             }
-            changes.push(Change { id, category, category_detailed });
+            changes.push(Change {
+                id,
+                category,
+                category_detailed,
+            });
         }
     }
 
     // Report.
-    println!("{total_null} NULL-category rows scanned; {} would be categorized:\n", changes.len());
+    println!(
+        "{total_null} NULL-category rows scanned; {} would be categorized:\n",
+        changes.len()
+    );
     for (cat, t) in &tally {
-        println!("  {cat:<26} {:>5} rows   Σ|amount| {:>14.2}", t.n, t.total_abs);
+        println!(
+            "  {cat:<26} {:>5} rows   Σ|amount| {:>14.2}",
+            t.n, t.total_abs
+        );
         for s in &t.samples {
             println!("      e.g. {s}");
         }
     }
     let leftover = total_null - changes.len();
-    println!("\n  {:<26} {:>5} rows (still NULL — no confident rule)", "(unchanged)", leftover);
+    println!(
+        "\n  {:<26} {:>5} rows (still NULL — no confident rule)",
+        "(unchanged)", leftover
+    );
 
     if !apply {
         println!("\nDRY-RUN only. Re-run with --apply to write these categories.");

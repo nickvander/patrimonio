@@ -79,7 +79,10 @@ pub async fn verify_plaid_webhook(
     let header = decode_header(plaid_verification_jwt)
         .map_err(|e| anyhow!("malformed Plaid-Verification JWT header: {e}"))?;
     if header.alg != Algorithm::ES256 {
-        bail!("Plaid-Verification JWT uses unexpected alg {:?}", header.alg);
+        bail!(
+            "Plaid-Verification JWT uses unexpected alg {:?}",
+            header.alg
+        );
     }
     let kid = header
         .kid
@@ -103,9 +106,7 @@ pub async fn verify_plaid_webhook(
         bail!("Plaid-Verification JWT iat is in the future by {}s", -age);
     }
     if age > IAT_MAX_AGE_SECONDS {
-        bail!(
-            "Plaid-Verification JWT is stale (iat age {age}s > {IAT_MAX_AGE_SECONDS}s)"
-        );
+        bail!("Plaid-Verification JWT is stale (iat age {age}s > {IAT_MAX_AGE_SECONDS}s)");
     }
 
     // 5. Bind the signature to *this* request body by comparing the

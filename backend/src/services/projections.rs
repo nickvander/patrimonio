@@ -107,7 +107,9 @@ impl ProjectionRequest {
     }
     /// Year at which the accumulation phase ends. Clamped to the horizon.
     fn retire_year(&self) -> i32 {
-        self.years_to_retirement.unwrap_or(self.years()).clamp(0, self.years())
+        self.years_to_retirement
+            .unwrap_or(self.years())
+            .clamp(0, self.years())
     }
     /// Real (inflation-adjusted) annual return via the Fisher relation.
     fn real_return(&self) -> f64 {
@@ -363,12 +365,8 @@ pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
     } else {
         0.0
     };
-    let estimated_years_to_fi = calculate_years_to_fi(
-        req.start_balance,
-        req.monthly_contribution,
-        real,
-        fi_number,
-    );
+    let estimated_years_to_fi =
+        calculate_years_to_fi(req.start_balance, req.monthly_contribution, real, fi_number);
     let monthly_income_at_retirement = balance_at_retirement * req.withdrawal_rate / 12.0;
 
     // Coast FIRE: present value of the FI number discounted at the real return
@@ -774,14 +772,11 @@ mod tests {
             without.monte_carlo.success_rate
         );
         assert!(
-            with.monte_carlo.median_ending_balance
-                > without.monte_carlo.median_ending_balance,
+            with.monte_carlo.median_ending_balance > without.monte_carlo.median_ending_balance,
             "income should raise the median ending balance"
         );
         // Deterministic path: the final balance is higher with income too.
-        assert!(
-            with.points.last().unwrap().balance > without.points.last().unwrap().balance
-        );
+        assert!(with.points.last().unwrap().balance > without.points.last().unwrap().balance);
     }
 
     #[test]
@@ -867,10 +862,7 @@ mod tests {
             mx.fire_metrics.fi_number,
             legacy.fire_metrics.fi_number
         );
-        assert_eq!(
-            mx.monte_carlo.success_rate,
-            legacy.monte_carlo.success_rate
-        );
+        assert_eq!(mx.monte_carlo.success_rate, legacy.monte_carlo.success_rate);
         assert!(
             (mx.points.last().unwrap().balance - legacy.points.last().unwrap().balance).abs()
                 < 1e-6

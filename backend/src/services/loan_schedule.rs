@@ -77,12 +77,7 @@ fn period_params(
 }
 
 /// due_date of installment k (1-based) for a frequency.
-fn due_date_for(
-    origination: NaiveDate,
-    k: i32,
-    term_months: i32,
-    frequency: &str,
-) -> NaiveDate {
+fn due_date_for(origination: NaiveDate, k: i32, term_months: i32, frequency: &str) -> NaiveDate {
     match frequency {
         // Months::new clamps Jan-31 + 1mo → Feb-28 correctly.
         "monthly" => origination + Months::new(k as u32),
@@ -109,7 +104,9 @@ pub fn generate(
     term_months: Option<i32>,
     payment_frequency: Option<&str>,
 ) -> Result<Vec<ScheduleRow>, ScheduleError> {
-    let term = term_months.filter(|t| *t > 0).ok_or(ScheduleError::OpenEnded)?;
+    let term = term_months
+        .filter(|t| *t > 0)
+        .ok_or(ScheduleError::OpenEnded)?;
     if term > MAX_TERM_MONTHS {
         return Err(ScheduleError::TermTooLong);
     }
@@ -126,9 +123,7 @@ pub fn generate(
     }
 
     let rows = match interest_type {
-        "amortized" if i > Decimal::ZERO => {
-            amortized(principal, i, n)
-        }
+        "amortized" if i > Decimal::ZERO => amortized(principal, i, n),
         // Each period pays interest only; principal balloons at the end.
         "interest_only" => interest_only(principal, i, n),
         // Interest compounds over the term; nothing is paid until a
@@ -143,7 +138,11 @@ pub fn generate(
     // Stamp due dates. Compound is a single balloon at maturity, so it
     // borrows the lump-sum due-date rule (origination + term) rather
     // than the per-period stepping.
-    let due_freq = if interest_type == "compound" { "lump_sum" } else { freq };
+    let due_freq = if interest_type == "compound" {
+        "lump_sum"
+    } else {
+        freq
+    };
     Ok(rows
         .into_iter()
         .map(|mut r| {
@@ -188,8 +187,7 @@ fn amortized(principal: Decimal, i: Decimal, n: i32) -> Vec<ScheduleRow> {
 /// period. Total interest = P · annual_rate · (term_months/12). Final
 /// row absorbs both residuals.
 fn simple(principal: Decimal, annual_rate: Decimal, term_months: i32, n: i32) -> Vec<ScheduleRow> {
-    let total_interest =
-        principal * annual_rate * Decimal::from(term_months) / Decimal::from(12);
+    let total_interest = principal * annual_rate * Decimal::from(term_months) / Decimal::from(12);
     let per_principal = money(principal / Decimal::from(n));
     let per_interest = money(total_interest / Decimal::from(n));
 
@@ -199,7 +197,10 @@ fn simple(principal: Decimal, annual_rate: Decimal, term_months: i32, n: i32) ->
     for k in 1..=n {
         let (principal_k, interest_k) = if k == n {
             // Tail absorbs the rounding residual on both columns.
-            (principal - principal_acc, money(total_interest) - interest_acc)
+            (
+                principal - principal_acc,
+                money(total_interest) - interest_acc,
+            )
         } else {
             (per_principal, per_interest)
         };
@@ -338,7 +339,11 @@ pub fn expand_pattern(
         if due > end_date {
             break;
         }
-        let amt = if idx < first_count { first_amount } else { amount };
+        let amt = if idx < first_count {
+            first_amount
+        } else {
+            amount
+        };
         rows.push((due, amt));
         idx += 1;
         month = month + Months::new(1);
@@ -419,7 +424,13 @@ mod tests {
         assert_eq!(err, ScheduleError::TermTooLong);
         // The boundary value is still accepted.
         assert!(generate(
-            d("1000"), d("0"), "annual", "none", orig(), Some(MAX_TERM_MONTHS), Some("monthly"),
+            d("1000"),
+            d("0"),
+            "annual",
+            "none",
+            orig(),
+            Some(MAX_TERM_MONTHS),
+            Some("monthly"),
         )
         .is_ok());
     }
@@ -431,7 +442,13 @@ mod tests {
         // we let the code compute it and check the properties that
         // actually matter for correctness).
         let rows = generate(
-            d("2000"), d("0.05"), "annual", "amortized", orig(), Some(24), Some("monthly"),
+            d("2000"),
+            d("0.05"),
+            "annual",
+            "amortized",
+            orig(),
+            Some(24),
+            Some("monthly"),
         )
         .unwrap();
         assert_eq!(rows.len(), 24);
@@ -439,33 +456,57 @@ mod tests {
         assert_eq!(rows[0].interest, d("8.33"));
         // Each row is internally consistent: amount = principal + interest.
         for r in &rows {
-            assert_eq!(r.amount, r.principal + r.interest, "row {} inconsistent", r.installment_number);
+            assert_eq!(
+                r.amount,
+                r.principal + r.interest,
+                "row {} inconsistent",
+                r.installment_number
+            );
         }
         // Every payment except the last is the same level payment M.
         let m = rows[0].amount;
         for r in &rows[..23] {
-            assert_eq!(r.amount, m, "row {} should be the level payment", r.installment_number);
+            assert_eq!(
+                r.amount, m,
+                "row {} should be the level payment",
+                r.installment_number
+            );
         }
         // The final row absorbs the accumulated rounding residual, so
         // it differs from the level payment M by at most a small amount
         // (either direction — drift can round up or down). The HARD
         // guarantee is the principal-sum invariant below.
-        assert!((m - rows[23].amount).abs() < d("1.00"),
-            "final payment {} should be within $1 of level payment {m}", rows[23].amount);
+        assert!(
+            (m - rows[23].amount).abs() < d("1.00"),
+            "final payment {} should be within $1 of level payment {m}",
+            rows[23].amount
+        );
         // HARD invariant: principal sums to EXACTLY the loan principal.
         assert_eq!(sum_principal(&rows), d("2000.00"));
         // Interest is positive and reasonable (~$105 over 24 months).
         assert!(sum_interest(&rows) > d("100") && sum_interest(&rows) < d("110"));
         // Due dates: monthly steps from origination.
-        assert_eq!(rows[0].due_date, NaiveDate::from_ymd_opt(2026, 2, 15).unwrap());
-        assert_eq!(rows[23].due_date, NaiveDate::from_ymd_opt(2028, 1, 15).unwrap());
+        assert_eq!(
+            rows[0].due_date,
+            NaiveDate::from_ymd_opt(2026, 2, 15).unwrap()
+        );
+        assert_eq!(
+            rows[23].due_date,
+            NaiveDate::from_ymd_opt(2028, 1, 15).unwrap()
+        );
     }
 
     #[test]
     fn amortized_weekly_period_count() {
         // 12 months weekly → 52 periods.
         let rows = generate(
-            d("5000"), d("0.06"), "annual", "amortized", orig(), Some(12), Some("weekly"),
+            d("5000"),
+            d("0.06"),
+            "annual",
+            "amortized",
+            orig(),
+            Some(12),
+            Some("weekly"),
         )
         .unwrap();
         assert_eq!(rows.len(), 52);
@@ -477,7 +518,13 @@ mod tests {
     fn lump_sum_single_row() {
         // $1000 @ 10% for 12 months, lump sum → 1 row, 100 interest.
         let rows = generate(
-            d("1000"), d("0.10"), "annual", "amortized", orig(), Some(12), Some("lump_sum"),
+            d("1000"),
+            d("0.10"),
+            "annual",
+            "amortized",
+            orig(),
+            Some(12),
+            Some("lump_sum"),
         )
         .unwrap();
         assert_eq!(rows.len(), 1);
@@ -490,7 +537,13 @@ mod tests {
     fn none_equal_slices_with_tail() {
         // $1000 over 3 months, no interest → 333.33, 333.33, 333.34.
         let rows = generate(
-            d("1000"), Decimal::ZERO, "annual", "none", orig(), Some(3), Some("monthly"),
+            d("1000"),
+            Decimal::ZERO,
+            "annual",
+            "none",
+            orig(),
+            Some(3),
+            Some("monthly"),
         )
         .unwrap();
         assert_eq!(rows.len(), 3);
@@ -505,7 +558,13 @@ mod tests {
         // $1200 @ 6% for 12 months simple → I = 72.00; per row
         // principal 100, interest 6, amount 106.
         let rows = generate(
-            d("1200"), d("0.06"), "annual", "simple", orig(), Some(12), Some("monthly"),
+            d("1200"),
+            d("0.06"),
+            "annual",
+            "simple",
+            orig(),
+            Some(12),
+            Some("monthly"),
         )
         .unwrap();
         assert_eq!(rows.len(), 12);
@@ -519,7 +578,13 @@ mod tests {
     #[test]
     fn none_divisible_no_tail_needed() {
         let rows = generate(
-            d("1200"), Decimal::ZERO, "annual", "none", orig(), Some(12), Some("monthly"),
+            d("1200"),
+            Decimal::ZERO,
+            "annual",
+            "none",
+            orig(),
+            Some(12),
+            Some("monthly"),
         )
         .unwrap();
         assert!(rows.iter().all(|r| r.principal == d("100.00")));
@@ -529,11 +594,27 @@ mod tests {
     #[test]
     fn open_ended_rejected() {
         assert_eq!(
-            generate(d("1000"), Decimal::ZERO, "annual", "none", orig(), None, Some("monthly")),
+            generate(
+                d("1000"),
+                Decimal::ZERO,
+                "annual",
+                "none",
+                orig(),
+                None,
+                Some("monthly")
+            ),
             Err(ScheduleError::OpenEnded)
         );
         assert_eq!(
-            generate(d("1000"), Decimal::ZERO, "annual", "none", orig(), Some(12), None),
+            generate(
+                d("1000"),
+                Decimal::ZERO,
+                "annual",
+                "none",
+                orig(),
+                Some(12),
+                None
+            ),
             Err(ScheduleError::OpenEnded)
         );
     }
@@ -541,7 +622,15 @@ mod tests {
     #[test]
     fn bad_frequency_rejected() {
         assert_eq!(
-            generate(d("1000"), Decimal::ZERO, "annual", "none", orig(), Some(12), Some("daily")),
+            generate(
+                d("1000"),
+                Decimal::ZERO,
+                "annual",
+                "none",
+                orig(),
+                Some(12),
+                Some("daily")
+            ),
             Err(ScheduleError::BadFrequency)
         );
     }
@@ -550,7 +639,13 @@ mod tests {
     fn zero_rate_amortized_is_equal_principal() {
         // 0% amortized falls through to equal-principal slices.
         let rows = generate(
-            d("1200"), Decimal::ZERO, "annual", "amortized", orig(), Some(12), Some("monthly"),
+            d("1200"),
+            Decimal::ZERO,
+            "annual",
+            "amortized",
+            orig(),
+            Some(12),
+            Some("monthly"),
         )
         .unwrap();
         assert_eq!(sum_principal(&rows), d("1200.00"));
@@ -563,12 +658,22 @@ mod tests {
         // Monthly periodic = 1% → interest $100 every month; principal
         // balloons in month 6.
         let rows = generate(
-            d("10000"), d("0.12"), "annual", "interest_only", orig(), Some(6), Some("monthly"),
+            d("10000"),
+            d("0.12"),
+            "annual",
+            "interest_only",
+            orig(),
+            Some(6),
+            Some("monthly"),
         )
         .unwrap();
         assert_eq!(rows.len(), 6);
         for r in &rows[..5] {
-            assert_eq!(r.principal, Decimal::ZERO, "non-final rows are interest-only");
+            assert_eq!(
+                r.principal,
+                Decimal::ZERO,
+                "non-final rows are interest-only"
+            );
             assert_eq!(r.interest, d("100.00"));
             assert_eq!(r.amount, d("100.00"));
         }
@@ -586,20 +691,37 @@ mod tests {
         // 'monthly', the per-period rate must be EXACTLY 1% — so row-1
         // interest = 10000 * 0.01 = 100.00 exactly.
         let monthly = generate(
-            d("10000"), d("0.01"), "monthly", "amortized", orig(), Some(12), Some("monthly"),
+            d("10000"),
+            d("0.01"),
+            "monthly",
+            "amortized",
+            orig(),
+            Some(12),
+            Some("monthly"),
         )
         .unwrap();
-        assert_eq!(monthly[0].interest, d("100.00"),
-            "1%/month must give exactly $100 first-month interest on $10k");
+        assert_eq!(
+            monthly[0].interest,
+            d("100.00"),
+            "1%/month must give exactly $100 first-month interest on $10k"
+        );
         assert_eq!(sum_principal(&monthly), d("10000.00"));
 
         // Equivalence: 1%/month == 12%/annual for a monthly schedule.
         let annual = generate(
-            d("10000"), d("0.12"), "annual", "amortized", orig(), Some(12), Some("monthly"),
+            d("10000"),
+            d("0.12"),
+            "annual",
+            "amortized",
+            orig(),
+            Some(12),
+            Some("monthly"),
         )
         .unwrap();
-        assert_eq!(monthly[0].amount, annual[0].amount,
-            "1%/month and 12%/annual must produce the same monthly payment");
+        assert_eq!(
+            monthly[0].amount, annual[0].amount,
+            "1%/month and 12%/annual must produce the same monthly payment"
+        );
     }
 
     #[test]
@@ -607,16 +729,28 @@ mod tests {
         // $1,000 @ 10% annual, 2 years monthly-compounded → one balloon
         // at maturity. (1 + 0.10/12)^24 ≈ 1.22039 → interest ≈ $220.39.
         let rows = generate(
-            d("1000"), d("0.10"), "annual", "compound", orig(), Some(24), Some("monthly"),
+            d("1000"),
+            d("0.10"),
+            "annual",
+            "compound",
+            orig(),
+            Some(24),
+            Some("monthly"),
         )
         .unwrap();
         assert_eq!(rows.len(), 1, "compound is a single balloon");
         assert_eq!(rows[0].principal, d("1000.00"));
-        assert!((rows[0].interest - d("220.39")).abs() < d("0.50"),
-            "compound interest ~220.39, got {}", rows[0].interest);
+        assert!(
+            (rows[0].interest - d("220.39")).abs() < d("0.50"),
+            "compound interest ~220.39, got {}",
+            rows[0].interest
+        );
         assert_eq!(rows[0].amount, rows[0].principal + rows[0].interest);
         // Due at maturity (origination + 24 months), not period 1.
-        assert_eq!(rows[0].due_date, NaiveDate::from_ymd_opt(2028, 1, 15).unwrap());
+        assert_eq!(
+            rows[0].due_date,
+            NaiveDate::from_ymd_opt(2028, 1, 15).unwrap()
+        );
         // Compound > simple over the same terms (10%·2 = $200 simple).
         assert!(rows[0].interest > d("200.00"));
     }
@@ -656,7 +790,10 @@ mod tests {
         assert_eq!(d("130000") - paid, Decimal::ZERO);
         // Dates + numbering are the input's, 1-based.
         assert_eq!(out[0].installment_number, 1);
-        assert_eq!(out[0].due_date, NaiveDate::from_ymd_opt(2026, 6, 15).unwrap());
+        assert_eq!(
+            out[0].due_date,
+            NaiveDate::from_ymd_opt(2026, 6, 15).unwrap()
+        );
         assert_eq!(out[1].amount, d("4000.00"));
         assert_eq!(out[36].due_date, end);
     }
@@ -667,12 +804,7 @@ mod tests {
         // of 275 (sum 1100). Interest spreads flat (25/row); tail absorbs
         // residuals. Nothing negative; both columns close.
         let rows: Vec<(NaiveDate, Decimal)> = (0..4)
-            .map(|k| {
-                (
-                    NaiveDate::from_ymd_opt(2026, 1 + k, 15).unwrap(),
-                    d("275"),
-                )
-            })
+            .map(|k| (NaiveDate::from_ymd_opt(2026, 1 + k, 15).unwrap(), d("275")))
             .collect();
         let out = expand_rows(&rows, d("1000"));
         assert_eq!(out.len(), 4);
@@ -704,7 +836,10 @@ mod tests {
         assert_eq!(rows.len(), 4);
         assert_eq!(rows[0].amount, d("4000.00"));
         assert_eq!(rows[1].amount, d("3500.00"));
-        assert_eq!(rows[3].due_date, NaiveDate::from_ymd_opt(2026, 9, 15).unwrap());
+        assert_eq!(
+            rows[3].due_date,
+            NaiveDate::from_ymd_opt(2026, 9, 15).unwrap()
+        );
         // 4000 + 3*3500 = 14500 == principal → 0 interest.
         assert_eq!(sum_principal(&rows), d("14500.00"));
         assert_eq!(sum_interest(&rows), d("0.00"));
@@ -720,7 +855,13 @@ mod tests {
         // 2%/month simple over 6 months on $1000 → total interest
         // = 1000 * 0.02 * 6 = $120; per row $20 interest + ~166.67 principal.
         let rows = generate(
-            d("1000"), d("0.02"), "monthly", "simple", orig(), Some(6), Some("monthly"),
+            d("1000"),
+            d("0.02"),
+            "monthly",
+            "simple",
+            orig(),
+            Some(6),
+            Some("monthly"),
         )
         .unwrap();
         assert_eq!(sum_principal(&rows), d("1000.00"));
@@ -736,9 +877,7 @@ mod tests {
         // clamp to day 1 and return promptly.
         let start = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
         let end = NaiveDate::from_ymd_opt(2026, 4, 30).unwrap();
-        let rows = expand_pattern(
-            d("1000"), start, end, Some(0), 0, d("0"), d("250"),
-        );
+        let rows = expand_pattern(d("1000"), start, end, Some(0), 0, d("0"), d("250"));
         assert!(!rows.is_empty(), "should still produce rows");
         // Day 0 clamped to the 1st of each month.
         for r in &rows {

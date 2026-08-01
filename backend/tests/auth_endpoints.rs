@@ -89,8 +89,11 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");
     let webauthn = std::sync::Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
-            .expect("webauthn builder"),
+        patrimonio::api::passkeys::build_webauthn(
+            &config.frontend_base_url,
+            &config.android_apk_cert_sha256,
+        )
+        .expect("webauthn builder"),
     );
     let state = AppState {
         db: pool.clone(),
@@ -102,8 +105,7 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
 
     // Mirror the public/protected split from main.rs so the middleware
     // posture matches production exactly.
-    let public = Router::new()
-        .nest("/api/auth", patrimonio::api::session::public_router());
+    let public = Router::new().nest("/api/auth", patrimonio::api::session::public_router());
 
     let protected = Router::new()
         .nest("/api/auth", patrimonio::api::session::protected_router())
@@ -143,8 +145,7 @@ fn set_cookie_value(headers: &axum::http::HeaderMap) -> Option<String> {
 }
 
 fn cookie_header(token: &str) -> HeaderValue {
-    HeaderValue::from_str(&format!("{SESSION_COOKIE}={token}"))
-        .expect("valid cookie header")
+    HeaderValue::from_str(&format!("{SESSION_COOKIE}={token}")).expect("valid cookie header")
 }
 
 fn json_request(method: Method, uri: &str, body: &Value, cookie: Option<&str>) -> Request<Body> {
@@ -170,7 +171,9 @@ fn get_request(uri: &str, cookie: Option<&str>) -> Request<Body> {
 #[tokio::test]
 #[serial_test::serial]
 async fn full_auth_lifecycle() {
-    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
 
     // Fresh DB reports needs_bootstrap.
     let res = app
@@ -375,7 +378,9 @@ async fn full_auth_lifecycle() {
 #[tokio::test]
 #[serial_test::serial]
 async fn session_management_endpoints() {
-    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
 
     // Bootstrap to create the first session.
     let res = app
@@ -434,7 +439,12 @@ async fn session_management_endpoints() {
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res.into_body()).await;
     let arr = body.as_array().expect("array");
-    assert_eq!(arr.len(), 3, "expected 3 active sessions, got {}", arr.len());
+    assert_eq!(
+        arr.len(),
+        3,
+        "expected 3 active sessions, got {}",
+        arr.len()
+    );
     let current_count = arr
         .iter()
         .filter(|s| s["is_current"].as_bool() == Some(true))
@@ -484,7 +494,9 @@ async fn session_management_endpoints() {
     let body = body_json(res.into_body()).await;
     let arr = body.as_array().expect("array");
     assert_eq!(arr.len(), 2);
-    assert!(arr.iter().all(|s| s["id"].as_str() != Some(&target_session_id)));
+    assert!(arr
+        .iter()
+        .all(|s| s["id"].as_str() != Some(&target_session_id)));
 
     // Refusing to revoke the current session — even via DELETE — is a
     // 400 so the user has to use /logout instead. (Identify the
@@ -569,7 +581,9 @@ async fn session_management_endpoints() {
 #[tokio::test]
 #[serial_test::serial]
 async fn rate_limit_kicks_in_after_repeated_failures() {
-    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
 
     // Bootstrap a user so the username exists (the limiter keys off
     // failures for that username).

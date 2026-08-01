@@ -71,16 +71,16 @@ fn main() -> anyhow::Result<()> {
     let deposits = txs.iter().filter(|t| t.amount.is_sign_positive()).count();
     let withdrawals = txs.len() - deposits;
     let with_balance = txs.iter().filter(|t| t.balance_after.is_some()).count();
-    println!(
-        "  deposits={deposits} withdrawals={withdrawals} with_balance={with_balance}"
-    );
+    println!("  deposits={deposits} withdrawals={withdrawals} with_balance={with_balance}");
 
     // Per-account_label breakdown (for multi-section statements like Nu cajitas).
     use std::collections::BTreeMap;
     let mut by_label: BTreeMap<String, (usize, rust_decimal::Decimal)> = BTreeMap::new();
     for t in &txs {
         let key = t.account_label.clone().unwrap_or_else(|| "main".into());
-        let e = by_label.entry(key).or_insert((0, rust_decimal::Decimal::ZERO));
+        let e = by_label
+            .entry(key)
+            .or_insert((0, rust_decimal::Decimal::ZERO));
         e.0 += 1;
         e.1 += t.amount;
     }

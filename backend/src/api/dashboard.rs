@@ -46,19 +46,25 @@ pub fn router() -> Router<AppState> {
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
         .route("/transactions/export", get(export_transactions_csv))
-        .route("/transactions/manual", axum::routing::post(create_manual_transaction))
+        .route(
+            "/transactions/manual",
+            axum::routing::post(create_manual_transaction),
+        )
         .route("/since-last-login", get(since_last_login))
         .route("/subscriptions", get(detected_subscriptions))
+        .route("/subscriptions/ignored", get(list_ignored_subscriptions))
         .route(
-            "/subscriptions/ignored",
-            get(list_ignored_subscriptions),
+            "/subscriptions/ignore",
+            axum::routing::post(ignore_subscription),
         )
-        .route("/subscriptions/ignore", axum::routing::post(ignore_subscription))
         .route(
             "/subscriptions/ignored/{merchant_key}",
             axum::routing::delete(unignore_subscription),
         )
-        .route("/fx-transfers", get(list_fx_transfers).post(detect_fx_transfers))
+        .route(
+            "/fx-transfers",
+            get(list_fx_transfers).post(detect_fx_transfers),
+        )
         // Static "dismissed" segments mounted BEFORE the dynamic
         // /{id} route so axum's matcher prefers them — otherwise
         // /fx-transfers/dismissed could be parsed as id="dismissed"
@@ -70,8 +76,7 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/fx-transfers/{id}",
-            axum::routing::delete(unlink_fx_transfer)
-                .patch(confirm_fx_transfer),
+            axum::routing::delete(unlink_fx_transfer).patch(confirm_fx_transfer),
         )
 }
 
@@ -235,7 +240,9 @@ async fn dashboard_overview(
             WHERE user_id = $1 AND archived_at IS NULL
             GROUP BY currency
             "#
-        ).bind(ctx.user_id).fetch_all(&state.db),
+        )
+        .bind(ctx.user_id)
+        .fetch_all(&state.db),
         // FX rate + staleness flag (missing or >7 days old). Replaces the old
         // silent 20.0 fallback so MXN-converted figures can be badged.
         latest_usd_mxn_rate(&state.db),
@@ -264,17 +271,26 @@ async fn dashboard_overview(
             WHERE a.user_id = $1 AND a.archived_at IS NULL
             ORDER BY a.account_type, a.name
             "#
-        ).bind(ctx.user_id).fetch_all(&state.db),
+        )
+        .bind(ctx.user_id)
+        .fetch_all(&state.db),
     );
     let currency_rows = currency_rows.unwrap_or_default();
     let accounts_rows = accounts_rows.unwrap_or_default();
 
-    let currency_breakdown: Vec<CurrencyBreakdown> = currency_rows.iter()
+    let currency_breakdown: Vec<CurrencyBreakdown> = currency_rows
+        .iter()
         .map(|r| {
-            let assets: f64 = r.try_get::<rust_decimal::Decimal, _>("assets")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-            let liabilities: f64 = r.try_get::<rust_decimal::Decimal, _>("liabilities")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+            let assets: f64 = r
+                .try_get::<rust_decimal::Decimal, _>("assets")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
+            let liabilities: f64 = r
+                .try_get::<rust_decimal::Decimal, _>("liabilities")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
             CurrencyBreakdown {
                 currency: r.get("currency"),
                 assets,
@@ -337,30 +353,45 @@ async fn dashboard_overview(
     let type_rows = type_rows.unwrap_or_default();
     let institution_rows = institution_rows.unwrap_or_default();
 
-    let type_breakdown: Vec<TypeBreakdown> = type_rows.iter()
+    let type_breakdown: Vec<TypeBreakdown> = type_rows
+        .iter()
         .map(|r| TypeBreakdown {
             account_type: r.get("account_type"),
             count: r.try_get::<i64, _>("count").unwrap_or(0) as i32,
-            total: r.try_get::<rust_decimal::Decimal, _>("total")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
-            total_usd: r.try_get::<rust_decimal::Decimal, _>("total_usd")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+            total: r
+                .try_get::<rust_decimal::Decimal, _>("total")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
+            total_usd: r
+                .try_get::<rust_decimal::Decimal, _>("total_usd")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
         })
         .collect();
 
-    let institution_breakdown: Vec<InstitutionBreakdown> = institution_rows.iter()
+    let institution_breakdown: Vec<InstitutionBreakdown> = institution_rows
+        .iter()
         .map(|r| InstitutionBreakdown {
             name: r.get("institution_name"),
             country: r.get("country"),
             account_count: r.try_get::<i64, _>("account_count").unwrap_or(0) as i32,
-            total: r.try_get::<rust_decimal::Decimal, _>("total")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
-            total_usd: r.try_get::<rust_decimal::Decimal, _>("total_usd")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+            total: r
+                .try_get::<rust_decimal::Decimal, _>("total")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
+            total_usd: r
+                .try_get::<rust_decimal::Decimal, _>("total_usd")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
         })
         .collect();
 
-    let accounts: Vec<AccountDetail> = accounts_rows.iter()
+    let accounts: Vec<AccountDetail> = accounts_rows
+        .iter()
         .map(|r| AccountDetail {
             id: r.get::<uuid::Uuid, _>("id").to_string(),
             name: r.get("name"),
@@ -371,15 +402,22 @@ async fn dashboard_overview(
                 .unwrap_or_default(),
             institution_name: r.get("institution_name"),
             account_type: r.get("account_type"),
-            current_balance: r.try_get::<rust_decimal::Decimal, _>("current_balance")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+            current_balance: r
+                .try_get::<rust_decimal::Decimal, _>("current_balance")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
             currency: r.get("currency"),
             ticker_symbol: r.get("ticker_symbol"),
-            crypto_amount: r.try_get::<rust_decimal::Decimal, _>("crypto_amount")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
+            crypto_amount: r
+                .try_get::<rust_decimal::Decimal, _>("crypto_amount")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0)),
             clabe: r.try_get::<Option<String>, _>("clabe").ok().flatten(),
             holder_name: r.try_get::<Option<String>, _>("holder_name").ok().flatten(),
-            integration_type: r.try_get::<String, _>("integration_type").unwrap_or_default(),
+            integration_type: r
+                .try_get::<String, _>("integration_type")
+                .unwrap_or_default(),
             last_data_at: r
                 .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_data_at")
                 .ok()
@@ -568,14 +606,13 @@ async fn portfolio_value_history(
     .await
     .unwrap_or_default();
 
-    let mut latest: std::collections::HashMap<uuid::Uuid, f64> =
-        std::collections::HashMap::new();
+    let mut latest: std::collections::HashMap<uuid::Uuid, f64> = std::collections::HashMap::new();
     let mut points: Vec<PortfolioValuePoint> = Vec::new();
     let mut current_date: Option<chrono::NaiveDate> = None;
 
     let flush = |date: Option<chrono::NaiveDate>,
-                     latest: &std::collections::HashMap<uuid::Uuid, f64>,
-                     points: &mut Vec<PortfolioValuePoint>| {
+                 latest: &std::collections::HashMap<uuid::Uuid, f64>,
+                 points: &mut Vec<PortfolioValuePoint>| {
         if let Some(d) = date {
             points.push(PortfolioValuePoint {
                 date: d.to_string(),
@@ -638,7 +675,7 @@ async fn fetch_holdings_details(
         JOIN institutions i ON a.institution_id = i.id
         WHERE h.user_id = $1 AND a.archived_at IS NULL AND h.deleted_at IS NULL
         ORDER BY h.value DESC NULLS LAST
-        "#
+        "#,
     )
     .bind(user_id)
     .fetch_all(db)
@@ -661,7 +698,7 @@ async fn fetch_holdings_details(
         FROM holding_lots
         WHERE user_id = $1 AND qty > 0
         ORDER BY acquired_at ASC, id ASC
-        "#
+        "#,
     )
     .bind(user_id)
     .fetch_all(db)
@@ -671,18 +708,29 @@ async fn fetch_holdings_details(
     // Two parallel maps: one for the cost-basis computation (the
     // tuple form was already in use downstream), one for the
     // serialised lot breakdown surfaced to the frontend.
-    let mut lots_by_holding: HashMap<uuid::Uuid, Vec<(f64, f64, String, f64)>> =
-        HashMap::new();
+    let mut lots_by_holding: HashMap<uuid::Uuid, Vec<(f64, f64, String, f64)>> = HashMap::new();
     let mut lot_details_by_holding: HashMap<uuid::Uuid, Vec<HoldingLot>> = HashMap::new();
     for r in &lot_rows {
-        let hid: uuid::Uuid = match r.try_get("holding_id") { Ok(v) => v, Err(_) => continue };
-        let qty: f64 = r.try_get::<rust_decimal::Decimal, _>("qty").ok()
-            .map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-        let cpu: f64 = r.try_get::<rust_decimal::Decimal, _>("cost_per_unit").ok()
-            .map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+        let hid: uuid::Uuid = match r.try_get("holding_id") {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let qty: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("qty")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let cpu: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("cost_per_unit")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
         let ccy: String = r.try_get("currency").unwrap_or_else(|_| "USD".to_string());
-        let fx: f64 = r.try_get::<rust_decimal::Decimal, _>("usd_fx_rate").ok()
-            .map(|d| d.to_string().parse().unwrap_or(1.0)).unwrap_or(1.0);
+        let fx: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("usd_fx_rate")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(1.0))
+            .unwrap_or(1.0);
         let acquired_at: String = r
             .try_get::<chrono::NaiveDate, _>("acquired_at")
             .map(|d| d.to_string())
@@ -694,18 +742,27 @@ async fn fetch_holdings_details(
         let native_cost = qty * cpu;
         let usd_cost = match ccy.as_str() {
             "USD" => native_cost,
-            "MXN" => if fx > 0.0 { native_cost / fx } else { native_cost },
+            "MXN" => {
+                if fx > 0.0 {
+                    native_cost / fx
+                } else {
+                    native_cost
+                }
+            }
             _ => native_cost,
         };
-        lot_details_by_holding.entry(hid).or_default().push(HoldingLot {
-            acquired_at,
-            qty,
-            cost_per_unit: cpu,
-            currency: ccy,
-            usd_fx_rate: fx,
-            native_cost,
-            usd_cost,
-        });
+        lot_details_by_holding
+            .entry(hid)
+            .or_default()
+            .push(HoldingLot {
+                acquired_at,
+                qty,
+                cost_per_unit: cpu,
+                currency: ccy,
+                usd_fx_rate: fx,
+                native_cost,
+                usd_cost,
+            });
     }
 
     let to_usd = |amount: f64, ccy: &str| -> f64 {
@@ -719,8 +776,11 @@ async fn fetch_holdings_details(
     rows.iter()
         .map(|r| {
             let id: uuid::Uuid = r.try_get("id").unwrap_or_else(|_| uuid::Uuid::nil());
-            let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+            let value: f64 = r
+                .try_get::<rust_decimal::Decimal, _>("value")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
             // NULL cost_basis means the institution didn't report a
             // basis (Plaid omits it for many employer plans, statement
             // imports never have one). That is "unknown", which is NOT
@@ -737,20 +797,28 @@ async fn fetch_holdings_details(
             // fall back to current-FX conversion of the flat basis.
             // None when neither lots nor a flat basis exist.
             let cost_basis_usd: Option<f64> = if let Some(lots) = lots_by_holding.get(&id) {
-                Some(lots.iter()
-                    .map(|(qty, cpu, ccy, fx)| {
-                        let native = qty * cpu;
-                        // Lot's currency may differ from holding's
-                        // currency in edge cases (multi-currency
-                        // brokerages); convert via the lot's recorded
-                        // historical FX rate.
-                        match ccy.as_str() {
-                            "USD" => native,
-                            "MXN" => if *fx > 0.0 { native / fx } else { native / fx_usd_to_mxn },
-                            _ => native,
-                        }
-                    })
-                    .sum::<f64>())
+                Some(
+                    lots.iter()
+                        .map(|(qty, cpu, ccy, fx)| {
+                            let native = qty * cpu;
+                            // Lot's currency may differ from holding's
+                            // currency in edge cases (multi-currency
+                            // brokerages); convert via the lot's recorded
+                            // historical FX rate.
+                            match ccy.as_str() {
+                                "USD" => native,
+                                "MXN" => {
+                                    if *fx > 0.0 {
+                                        native / fx
+                                    } else {
+                                        native / fx_usd_to_mxn
+                                    }
+                                }
+                                _ => native,
+                            }
+                        })
+                        .sum::<f64>(),
+                )
             } else {
                 cost_basis_native.map(|cb| to_usd(cb, &currency))
             };
@@ -776,10 +844,16 @@ async fn fetch_holdings_details(
             HoldingDetail {
                 symbol,
                 name,
-                quantity: r.try_get::<rust_decimal::Decimal, _>("quantity")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
-                price: r.try_get::<rust_decimal::Decimal, _>("price")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+                quantity: r
+                    .try_get::<rust_decimal::Decimal, _>("quantity")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0),
+                price: r
+                    .try_get::<rust_decimal::Decimal, _>("price")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0),
                 value,
                 cost_basis: cost_basis_native,
                 gain_loss: cost_basis_native.map(|cb| value - cb),
@@ -787,7 +861,11 @@ async fn fetch_holdings_details(
                 // unknown and when it's a true zero-cost position
                 // (division by zero) — null in either case.
                 gain_loss_pct: cost_basis_native.and_then(|cb| {
-                    if cb > 0.0 { Some(((value - cb) / cb) * 100.0) } else { None }
+                    if cb > 0.0 {
+                        Some(((value - cb) / cb) * 100.0)
+                    } else {
+                        None
+                    }
                 }),
                 value_usd,
                 value_mxn,
@@ -1008,15 +1086,25 @@ async fn holdings(
     let total_value_mxn: f64 = holdings_list.iter().map(|h| h.value_mxn).sum();
 
     let total_cost: f64 = holdings_list.iter().filter_map(|h| h.cost_basis).sum();
-    let known_value: f64 = holdings_list.iter()
-        .filter(|h| h.cost_basis.is_some()).map(|h| h.value).sum();
+    let known_value: f64 = holdings_list
+        .iter()
+        .filter(|h| h.cost_basis.is_some())
+        .map(|h| h.value)
+        .sum();
     let total_cost_usd: f64 = holdings_list.iter().filter_map(|h| h.cost_basis_usd).sum();
-    let known_value_usd: f64 = holdings_list.iter()
-        .filter(|h| h.cost_basis_usd.is_some()).map(|h| h.value_usd).sum();
+    let known_value_usd: f64 = holdings_list
+        .iter()
+        .filter(|h| h.cost_basis_usd.is_some())
+        .map(|h| h.value_usd)
+        .sum();
     let total_cost_mxn: f64 = holdings_list.iter().filter_map(|h| h.cost_basis_mxn).sum();
-    let known_value_mxn: f64 = holdings_list.iter()
-        .filter(|h| h.cost_basis_mxn.is_some()).map(|h| h.value_mxn).sum();
-    let holdings_without_basis = holdings_list.iter()
+    let known_value_mxn: f64 = holdings_list
+        .iter()
+        .filter(|h| h.cost_basis_mxn.is_some())
+        .map(|h| h.value_mxn)
+        .sum();
+    let holdings_without_basis = holdings_list
+        .iter()
         .filter(|h| h.cost_basis.is_none() && h.cost_basis_usd.is_none())
         .count();
 
@@ -1024,7 +1112,11 @@ async fn holdings(
         total_value,
         total_cost_basis: total_cost,
         total_gain_loss: known_value - total_cost,
-        total_gain_loss_pct: if total_cost > 0.0 { ((known_value - total_cost) / total_cost) * 100.0 } else { 0.0 },
+        total_gain_loss_pct: if total_cost > 0.0 {
+            ((known_value - total_cost) / total_cost) * 100.0
+        } else {
+            0.0
+        },
         total_value_usd,
         total_value_mxn,
         total_cost_basis_usd: total_cost_usd,
@@ -1056,7 +1148,7 @@ async fn credit_utilization(
         WHERE a.account_type IN ('credit', 'credit card') AND a.user_id = $1
           AND a.archived_at IS NULL
         ORDER BY i.name, a.name
-        "#
+        "#,
     )
     .bind(ctx.user_id)
     .fetch_all(&state.db)
@@ -1066,18 +1158,28 @@ async fn credit_utilization(
     Json(
         rows.iter()
             .map(|r| {
-                let balance: f64 = r.try_get::<rust_decimal::Decimal, _>("current_balance")
-                    .ok().map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)).unwrap_or(0.0)
+                let balance: f64 = r
+                    .try_get::<rust_decimal::Decimal, _>("current_balance")
+                    .ok()
+                    .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0))
+                    .unwrap_or(0.0)
                     .abs();
-                let limit: f64 = r.try_get::<rust_decimal::Decimal, _>("credit_limit")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                let limit: f64 = r
+                    .try_get::<rust_decimal::Decimal, _>("credit_limit")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0);
                 CreditUtilization {
                     name: r.get("name"),
                     institution_name: r.get("institution_name"),
                     currency: r.try_get("currency").unwrap_or_else(|_| "USD".to_string()),
                     balance,
                     credit_limit: limit,
-                    utilization_pct: if limit > 0.0 { (balance / limit) * 100.0 } else { 0.0 },
+                    utilization_pct: if limit > 0.0 {
+                        (balance / limit) * 100.0
+                    } else {
+                        0.0
+                    },
                 }
             })
             .collect(),
@@ -1095,7 +1197,7 @@ async fn sync_status(
         FROM institutions
         WHERE user_id = $1
         ORDER BY name
-        "#
+        "#,
     )
     .bind(ctx.user_id)
     .fetch_all(&state.db)
@@ -1105,18 +1207,24 @@ async fn sync_status(
     Json(
         rows.iter()
             .map(|r| SyncStatusEntry {
-                id: r.try_get::<uuid::Uuid, _>("id")
+                id: r
+                    .try_get::<uuid::Uuid, _>("id")
                     .map(|u| u.to_string())
                     .unwrap_or_default(),
                 name: r.get("name"),
                 integration_type: r.get("integration_type"),
                 country: r.get("country"),
-                sync_status: r.try_get::<String, _>("sync_status")
+                sync_status: r
+                    .try_get::<String, _>("sync_status")
                     .unwrap_or_else(|_| "unknown".to_string()),
-                last_synced_at: r.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
-                    .ok().map(|d| d.to_rfc3339()),
-                last_sync_error: r.try_get::<Option<String>, _>("last_sync_error")
-                    .ok().flatten(),
+                last_synced_at: r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
+                    .ok()
+                    .map(|d| d.to_rfc3339()),
+                last_sync_error: r
+                    .try_get::<Option<String>, _>("last_sync_error")
+                    .ok()
+                    .flatten(),
             })
             .collect(),
     )
@@ -1204,7 +1312,7 @@ async fn recent_transactions(
           ))
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $2 OFFSET $3
-        "#
+        "#,
     )
     .bind(ctx.user_id)
     .bind(limit)
@@ -1220,8 +1328,11 @@ async fn recent_transactions(
     Json(
         rows.iter()
             .map(|r| {
-                let amount: f64 = r.try_get::<rust_decimal::Decimal, _>("amount")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                let amount: f64 = r
+                    .try_get::<rust_decimal::Decimal, _>("amount")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0);
                 TransactionEntry {
                     id: r.get::<uuid::Uuid, _>("id").to_string(),
                     account_id: r.get::<uuid::Uuid, _>("account_id").to_string(),
@@ -1267,10 +1378,7 @@ async fn recent_transactions(
                         .try_get::<Option<String>, _>("user_category")
                         .ok()
                         .flatten(),
-                    user_notes: r
-                        .try_get::<Option<String>, _>("user_notes")
-                        .ok()
-                        .flatten(),
+                    user_notes: r.try_get::<Option<String>, _>("user_notes").ok().flatten(),
                     payment_payee: r
                         .try_get::<Option<String>, _>("payment_payee")
                         .ok()
@@ -1285,10 +1393,7 @@ async fn recent_transactions(
                         .flatten()
                         .map(|u| u.to_string()),
                     pending: r.get("pending"),
-                    source: r
-                        .try_get::<Option<String>, _>("source")
-                        .ok()
-                        .flatten(),
+                    source: r.try_get::<Option<String>, _>("source").ok().flatten(),
                 }
             })
             .collect(),
@@ -1382,9 +1487,7 @@ async fn export_transactions_csv(
                     // browser download) will report the truncation
                     // instead of silently shipping a half CSV.
                     let _ = tx
-                        .send(Err(std::io::Error::other(format!(
-                            "csv stream: {e}"
-                        ))))
+                        .send(Err(std::io::Error::other(format!("csv stream: {e}"))))
                         .await;
                     return;
                 }
@@ -1426,9 +1529,7 @@ async fn export_transactions_csv(
         }
     });
 
-    let body = axum::body::Body::from_stream(
-        tokio_stream::wrappers::ReceiverStream::new(rx),
-    );
+    let body = axum::body::Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx));
 
     Response::builder()
         .status(StatusCode::OK)
@@ -1672,12 +1773,13 @@ async fn create_manual_transaction(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            (StatusCode::CREATED, Json(serde_json::json!({"id": id.to_string()})))
+            (
+                StatusCode::CREATED,
+                Json(serde_json::json!({"id": id.to_string()})),
+            )
                 .into_response()
         }
-        Ok(None) => {
-            (StatusCode::CONFLICT, "duplicate manual transaction").into_response()
-        }
+        Ok(None) => (StatusCode::CONFLICT, "duplicate manual transaction").into_response(),
         Err(e) => {
             error!("Failed to insert manual transaction: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "insert failed").into_response()
@@ -1881,22 +1983,30 @@ async fn asset_allocation(
             }
         };
 
-        let slot = grouped.entry((asset_class, sub_category)).or_insert((0.0, 0.0));
+        let slot = grouped
+            .entry((asset_class, sub_category))
+            .or_insert((0.0, 0.0));
         slot.0 += value;
         slot.1 += qty;
     }
 
     let mut entries: Vec<AllocationEntry> = grouped
         .into_iter()
-        .map(|((asset_class, sub_category), (value, quantity))| AllocationEntry {
-            category: asset_class_label(&asset_class).to_string(),
-            asset_class,
-            sub_category,
-            value,
-            quantity,
-        })
+        .map(
+            |((asset_class, sub_category), (value, quantity))| AllocationEntry {
+                category: asset_class_label(&asset_class).to_string(),
+                asset_class,
+                sub_category,
+                value,
+                quantity,
+            },
+        )
         .collect();
-    entries.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap_or(std::cmp::Ordering::Equal));
+    entries.sort_by(|a, b| {
+        b.value
+            .partial_cmp(&a.value)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Json(entries)
 }
 
@@ -1990,7 +2100,9 @@ async fn cash_flow_trends(
     let mut points = Vec::with_capacity(rows.len());
     for r in &rows {
         let dec = |col: &str| -> Result<f64, ApiError> {
-            let d = r.try_get::<rust_decimal::Decimal, _>(col).map_err(internal)?;
+            let d = r
+                .try_get::<rust_decimal::Decimal, _>(col)
+                .map_err(internal)?;
             Ok(d.to_string().parse().unwrap_or(0.0))
         };
         points.push(CashFlowPoint {
@@ -2152,7 +2264,11 @@ async fn spending_by_category(
         }
     }
 
-    categories.sort_by(|a, b| b.total.partial_cmp(&a.total).unwrap_or(std::cmp::Ordering::Equal));
+    categories.sort_by(|a, b| {
+        b.total
+            .partial_cmp(&a.total)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     if other_total > 0.0 {
         let monthly = months_vec
@@ -2347,14 +2463,20 @@ async fn spending_insights(
         .into_iter()
         .map(|((uc, cd, c), per_month)| {
             let recent = *per_month.get(&recent_month).unwrap_or(&0.0);
-            let baseline_sum: f64 =
-                baseline_months.iter().map(|m| *per_month.get(m).unwrap_or(&0.0)).sum();
+            let baseline_sum: f64 = baseline_months
+                .iter()
+                .map(|m| *per_month.get(m).unwrap_or(&0.0))
+                .sum();
             CategoryInsight {
                 user_category: uc,
                 category_detailed: cd,
                 category: c,
                 recent,
-                previous_avg: if lookback_f > 0.0 { baseline_sum / lookback_f } else { 0.0 },
+                previous_avg: if lookback_f > 0.0 {
+                    baseline_sum / lookback_f
+                } else {
+                    0.0
+                },
                 trailing_avg: (recent + baseline_sum) / window_f,
             }
         })
@@ -2461,9 +2583,7 @@ async fn portfolio_twr(
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<BenchmarkSelectQuery>,
 ) -> Json<crate::services::twr::TwrResult> {
-    Json(
-        crate::services::twr::portfolio_twr(&state.db, ctx.user_id, q.benchmark.as_deref()).await,
-    )
+    Json(crate::services::twr::portfolio_twr(&state.db, ctx.user_id, q.benchmark.as_deref()).await)
 }
 
 #[derive(Serialize)]
@@ -2565,7 +2685,10 @@ async fn emergency_fund(
         .to_string()
         .parse()
         .unwrap_or(0.0);
-    let months: i64 = spend_row.try_get::<i64, _>("months").map_err(internal)?.max(0);
+    let months: i64 = spend_row
+        .try_get::<i64, _>("months")
+        .map_err(internal)?
+        .max(0);
 
     let monthly_spend_usd = if months > 0 {
         spending / months as f64
@@ -2998,8 +3121,7 @@ async fn export_realized_gains_csv(
         }
     });
 
-    let body =
-        axum::body::Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx));
+    let body = axum::body::Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx));
     csv_attachment_response(&filename, body)
 }
 
@@ -3634,13 +3756,12 @@ async fn detected_subscriptions(
     // Pull the user's dismissed-as-not-subscription set first, so we
     // can skip those keys during clustering. Small table; we hold the
     // whole thing in memory.
-    let ignored_rows = sqlx::query(
-        "SELECT merchant_key FROM ignored_subscription_merchants WHERE user_id = $1",
-    )
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    let ignored_rows =
+        sqlx::query("SELECT merchant_key FROM ignored_subscription_merchants WHERE user_id = $1")
+            .bind(ctx.user_id)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
     let ignored: std::collections::HashSet<String> = ignored_rows
         .iter()
         .filter_map(|r| r.try_get::<String, _>("merchant_key").ok())
@@ -3670,10 +3791,10 @@ async fn detected_subscriptions(
         "#,
     );
     let rows = sqlx::query(&sql)
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+        .bind(ctx.user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
 
     if rows.is_empty() {
         return Json(vec![]);
@@ -3790,8 +3911,10 @@ async fn detected_subscriptions(
         let account_name: String = r
             .try_get::<String, _>("account_name")
             .unwrap_or_else(|_| "Account".into());
-        let merchant_name: Option<String> =
-            r.try_get::<Option<String>, _>("merchant_name").ok().flatten();
+        let merchant_name: Option<String> = r
+            .try_get::<Option<String>, _>("merchant_name")
+            .ok()
+            .flatten();
         let counterparty_name: Option<String> = r
             .try_get::<Option<String>, _>("counterparty_name")
             .ok()
@@ -3817,8 +3940,18 @@ async fn detected_subscriptions(
         // row together and report a fake subscription.
         let lower = key_part.as_str();
         let generic_prefixes = [
-            "miscellaneous", "ach ", "pos ", "online ", "wire ", "transfer", "debit", "credit",
-            "withdrawal", "deposit", "bill payment", "electronic ",
+            "miscellaneous",
+            "ach ",
+            "pos ",
+            "online ",
+            "wire ",
+            "transfer",
+            "debit",
+            "credit",
+            "withdrawal",
+            "deposit",
+            "bill payment",
+            "electronic ",
         ];
         if generic_prefixes
             .iter()
@@ -3850,11 +3983,14 @@ async fn detected_subscriptions(
             by_account: HashMap::new(),
         });
         cluster.events.push((date, amount));
-        let tally = cluster.by_account.entry(account_id).or_insert(AccountTally {
-            display: account_name,
-            count: 0,
-            total_native: 0.0,
-        });
+        let tally = cluster
+            .by_account
+            .entry(account_id)
+            .or_insert(AccountTally {
+                display: account_name,
+                count: 0,
+                total_native: 0.0,
+            });
         tally.count += 1;
         tally.total_native += amount;
     }
@@ -3955,16 +4091,14 @@ async fn detected_subscriptions(
 
     // Active first (sorted by monthly spend), then cancelled (sorted by
     // recency of last charge — most recently stopped is most actionable).
-    out.sort_by(|a, b| {
-        match (a.status, b.status) {
-            ("active", "cancelled") => std::cmp::Ordering::Less,
-            ("cancelled", "active") => std::cmp::Ordering::Greater,
-            ("cancelled", "cancelled") => b.last_charge_date.cmp(&a.last_charge_date),
-            _ => b
-                .monthly_usd
-                .partial_cmp(&a.monthly_usd)
-                .unwrap_or(std::cmp::Ordering::Equal),
-        }
+    out.sort_by(|a, b| match (a.status, b.status) {
+        ("active", "cancelled") => std::cmp::Ordering::Less,
+        ("cancelled", "active") => std::cmp::Ordering::Greater,
+        ("cancelled", "cancelled") => b.last_charge_date.cmp(&a.last_charge_date),
+        _ => b
+            .monthly_usd
+            .partial_cmp(&a.monthly_usd)
+            .unwrap_or(std::cmp::Ordering::Equal),
     });
     out.truncate(40);
     Json(out)
@@ -4080,9 +4214,8 @@ async fn list_fx_transfers(
                     .ok()
                     .and_then(|d| d.to_string().parse().ok())
                     .unwrap_or(0.0),
-                detection_confidence: r
-                    .try_get::<i16, _>("detection_confidence")
-                    .unwrap_or(0) as i32,
+                detection_confidence: r.try_get::<i16, _>("detection_confidence").unwrap_or(0)
+                    as i32,
                 user_confirmed: r.try_get("user_confirmed").unwrap_or(false),
                 detected_at: r
                     .try_get::<chrono::DateTime<chrono::Utc>, _>("detected_at")
@@ -4092,9 +4225,15 @@ async fn list_fx_transfers(
                     .try_get::<Option<String>, _>("matched_keyword")
                     .ok()
                     .flatten(),
-                source_label: r.try_get::<Option<String>, _>("source_label").ok().flatten()
+                source_label: r
+                    .try_get::<Option<String>, _>("source_label")
+                    .ok()
+                    .flatten()
                     .unwrap_or_else(|| r.try_get::<String, _>("source_desc").unwrap_or_default()),
-                dest_label: r.try_get::<Option<String>, _>("dest_label").ok().flatten()
+                dest_label: r
+                    .try_get::<Option<String>, _>("dest_label")
+                    .ok()
+                    .flatten()
                     .unwrap_or_default(),
                 source_date: r
                     .try_get::<chrono::NaiveDate, _>("source_date")
@@ -4134,7 +4273,10 @@ async fn detect_fx_transfers(
     match crate::services::fx_transfer_link::detect_for_user(&state.db, ctx.user_id).await {
         Ok((checked, inserted)) => Json(DetectFxResponse { checked, inserted }),
         Err(e) => {
-            error!("fx-transfer detection failed for user {}: {}", ctx.user_id, e);
+            error!(
+                "fx-transfer detection failed for user {}: {}",
+                ctx.user_id, e
+            );
             Json(DetectFxResponse {
                 checked: 0,
                 inserted: 0,
@@ -4351,13 +4493,11 @@ async fn restore_dismissed_fx_pair(
     Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> StatusCode {
-    let result = sqlx::query(
-        "DELETE FROM dismissed_fx_pairs WHERE id = $1 AND user_id = $2",
-    )
-    .bind(id)
-    .bind(ctx.user_id)
-    .execute(&state.db)
-    .await;
+    let result = sqlx::query("DELETE FROM dismissed_fx_pairs WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await;
     match result {
         Ok(_) => StatusCode::NO_CONTENT,
         Err(e) => {
@@ -4567,8 +4707,7 @@ fn projected_ex_dates(
     if per_year <= 0 {
         return Vec::new();
     }
-    let Some(start) =
-        est_next.and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+    let Some(start) = est_next.and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
     else {
         return Vec::new();
     };
@@ -4598,11 +4737,13 @@ fn build_dividend_calendar(
             format!("{:04}-{:02}", m0.div_euclid(12), m0.rem_euclid(12) + 1)
         })
         .collect();
-    let index: HashMap<&str, usize> =
-        month_keys.iter().enumerate().map(|(i, k)| (k.as_str(), i)).collect();
+    let index: HashMap<&str, usize> = month_keys
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (k.as_str(), i))
+        .collect();
 
-    let mut buckets: Vec<Vec<DividendCalendarEntry>> =
-        (0..12).map(|_| Vec::new()).collect();
+    let mut buckets: Vec<Vec<DividendCalendarEntry>> = (0..12).map(|_| Vec::new()).collect();
     for c in contributions {
         if c.per_year <= 0 || c.annual_income_usd <= 0.0 {
             continue;
@@ -4625,11 +4766,17 @@ fn build_dividend_calendar(
         .zip(buckets)
         .map(|(month, mut entries)| {
             entries.sort_by(|a, b| {
-                b.amount_usd.partial_cmp(&a.amount_usd).unwrap_or(std::cmp::Ordering::Equal)
+                b.amount_usd
+                    .partial_cmp(&a.amount_usd)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
             let total_usd =
                 (entries.iter().map(|e| e.amount_usd).sum::<f64>() * 100.0).round() / 100.0;
-            DividendCalendarMonth { month, total_usd, entries }
+            DividendCalendarMonth {
+                month,
+                total_usd,
+                entries,
+            }
         })
         .collect()
 }
@@ -4754,19 +4901,18 @@ async fn portfolio_dividends(
                 // round-4 Redis envelope cache (C4-C) — the concurrency bound
                 // mostly gates cold-cache fills. Map a fetch error to None so
                 // it degrades to zero income for this symbol only.
-                let info = match crate::services::dividends::fetch_dividends_cached(
-                    redis, &symbol, false,
-                )
-                .await
-                {
-                    Ok(i) => Some((
-                        i.annual_rate,
-                        i.last_ex_date,
-                        i.est_next_ex_date,
-                        i.per_year,
-                    )),
-                    Err(_) => None,
-                };
+                let info =
+                    match crate::services::dividends::fetch_dividends_cached(redis, &symbol, false)
+                        .await
+                    {
+                        Ok(i) => Some((
+                            i.annual_rate,
+                            i.last_ex_date,
+                            i.est_next_ex_date,
+                            i.per_year,
+                        )),
+                        Err(_) => None,
+                    };
                 (symbol, info)
             }
         }))
@@ -5299,7 +5445,13 @@ async fn dividend_detail(
     )
     .await;
 
-    Json(build_dividend_detail(&positions, &info, fx_info.rate, payments)).into_response()
+    Json(build_dividend_detail(
+        &positions,
+        &info,
+        fx_info.rate,
+        payments,
+    ))
+    .into_response()
 }
 
 // =====================================================================
@@ -5448,7 +5600,10 @@ fn build_instrument_detail(
     // partial basis would misstate the aggregate gain.
     let cost_basis_usd: Option<f64> = if positions.iter().all(|p| p.cost_basis_usd.is_some()) {
         Some(round2(
-            positions.iter().map(|p| p.cost_basis_usd.unwrap_or(0.0)).sum(),
+            positions
+                .iter()
+                .map(|p| p.cost_basis_usd.unwrap_or(0.0))
+                .sum(),
         ))
     } else {
         None
@@ -5462,11 +5617,8 @@ fn build_instrument_detail(
     // source field tells the sheet which one it is showing. The heuristic is
     // always emitted too, so the sheet can label its "Automatic — <class>"
     // revert row while an override is active.
-    let asset_class_heuristic = crate::services::holdings::classify_asset(
-        &first.holding_type,
-        &first.symbol,
-        &first.name,
-    );
+    let asset_class_heuristic =
+        crate::services::holdings::classify_asset(&first.holding_type, &first.symbol, &first.name);
     let (asset_class, asset_class_source) = match asset_class_override {
         Some(c) => (c.to_string(), "override"),
         None => (asset_class_heuristic.to_string(), "heuristic"),
@@ -5720,22 +5872,21 @@ async fn instrument_detail(
     // exists); opaque symbols skip straight to the empty-series degradation.
     let today = chrono::Utc::now().date_naive();
     let canonical_symbol = positions[0].symbol.clone();
-    let (prices, closes_by_symbol) =
-        if crate::services::twr::looks_like_ticker(&canonical_symbol) {
-            let _ = crate::services::benchmark::ensure_symbol_fresh(
-                &state.db,
-                &canonical_symbol,
-                &canonical_symbol,
-            )
-            .await;
-            let from = instrument_range_start(q.range.as_deref(), today);
-            (
-                crate::services::benchmark::series(&state.db, &canonical_symbol, from).await,
-                latest_two_closes(&state.db, std::slice::from_ref(&canonical_symbol)).await,
-            )
-        } else {
-            (Vec::new(), HashMap::new())
-        };
+    let (prices, closes_by_symbol) = if crate::services::twr::looks_like_ticker(&canonical_symbol) {
+        let _ = crate::services::benchmark::ensure_symbol_fresh(
+            &state.db,
+            &canonical_symbol,
+            &canonical_symbol,
+        )
+        .await;
+        let from = instrument_range_start(q.range.as_deref(), today);
+        (
+            crate::services::benchmark::series(&state.db, &canonical_symbol, from).await,
+            latest_two_closes(&state.db, std::slice::from_ref(&canonical_symbol)).await,
+        )
+    } else {
+        (Vec::new(), HashMap::new())
+    };
     let closes = closes_by_symbol
         .get(&canonical_symbol)
         .map(|v| v.as_slice());
@@ -5893,14 +6044,19 @@ mod tests {
             est_next_ex_date: Some("2026-09-10".to_string()),
             per_year: 4,
             history: vec![
-                DividendEvent { ex_date: "2024-08-28".to_string(), amount_per_share: 0.01 },
-                DividendEvent { ex_date: "2026-06-11".to_string(), amount_per_share: 0.01 },
+                DividendEvent {
+                    ex_date: "2024-08-28".to_string(),
+                    amount_per_share: 0.01,
+                },
+                DividendEvent {
+                    ex_date: "2026-06-11".to_string(),
+                    amount_per_share: 0.01,
+                },
             ],
         };
 
-        let got =
-            serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
-                .unwrap();
+        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
+            .unwrap();
         let want = serde_json::json!({
             "symbol": "NVDA",
             "name": "NVIDIA Corp",
@@ -5958,9 +6114,8 @@ mod tests {
         }];
         let info = DividendInfo::none("VANG TARGET RET 2045");
 
-        let got =
-            serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
-                .unwrap();
+        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
+            .unwrap();
         assert_eq!(got["per_year"], 0);
         assert_eq!(got["rate_per_share_annual"], 0.0);
         assert_eq!(got["annual_income_usd"], 0.0);
@@ -6016,9 +6171,8 @@ mod tests {
             history: Vec::new(),
         };
 
-        let got =
-            serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
-                .unwrap();
+        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
+            .unwrap();
         // 1000 USD + 20000 MXN / 20 = 2000 USD.
         assert_eq!(got["market_value_usd"], 2000.0);
         // Income: 40 USD + 40 MXN / 20 = 42 USD; NOT 80 (both as USD) nor
@@ -6282,7 +6436,10 @@ mod tests {
         assert_eq!(instrument_range_start(Some("1y"), today), day(2025, 7, 6));
         assert_eq!(instrument_range_start(Some("max"), today), day(2000, 1, 1));
         assert_eq!(instrument_range_start(None, today), day(2025, 7, 6));
-        assert_eq!(instrument_range_start(Some("bogus"), today), day(2025, 7, 6));
+        assert_eq!(
+            instrument_range_start(Some("bogus"), today),
+            day(2025, 7, 6)
+        );
     }
 
     // =================================================================
@@ -6373,7 +6530,9 @@ mod tests {
         assert!(upcoming
             .iter()
             .any(|u| u.est_next_ex_date.starts_with("2026-09")));
-        assert!(upcoming.iter().all(|u| u.symbol != "PAST" && u.symbol != "NOPAY"));
+        assert!(upcoming
+            .iter()
+            .all(|u| u.symbol != "PAST" && u.symbol != "NOPAY"));
     }
 
     // =================================================================
@@ -6407,7 +6566,12 @@ mod tests {
         let dates = projected_ex_dates(4, Some("2026-09-10"), 365);
         assert_eq!(
             dates,
-            vec![day(2026, 9, 10), day(2026, 12, 10), day(2027, 3, 11), day(2027, 6, 10)]
+            vec![
+                day(2026, 9, 10),
+                day(2026, 12, 10),
+                day(2027, 3, 11),
+                day(2027, 6, 10)
+            ]
         );
         // Non-payer / missing / unparsable estimate: empty.
         assert!(projected_ex_dates(0, Some("2026-09-10"), 365).is_empty());
@@ -6488,7 +6652,9 @@ mod tests {
             contribution("ANN", 50.0, 1, Some("2027-03-01")),
         ];
         let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
-        assert!(calendar.iter().all(|m| m.entries.iter().any(|e| e.symbol == "O")));
+        assert!(calendar
+            .iter()
+            .all(|m| m.entries.iter().any(|e| e.symbol == "O")));
         let ann_months: Vec<&str> = calendar
             .iter()
             .filter(|m| m.entries.iter().any(|e| e.symbol == "ANN"))
@@ -6509,7 +6675,9 @@ mod tests {
         ];
         let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
         assert_eq!(calendar.len(), 12);
-        assert!(calendar.iter().all(|m| m.entries.is_empty() && m.total_usd == 0.0));
+        assert!(calendar
+            .iter()
+            .all(|m| m.entries.is_empty() && m.total_usd == 0.0));
     }
 
     /// The acknowledged delta vs `projected_annual_income_usd`: an annual
@@ -6525,7 +6693,9 @@ mod tests {
         let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
         let total: f64 = calendar.iter().map(|m| m.total_usd).sum();
         assert!((total - 400.0).abs() < 0.01 + 1e-9);
-        assert!(calendar.iter().all(|m| m.entries.iter().all(|e| e.symbol != "FAR")));
+        assert!(calendar
+            .iter()
+            .all(|m| m.entries.iter().all(|e| e.symbol != "FAR")));
     }
 
     /// Entries within a month sort by amount descending; the December
@@ -6539,12 +6709,17 @@ mod tests {
         let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
         let sept = calendar.iter().find(|m| m.month == "2026-09").unwrap();
         assert_eq!(
-            sept.entries.iter().map(|e| e.symbol.as_str()).collect::<Vec<_>>(),
+            sept.entries
+                .iter()
+                .map(|e| e.symbol.as_str())
+                .collect::<Vec<_>>(),
             vec!["BIG", "SMALL"]
         );
         assert_eq!(sept.total_usd, 110.0);
         // Quarterly from September crosses the year boundary: 2026-12 pays.
-        assert!(calendar.iter().any(|m| m.month == "2026-12" && !m.entries.is_empty()));
+        assert!(calendar
+            .iter()
+            .any(|m| m.month == "2026-12" && !m.entries.is_empty()));
     }
 
     // =================================================================
@@ -6558,8 +6733,26 @@ mod tests {
     #[test]
     fn portfolio_dividends_response_shape_freeze() {
         let contributions = vec![
-            contribution_full("O", 12.0, 3.0, 36.0, Some(5.0), Some("2026-07-01"), Some("2026-07-15"), 12),
-            contribution_full("KO", 10.0, 2.0, 20.0, Some(2.86), Some("2026-06-13"), Some("2026-09-12"), 4),
+            contribution_full(
+                "O",
+                12.0,
+                3.0,
+                36.0,
+                Some(5.0),
+                Some("2026-07-01"),
+                Some("2026-07-15"),
+                12,
+            ),
+            contribution_full(
+                "KO",
+                10.0,
+                2.0,
+                20.0,
+                Some(2.86),
+                Some("2026-06-13"),
+                Some("2026-09-12"),
+                4,
+            ),
             contribution_full("VANG TARGET RET 2045", 100.0, 0.0, 0.0, None, None, None, 0),
         ];
         let today = day(2026, 7, 6);
@@ -6582,11 +6775,18 @@ mod tests {
             "upcoming_ex_dates",
             "fx_stale",
         ];
-        let mut got_keys: Vec<&str> =
-            got.as_object().unwrap().keys().map(String::as_str).collect();
+        let mut got_keys: Vec<&str> = got
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
         got_keys.sort_unstable();
-        let mut want_keys: Vec<&str> =
-            round3_keys.iter().copied().chain(std::iter::once("calendar")).collect();
+        let mut want_keys: Vec<&str> = round3_keys
+            .iter()
+            .copied()
+            .chain(std::iter::once("calendar"))
+            .collect();
         want_keys.sort_unstable();
         assert_eq!(got_keys, want_keys, "exactly one added key: `calendar`");
 

@@ -275,7 +275,11 @@ async fn recurring_crud_roundtrip_and_pause() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let json = body_json(res.into_body()).await;
-    assert_eq!(json.as_array().map(Vec::len), Some(1), "one rule listed: {json}");
+    assert_eq!(
+        json.as_array().map(Vec::len),
+        Some(1),
+        "one rule listed: {json}"
+    );
 
     // Pause.
     let res = app
@@ -331,7 +335,11 @@ async fn recurring_crud_roundtrip_and_pause() {
         .await
         .unwrap();
     let json = body_json(res.into_body()).await;
-    assert_eq!(json.as_array().map(Vec::len), Some(0), "rule gone after delete");
+    assert_eq!(
+        json.as_array().map(Vec::len),
+        Some(0),
+        "rule gone after delete"
+    );
 }
 
 #[tokio::test]
@@ -364,7 +372,11 @@ async fn recurring_rejects_foreign_account_and_bad_input() {
         ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::NOT_FOUND, "foreign account rejected");
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "foreign account rejected"
+    );
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM recurring_rules")
         .fetch_one(&pool)
         .await
@@ -383,7 +395,11 @@ async fn recurring_rejects_foreign_account_and_bad_input() {
         ))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::BAD_REQUEST, "unknown cadence → 400");
+    assert_eq!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "unknown cadence → 400"
+    );
     let res = app
         .clone()
         .oneshot(req(
@@ -461,8 +477,16 @@ async fn recurring_upcoming_expands_and_converts_mxn_per_row() {
     let json = body_json(res.into_body()).await;
     let items = json["items"].as_array().expect("items array");
     assert_eq!(items.len(), 4, "2 monthly + 2 biweekly occurrences: {json}");
-    assert_eq!(json["expected_inflows_usd"].as_f64(), Some(6000.0), "{json}");
-    assert_eq!(json["expected_outflows_usd"].as_f64(), Some(600.0), "{json}");
+    assert_eq!(
+        json["expected_inflows_usd"].as_f64(),
+        Some(6000.0),
+        "{json}"
+    );
+    assert_eq!(
+        json["expected_outflows_usd"].as_f64(),
+        Some(600.0),
+        "{json}"
+    );
     // Items are date-sorted and carry native currency + per-row USD.
     assert_eq!(items[0]["due_date"], "2026-08-01");
     assert_eq!(items[0]["currency"], "MXN");

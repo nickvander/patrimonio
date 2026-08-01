@@ -491,12 +491,11 @@ async fn a_failed_row_rolls_the_whole_batch_back() {
         "the client must be told the batch was rolled back, got: {msg}"
     );
 
-    let landed: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE account_id = $1")
-            .bind(account)
-            .fetch_one(&pool)
-            .await
-            .expect("count");
+    let landed: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE account_id = $1")
+        .bind(account)
+        .fetch_one(&pool)
+        .await
+        .expect("count");
     assert_eq!(landed, 0, "the good row must not survive a failed batch");
     assert_eq!(
         current_balance(&pool, account).await,

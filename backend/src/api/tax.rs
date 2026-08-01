@@ -1,14 +1,17 @@
+use crate::api::session::{ApiError, AuthContext};
+use crate::{
+    services::tax::{TaxEstimation, TaxService},
+    AppState,
+};
 use axum::{
     extract::{Extension, Query, State},
     response::IntoResponse,
     routing::get,
     Json, Router,
 };
-use serde::Deserialize;
-use csv::WriterBuilder;
 use chrono::Datelike;
-use crate::api::session::{ApiError, AuthContext};
-use crate::{AppState, services::tax::{TaxService, TaxEstimation}};
+use csv::WriterBuilder;
+use serde::Deserialize;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -158,7 +161,7 @@ async fn get_tax_transactions(
             Json::<Vec<crate::services::tax::TaxableTransaction>>(transactions).into_response()
         }
         Err(e) => {
-             tracing::error!("Failed to fetch taxable transactions: {}", e);
+            tracing::error!("Failed to fetch taxable transactions: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 // Generic message to the client; the real error is logged
@@ -226,9 +229,7 @@ async fn get_tax_unrealized(
     let today = chrono::Utc::now().naive_utc().date();
 
     match TaxService::get_unrealized_lots(&state.db, year, &status, ctx.user_id, today).await {
-        Ok(unrealized) => {
-            Json::<crate::services::tax::UnrealizedLots>(unrealized).into_response()
-        }
+        Ok(unrealized) => Json::<crate::services::tax::UnrealizedLots>(unrealized).into_response(),
         Err(e) => {
             tracing::error!("Failed to compute unrealized lots: {}", e);
             (
@@ -312,9 +313,9 @@ async fn get_retirement_contributions(
 }
 
 async fn export_tax_csv(
-     State(state): State<AppState>,
-     Extension(ctx): Extension<AuthContext>,
-     Query(query): Query<TaxQuery>,
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = match query.resolved_year() {
         Ok(y) => y,
@@ -322,28 +323,28 @@ async fn export_tax_csv(
     };
     let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
-    let transactions = match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!("Failed to fetch taxable transactions (export): {}", e);
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                // Generic message to the client; the real error is logged
-                // via tracing::error! above (§1: never leak internals on a 500).
-                Json(serde_json::json!({ "error": "Internal server error" })),
-            )
-                .into_response();
-        }
-    };
+    let transactions =
+        match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::error!("Failed to fetch taxable transactions (export): {}", e);
+                return (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    // Generic message to the client; the real error is logged
+                    // via tracing::error! above (§1: never leak internals on a 500).
+                    Json(serde_json::json!({ "error": "Internal server error" })),
+                )
+                    .into_response();
+            }
+        };
     // Realized-gains detail + summary. Best-effort: a failure here shouldn't
     // sink the whole export — the income-transaction section still ships.
     let disposals = TaxService::get_lot_disposals(&state.db, year, ctx.user_id)
         .await
         .unwrap_or_default();
-    let estimation =
-        TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id)
-            .await
-            .ok();
+    let estimation = TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id)
+        .await
+        .ok();
 
     // Records vary in width (section headers vs data rows), so the writer must
     // run in flexible mode — the default errors on inconsistent field counts.
@@ -429,9 +430,8 @@ async fn export_tax_csv(
     // Section 2b — the excluded tax-advantaged activity, visible rather than
     // silently dropped. Only written when there is any.
     if disposals.iter().any(|d| d.tax_advantaged) {
-        let _ = wtr.write_record([
-            "Tax-advantaged account disposals (excluded from taxable gains)",
-        ]);
+        let _ =
+            wtr.write_record(["Tax-advantaged account disposals (excluded from taxable gains)"]);
         let _ = wtr.write_record([
             "Symbol",
             "Name",
@@ -493,14 +493,8 @@ async fn export_tax_csv(
             "  of which wages & other income (USD)",
             &money(est.wage_income),
         ]);
-        let _ = wtr.write_record([
-            "  of which dividends (USD)",
-            &money(est.dividend_income),
-        ]);
-        let _ = wtr.write_record([
-            "  of which interest (USD)",
-            &money(est.interest_income),
-        ]);
+        let _ = wtr.write_record(["  of which dividends (USD)", &money(est.dividend_income)]);
+        let _ = wtr.write_record(["  of which interest (USD)", &money(est.interest_income)]);
         let _ = wtr.write_record(["Ordinary income (MXN)", &money(est.ordinary_income_mxn)]);
         let _ = wtr.write_record(["Total taxable (USD)", &money(est.total_taxable)]);
         let _ = wtr.write_record([
@@ -551,16 +545,18 @@ async fn export_tax_csv(
     );
     headers.insert(
         axum::http::header::CONTENT_DISPOSITION,
-        format!("attachment; filename=\"tax_export_{year}.csv\"").parse().unwrap(),
+        format!("attachment; filename=\"tax_export_{year}.csv\"")
+            .parse()
+            .unwrap(),
     );
 
     (headers, csv_data).into_response()
 }
 
 async fn export_tax_pdf(
-     State(state): State<AppState>,
-     Extension(ctx): Extension<AuthContext>,
-     Query(query): Query<TaxQuery>,
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = match query.resolved_year() {
         Ok(y) => y,
@@ -568,21 +564,23 @@ async fn export_tax_pdf(
     };
     let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
-    let estimation = match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
-        Ok(est) => est,
-        Err(e) => {
-            tracing::error!("Failed to calculate tax estimation (export): {}", e);
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                // Generic message to the client; the real error is logged
-                // via tracing::error! above (§1: never leak internals on a 500).
-                Json(serde_json::json!({ "error": "Internal server error" })),
-            ).into_response();
-        }
-    };
+    let estimation =
+        match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
+            Ok(est) => est,
+            Err(e) => {
+                tracing::error!("Failed to calculate tax estimation (export): {}", e);
+                return (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    // Generic message to the client; the real error is logged
+                    // via tracing::error! above (§1: never leak internals on a 500).
+                    Json(serde_json::json!({ "error": "Internal server error" })),
+                )
+                    .into_response();
+            }
+        };
 
-    use lopdf::{Document, Object, dictionary};
     use lopdf::content::{Content, Operation};
+    use lopdf::{dictionary, Document, Object};
 
     let mut doc = Document::with_version("1.5");
     let pages_id = doc.new_object_id();
@@ -605,13 +603,22 @@ async fn export_tax_pdf(
     let line = |ops: &mut Vec<Operation>, y: &mut i64, size: i64, indent: i64, text: String| {
         ops.push(Operation::new("BT", vec![]));
         ops.push(Operation::new("Tf", vec!["F1".into(), size.into()]));
-        ops.push(Operation::new("Td", vec![(50 + indent).into(), (*y).into()]));
+        ops.push(Operation::new(
+            "Td",
+            vec![(50 + indent).into(), (*y).into()],
+        ));
         ops.push(Operation::new("Tj", vec![Object::string_literal(text)]));
         ops.push(Operation::new("ET", vec![]));
         *y -= if size >= 20 { 40 } else { 22 };
     };
 
-    line(&mut ops, &mut y, 20, 0, format!("Patrimonio Tax Summary - {year}"));
+    line(
+        &mut ops,
+        &mut y,
+        20,
+        0,
+        format!("Patrimonio Tax Summary - {year}"),
+    );
     line(&mut ops, &mut y, 12, 0, format!("Filing Status: {status}"));
     y -= 8; // small gap before the figures
     line(
@@ -619,7 +626,10 @@ async fn export_tax_pdf(
         &mut y,
         12,
         0,
-        format!("Ordinary Income: ${}", estimation.ordinary_income.round_dp(2)),
+        format!(
+            "Ordinary Income: ${}",
+            estimation.ordinary_income.round_dp(2)
+        ),
     );
     // T6: dividends/interest decomposition behind the ordinary-income figure,
     // indented as sub-detail like the ST/LT split below. Only shown when
@@ -706,7 +716,10 @@ async fn export_tax_pdf(
         &mut y,
         12,
         0,
-        format!("Total Taxable Amount: ${}", estimation.total_taxable.round_dp(2)),
+        format!(
+            "Total Taxable Amount: ${}",
+            estimation.total_taxable.round_dp(2)
+        ),
     );
     y -= 8;
     line(
@@ -767,7 +780,10 @@ async fn export_tax_pdf(
 
     let content = Content { operations: ops };
 
-    let content_id = doc.add_object(lopdf::Stream::new(dictionary! {}, content.encode().unwrap()));
+    let content_id = doc.add_object(lopdf::Stream::new(
+        dictionary! {},
+        content.encode().unwrap(),
+    ));
     let page_id = doc.add_object(dictionary! {
         "Type" => "Page",
         "Parent" => pages_id,
@@ -788,7 +804,7 @@ async fn export_tax_pdf(
     });
     doc.trailer.set("Root", catalog_id);
     doc.compress();
-    
+
     let mut pdf_bytes = Vec::new();
     let _ = doc.save_to(&mut pdf_bytes);
 
@@ -799,7 +815,9 @@ async fn export_tax_pdf(
     );
     headers.insert(
         axum::http::header::CONTENT_DISPOSITION,
-        format!("attachment; filename=\"tax_summary_{year}.pdf\"").parse().unwrap(),
+        format!("attachment; filename=\"tax_summary_{year}.pdf\"")
+            .parse()
+            .unwrap(),
     );
 
     (headers, pdf_bytes).into_response()

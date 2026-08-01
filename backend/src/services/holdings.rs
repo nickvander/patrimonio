@@ -10,9 +10,9 @@ use sqlx::PgPool;
 /// 'mutual fund', so without this list VBTLX and BND land in the equity band
 /// and the allocation view shows zero bond exposure. Uppercase tickers.
 const BOND_FUND_SYMBOLS: &[&str] = &[
-    "BND", "AGG", "TLT", "IEF", "SHY", "BNDX", "VBTLX", "VBMFX", "VBILX", "FXNAX", "VGIT",
-    "VGSH", "VGLT", "VCIT", "VCSH", "VTEB", "MUB", "LQD", "HYG", "JNK", "TIP", "VTIP", "GOVT",
-    "BIV", "BSV", "BLV", "SCHZ",
+    "BND", "AGG", "TLT", "IEF", "SHY", "BNDX", "VBTLX", "VBMFX", "VBILX", "FXNAX", "VGIT", "VGSH",
+    "VGLT", "VCIT", "VCSH", "VTEB", "MUB", "LQD", "HYG", "JNK", "TIP", "VTIP", "GOVT", "BIV",
+    "BSV", "BLV", "SCHZ",
 ];
 
 /// Money-market funds — cash sleeves that arrive typed 'mutual fund'.
@@ -80,7 +80,13 @@ pub(crate) fn classify_asset(holding_type: &str, symbol: &str, name: &str) -> &'
 /// values the override endpoint (round 3) accepts, matching the CHECK
 /// constraint on `asset_class_overrides`.
 pub(crate) const ASSET_CLASSES: &[&str] = &[
-    "equity", "bonds", "cash", "crypto", "real_estate", "commodities", "other",
+    "equity",
+    "bonds",
+    "cash",
+    "crypto",
+    "real_estate",
+    "commodities",
+    "other",
 ];
 
 /// Round 3: the user's asset-class overrides, keyed `UPPER(symbol)` →
@@ -330,16 +336,38 @@ mod tests {
         // The prod repro: the only bond exposure is a 'mutual fund' (VBTLX)
         // and two 'etf's (BND, TLT) — the type column alone puts all three
         // in equity.
-        assert_eq!(classify_asset("mutual fund", "VBTLX", "Vanguard Total Bond Market Index Fund"), "bonds");
-        assert_eq!(classify_asset("etf", "BND", "Vanguard Total Bond Market ETF"), "bonds");
-        assert_eq!(classify_asset("etf", "TLT", "iShares 20+ Year Treasury Bond ETF"), "bonds");
+        assert_eq!(
+            classify_asset(
+                "mutual fund",
+                "VBTLX",
+                "Vanguard Total Bond Market Index Fund"
+            ),
+            "bonds"
+        );
+        assert_eq!(
+            classify_asset("etf", "BND", "Vanguard Total Bond Market ETF"),
+            "bonds"
+        );
+        assert_eq!(
+            classify_asset("etf", "TLT", "iShares 20+ Year Treasury Bond ETF"),
+            "bonds"
+        );
         // Explicit type wins even with no recognizable symbol/name.
         assert_eq!(classify_asset("bonds", "XYZ", "Some Fund"), "bonds");
         assert_eq!(classify_asset("fixed income", "912828XY", "Note"), "bonds");
         // Name-only match (unknown ticker, generic type), case-insensitive.
-        assert_eq!(classify_asset("mutual fund", "ZZBOND", "Corporate Bond Ladder 2030"), "bonds");
-        assert_eq!(classify_asset("etf", "SCHP", "Schwab U.S. TIPS ETF"), "bonds");
-        assert_eq!(classify_asset("", "T2026", "US Treasury Note 4.25% 2026"), "bonds");
+        assert_eq!(
+            classify_asset("mutual fund", "ZZBOND", "Corporate Bond Ladder 2030"),
+            "bonds"
+        );
+        assert_eq!(
+            classify_asset("etf", "SCHP", "Schwab U.S. TIPS ETF"),
+            "bonds"
+        );
+        assert_eq!(
+            classify_asset("", "T2026", "US Treasury Note 4.25% 2026"),
+            "bonds"
+        );
     }
 
     #[test]
@@ -349,26 +377,56 @@ mod tests {
         assert_eq!(classify_asset("", "CUR:USD", "US Dollar"), "cash");
         assert_eq!(classify_asset("equity", "cur:mxn", "Mexican Peso"), "cash");
         // Money-market funds arrive typed 'mutual fund'.
-        assert_eq!(classify_asset("mutual fund", "SPAXX", "Fidelity Government Money Market"), "cash");
-        assert_eq!(classify_asset("mutual fund", "VMFXX", "Vanguard Federal Money Market Fund"), "cash");
-        assert_eq!(classify_asset("etf", "XX123", "Premier Money Market Portfolio"), "cash");
+        assert_eq!(
+            classify_asset("mutual fund", "SPAXX", "Fidelity Government Money Market"),
+            "cash"
+        );
+        assert_eq!(
+            classify_asset("mutual fund", "VMFXX", "Vanguard Federal Money Market Fund"),
+            "cash"
+        );
+        assert_eq!(
+            classify_asset("etf", "XX123", "Premier Money Market Portfolio"),
+            "cash"
+        );
     }
 
     #[test]
     fn remaining_types_map_to_their_canonical_keys() {
         assert_eq!(classify_asset("crypto", "BTC", "Bitcoin"), "crypto");
-        assert_eq!(classify_asset("cryptocurrency", "ETH", "Ethereum"), "crypto");
-        assert_eq!(classify_asset("real estate", "VNQ2", "Real Estate Holding"), "real_estate");
-        assert_eq!(classify_asset("commodities", "GLD2", "Gold Trust"), "commodities");
+        assert_eq!(
+            classify_asset("cryptocurrency", "ETH", "Ethereum"),
+            "crypto"
+        );
+        assert_eq!(
+            classify_asset("real estate", "VNQ2", "Real Estate Holding"),
+            "real_estate"
+        );
+        assert_eq!(
+            classify_asset("commodities", "GLD2", "Gold Trust"),
+            "commodities"
+        );
         // NULL/'' and the generic instrument types default to equity.
         assert_eq!(classify_asset("", "AAPL", "Apple Inc"), "equity");
         assert_eq!(classify_asset("equity", "NVDA", "NVIDIA Corp"), "equity");
-        assert_eq!(classify_asset("etf", "VTI", "Vanguard Total Stock Market ETF"), "equity");
-        assert_eq!(classify_asset("mutual fund", "FXAIX", "Fidelity 500 Index Fund"), "equity");
+        assert_eq!(
+            classify_asset("etf", "VTI", "Vanguard Total Stock Market ETF"),
+            "equity"
+        );
+        assert_eq!(
+            classify_asset("mutual fund", "FXAIX", "Fidelity 500 Index Fund"),
+            "equity"
+        );
         // 401k trust units with no symbol and an opaque name: equity default.
-        assert_eq!(classify_asset("", "", "Vanguard Target Retirement 2045 Trust"), "equity");
+        assert_eq!(
+            classify_asset("", "", "Vanguard Target Retirement 2045 Trust"),
+            "equity"
+        );
         // Exotic types are honestly 'other'.
-        assert_eq!(classify_asset("derivative", "SPX260918C", "SPX Call"), "other");
+        assert_eq!(
+            classify_asset("derivative", "SPX260918C", "SPX Call"),
+            "other"
+        );
         assert_eq!(classify_asset("loan", "", "Private note"), "other");
     }
 }

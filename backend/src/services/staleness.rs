@@ -248,18 +248,14 @@ pub fn staleness_body(institution: &str, days_stale: i64) -> String {
 /// One `app_settings` value for `user_id`, or None when unset. Small helper
 /// so the sweep's three per-user reads (threshold / snoozes / mutes) stay
 /// one obvious line each.
-async fn fetch_setting(
-    db: &PgPool,
-    user_id: Uuid,
-    key: &str,
-) -> Result<Option<serde_json::Value>> {
-    Ok(sqlx::query_scalar(
-        "SELECT value FROM app_settings WHERE user_id = $1 AND key = $2",
+async fn fetch_setting(db: &PgPool, user_id: Uuid, key: &str) -> Result<Option<serde_json::Value>> {
+    Ok(
+        sqlx::query_scalar("SELECT value FROM app_settings WHERE user_id = $1 AND key = $2")
+            .bind(user_id)
+            .bind(key)
+            .fetch_optional(db)
+            .await?,
     )
-    .bind(user_id)
-    .bind(key)
-    .fetch_optional(db)
-    .await?)
 }
 
 /// One user's three staleness preferences, read together because every

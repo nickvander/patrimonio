@@ -112,7 +112,12 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             // Opening/closing "SALDO FINAL…" rows have no movement.
             (None, None) => return,
         };
-        let description = rec.desc.join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+        let description = rec
+            .desc
+            .join(" ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         if description.is_empty() {
             return;
         }
@@ -139,13 +144,13 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         let upper = trimmed.to_uppercase();
 
         // Learn / refresh the column geometry from each header.
-        if (upper.contains("DEPOSITOS") || upper.contains("DEPÓSITOS"))
-            && upper.contains("RETIROS") {
-                if let Some(c) = detect_columns(line) {
-                    cols = Some(c);
-                }
-                continue;
+        if (upper.contains("DEPOSITOS") || upper.contains("DEPÓSITOS")) && upper.contains("RETIROS")
+        {
+            if let Some(c) = detect_columns(line) {
+                cols = Some(c);
             }
+            continue;
+        }
 
         if let Some(c) = row_re.captures(line) {
             flush(cur.take(), &mut txs);
@@ -186,7 +191,10 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     }
     flush(cur.take(), &mut txs);
 
-    info!("Santander layout parser extracted {} transactions", txs.len());
+    info!(
+        "Santander layout parser extracted {} transactions",
+        txs.len()
+    );
     Ok(txs)
 }
 
@@ -253,7 +261,10 @@ BANCO SANTANDER (MEXICO) S.A., INSTITUCION DE BANCA MULTIPLE, R.F.C. BSM970519DU
         assert_eq!(txs[0].amount, Decimal::from_str("12500.00").unwrap());
         assert!(txs[0].description.contains("ABONO NOMINA"));
         assert!(!txs[0].description.starts_with("0000000"), "folio stripped");
-        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("21040.10").unwrap()));
+        assert_eq!(
+            txs[0].balance_after,
+            Some(Decimal::from_str("21040.10").unwrap())
+        );
 
         // 2) Debit-card purchase (retiro → negative).
         assert_eq!(txs[1].amount, Decimal::from_str("-248.50").unwrap());
@@ -267,7 +278,10 @@ BANCO SANTANDER (MEXICO) S.A., INSTITUCION DE BANCA MULTIPLE, R.F.C. BSM970519DU
 
         // 5) Commission (retiro), last real row's balance is the closing.
         assert_eq!(txs[4].amount, Decimal::from_str("-190.00").unwrap());
-        assert_eq!(txs[4].balance_after, Some(Decimal::from_str("22401.60").unwrap()));
+        assert_eq!(
+            txs[4].balance_after,
+            Some(Decimal::from_str("22401.60").unwrap())
+        );
     }
 
     #[test]

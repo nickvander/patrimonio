@@ -99,10 +99,7 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
     let public = Router::new().nest("/api/auth", patrimonio::api::session::public_router());
 
     let business = Router::new()
-        .nest(
-            "/api/projections",
-            patrimonio::api::projections::router(),
-        )
+        .nest("/api/projections", patrimonio::api::projections::router())
         .layer(axum::middleware::from_fn(
             patrimonio::api::session::require_owner,
         ));
@@ -211,12 +208,18 @@ async fn legacy_request_has_no_mx_block() {
 
     let res = app
         .clone()
-        .oneshot(get(&format!("/api/projections/calculate?{BASE_QS}"), &cookie))
+        .oneshot(get(
+            &format!("/api/projections/calculate?{BASE_QS}"),
+            &cookie,
+        ))
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let json = body_json(res.into_body()).await;
-    assert_eq!(json["fire_metrics"]["fi_number"].as_f64(), Some(1_000_000.0));
+    assert_eq!(
+        json["fire_metrics"]["fi_number"].as_f64(),
+        Some(1_000_000.0)
+    );
     assert!(
         json.get("mx_scenario").is_none(),
         "legacy response must not carry an mx_scenario key: {json}"
@@ -251,7 +254,11 @@ async fn mx_scenario_uses_latest_stored_rate_when_client_omits_it() {
     assert_eq!(res.status(), StatusCode::OK);
     let json = body_json(res.into_body()).await;
     let mx = &json["mx_scenario"];
-    assert_eq!(mx["fx_rate_today"].as_f64(), Some(17.0), "latest DB rate: {json}");
+    assert_eq!(
+        mx["fx_rate_today"].as_f64(),
+        Some(17.0),
+        "latest DB rate: {json}"
+    );
     assert_eq!(mx["fx_rate_at_retirement"].as_f64(), Some(17.0));
     assert!((mx["effective_annual_expenses_usd"].as_f64().unwrap() - 40_000.0).abs() < 1e-6);
     assert!((json["fire_metrics"]["fi_number"].as_f64().unwrap() - 1_000_000.0).abs() < 1e-6);

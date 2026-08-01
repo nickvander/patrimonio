@@ -15,7 +15,7 @@ impl CryptoPriceService {
         if fiat == "USD" {
             let url = format!("https://api.coinbase.com/v2/prices/{symbol}-USD/spot");
             let res = client.get(&url).send().await?.json::<Value>().await?;
-            
+
             if let Some(amount_str) = res["data"]["amount"].as_str() {
                 return Decimal::from_str(amount_str).map_err(|e| anyhow!("Invalid decimal: {e}"));
             }
@@ -23,7 +23,7 @@ impl CryptoPriceService {
             let book = format!("{}_mxn", symbol.to_lowercase());
             let url = format!("https://api.bitso.com/v3/ticker/?book={book}");
             let res = client.get(&url).send().await?.json::<Value>().await?;
-            
+
             if let Some(last_str) = res["payload"]["last"].as_str() {
                 return Decimal::from_str(last_str).map_err(|e| anyhow!("Invalid decimal: {e}"));
             }

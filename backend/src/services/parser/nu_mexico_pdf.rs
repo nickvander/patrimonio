@@ -94,10 +94,9 @@ fn month_full(s: &str) -> Option<u32> {
 /// the document" is anchored with `\b` so it can't latch onto a year-like run
 /// inside an account number (e.g. `01018002079` → `2079`).
 fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
-    let re = Regex::new(
-        r"PERIODO[: ]+DEL \d{1,2} DE (\w+) DE (\d{4}) AL \d{1,2} DE (\w+) DE (\d{4})",
-    )
-    .unwrap();
+    let re =
+        Regex::new(r"PERIODO[: ]+DEL \d{1,2} DE (\w+) DE (\d{4}) AL \d{1,2} DE (\w+) DE (\d{4})")
+            .unwrap();
     let fallback = Regex::new(r"\b(20\d{2})\b")
         .unwrap()
         .captures(upper)
@@ -117,12 +116,25 @@ fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
 /// `Some(false)` = debit (money out), `None` = no keyword signal.
 fn keyword_credit(desc_upper: &str) -> Option<bool> {
     const CREDIT: &[&str] = &[
-        "RECIBISTE", "RECIBIDO", "DEPOSITO", "DEPÓSITO", "REEMBOLSO",
-        "INTERESES", "ABONO", "DEVOLUCION", "DEVOLUCIÓN",
+        "RECIBISTE",
+        "RECIBIDO",
+        "DEPOSITO",
+        "DEPÓSITO",
+        "REEMBOLSO",
+        "INTERESES",
+        "ABONO",
+        "DEVOLUCION",
+        "DEVOLUCIÓN",
     ];
     const DEBIT: &[&str] = &[
-        "ENVIASTE", "COMPRA", "PAGO", "RETIRO", "TRANSFERENCIA", "COMISION",
-        "COMISIÓN", "CARGO",
+        "ENVIASTE",
+        "COMPRA",
+        "PAGO",
+        "RETIRO",
+        "TRANSFERENCIA",
+        "COMISION",
+        "COMISIÓN",
+        "CARGO",
     ];
     if CREDIT.iter().any(|k| desc_upper.contains(k)) {
         Some(true)
@@ -211,14 +223,16 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         let monies: Vec<Money> = money_re
             .captures_iter(rest)
             .filter_map(|c| {
-                Decimal::from_str(&c[2].replace(',', "")).ok().map(|value| Money {
-                    neg: match &c[1] {
-                        "-" => Some(true),
-                        "+" => Some(false),
-                        _ => None,
-                    },
-                    value,
-                })
+                Decimal::from_str(&c[2].replace(',', ""))
+                    .ok()
+                    .map(|value| Money {
+                        neg: match &c[1] {
+                            "-" => Some(true),
+                            "+" => Some(false),
+                            _ => None,
+                        },
+                        value,
+                    })
             })
             .collect();
         if monies.is_empty() {
@@ -227,7 +241,10 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
 
         // ≥2 tokens → [..monto, saldo] (old layout); 1 token → just the monto.
         let (balance, monto) = if monies.len() >= 2 {
-            (Some(monies[monies.len() - 1].value), &monies[monies.len() - 2])
+            (
+                Some(monies[monies.len() - 1].value),
+                &monies[monies.len() - 2],
+            )
         } else {
             (None, &monies[0])
         };
@@ -298,11 +315,13 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     // figure; else derive it by removing the cajita total from the grand
     // total; else (no cajitas seen) the grand total IS the available balance.
     let summary = parse_account_summary(text);
-    let available = summary.en_su_cuenta.or(match (summary.saldo_total, summary.total_cajitas) {
-        (Some(total), Some(cajitas)) => Some(total - cajitas),
-        (total, None) => total,
-        (None, _) => None,
-    });
+    let available = summary
+        .en_su_cuenta
+        .or(match (summary.saldo_total, summary.total_cajitas) {
+            (Some(total), Some(cajitas)) => Some(total - cajitas),
+            (total, None) => total,
+            (None, _) => None,
+        });
     if let Some(available) = available {
         if let Some((idx, _)) = txs
             .iter()
@@ -341,9 +360,10 @@ pub fn parse_account_summary(text: &str) -> NuSummary {
     let dec = |s: &str| Decimal::from_str(&s.replace(',', "")).ok();
 
     // "Saldo al generar este estado de cuenta   $63,525.30"
-    if let Some(c) = Regex::new(r"(?i)Saldo al generar este estado de cuenta\s*\$?\s*([\d,]+\.\d{2})")
-        .unwrap()
-        .captures(text)
+    if let Some(c) =
+        Regex::new(r"(?i)Saldo al generar este estado de cuenta\s*\$?\s*([\d,]+\.\d{2})")
+            .unwrap()
+            .captures(text)
     {
         out.saldo_total = dec(&c[1]);
     }
@@ -405,12 +425,18 @@ Fecha    Descripción                                         Monto         Sald
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2024, 10, 1).unwrap());
         assert_eq!(txs[0].amount, Decimal::from_str("12000.00").unwrap());
         assert!(txs[0].description.contains("Recibiste de NOMINA"));
-        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("36406.48").unwrap()));
+        assert_eq!(
+            txs[0].balance_after,
+            Some(Decimal::from_str("36406.48").unwrap())
+        );
         assert_eq!(txs[1].amount, Decimal::from_str("-150.00").unwrap());
         assert_eq!(txs[2].amount, Decimal::from_str("-2500.00").unwrap());
         assert_eq!(txs[3].amount, Decimal::from_str("4272.69").unwrap());
         assert_eq!(txs[4].amount, Decimal::from_str("-5743.57").unwrap());
-        assert_eq!(txs[4].balance_after, Some(Decimal::from_str("32285.60").unwrap()));
+        assert_eq!(
+            txs[4].balance_after,
+            Some(Decimal::from_str("32285.60").unwrap())
+        );
     }
 
     #[test]
@@ -457,8 +483,12 @@ Cómo está organizado tu dinero
         let txs = parse_text(CURRENT).unwrap();
 
         // Inline year is honoured (NOT 2079 from the account number).
-        assert!(txs.iter().all(|t| t.date.format("%Y").to_string() == "2025"),
-            "years: {:?}", txs.iter().map(|t| t.date).collect::<Vec<_>>());
+        assert!(
+            txs.iter()
+                .all(|t| t.date.format("%Y").to_string() == "2025"),
+            "years: {:?}",
+            txs.iter().map(|t| t.date).collect::<Vec<_>>()
+        );
 
         // Main-account rows: account_label None, BANAMEX in a description must
         // NOT matter here.
@@ -476,14 +506,19 @@ Cómo está organizado tu dinero
         assert_eq!(cajita[1].account_label.as_deref(), Some("Ahorro"));
         assert_eq!(cajita[1].amount, Decimal::from_str("-35448.17").unwrap());
         // The "Congelaste…" row was skipped.
-        assert!(!txs.iter().any(|t| t.description.to_uppercase().contains("CONGEL")));
+        assert!(!txs
+            .iter()
+            .any(|t| t.description.to_uppercase().contains("CONGEL")));
     }
 
     #[test]
     fn extracts_summary_balances() {
         let s = parse_account_summary(CURRENT);
         assert_eq!(s.en_su_cuenta, Some(Decimal::from_str("0.00").unwrap()));
-        assert_eq!(s.total_cajitas, Some(Decimal::from_str("62672.07").unwrap()));
+        assert_eq!(
+            s.total_cajitas,
+            Some(Decimal::from_str("62672.07").unwrap())
+        );
         assert_eq!(s.credito, Some(Decimal::from_str("828.50").unwrap()));
         assert_eq!(s.saldo_total, Some(Decimal::from_str("63525.30").unwrap()));
     }
@@ -504,7 +539,11 @@ Cómo está organizado tu dinero
             .iter()
             .filter(|t| t.account_label.is_none() && t.balance_after.is_some())
             .collect();
-        assert_eq!(stamped.len(), 1, "exactly one main row is stamped: {stamped:#?}");
+        assert_eq!(
+            stamped.len(),
+            1,
+            "exactly one main row is stamped: {stamped:#?}"
+        );
         assert_eq!(
             stamped[0].balance_after,
             Some(Decimal::from_str("0.00").unwrap()),

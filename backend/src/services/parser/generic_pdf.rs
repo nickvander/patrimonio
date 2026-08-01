@@ -45,9 +45,24 @@ fn month_name(s: &str) -> Option<u32> {
 /// never be treated as a transaction description.
 fn is_noise(line: &str) -> bool {
     const NOISE: &[&str] = &[
-        "SALDO", "TOTAL", "RESUMEN", "GAT ", "PERIODO", "PERÍODO", "PAGINA",
-        "PÁGINA", "ESTADO DE CUENTA", "CLABE", "R.F.C", "RFC", "SUBTOTAL",
-        "COMISION", "COMISIÓN", "INTERESES GANADOS", "PAGE ", " OF ",
+        "SALDO",
+        "TOTAL",
+        "RESUMEN",
+        "GAT ",
+        "PERIODO",
+        "PERÍODO",
+        "PAGINA",
+        "PÁGINA",
+        "ESTADO DE CUENTA",
+        "CLABE",
+        "R.F.C",
+        "RFC",
+        "SUBTOTAL",
+        "COMISION",
+        "COMISIÓN",
+        "INTERESES GANADOS",
+        "PAGE ",
+        " OF ",
     ];
     NOISE.iter().any(|n| line.contains(n))
 }

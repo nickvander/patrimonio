@@ -221,7 +221,10 @@ Emitido por HSBC MEXICO SA RFC HMI950125KG8
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2026, 2, 5).unwrap());
         assert_eq!(txs[0].amount, Decimal::from_str("9500.00").unwrap());
         assert!(txs[0].description.contains("ABONO TRANSFERENCIA"));
-        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("25500.00").unwrap()));
+        assert_eq!(
+            txs[0].balance_after,
+            Some(Decimal::from_str("25500.00").unwrap())
+        );
 
         // Withdrawals (Cargo) — left money column → negative.
         assert_eq!(txs[1].amount, Decimal::from_str("-1250.00").unwrap());

@@ -74,13 +74,7 @@ fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
         let sm: u32 = c[1].parse().unwrap_or(1);
         let sy: i32 = c[2].parse().unwrap_or(fallback);
         let ey: i32 = c[4].parse().unwrap_or(sy);
-        Box::new(move |m: u32| {
-            if sy == ey || m >= sm {
-                sy
-            } else {
-                ey
-            }
-        })
+        Box::new(move |m: u32| if sy == ey || m >= sm { sy } else { ey })
     } else {
         Box::new(move |_| fallback)
     }
@@ -150,7 +144,12 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             // No movement on the row (balance-only / informational) — skip.
             (None, None) => return,
         };
-        let description = rec.desc.join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+        let description = rec
+            .desc
+            .join(" ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         if description.is_empty() {
             return;
         }
@@ -307,8 +306,14 @@ Av. Paseo de la Reforma 510, Col. Juárez R.F.C. BBA830831LJ2
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2026, 5, 2).unwrap());
         assert_eq!(txs[0].amount, Decimal::from_str("12500.00").unwrap());
         assert!(txs[0].description.contains("SPEI RECIBIDO"));
-        assert!(txs[0].description.contains("EMPRESA EJEMPLO"), "continuation joined");
-        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("27700.00").unwrap()));
+        assert!(
+            txs[0].description.contains("EMPRESA EJEMPLO"),
+            "continuation joined"
+        );
+        assert_eq!(
+            txs[0].balance_after,
+            Some(Decimal::from_str("27700.00").unwrap())
+        );
 
         // 2) CARGO (withdrawal) with NO balance printed on the row.
         assert_eq!(txs[1].amount, Decimal::from_str("-3200.00").unwrap());
@@ -324,7 +329,10 @@ Av. Paseo de la Reforma 510, Col. Juárez R.F.C. BBA830831LJ2
 
         // 5) Commission (cargo) — last row.
         assert_eq!(txs[4].amount, Decimal::from_str("-37.32").unwrap());
-        assert_eq!(txs[4].balance_after, Some(Decimal::from_str("22532.68").unwrap()));
+        assert_eq!(
+            txs[4].balance_after,
+            Some(Decimal::from_str("22532.68").unwrap())
+        );
     }
 
     #[test]

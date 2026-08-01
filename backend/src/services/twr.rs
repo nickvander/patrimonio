@@ -243,7 +243,10 @@ pub async fn portfolio_twr(db: &PgPool, user_id: Uuid, benchmark: Option<&str>) 
         let fx = dec(r, "usd_fx_rate");
         let cost_usd = if fx > 0.0 { qty * cpu / fx } else { qty * cpu };
         *flow_map.entry(date).or_default() += cost_usd;
-        lots_by_sym.entry(sym).or_default().push(QtyEvent { date, qty });
+        lots_by_sym
+            .entry(sym)
+            .or_default()
+            .push(QtyEvent { date, qty });
     }
     for r in &disp_rows {
         let sym: String = r.try_get("symbol").unwrap_or_default();
@@ -258,7 +261,10 @@ pub async fn portfolio_twr(db: &PgPool, user_id: Uuid, benchmark: Option<&str>) 
         let fx = dec(r, "sell_fx_rate");
         let proceeds_usd = if fx > 0.0 { qty * spp / fx } else { qty * spp };
         *flow_map.entry(date).or_default() -= proceeds_usd;
-        disps_by_sym.entry(sym).or_default().push(QtyEvent { date, qty });
+        disps_by_sym
+            .entry(sym)
+            .or_default()
+            .push(QtyEvent { date, qty });
     }
 
     // 5. Window. Start at the earliest acquisition we know about (the first

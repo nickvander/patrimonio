@@ -82,7 +82,8 @@ impl YearCtx {
 
 fn period(text: &str) -> YearCtx {
     // Periodo 01-MAR-24/27-MAR-24  (DD-MMM-AA / DD-MMM-AA)
-    let re = Regex::new(r"(\d{2})-([A-Za-z]{3})-(\d{2})\s*/\s*(\d{2})-([A-Za-z]{3})-(\d{2})").unwrap();
+    let re =
+        Regex::new(r"(\d{2})-([A-Za-z]{3})-(\d{2})\s*/\s*(\d{2})-([A-Za-z]{3})-(\d{2})").unwrap();
     if let Some(c) = re.captures(text) {
         let sm = month_abbr(&c[2].to_uppercase()).unwrap_or(1);
         let sy = 2000 + c[3].parse::<i32>().unwrap_or(25);
@@ -218,7 +219,10 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     }
     flush(cur.take(), &mut txs);
 
-    info!("Scotiabank layout parser extracted {} transactions", txs.len());
+    info!(
+        "Scotiabank layout parser extracted {} transactions",
+        txs.len()
+    );
     Ok(txs)
 }
 
@@ -252,7 +256,10 @@ Scotiabank Inverlat S.A.
         assert_eq!(txs[0].amount, Decimal::from_str("-1.00").unwrap());
         assert!(txs[0].description.contains("COBRO DE COMISION"));
         assert!(!txs[0].description.contains('$'), "dollar signs stripped");
-        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("3983530.04").unwrap()));
+        assert_eq!(
+            txs[0].balance_after,
+            Some(Decimal::from_str("3983530.04").unwrap())
+        );
 
         // Deposit row.
         assert_eq!(txs[1].amount, Decimal::from_str("2767.29").unwrap());

@@ -1,3 +1,6 @@
+use crate::api::session::AuthContext;
+use crate::services::encryption;
+use crate::AppState;
 use axum::{
     extract::{Extension, Query, State},
     response::{IntoResponse, Redirect},
@@ -8,9 +11,6 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rand::{rngs::OsRng, RngCore};
 use redis::AsyncCommands;
 use serde::Deserialize;
-use crate::AppState;
-use crate::api::session::AuthContext;
-use crate::services::encryption;
 
 const OAUTH_STATE_PREFIX: &str = "oauth:coinbase:";
 const OAUTH_STATE_TTL_SECONDS: u64 = 600; // 10 min — covers the full Coinbase login + 2FA dance.
@@ -34,7 +34,10 @@ async fn coinbase_authorize(
 ) -> impl IntoResponse {
     let client_id = match &state.config.coinbase_client_id {
         Some(id) => id,
-        None => return frontend_redirect(&state, "error", Some("Coinbase Client ID missing")).into_response(),
+        None => {
+            return frontend_redirect(&state, "error", Some("Coinbase Client ID missing"))
+                .into_response()
+        }
     };
 
     let mut state_bytes = [0u8; 32];
@@ -50,7 +53,8 @@ async fn coinbase_authorize(
             .await;
     } else {
         tracing::error!("Redis unavailable; refusing to start Coinbase OAuth without CSRF state");
-        return frontend_redirect(&state, "error", Some("Auth temporarily unavailable")).into_response();
+        return frontend_redirect(&state, "error", Some("Auth temporarily unavailable"))
+            .into_response();
     }
 
     let redirect_uri = &state.config.coinbase_redirect_uri;
@@ -91,7 +95,9 @@ async fn coinbase_callback(
     //    Coinbase always echoes whatever we sent in /authorize.
     let provided_state = match query.state.as_deref() {
         Some(s) if !s.is_empty() => s,
-        _ => return frontend_redirect(&state, "error", Some("Missing OAuth state")).into_response(),
+        _ => {
+            return frontend_redirect(&state, "error", Some("Missing OAuth state")).into_response()
+        }
     };
     let key = format!("{OAUTH_STATE_PREFIX}{provided_state}");
     let bound_user_id = match state.redis.get_multiplexed_async_connection().await {
@@ -103,11 +109,13 @@ async fn coinbase_callback(
         }
         Err(e) => {
             tracing::error!("Redis lookup for OAuth state failed: {}", e);
-            return frontend_redirect(&state, "error", Some("Auth temporarily unavailable")).into_response();
+            return frontend_redirect(&state, "error", Some("Auth temporarily unavailable"))
+                .into_response();
         }
     };
     let Some(bound_user_id) = bound_user_id else {
-        return frontend_redirect(&state, "error", Some("Invalid or expired OAuth state")).into_response();
+        return frontend_redirect(&state, "error", Some("Invalid or expired OAuth state"))
+            .into_response();
     };
     let bound_user_uuid = match uuid::Uuid::parse_str(&bound_user_id) {
         Ok(u) => u,
@@ -120,24 +128,37 @@ async fn coinbase_callback(
     let code = match query.code {
         Some(code) => code,
         None => {
-            let detail = query.error.as_deref().unwrap_or("Coinbase authorization failed");
+            let detail = query
+                .error
+                .as_deref()
+                .unwrap_or("Coinbase authorization failed");
             return frontend_redirect(&state, "error", Some(detail)).into_response();
         }
     };
     let client_id = match config.coinbase_client_id.as_ref() {
         Some(value) => value,
-        None => return frontend_redirect(&state, "error", Some("Coinbase Client ID missing")).into_response(),
+        None => {
+            return frontend_redirect(&state, "error", Some("Coinbase Client ID missing"))
+                .into_response()
+        }
     };
     let client_secret = match config.coinbase_client_secret.as_ref() {
         Some(value) => value,
-        None => return frontend_redirect(&state, "error", Some("Coinbase Client Secret missing")).into_response(),
+        None => {
+            return frontend_redirect(&state, "error", Some("Coinbase Client Secret missing"))
+                .into_response()
+        }
     };
     let enc_key = match config.encryption_key.as_ref() {
         Some(value) => value,
-        None => return frontend_redirect(&state, "error", Some("Encryption key missing")).into_response(),
+        None => {
+            return frontend_redirect(&state, "error", Some("Encryption key missing"))
+                .into_response()
+        }
     };
 
-    let res = client.post("https://api.coinbase.com/oauth/token")
+    let res = client
+        .post("https://api.coinbase.com/oauth/token")
         .form(&[
             ("grant_type", "authorization_code"),
             ("code", &code),
@@ -154,14 +175,16 @@ async fn coinbase_callback(
                 let status = response.status();
                 let body = response.text().await.unwrap_or_default();
                 tracing::error!("Coinbase OAuth returned {}: {}", status, body);
-                return frontend_redirect(&state, "error", Some("Coinbase token exchange failed")).into_response();
+                return frontend_redirect(&state, "error", Some("Coinbase token exchange failed"))
+                    .into_response();
             }
 
             let tokens: serde_json::Value = match response.json().await {
                 Ok(tokens) => tokens,
                 Err(e) => {
                     tracing::error!("Invalid Coinbase OAuth response: {}", e);
-                    return frontend_redirect(&state, "error", Some("Invalid Coinbase response")).into_response();
+                    return frontend_redirect(&state, "error", Some("Invalid Coinbase response"))
+                        .into_response();
                 }
             };
             // SECURITY: never log the `tokens` object — even when one field is
@@ -181,7 +204,8 @@ async fn coinbase_callback(
                         "Coinbase OAuth response missing access_token (keys: {:?})",
                         token_keys()
                     );
-                    return frontend_redirect(&state, "error", Some("Coinbase token missing")).into_response();
+                    return frontend_redirect(&state, "error", Some("Coinbase token missing"))
+                        .into_response();
                 }
             };
             let refresh_token = match tokens["refresh_token"].as_str() {
@@ -191,7 +215,12 @@ async fn coinbase_callback(
                         "Coinbase OAuth response missing refresh_token (keys: {:?})",
                         token_keys()
                     );
-                    return frontend_redirect(&state, "error", Some("Coinbase refresh token missing")).into_response();
+                    return frontend_redirect(
+                        &state,
+                        "error",
+                        Some("Coinbase refresh token missing"),
+                    )
+                    .into_response();
                 }
             };
 
@@ -200,14 +229,16 @@ async fn coinbase_callback(
                 Ok(value) => value,
                 Err(e) => {
                     tracing::error!("Failed to encrypt Coinbase access token: {}", e);
-                    return frontend_redirect(&state, "error", Some("Token encryption failed")).into_response();
+                    return frontend_redirect(&state, "error", Some("Token encryption failed"))
+                        .into_response();
                 }
             };
             let ref_enc = match encryption::encrypt(enc_key, refresh_token) {
                 Ok(value) => value,
                 Err(e) => {
                     tracing::error!("Failed to encrypt Coinbase refresh token: {}", e);
-                    return frontend_redirect(&state, "error", Some("Token encryption failed")).into_response();
+                    return frontend_redirect(&state, "error", Some("Token encryption failed"))
+                        .into_response();
                 }
             };
 
@@ -263,13 +294,18 @@ async fn coinbase_callback(
         }
         Err(e) => {
             tracing::error!("Coinbase OAuth Error: {}", e);
-            frontend_redirect(&state, "error", Some("Coinbase token exchange failed")).into_response()
+            frontend_redirect(&state, "error", Some("Coinbase token exchange failed"))
+                .into_response()
         }
     }
 }
 
 fn frontend_redirect(state: &AppState, status: &str, msg: Option<&str>) -> Redirect {
-    let mut url = format!("{}/?status={}", state.config.frontend_base_url.trim_end_matches('/'), status);
+    let mut url = format!(
+        "{}/?status={}",
+        state.config.frontend_base_url.trim_end_matches('/'),
+        status
+    );
     if let Some(msg) = msg {
         url.push_str("&msg=");
         url.push_str(&query_escape(msg));

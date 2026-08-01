@@ -43,7 +43,15 @@ pub async fn create_session(
     user_agent: Option<&str>,
     ip: Option<&str>,
 ) -> Result<CreatedSession> {
-    create_session_inner(db, user_id, user_agent, ip, false, Duration::days(SESSION_TTL_DAYS)).await
+    create_session_inner(
+        db,
+        user_id,
+        user_agent,
+        ip,
+        false,
+        Duration::days(SESSION_TTL_DAYS),
+    )
+    .await
 }
 
 /// Issue a short-lived session that is NOT yet accepted by
@@ -123,20 +131,26 @@ pub async fn validate_and_touch(db: &PgPool, raw_token: &str) -> Result<Option<V
     // request — fetching it here avoids a per-request lookup.
     // one-off sqlx row tuple, materialized once at this query_as call site
     #[allow(clippy::type_complexity)]
-    let row: Option<(Uuid, Uuid, DateTime<Utc>, Option<DateTime<Utc>>, bool, String)> =
-        sqlx::query_as(
-            r#"
+    let row: Option<(
+        Uuid,
+        Uuid,
+        DateTime<Utc>,
+        Option<DateTime<Utc>>,
+        bool,
+        String,
+    )> = sqlx::query_as(
+        r#"
             SELECT s.id, s.user_id, s.expires_at, s.revoked_at, s.pending_totp,
                    u.role
             FROM user_sessions s
             JOIN users u ON u.id = s.user_id
             WHERE s.token_hash = $1
             "#,
-        )
-        .bind(&hash)
-        .fetch_optional(db)
-        .await
-        .map_err(|e| anyhow!("validate_and_touch lookup: {e}"))?;
+    )
+    .bind(&hash)
+    .fetch_optional(db)
+    .await
+    .map_err(|e| anyhow!("validate_and_touch lookup: {e}"))?;
 
     let Some((session_id, user_id, expires_at, revoked_at, pending_totp, role)) = row else {
         return Ok(None);
@@ -238,16 +252,16 @@ pub async fn list_active(db: &PgPool, user_id: Uuid) -> Result<Vec<ActiveSession
 
     Ok(rows
         .into_iter()
-        .map(|(id, created_at, last_seen_at, expires_at, user_agent, ip_address)| {
-            ActiveSessionRow {
+        .map(
+            |(id, created_at, last_seen_at, expires_at, user_agent, ip_address)| ActiveSessionRow {
                 id,
                 created_at,
                 last_seen_at,
                 expires_at,
                 user_agent,
                 ip_address,
-            }
-        })
+            },
+        )
         .collect())
 }
 
@@ -255,11 +269,7 @@ pub async fn list_active(db: &PgPool, user_id: Uuid) -> Result<Vec<ActiveSession
 /// the supplied user. Returns true if a row was actually flipped — the
 /// caller can use that to distinguish "not found / not yours" from
 /// "already revoked".
-pub async fn revoke_by_id_for_user(
-    db: &PgPool,
-    session_id: Uuid,
-    user_id: Uuid,
-) -> Result<bool> {
+pub async fn revoke_by_id_for_user(db: &PgPool, session_id: Uuid, user_id: Uuid) -> Result<bool> {
     let result = sqlx::query(
         "UPDATE user_sessions
             SET revoked_at = NOW()
@@ -276,11 +286,7 @@ pub async fn revoke_by_id_for_user(
 /// Revoke every live session for the user EXCEPT the one identified
 /// by `keep_session_id`. Returns the number of sessions revoked so
 /// the UI can report "Signed out of N other devices".
-pub async fn revoke_all_except(
-    db: &PgPool,
-    user_id: Uuid,
-    keep_session_id: Uuid,
-) -> Result<u64> {
+pub async fn revoke_all_except(db: &PgPool, user_id: Uuid, keep_session_id: Uuid) -> Result<u64> {
     let result = sqlx::query(
         "UPDATE user_sessions
             SET revoked_at = NOW()

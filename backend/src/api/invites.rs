@@ -141,7 +141,9 @@ async fn create_invite(
 
     tracing::info!(
         "User {} minted invite {} (expires {})",
-        ctx.user_id, id, stored_expires
+        ctx.user_id,
+        id,
+        stored_expires
     );
 
     Ok(Json(CreateInviteResponse {
@@ -175,12 +177,8 @@ async fn list_invites(
                 let used_at: Option<DateTime<Utc>> = r.try_get("used_at").ok().flatten();
                 InviteSummary {
                     id: r.get::<Uuid, _>("id").to_string(),
-                    created_at: r
-                        .get::<DateTime<Utc>, _>("created_at")
-                        .to_rfc3339(),
-                    expires_at: r
-                        .get::<DateTime<Utc>, _>("expires_at")
-                        .to_rfc3339(),
+                    created_at: r.get::<DateTime<Utc>, _>("created_at").to_rfc3339(),
+                    expires_at: r.get::<DateTime<Utc>, _>("expires_at").to_rfc3339(),
                     used: used_at.is_some(),
                     used_at: used_at.map(|t| t.to_rfc3339()),
                     note: r.try_get::<Option<String>, _>("note").ok().flatten(),
@@ -201,7 +199,7 @@ async fn revoke_invite(
     // Revoke = delete. Already-redeemed invites are kept (used_at row
     // is a record of who joined when), so we filter to live ones only.
     let result = sqlx::query(
-        "DELETE FROM invite_tokens WHERE id = $1 AND created_by_user_id = $2 AND used_at IS NULL"
+        "DELETE FROM invite_tokens WHERE id = $1 AND created_by_user_id = $2 AND used_at IS NULL",
     )
     .bind(id)
     .bind(ctx.user_id)

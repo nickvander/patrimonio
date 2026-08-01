@@ -1,17 +1,25 @@
 use super::*;
+use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
 use std::str::FromStr;
-use chrono::{NaiveDate, Datelike};
 
 #[test]
 fn test_parse_nu_mexico_csv() {
-    let data = "Fecha,Descripción,Monto\n2024-03-15,Uber Mexico,-150.50\n16/03/2024,OXXO Gas,500.00".as_bytes();
+    let data =
+        "Fecha,Descripción,Monto\n2024-03-15,Uber Mexico,-150.50\n16/03/2024,OXXO Gas,500.00"
+            .as_bytes();
     let result = nu_mexico::parse_csv(data).unwrap();
-    
+
     assert_eq!(result.len(), 2);
-    assert_eq!(result[0].date, NaiveDate::from_ymd_opt(2024, 3, 15).unwrap());
+    assert_eq!(
+        result[0].date,
+        NaiveDate::from_ymd_opt(2024, 3, 15).unwrap()
+    );
     assert_eq!(result[0].amount, Decimal::from_str("-150.50").unwrap());
-    assert_eq!(result[1].date, NaiveDate::from_ymd_opt(2024, 3, 16).unwrap());
+    assert_eq!(
+        result[1].date,
+        NaiveDate::from_ymd_opt(2024, 3, 16).unwrap()
+    );
     assert_eq!(result[1].amount, Decimal::from_str("500.00").unwrap());
 }
 
@@ -19,7 +27,7 @@ fn test_parse_nu_mexico_csv() {
 fn test_parse_banamex_csv() {
     let data = "Fecha,Concepto,Monto\n15/03/2024,COMPRA OXXO,-50.00".as_bytes();
     let result = banamex::parse_csv(data).unwrap();
-    
+
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].description, "COMPRA OXXO");
     assert_eq!(result[0].amount, Decimal::from_str("-50.00").unwrap());
@@ -28,11 +36,11 @@ fn test_parse_banamex_csv() {
 #[test]
 fn test_detect_and_parse_routing() {
     let data = "Fecha,Concepto,Monto\n15/03/2024,Test,10.0".as_bytes();
-    
+
     // Should route to Banamex
     let result = detect_and_parse("banamex_statement.csv", data, None).unwrap();
     assert_eq!(result.len(), 1);
-    
+
     // Should route to Nu
     let nu_data = "Fecha,Descripción,Monto\n2024-03-15,Test,-10.0".as_bytes();
     let result = detect_and_parse("nu_mexico.csv", nu_data, None).unwrap();
@@ -116,7 +124,10 @@ fn test_cetes_pdf_maturity_premium_is_income() {
         .iter()
         .find(|t| t.description.contains("PREMIO"))
         .expect("premio row present");
-    assert!(premio.amount > Decimal::ZERO, "yield must be a positive inflow");
+    assert!(
+        premio.amount > Decimal::ZERO,
+        "yield must be a positive inflow"
+    );
     assert_eq!(premio.amount, Decimal::from_str("258.74").unwrap());
     assert_eq!(premio.category.as_deref(), Some("INCOME"));
     // The COMPRA principal buy is NOT income — it's an internal transfer out.
@@ -278,7 +289,10 @@ fn test_detect_and_parse_content() {
 fn test_polish_description_strips_trailing_yyyymmdd() {
     assert_eq!(polish_description("MISC DEBIT 20260418"), "MISC DEBIT");
     assert_eq!(polish_description("UBER MEXICO 20260418"), "UBER MEXICO");
-    assert_eq!(polish_description("UBER 20260418 OAXACA"), "UBER 20260418 OAXACA"); // mid-string is not stripped
+    assert_eq!(
+        polish_description("UBER 20260418 OAXACA"),
+        "UBER 20260418 OAXACA"
+    ); // mid-string is not stripped
 }
 
 #[test]
@@ -290,7 +304,10 @@ fn test_polish_description_strips_trailing_dmy_date() {
 #[test]
 fn test_polish_description_strips_generic_prefix() {
     assert_eq!(polish_description("COMPRA OXXO"), "OXXO");
-    assert_eq!(polish_description("RETIRO CAJERO BANAMEX"), "CAJERO BANAMEX");
+    assert_eq!(
+        polish_description("RETIRO CAJERO BANAMEX"),
+        "CAJERO BANAMEX"
+    );
     assert_eq!(polish_description("MISC DEBIT NETFLIX"), "NETFLIX");
 }
 
@@ -305,7 +322,10 @@ fn test_polish_description_preserves_when_strip_would_empty() {
 
 #[test]
 fn test_polish_description_collapses_whitespace() {
-    assert_eq!(polish_description("UBER    EATS   MEXICO"), "UBER EATS MEXICO");
+    assert_eq!(
+        polish_description("UBER    EATS   MEXICO"),
+        "UBER EATS MEXICO"
+    );
 }
 
 #[test]
@@ -328,7 +348,10 @@ fn test_polish_all_captures_original_when_changed() {
     }];
     let polished = polish_all(Ok(parsed)).unwrap();
     assert_eq!(polished[0].description, "OXXO");
-    assert_eq!(polished[0].original_description.as_deref(), Some("COMPRA OXXO 20260418"));
+    assert_eq!(
+        polished[0].original_description.as_deref(),
+        Some("COMPRA OXXO 20260418")
+    );
 }
 
 #[test]
@@ -418,10 +441,16 @@ Interest
 
     assert_eq!(rows[0].date, NaiveDate::from_ymd_opt(2026, 5, 1).unwrap());
     assert_eq!(rows[0].amount, Decimal::from_str("6.74").unwrap()); // 17193.53 - 17186.79
-    assert_eq!(rows[0].balance_after, Some(Decimal::from_str("17193.53").unwrap()));
+    assert_eq!(
+        rows[0].balance_after,
+        Some(Decimal::from_str("17193.53").unwrap())
+    );
     assert_eq!(rows[0].currency, "MXN");
     assert_eq!(rows[0].category.as_deref(), Some("INCOME"));
-    assert_eq!(rows[0].category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
+    assert_eq!(
+        rows[0].category_detailed.as_deref(),
+        Some("INCOME_INTEREST_EARNED")
+    );
     assert_eq!(rows[0].account_label, None);
 
     assert_eq!(rows[1].amount, Decimal::from_str("6.75").unwrap());
@@ -476,21 +505,36 @@ Summary of balances and movements during the period
     assert_eq!(rows[0].description, "SPEI Transfer received from STP");
     assert_eq!(rows[0].amount, Decimal::from_str("1000.00").unwrap());
     assert_eq!(rows[0].category.as_deref(), Some("TRANSFER_IN"));
-    assert_eq!(rows[0].account_label.as_deref(), Some("Mexican Peso Account"));
+    assert_eq!(
+        rows[0].account_label.as_deref(),
+        Some("Mexican Peso Account")
+    );
     assert_eq!(rows[0].currency, "MXN");
 
     assert_eq!(rows[1].description, "To Instant Access Savings");
     assert_eq!(rows[1].amount, Decimal::from_str("-1000.00").unwrap()); // 0 - 1000
     assert_eq!(rows[1].category.as_deref(), Some("TRANSFER_OUT"));
-    assert_eq!(rows[1].account_label.as_deref(), Some("Mexican Peso Account"));
+    assert_eq!(
+        rows[1].account_label.as_deref(),
+        Some("Mexican Peso Account")
+    );
 
     // Savings pocket (its own account_label), seeded from its $0.00 opening.
     assert_eq!(rows[2].amount, Decimal::from_str("1000.00").unwrap());
-    assert_eq!(rows[2].account_label.as_deref(), Some("Instant Access Savings"));
+    assert_eq!(
+        rows[2].account_label.as_deref(),
+        Some("Instant Access Savings")
+    );
 
     assert_eq!(rows[3].amount, Decimal::from_str("6.74").unwrap()); // 1006.74 - 1000
-    assert_eq!(rows[3].category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
-    assert_eq!(rows[3].account_label.as_deref(), Some("Instant Access Savings"));
+    assert_eq!(
+        rows[3].category_detailed.as_deref(),
+        Some("INCOME_INTEREST_EARNED")
+    );
+    assert_eq!(
+        rows[3].account_label.as_deref(),
+        Some("Instant Access Savings")
+    );
 }
 
 #[test]

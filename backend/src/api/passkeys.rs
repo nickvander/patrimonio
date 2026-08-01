@@ -31,8 +31,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use webauthn_rs::prelude::{
     CreationChallengeResponse, CredentialID, Passkey, PasskeyAuthentication, PasskeyRegistration,
-    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, Url, Uuid as WebauthnUuid,
-    Webauthn, WebauthnBuilder,
+    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, Url,
+    Uuid as WebauthnUuid, Webauthn, WebauthnBuilder,
 };
 
 use crate::api::session::{
@@ -290,18 +290,21 @@ async fn register_start(
     .await
     .map_err(internal)?;
     let exclude: Vec<CredentialID> = existing_ids.into_iter().map(CredentialID::from).collect();
-    let exclude_opt = if exclude.is_empty() { None } else { Some(exclude) };
+    let exclude_opt = if exclude.is_empty() {
+        None
+    } else {
+        Some(exclude)
+    };
 
     // Look up the username so the platform's passkey UI can display
     // something useful ("Save passkey for nick@…") rather than the
     // user's UUID.
-    let (username, display_name): (String, Option<String>) = sqlx::query_as(
-        "SELECT username, email FROM users WHERE id = $1",
-    )
-    .bind(ctx.user_id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(internal)?;
+    let (username, display_name): (String, Option<String>) =
+        sqlx::query_as("SELECT username, email FROM users WHERE id = $1")
+            .bind(ctx.user_id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(internal)?;
 
     let user_id_webauthn = WebauthnUuid::from_bytes(*ctx.user_id.as_bytes());
 
@@ -457,13 +460,12 @@ async fn login_start(
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "Username required."));
     }
 
-    let user_row: Option<(Uuid, bool)> = sqlx::query_as(
-        "SELECT id, is_active FROM users WHERE LOWER(username) = LOWER($1)",
-    )
-    .bind(&username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?;
+    let user_row: Option<(Uuid, bool)> =
+        sqlx::query_as("SELECT id, is_active FROM users WHERE LOWER(username) = LOWER($1)")
+            .bind(&username)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(internal)?;
 
     let passkeys: Vec<Passkey> = match user_row {
         Some((user_id, true)) => {
@@ -533,29 +535,23 @@ async fn login_finish(
 
     // Re-resolve the user — Redis is not authoritative and the row may
     // have been deactivated between start and finish.
-    let user_row: Option<(Uuid, bool)> = sqlx::query_as(
-        "SELECT id, is_active FROM users WHERE LOWER(username) = LOWER($1)",
-    )
-    .bind(&pending.username)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?;
+    let user_row: Option<(Uuid, bool)> =
+        sqlx::query_as("SELECT id, is_active FROM users WHERE LOWER(username) = LOWER($1)")
+            .bind(&pending.username)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(internal)?;
     let user_id = match user_row {
         Some((id, true)) => id,
         _ => {
-            return Err(ApiError::new(
-                StatusCode::UNAUTHORIZED,
-                "Invalid passkey.",
-            ));
+            return Err(ApiError::new(StatusCode::UNAUTHORIZED, "Invalid passkey."));
         }
     };
 
     let result = state
         .webauthn
         .finish_passkey_authentication(&body.credential, &pending.state)
-        .map_err(|e| {
-            ApiError::new(StatusCode::UNAUTHORIZED, &format!("webauthn finish: {e}"))
-        })?;
+        .map_err(|e| ApiError::new(StatusCode::UNAUTHORIZED, &format!("webauthn finish: {e}")))?;
 
     // Find the DB row whose credential_id matches what the user just
     // signed with so we can bump last_used_at and rewrite the
@@ -609,11 +605,15 @@ async fn login_finish(
         "UPDATE users SET previous_login_at = last_login_at, \
                           last_login_at = NOW() WHERE id = $1",
     )
-        .bind(user_id)
-        .execute(&state.db)
-        .await;
+    .bind(user_id)
+    .execute(&state.db)
+    .await;
 
-    let jar = jar.add(build_session_cookie(&state, session.token, session.expires_at));
+    let jar = jar.add(build_session_cookie(
+        &state,
+        session.token,
+        session.expires_at,
+    ));
     let user = crate::api::session::load_user_view(&state.db, user_id)
         .await
         .map_err(internal)?;
@@ -665,13 +665,12 @@ async fn reauth_passkey_start(
 ) -> Result<Json<ReauthStartResponse>, ApiError> {
     // Build the assertion over exactly the current user's credentials —
     // scoped by id, never by a client-supplied username.
-    let rows: Vec<serde_json::Value> = sqlx::query_scalar(
-        "SELECT passkey_json FROM passkey_credentials WHERE user_id = $1",
-    )
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(internal)?;
+    let rows: Vec<serde_json::Value> =
+        sqlx::query_scalar("SELECT passkey_json FROM passkey_credentials WHERE user_id = $1")
+            .bind(ctx.user_id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(internal)?;
 
     let passkeys: Vec<Passkey> = rows
         .into_iter()
@@ -885,14 +884,12 @@ async fn remove_passkey(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    let result = sqlx::query(
-        "DELETE FROM passkey_credentials WHERE id = $1 AND user_id = $2",
-    )
-    .bind(id)
-    .bind(ctx.user_id)
-    .execute(&state.db)
-    .await
-    .map_err(internal)?;
+    let result = sqlx::query("DELETE FROM passkey_credentials WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(internal)?;
     if result.rows_affected() == 0 {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "Passkey not found."));
     }
@@ -931,12 +928,14 @@ async fn store_state<T: Serialize>(state: &AppState, key: &str, value: &T) -> Re
     let json = serde_json::to_string(value).map_err(internal)?;
     let payload = match state.config.encryption_key.as_deref() {
         Some(enc_key) => {
-            let ct = crate::services::encryption::encrypt(enc_key, &json)
-                .map_err(internal)?;
+            let ct = crate::services::encryption::encrypt(enc_key, &json).map_err(internal)?;
             // `v2:` prefix marks AEAD-encrypted base64 payloads so
             // `take_state` can dispatch on the format. Base64 keeps
             // the value 7-bit clean for the Redis text protocol.
-            format!("v2:{}", base64::engine::general_purpose::STANDARD.encode(ct))
+            format!(
+                "v2:{}",
+                base64::engine::general_purpose::STANDARD.encode(ct)
+            )
         }
         None => {
             tracing::warn!(
@@ -985,16 +984,12 @@ async fn take_state<T: for<'de> Deserialize<'de>>(
     // Anything else is rejected — it can only mean a stray key written
     // by a different writer or a downgrade attack on the format.
     let json = if let Some(rest) = raw.strip_prefix("v2:") {
-        let enc_key = state
-            .config
-            .encryption_key
-            .as_deref()
-            .ok_or_else(|| {
-                ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    "Passkey flow state encrypted but ENCRYPTION_KEY is unset.",
-                )
-            })?;
+        let enc_key = state.config.encryption_key.as_deref().ok_or_else(|| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "Passkey flow state encrypted but ENCRYPTION_KEY is unset.",
+            )
+        })?;
         let ct = base64::engine::general_purpose::STANDARD
             .decode(rest)
             .map_err(internal)?;

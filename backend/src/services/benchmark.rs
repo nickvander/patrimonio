@@ -22,11 +22,11 @@ pub const SP500: &str = "SP500";
 /// Anything not in this table resolves to the S&P 500 default, so an unknown or
 /// illiquid `?benchmark=` fails soft to the existing behavior rather than 500ing.
 const BENCHMARKS: &[(&str, &str)] = &[
-    (SP500, "%5EGSPC"),  // S&P 500 (^GSPC)
-    ("NDX", "%5ENDX"),   // Nasdaq-100 (^NDX)
-    ("ACWI", "ACWI"),    // MSCI ACWI / Total World ETF
-    ("AGG", "AGG"),      // US Aggregate Bonds ETF
-    ("MXX", "%5EMXX"),   // IPC Mexico (^MXX)
+    (SP500, "%5EGSPC"), // S&P 500 (^GSPC)
+    ("NDX", "%5ENDX"),  // Nasdaq-100 (^NDX)
+    ("ACWI", "ACWI"),   // MSCI ACWI / Total World ETF
+    ("AGG", "AGG"),     // US Aggregate Bonds ETF
+    ("MXX", "%5EMXX"),  // IPC Mexico (^MXX)
 ];
 
 /// Resolve a requested benchmark key to its `(store_as, yahoo_symbol)`. Unknown
@@ -113,9 +113,8 @@ pub async fn refresh_yahoo(db: &PgPool, yahoo_symbol: &str, store_as: &str) -> R
     // Multi-row upsert in chunks (Postgres caps bind params at 65535).
     let mut written = 0usize;
     for chunk in rows.chunks(1000) {
-        let mut qb = sqlx::QueryBuilder::new(
-            "INSERT INTO benchmark_prices (symbol, price_date, close) ",
-        );
+        let mut qb =
+            sqlx::QueryBuilder::new("INSERT INTO benchmark_prices (symbol, price_date, close) ");
         qb.push_values(chunk, |mut b, (date, close)| {
             b.push_bind(store_as).push_bind(date).push_bind(close);
         });
@@ -124,7 +123,11 @@ pub async fn refresh_yahoo(db: &PgPool, yahoo_symbol: &str, store_as: &str) -> R
         written += chunk.len();
     }
 
-    tracing::info!("Refreshed {} quote series: {} daily closes", store_as, written);
+    tracing::info!(
+        "Refreshed {} quote series: {} daily closes",
+        store_as,
+        written
+    );
     Ok(written)
 }
 
@@ -139,11 +142,7 @@ pub async fn ensure_fresh(db: &PgPool) -> Result<()> {
 /// `store_as` from `yahoo_symbol` when the newest stored close is more than
 /// ~4 days old (covering weekends/holidays). Tolerates network failure as
 /// long as *some* data is already stored for `store_as`.
-pub async fn ensure_symbol_fresh(
-    db: &PgPool,
-    yahoo_symbol: &str,
-    store_as: &str,
-) -> Result<()> {
+pub async fn ensure_symbol_fresh(db: &PgPool, yahoo_symbol: &str, store_as: &str) -> Result<()> {
     let stale = match latest_date(db, store_as).await {
         Some(d) => Utc::now().date_naive() - d > Duration::days(4),
         None => true,
@@ -294,8 +293,7 @@ pub async fn contribution_comparison(
         first_acquired: NaiveDate,
         last_acquired: NaiveDate,
     }
-    let mut by_symbol: std::collections::HashMap<String, SymAgg> =
-        std::collections::HashMap::new();
+    let mut by_symbol: std::collections::HashMap<String, SymAgg> = std::collections::HashMap::new();
     // Holdings that contributed at least one counted lot — everything else
     // in the population with value is "untracked" below.
     let mut counted_holdings: std::collections::HashSet<uuid::Uuid> =

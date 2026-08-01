@@ -83,7 +83,12 @@ pub async fn fetch_and_store_rate(
 
     // Free tier: https://open.er-api.com/v6/latest/{base}
     let url = format!("https://open.er-api.com/v6/latest/{}", base.to_uppercase());
-    let resp = client.get(&url).send().await?.json::<ErApiResponse>().await?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await?
+        .json::<ErApiResponse>()
+        .await?;
 
     let rate = resp
         .rates
@@ -132,7 +137,7 @@ pub async fn fetch_and_store_rate(
         VALUES ($1, $2, $3, NOW(), 'api')
         ON CONFLICT (base_currency, target_currency, recorded_at) DO UPDATE
         SET rate = EXCLUDED.rate, source = EXCLUDED.source
-        "#
+        "#,
     )
     .bind(base.to_uppercase())
     .bind(target.to_uppercase())
@@ -153,9 +158,7 @@ pub async fn fetch_and_store_rate(
 
     // Best-effort alert fan-out; never fail the fetch over it.
     if let (Some(prev), true) = (prev_rate, rate_decimal > Decimal::ZERO) {
-        if let Err(e) =
-            record_fx_alert_crossings(db, base, target, prev, rate_decimal).await
-        {
+        if let Err(e) = record_fx_alert_crossings(db, base, target, prev, rate_decimal).await {
             tracing::warn!("FX alert evaluation failed for {base}/{target}: {e}");
         }
     }

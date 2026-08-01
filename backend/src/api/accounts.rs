@@ -2,7 +2,7 @@ use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, patch, post, delete},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -50,7 +50,10 @@ pub fn router() -> Router<AppState> {
         // POST (not DELETE) so the body-carrying batch delete is distinct
         // from the param route below and reuses the static-before-dynamic
         // ordering already required for `/transactions/batch`.
-        .route("/transactions/batch-delete", post(batch_delete_transactions))
+        .route(
+            "/transactions/batch-delete",
+            post(batch_delete_transactions),
+        )
         // PATCH tweaks user overrides on ANY row; PUT is the full edit of a
         // manually-entered row (source='manual' only — see the handler).
         .route(
@@ -132,7 +135,10 @@ async fn update_account_balance(
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateBalanceRequest>,
 ) -> impl IntoResponse {
-    info!("Updating balance for account {}: {}", id, payload.current_balance);
+    info!(
+        "Updating balance for account {}: {}",
+        id, payload.current_balance
+    );
 
     // 1. Update the account's current balance — scoped to owner.
     let update_acc = sqlx::query(
@@ -158,16 +164,15 @@ async fn update_account_balance(
     // 2. Fetch the account's currency to ensure the snapshot is accurate.
     //    Still scoped by user_id — defence in depth even though step 1
     //    already proved ownership.
-    let account =
-        sqlx::query("SELECT currency FROM accounts WHERE id = $1 AND user_id = $2")
-            .bind(id)
-            .bind(ctx.user_id)
-            .fetch_one(&state.db)
-            .await;
+    let account = sqlx::query("SELECT currency FROM accounts WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(ctx.user_id)
+        .fetch_one(&state.db)
+        .await;
 
     if let Ok(row) = account {
         let currency: String = row.get("currency");
-        
+
         // 3. Upsert balance snapshot for today
         // balance_usd is FX-converted via the shared rate ladder, which always
         // returns a positive rate — the old inline lookup fell back to the
@@ -236,32 +241,42 @@ async fn list_accounts(
         JOIN institutions i ON a.institution_id = i.id
         WHERE a.user_id = $1 AND a.archived_at IS NULL
         ORDER BY i.name, a.name
-        "#
+        "#,
     )
     .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
-    let accounts = rows.iter().map(|row| {
-        AccountResponse {
+    let accounts = rows
+        .iter()
+        .map(|row| AccountResponse {
             id: row.get::<uuid::Uuid, _>("id").to_string(),
             name: row.get("name"),
             nickname: row.try_get::<Option<String>, _>("nickname").ok().flatten(),
             account_type: row.get("account_type"),
             currency: row.get("currency"),
-            current_balance: row.try_get::<rust_decimal::Decimal, _>("current_balance")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
-            available_balance: row.try_get::<rust_decimal::Decimal, _>("available_balance")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
-            credit_limit: row.try_get::<rust_decimal::Decimal, _>("credit_limit")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
+            current_balance: row
+                .try_get::<rust_decimal::Decimal, _>("current_balance")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0)),
+            available_balance: row
+                .try_get::<rust_decimal::Decimal, _>("available_balance")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0)),
+            credit_limit: row
+                .try_get::<rust_decimal::Decimal, _>("credit_limit")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0)),
             institution_name: row.get("institution_name"),
             country: row.get("country"),
-            updated_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
-                .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-        }
-    }).collect();
+            updated_at: row
+                .try_get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
+                .ok()
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_default(),
+        })
+        .collect();
 
     Json(accounts)
 }
@@ -293,7 +308,7 @@ async fn accounts_summary(
             COUNT(*) as account_count
         FROM accounts
         WHERE user_id = $1 AND archived_at IS NULL
-        "#
+        "#,
     )
     .bind(ctx.user_id)
     .bind(fx_rate)
@@ -302,10 +317,16 @@ async fn accounts_summary(
 
     match row {
         Ok(row) => {
-            let assets: f64 = row.try_get::<rust_decimal::Decimal, _>("total_assets")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-            let liabilities: f64 = row.try_get::<rust_decimal::Decimal, _>("total_liabilities")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+            let assets: f64 = row
+                .try_get::<rust_decimal::Decimal, _>("total_assets")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
+            let liabilities: f64 = row
+                .try_get::<rust_decimal::Decimal, _>("total_liabilities")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
             Json(AccountsSummary {
                 total_assets: assets,
                 total_liabilities: liabilities,
@@ -348,20 +369,21 @@ async fn create_account(
     Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<CreateAccountRequest>,
 ) -> impl IntoResponse {
-    info!("Creating manual account for user {}: {}", ctx.user_id, payload.name);
+    info!(
+        "Creating manual account for user {}: {}",
+        ctx.user_id, payload.name
+    );
 
     // 1. Get or create a per-user "Manual" institution. Each user gets
     //    their own Manual row so manual accounts can never bleed across
     //    tenants via the institution table.
     let institution_id = if let Some(id) = payload.institution_id {
         // Verify the supplied institution belongs to this user.
-        let owns = sqlx::query(
-            "SELECT 1 FROM institutions WHERE id = $1 AND user_id = $2"
-        )
-        .bind(id)
-        .bind(ctx.user_id)
-        .fetch_optional(&state.db)
-        .await;
+        let owns = sqlx::query("SELECT 1 FROM institutions WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await;
         match owns {
             Ok(Some(_)) => id,
             Ok(None) => return StatusCode::NOT_FOUND.into_response(),
@@ -382,13 +404,11 @@ async fn create_account(
             .unwrap_or("Manual")
             .to_string();
         // Find this user's institution with that name (find-or-create).
-        let inst = sqlx::query(
-            "SELECT id FROM institutions WHERE name = $1 AND user_id = $2"
-        )
-        .bind(&inst_name)
-        .bind(ctx.user_id)
-        .fetch_optional(&state.db)
-        .await;
+        let inst = sqlx::query("SELECT id FROM institutions WHERE name = $1 AND user_id = $2")
+            .bind(&inst_name)
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await;
         match inst {
             Ok(Some(row)) => row.get("id"),
             Ok(None) => {
@@ -402,7 +422,10 @@ async fn create_account(
                 .execute(&state.db)
                 .await;
                 if let Err(e) = created {
-                    error!("Failed to create per-user institution '{}': {}", inst_name, e);
+                    error!(
+                        "Failed to create per-user institution '{}': {}",
+                        inst_name, e
+                    );
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
                 new_inst_id
@@ -619,7 +642,7 @@ async fn get_account_transactions(
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $3 OFFSET $4
-        "#
+        "#,
     )
     .bind(id)
     .bind(ctx.user_id)
@@ -629,41 +652,79 @@ async fn get_account_transactions(
     .await
     .unwrap_or_default();
 
-    let txs = rows.iter().map(|row| TransactionResponse {
-        id: row.get::<uuid::Uuid, _>("id").to_string(),
-        date: row.try_get::<chrono::NaiveDate, _>("date")
-            .map(|d| d.to_string())
-            .unwrap_or_default(),
-        description: row.try_get::<String, _>("description").unwrap_or_default(),
-        amount: row.try_get::<rust_decimal::Decimal, _>("amount")
-            .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
-        currency: row.try_get::<String, _>("currency").unwrap_or_else(|_| "USD".to_string()),
-        category: row.try_get::<String, _>("category").unwrap_or_else(|_| "Uncategorized".to_string()),
-        category_detailed: row.try_get::<Option<String>, _>("category_detailed").ok().flatten(),
-        payment_channel: row.try_get::<Option<String>, _>("payment_channel").ok().flatten(),
-        merchant_name: row.try_get::<Option<String>, _>("merchant_name").ok().flatten(),
-        original_description: row.try_get::<Option<String>, _>("original_description").ok().flatten(),
-        counterparty_name: row.try_get::<Option<String>, _>("counterparty_name").ok().flatten(),
-        counterparty_logo_url: row.try_get::<Option<String>, _>("counterparty_logo_url").ok().flatten(),
-        user_category: row.try_get("user_category").ok(),
-        user_notes: row.try_get("user_notes").ok(),
-        user_description: row.try_get::<Option<String>, _>("user_description").ok().flatten(),
-        payment_payee: row.try_get::<Option<String>, _>("payment_payee").ok().flatten(),
-        payment_payer: row.try_get::<Option<String>, _>("payment_payer").ok().flatten(),
-        parent_id: row
-            .try_get::<Option<uuid::Uuid>, _>("parent_id")
-            .ok()
-            .flatten()
-            .map(|u| u.to_string()),
-        source: row.try_get("source").ok(),
-        balance_after: row
-            .try_get::<Option<rust_decimal::Decimal>, _>("balance_after")
-            .ok()
-            .flatten()
-            .and_then(|d| d.to_string().parse().ok()),
-        account_name: row.get("account_name"),
-        institution_name: row.get("institution_name"),
-    }).collect();
+    let txs = rows
+        .iter()
+        .map(|row| TransactionResponse {
+            id: row.get::<uuid::Uuid, _>("id").to_string(),
+            date: row
+                .try_get::<chrono::NaiveDate, _>("date")
+                .map(|d| d.to_string())
+                .unwrap_or_default(),
+            description: row.try_get::<String, _>("description").unwrap_or_default(),
+            amount: row
+                .try_get::<rust_decimal::Decimal, _>("amount")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
+            currency: row
+                .try_get::<String, _>("currency")
+                .unwrap_or_else(|_| "USD".to_string()),
+            category: row
+                .try_get::<String, _>("category")
+                .unwrap_or_else(|_| "Uncategorized".to_string()),
+            category_detailed: row
+                .try_get::<Option<String>, _>("category_detailed")
+                .ok()
+                .flatten(),
+            payment_channel: row
+                .try_get::<Option<String>, _>("payment_channel")
+                .ok()
+                .flatten(),
+            merchant_name: row
+                .try_get::<Option<String>, _>("merchant_name")
+                .ok()
+                .flatten(),
+            original_description: row
+                .try_get::<Option<String>, _>("original_description")
+                .ok()
+                .flatten(),
+            counterparty_name: row
+                .try_get::<Option<String>, _>("counterparty_name")
+                .ok()
+                .flatten(),
+            counterparty_logo_url: row
+                .try_get::<Option<String>, _>("counterparty_logo_url")
+                .ok()
+                .flatten(),
+            user_category: row.try_get("user_category").ok(),
+            user_notes: row.try_get("user_notes").ok(),
+            user_description: row
+                .try_get::<Option<String>, _>("user_description")
+                .ok()
+                .flatten(),
+            payment_payee: row
+                .try_get::<Option<String>, _>("payment_payee")
+                .ok()
+                .flatten(),
+            payment_payer: row
+                .try_get::<Option<String>, _>("payment_payer")
+                .ok()
+                .flatten(),
+            parent_id: row
+                .try_get::<Option<uuid::Uuid>, _>("parent_id")
+                .ok()
+                .flatten()
+                .map(|u| u.to_string()),
+            source: row.try_get("source").ok(),
+            balance_after: row
+                .try_get::<Option<rust_decimal::Decimal>, _>("balance_after")
+                .ok()
+                .flatten()
+                .and_then(|d| d.to_string().parse().ok()),
+            account_name: row.get("account_name"),
+            institution_name: row.get("institution_name"),
+        })
+        .collect();
 
     Json(txs)
 }
@@ -1016,7 +1077,12 @@ async fn batch_update_transactions(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            (StatusCode::OK, Json(BatchUpdateResponse { updated: r.rows_affected() }))
+            (
+                StatusCode::OK,
+                Json(BatchUpdateResponse {
+                    updated: r.rows_affected(),
+                }),
+            )
                 .into_response()
         }
         Err(e) => {
@@ -1082,7 +1148,12 @@ async fn batch_delete_transactions(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            (StatusCode::OK, Json(BatchDeleteResponse { deleted: r.rows_affected() }))
+            (
+                StatusCode::OK,
+                Json(BatchDeleteResponse {
+                    deleted: r.rows_affected(),
+                }),
+            )
                 .into_response()
         }
         Err(e) => {
@@ -1099,12 +1170,11 @@ async fn delete_transaction(
     Path(tx_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     info!("Deleting transaction {} for user {}", tx_id, ctx.user_id);
-    let result =
-        sqlx::query("DELETE FROM transactions WHERE id = $1 AND user_id = $2")
-            .bind(tx_id)
-            .bind(ctx.user_id)
-            .execute(&state.db)
-            .await;
+    let result = sqlx::query("DELETE FROM transactions WHERE id = $1 AND user_id = $2")
+        .bind(tx_id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await;
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
         Ok(_) => {
@@ -1710,11 +1780,7 @@ use crate::services::holdings::{latest_price, recompute_holding_balance};
 /// Recompute a holdings-backed account's balance as the sum of its holdings'
 /// values, and snapshot it (FX-aware) so it flows into net worth — the same
 /// way a Plaid investment account's balance is the sum of its holdings.
-async fn account_owned(
-    db: &sqlx::PgPool,
-    account_id: uuid::Uuid,
-    user_id: uuid::Uuid,
-) -> bool {
+async fn account_owned(db: &sqlx::PgPool, account_id: uuid::Uuid, user_id: uuid::Uuid) -> bool {
     matches!(
         sqlx::query_scalar::<_, uuid::Uuid>(
             "SELECT id FROM accounts WHERE id = $1 AND user_id = $2",
@@ -1730,11 +1796,7 @@ async fn account_owned(
 /// True only for an owned, MANUAL account. Holdings can only be hand-edited on
 /// manual accounts — never a Plaid-synced one, where balance + holdings are
 /// authoritative from the institution (we'd corrupt them and fight the sync).
-async fn account_is_manual(
-    db: &sqlx::PgPool,
-    account_id: uuid::Uuid,
-    user_id: uuid::Uuid,
-) -> bool {
+async fn account_is_manual(db: &sqlx::PgPool, account_id: uuid::Uuid, user_id: uuid::Uuid) -> bool {
     matches!(
         sqlx::query_scalar::<_, String>(
             "SELECT i.integration_type FROM accounts a JOIN institutions i ON i.id = a.institution_id WHERE a.id = $1 AND a.user_id = $2",
@@ -1921,29 +1983,32 @@ async fn import_holdings(
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| symbol.clone());
         let stmt_value = h.value.and_then(rust_decimal::Decimal::from_f64_retain);
-        let (price, value, htype): (Option<rust_decimal::Decimal>, Option<rust_decimal::Decimal>, String) =
-            if h.cash {
-                // Cash sleeve: $1.00 NAV, value = the cash amount; never Yahoo-priced.
-                (
-                    Some(rust_decimal::Decimal::ONE),
-                    stmt_value.or(Some(qty)),
-                    "cash".to_string(),
-                )
-            } else {
-                // Equity/fund: live price from the Yahoo quote cache; fall back to
-                // the statement's reported value if the symbol can't be priced.
-                let p = latest_price(&state.db, &symbol).await;
-                let v = p.map(|p| (p * qty).round_dp(2)).or(stmt_value);
-                // Allocation bucket — defaults to "equity"; a fund import
-                // (e.g. HSA target-date) sets "mutual fund".
-                let kind = h
-                    .holding_type
-                    .as_ref()
-                    .map(|s| s.trim().to_lowercase())
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| "equity".to_string());
-                (p, v, kind)
-            };
+        let (price, value, htype): (
+            Option<rust_decimal::Decimal>,
+            Option<rust_decimal::Decimal>,
+            String,
+        ) = if h.cash {
+            // Cash sleeve: $1.00 NAV, value = the cash amount; never Yahoo-priced.
+            (
+                Some(rust_decimal::Decimal::ONE),
+                stmt_value.or(Some(qty)),
+                "cash".to_string(),
+            )
+        } else {
+            // Equity/fund: live price from the Yahoo quote cache; fall back to
+            // the statement's reported value if the symbol can't be priced.
+            let p = latest_price(&state.db, &symbol).await;
+            let v = p.map(|p| (p * qty).round_dp(2)).or(stmt_value);
+            // Allocation bucket — defaults to "equity"; a fund import
+            // (e.g. HSA target-date) sets "mutual fund".
+            let kind = h
+                .holding_type
+                .as_ref()
+                .map(|s| s.trim().to_lowercase())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "equity".to_string());
+            (p, v, kind)
+        };
 
         if let Err(e) = sqlx::query(
             r#"
@@ -2254,7 +2319,12 @@ async fn benchmark_dividends(
     symbol: &str,
 ) -> Option<(f64, Option<String>, Option<String>, i32)> {
     match crate::services::dividends::fetch_dividends_cached(redis, symbol, false).await {
-        Ok(i) => Some((i.annual_rate, i.last_ex_date, i.est_next_ex_date, i.per_year)),
+        Ok(i) => Some((
+            i.annual_rate,
+            i.last_ex_date,
+            i.est_next_ex_date,
+            i.per_year,
+        )),
         Err(_) => None,
     }
 }

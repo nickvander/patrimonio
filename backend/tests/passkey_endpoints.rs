@@ -84,8 +84,11 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");
     let webauthn = Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
-            .expect("webauthn builder"),
+        patrimonio::api::passkeys::build_webauthn(
+            &config.frontend_base_url,
+            &config.android_apk_cert_sha256,
+        )
+        .expect("webauthn builder"),
     );
     let state = AppState {
         db: pool.clone(),
@@ -203,7 +206,9 @@ async fn seed_passkey(pool: &PgPool, user_id: Uuid, cred_id: &[u8], nickname: &s
 #[tokio::test]
 #[serial_test::serial]
 async fn lists_every_passkey_a_user_holds() {
-    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let cookie = bootstrap_owner(&app).await;
     let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
         .fetch_one(&pool)
@@ -233,15 +238,15 @@ async fn lists_every_passkey_a_user_holds() {
     let both = body_json(res.into_body()).await;
     let arr = both.as_array().unwrap();
     assert_eq!(arr.len(), 2, "BOTH passkeys must appear in the list");
-    let nicknames: Vec<&str> = arr.iter().map(|p| p["nickname"].as_str().unwrap()).collect();
+    let nicknames: Vec<&str> = arr
+        .iter()
+        .map(|p| p["nickname"].as_str().unwrap())
+        .collect();
     assert!(nicknames.contains(&"Key A"));
     assert!(nicknames.contains(&"Key B"));
 
     // Removing one leaves the other — delete is scoped to the row id.
-    let victim = arr
-        .iter()
-        .find(|p| p["nickname"] == "Key A")
-        .unwrap()["id"]
+    let victim = arr.iter().find(|p| p["nickname"] == "Key A").unwrap()["id"]
         .as_str()
         .unwrap()
         .to_string();
@@ -277,7 +282,9 @@ async fn duplicate_credential_id_is_rejected_not_silently_upserted() {
     // The DB's UNIQUE(credential_id) is what backs the register_finish
     // 409: a credential we already hold cannot be inserted a second time.
     // This guards the storage invariant the 409 path relies on.
-    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let _cookie = bootstrap_owner(&app).await;
     let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
         .fetch_one(&pool)
@@ -340,7 +347,9 @@ async fn password_hash(pool: &PgPool, user_id: Uuid) -> String {
 #[tokio::test]
 #[serial_test::serial]
 async fn reauth_start_rejects_user_with_no_passkey() {
-    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let cookie = bootstrap_owner(&app).await;
     // No passkey seeded → reauth/start must 400, never mint a challenge.
     let res = app
@@ -358,7 +367,9 @@ async fn reauth_start_rejects_user_with_no_passkey() {
 #[tokio::test]
 #[serial_test::serial]
 async fn reauth_start_requires_authentication() {
-    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let _ = bootstrap_owner(&app).await;
     // No cookie → require_auth rejects before the handler runs.
     let res = app
@@ -376,7 +387,9 @@ async fn reauth_start_requires_authentication() {
 #[tokio::test]
 #[serial_test::serial]
 async fn set_password_requires_authentication() {
-    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let _ = bootstrap_owner(&app).await;
     let res = app
         .clone()
@@ -397,7 +410,9 @@ async fn set_password_requires_authentication() {
 #[tokio::test]
 #[serial_test::serial]
 async fn set_password_with_unknown_nonce_is_rejected_and_password_unchanged() {
-    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let cookie = bootstrap_owner(&app).await;
     let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
         .fetch_one(&pool)
@@ -436,7 +451,10 @@ async fn set_password_with_unknown_nonce_is_rejected_and_password_unchanged() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(success_rows, 0, "no successful set-password audit on a rejected attempt");
+    assert_eq!(
+        success_rows, 0,
+        "no successful set-password audit on a rejected attempt"
+    );
 
     // Sessions must NOT have been revoked — the original cookie still works.
     let res = app
@@ -444,13 +462,19 @@ async fn set_password_with_unknown_nonce_is_rejected_and_password_unchanged() {
         .oneshot(get_request("/api/auth/passkeys", &cookie))
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::OK, "session must survive a failed set-password");
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "session must survive a failed set-password"
+    );
 }
 
 #[tokio::test]
 #[serial_test::serial]
 async fn set_password_rejects_weak_password_before_consuming_nonce() {
-    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
     let cookie = bootstrap_owner(&app).await;
     let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
         .fetch_one(&pool)

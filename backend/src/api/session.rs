@@ -48,7 +48,10 @@ pub fn protected_router() -> Router<AppState> {
         .route("/logout", post(logout))
         .route("/me", get(me))
         .route("/change-password", post(change_password))
-        .route("/recovery-codes/regenerate", post(regenerate_recovery_codes))
+        .route(
+            "/recovery-codes/regenerate",
+            post(regenerate_recovery_codes),
+        )
         .route("/recovery-codes/count", get(recovery_codes_count))
         .route("/totp/enroll", post(totp_enroll))
         .route("/totp/confirm", post(totp_confirm))
@@ -298,7 +301,11 @@ async fn bootstrap(
         .await
         .map_err(internal)?;
 
-    let jar = jar.add(build_session_cookie(&state, session.token, session.expires_at));
+    let jar = jar.add(build_session_cookie(
+        &state,
+        session.token,
+        session.expires_at,
+    ));
     let user = load_user_view(&state.db, user_id).await.map_err(internal)?;
     Ok((
         jar,
@@ -433,7 +440,11 @@ async fn register(
         .await
         .map_err(internal)?;
 
-    let jar = jar.add(build_session_cookie(&state, session.token, session.expires_at));
+    let jar = jar.add(build_session_cookie(
+        &state,
+        session.token,
+        session.expires_at,
+    ));
     let user = load_user_view(&state.db, user_id).await.map_err(internal)?;
     Ok((
         jar,
@@ -554,14 +565,10 @@ async fn login(
     // with POST /api/auth/totp/verify before it can hit any data
     // route. require_auth rejects pending sessions everywhere else.
     if totp_enabled {
-        let pending = sessions::create_pending_totp_session(
-            &state.db,
-            user_id,
-            ua.as_deref(),
-            ip.as_deref(),
-        )
-        .await
-        .map_err(internal)?;
+        let pending =
+            sessions::create_pending_totp_session(&state.db, user_id, ua.as_deref(), ip.as_deref())
+                .await
+                .map_err(internal)?;
 
         record_audit(
             &state.db,
@@ -575,8 +582,17 @@ async fn login(
         )
         .await;
 
-        let jar = jar.add(build_session_cookie(&state, pending.token, pending.expires_at));
-        return Ok((jar, Json(LoginResponse::NeedsTotp { requires_totp: true })));
+        let jar = jar.add(build_session_cookie(
+            &state,
+            pending.token,
+            pending.expires_at,
+        ));
+        return Ok((
+            jar,
+            Json(LoginResponse::NeedsTotp {
+                requires_totp: true,
+            }),
+        ));
     }
 
     let session = sessions::create_session(&state.db, user_id, ua.as_deref(), ip.as_deref())
@@ -591,9 +607,9 @@ async fn login(
         "UPDATE users SET previous_login_at = last_login_at, \
                           last_login_at = NOW() WHERE id = $1",
     )
-        .bind(user_id)
-        .execute(&state.db)
-        .await;
+    .bind(user_id)
+    .execute(&state.db)
+    .await;
 
     record_audit(
         &state.db,
@@ -607,7 +623,11 @@ async fn login(
     )
     .await;
 
-    let jar = jar.add(build_session_cookie(&state, session.token, session.expires_at));
+    let jar = jar.add(build_session_cookie(
+        &state,
+        session.token,
+        session.expires_at,
+    ));
     let user = load_user_view(&state.db, user_id).await.map_err(internal)?;
     Ok((jar, Json(LoginResponse::Done(user))))
 }
@@ -633,7 +653,9 @@ async fn me(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Result<Json<UserView>, ApiError> {
-    let user = load_user_view(&state.db, ctx.user_id).await.map_err(internal)?;
+    let user = load_user_view(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
     Ok(Json(user))
 }
 
@@ -699,7 +721,17 @@ async fn recover(
     enforce_password_policy(&state, &body.new_password).await?;
 
     if rate_limited(&state.db, &username, ip.as_deref()).await {
-        record_audit(&state.db, "recover", Some(&username), None, ip.as_deref(), ua.as_deref(), false, Some("rate_limited")).await;
+        record_audit(
+            &state.db,
+            "recover",
+            Some(&username),
+            None,
+            ip.as_deref(),
+            ua.as_deref(),
+            false,
+            Some("rate_limited"),
+        )
+        .await;
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
             "Too many recent attempts. Try again shortly.",
@@ -730,7 +762,17 @@ async fn recover(
             password::random_login_jitter().await;
             // Log under the `login` event so the rate limiter sees it
             // and exponential lockout applies to recovery attempts too.
-            record_audit(&state.db, "login", Some(&username), None, ip.as_deref(), ua.as_deref(), false, Some("recover_invalid")).await;
+            record_audit(
+                &state.db,
+                "login",
+                Some(&username),
+                None,
+                ip.as_deref(),
+                ua.as_deref(),
+                false,
+                Some("recover_invalid"),
+            )
+            .await;
             return Err(ApiError::new(
                 StatusCode::UNAUTHORIZED,
                 "Invalid username or recovery code.",
@@ -745,7 +787,17 @@ async fn recover(
         .await
         .map_err(internal)?;
     if !burned {
-        record_audit(&state.db, "login", Some(&username), Some(target_user), ip.as_deref(), ua.as_deref(), false, Some("recover_race")).await;
+        record_audit(
+            &state.db,
+            "login",
+            Some(&username),
+            Some(target_user),
+            ip.as_deref(),
+            ua.as_deref(),
+            false,
+            Some("recover_race"),
+        )
+        .await;
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "Recovery code is no longer valid.",
@@ -764,7 +816,17 @@ async fn recover(
     // out — they may be the attacker.
     let _ = sessions::revoke_all_for_user(&state.db, target_user).await;
 
-    record_audit(&state.db, "recover", Some(&username), Some(target_user), ip.as_deref(), ua.as_deref(), true, None).await;
+    record_audit(
+        &state.db,
+        "recover",
+        Some(&username),
+        Some(target_user),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        None,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -808,14 +870,12 @@ async fn totp_enroll(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Result<Json<TotpEnrollment>, ApiError> {
-    let enc_key = state
-        .config
-        .encryption_key
-        .as_ref()
-        .ok_or_else(|| ApiError::new(
+    let enc_key = state.config.encryption_key.as_ref().ok_or_else(|| {
+        ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "ENCRYPTION_KEY is not configured; TOTP cannot be enabled.",
-        ))?;
+        )
+    })?;
 
     let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
         .bind(ctx.user_id)
@@ -839,14 +899,12 @@ async fn totp_confirm(
     headers: HeaderMap,
     Json(body): Json<TotpVerifyRequest>,
 ) -> Result<StatusCode, ApiError> {
-    let enc_key = state
-        .config
-        .encryption_key
-        .as_ref()
-        .ok_or_else(|| ApiError::new(
+    let enc_key = state.config.encryption_key.as_ref().ok_or_else(|| {
+        ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "ENCRYPTION_KEY is not configured.",
-        ))?;
+        )
+    })?;
 
     // Use the no-advance variant: a valid confirm code MUST also work
     // on the immediately-following login if the user enrols + logs in
@@ -862,7 +920,9 @@ async fn totp_confirm(
             "Invalid TOTP code. Check your authenticator app and try again.",
         ));
     }
-    let flipped = totp::mark_enabled(&state.db, ctx.user_id).await.map_err(internal)?;
+    let flipped = totp::mark_enabled(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
     if !flipped {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -872,7 +932,17 @@ async fn totp_confirm(
 
     let ua = user_agent(&headers);
     let ip = client_ip(&headers);
-    record_audit(&state.db, "totp_enabled", None, Some(ctx.user_id), ip.as_deref(), ua.as_deref(), true, None).await;
+    record_audit(
+        &state.db,
+        "totp_enabled",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        None,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -894,11 +964,23 @@ async fn totp_disable(
         return Err(invalid_credentials());
     }
 
-    totp::disable(&state.db, ctx.user_id).await.map_err(internal)?;
+    totp::disable(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
 
     let ua = user_agent(&headers);
     let ip = client_ip(&headers);
-    record_audit(&state.db, "totp_disabled", None, Some(ctx.user_id), ip.as_deref(), ua.as_deref(), true, None).await;
+    record_audit(
+        &state.db,
+        "totp_disabled",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        None,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -930,7 +1012,10 @@ async fn totp_verify(
     }
 
     let enc_key = state.config.encryption_key.as_ref().ok_or_else(|| {
-        ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "ENCRYPTION_KEY is not configured.")
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ENCRYPTION_KEY is not configured.",
+        )
     })?;
 
     let ok = totp::verify(&state.db, enc_key, validated.user_id, &body.code)
@@ -945,7 +1030,17 @@ async fn totp_verify(
         // jitter before responding so a brute-forcer can't probe
         // TOTP codes (1 in 1M per attempt) at HTTP throughput.
         password::random_login_jitter().await;
-        record_audit(&state.db, "totp_verify", None, Some(validated.user_id), ip.as_deref(), ua.as_deref(), false, Some("bad_code")).await;
+        record_audit(
+            &state.db,
+            "totp_verify",
+            None,
+            Some(validated.user_id),
+            ip.as_deref(),
+            ua.as_deref(),
+            false,
+            Some("bad_code"),
+        )
+        .await;
 
         // Hard cap: jitter alone let an attacker probe thousands of codes over
         // a single pending session. Once the user has failed too many times in
@@ -987,14 +1082,26 @@ async fn totp_verify(
         "UPDATE users SET previous_login_at = last_login_at, \
                           last_login_at = NOW() WHERE id = $1",
     )
-        .bind(validated.user_id)
-        .execute(&state.db)
-        .await;
+    .bind(validated.user_id)
+    .execute(&state.db)
+    .await;
 
-    record_audit(&state.db, "login", None, Some(validated.user_id), ip.as_deref(), ua.as_deref(), true, Some("totp_ok")).await;
+    record_audit(
+        &state.db,
+        "login",
+        None,
+        Some(validated.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        Some("totp_ok"),
+    )
+    .await;
 
     let jar = jar.add(build_session_cookie(&state, full.token, full.expires_at));
-    let user = load_user_view(&state.db, validated.user_id).await.map_err(internal)?;
+    let user = load_user_view(&state.db, validated.user_id)
+        .await
+        .map_err(internal)?;
     Ok((jar, Json(user)))
 }
 
@@ -1029,8 +1136,7 @@ async fn list_sessions(
         .into_iter()
         .map(|r| {
             let is_current = r.id == ctx.session_id;
-            let new_since_last_visit = !is_current
-                && anchor.is_some_and(|a| r.created_at > a);
+            let new_since_last_visit = !is_current && anchor.is_some_and(|a| r.created_at > a);
             ActiveSessionView {
                 id: r.id,
                 created_at: r.created_at,
@@ -1150,10 +1256,7 @@ impl AuthContext {
 /// Public webhook routes mount BEFORE this layer (in the public
 /// router) so Plaid's webhooks aren't broken. The protected router
 /// is the only thing this middleware wraps.
-pub async fn require_csrf_header(
-    req: axum::extract::Request,
-    next: Next,
-) -> Response {
+pub async fn require_csrf_header(req: axum::extract::Request, next: Next) -> Response {
     use axum::http::Method;
     let m = req.method().clone();
     if matches!(m, Method::GET | Method::HEAD | Method::OPTIONS) {
@@ -1234,8 +1337,7 @@ pub async fn require_auth(
         Ok(None) => unauthorized(),
         Err(e) => {
             tracing::error!("session lookup failed: {}", e);
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Session check failed")
-                .into_response()
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Session check failed").into_response()
         }
     }
 }

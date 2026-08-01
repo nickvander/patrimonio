@@ -53,7 +53,7 @@ fn signed(token: &str) -> Option<Decimal> {
     let neg = token.contains('(');
     let cleaned: String = token
         .chars()
-        .filter(|c| c.is_ascii_digit() || *c == '.' )
+        .filter(|c| c.is_ascii_digit() || *c == '.')
         .collect();
     let v = Decimal::from_str(&cleaned).ok()?;
     Some(if neg { -v } else { v })
@@ -110,7 +110,9 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             continue;
         };
         let description = c[4].trim().to_string();
-        let Some(amount) = signed(&c[5]) else { continue };
+        let Some(amount) = signed(&c[5]) else {
+            continue;
+        };
         if description.is_empty() {
             continue;
         }
@@ -244,7 +246,9 @@ mod tests {
         // Wrapped continuation line is appended to the admin-fee description.
         assert_eq!(txs[3].amount, Decimal::from_str("-2.88").unwrap());
         assert!(
-            txs[3].description.contains("HealthEquity investments of $34,669.61"),
+            txs[3]
+                .description
+                .contains("HealthEquity investments of $34,669.61"),
             "continuation should append: {:?}",
             txs[3].description
         );
@@ -256,7 +260,10 @@ mod tests {
         // Exactly one row carries a balance: the latest-dated (01/31).
         let with_bal: Vec<_> = txs.iter().filter(|t| t.balance_after.is_some()).collect();
         assert_eq!(with_bal.len(), 1, "only the period-end total is stamped");
-        assert_eq!(with_bal[0].date, NaiveDate::from_ymd_opt(2026, 1, 31).unwrap());
+        assert_eq!(
+            with_bal[0].date,
+            NaiveDate::from_ymd_opt(2026, 1, 31).unwrap()
+        );
         // 497.16 cash + 38,079.27 invested = 38,576.43.
         assert_eq!(
             with_bal[0].balance_after,
