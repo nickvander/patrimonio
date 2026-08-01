@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
+import 'package:patrimonio/utils/app_locale.dart';
 import 'package:patrimonio/widgets/notifications_panel.dart';
 
 void main() {
@@ -8,17 +9,22 @@ void main() {
 
   // Minimal call wrapper — only the fields under test vary per case.
   List<AppNotification> derive({
+    AppLocalizations? loc,
     Map<String, dynamic>? spendingInsights,
     List<dynamic> subscriptions = const [],
+    void Function(String categoryLabel, String recentMonth)?
+    onJumpToSpendingCategory,
+    void Function(String merchant)? onJumpToMerchant,
   }) {
     return deriveNotifications(
-      l: l,
+      l: loc ?? l,
       syncData: const [],
       netWorthHistory: const [],
       onJumpToManagement: () {},
       spendingInsights: spendingInsights,
       subscriptions: subscriptions,
-      onJumpToSpending: () {},
+      onJumpToSpendingCategory: onJumpToSpendingCategory,
+      onJumpToMerchant: onJumpToMerchant,
     );
   }
 
@@ -91,6 +97,94 @@ void main() {
       final out = derive(spendingInsights: {'lookback': 3, 'categories': cats});
       expect(out, hasLength(3));
     });
+
+    // The drill-down contract: the tap must deliver the PRETTIFIED label
+    // (the string TxFilters.categories matches against) plus the payload's
+    // recent_month — never the uppercased raw code from the row id, which
+    // would silently filter to zero rows.
+    test(
+      'tapping a spike row delivers the prettified label + recent_month',
+      () {
+        (String, String)? received;
+        final out = derive(
+          spendingInsights: {
+            'recent_month': '2026-07',
+            'lookback': 3,
+            'categories': [
+              {
+                'category_detailed': 'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY',
+                'category': 'RENT_AND_UTILITIES',
+                'recent': 330.0,
+                'previous_avg': 100.0,
+                'trailing_avg': 150.0,
+              },
+            ],
+          },
+          onJumpToSpendingCategory: (label, month) => received = (label, month),
+        );
+        expect(out.single.title, contains('Gas & electric'));
+        out.single.onTap!();
+        expect(received, ('Gas & electric', '2026-07'));
+        expect(
+          received!.$1,
+          isNot('RENT_AND_UTILITIES_GAS_AND_ELECTRICITY'),
+          reason: 'the raw code would match nothing in the category filter',
+        );
+      },
+    );
+
+    test('es-MX: the delivered label is the Spanish one the row displayed', () {
+      // prettyCategory reads the global locale notifier — pin es and
+      // restore so sibling tests keep their English labels.
+      localeNotifier.value = const Locale('es');
+      addTearDown(() => localeNotifier.value = null);
+      (String, String)? received;
+      final es = lookupAppLocalizations(const Locale('es'));
+      final out = derive(
+        loc: es,
+        spendingInsights: {
+          'recent_month': '2026-07',
+          'lookback': 3,
+          'categories': [
+            {
+              'category_detailed': 'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY',
+              'category': 'RENT_AND_UTILITIES',
+              'recent': 330.0,
+              'previous_avg': 100.0,
+              'trailing_avg': 150.0,
+            },
+          ],
+        },
+        onJumpToSpendingCategory: (label, month) => received = (label, month),
+      );
+      expect(out.single.title, contains('Gas y electricidad'));
+      out.single.onTap!();
+      expect(received, ('Gas y electricidad', '2026-07'));
+    });
+
+    test(
+      'a payload without recent_month degrades to an empty month string',
+      () {
+        (String, String)? received;
+        final out = derive(
+          spendingInsights: {
+            'lookback': 3,
+            'categories': [
+              {
+                'category_detailed': 'FOOD_AND_DRINK_GROCERIES',
+                'category': 'FOOD_AND_DRINK',
+                'recent': 400.0,
+                'previous_avg': 200.0,
+                'trailing_avg': 250.0,
+              },
+            ],
+          },
+          onJumpToSpendingCategory: (label, month) => received = (label, month),
+        );
+        out.single.onTap!();
+        expect(received, ('Groceries', ''));
+      },
+    );
   });
 
   group('subscription price-increase notifications', () {
@@ -129,6 +223,32 @@ void main() {
       expect(out.single.title, contains('Netflix'));
       expect(out.single.detail, contains('12.99'));
       expect(out.single.detail, contains('9.99'));
+    });
+
+    test('tapping a hike row delivers the merchant verbatim', () {
+      String? received;
+      final out = derive(
+        subscriptions: [
+          // Mixed-case merchant: the tap must carry it as displayed, not
+          // the lowercased form the row id uses.
+          sub(
+            merchant: 'Nu Crédito',
+            amount: 12.99,
+            date: '2026-05-10',
+            status: 'active',
+          ),
+          sub(
+            merchant: 'Nu Crédito',
+            amount: 9.99,
+            date: '2026-02-10',
+            status: 'cancelled',
+          ),
+        ],
+        onJumpToMerchant: (m) => received = m,
+      );
+      expect(out.single.id, startsWith('sub_price_up:nu crédito:'));
+      out.single.onTap!();
+      expect(received, 'Nu Crédito');
     });
 
     test('does not flag a single-cluster subscription', () {

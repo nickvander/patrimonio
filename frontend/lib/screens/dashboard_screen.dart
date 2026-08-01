@@ -31,6 +31,7 @@ import '../utils/currency.dart';
 import '../utils/import_staleness.dart';
 import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
+import '../utils/month_window.dart';
 import '../utils/net_worth_delta.dart';
 import '../utils/percent_format.dart';
 import '../utils/setup_check_l10n.dart';
@@ -270,6 +271,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   // the picked month, then clears the override so manual filter edits
   // aren't overwritten on the next dashboard rebuild.
   ({DateTime start, DateTime end})? _txDateSeed;
+  // Pending category seed from a bell spending-spike tap — the PRETTIFIED
+  // category label the row displayed. Same one-shot contract as
+  // _txDateSeed; the two travel together so the spike drill-down lands on
+  // "that category, that month" in a single filter application.
+  String? _txCategorySeed;
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
   // Active section: an index into [_destinations]. Replaces the old
@@ -4383,7 +4389,23 @@ class _DashboardScreenState extends State<DashboardScreen>
                 accountAlerts: _accountAlerts,
                 spendingInsights: _spendingInsights,
                 subscriptions: _subscriptions ?? const [],
-                onJumpToSpending: () => _goToNav(NavId.cashFlow),
+                // Spike rows drill into the actual transactions: category
+                // filter (prettified label) + the insight's month window.
+                // A malformed/missing recent_month degrades to a
+                // category-only filter — never a bare tab switch.
+                onJumpToSpendingCategory: (label, month) {
+                  setState(() {
+                    _txCategorySeed = label;
+                    _txDateSeed = monthWindow(month);
+                  });
+                  _goToNav(NavId.transactions);
+                },
+                // Price-hike rows reuse the SubscriptionsCard merchant
+                // jump: search seeded so the charge history is adjacent.
+                onJumpToMerchant: (m) {
+                  setState(() => _transactionsSearchOverride = m);
+                  _goToNav(NavId.transactions);
+                },
                 archivedAccounts: _archivedAccounts ?? const [],
                 onJumpToClosedAccounts: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const HiddenItemsScreen()),
@@ -5655,6 +5677,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         highlightedTxId: _highlightedTxId,
         dateSeed: _txDateSeed,
         onDateSeedConsumed: () => setState(() => _txDateSeed = null),
+        categorySeed: _txCategorySeed,
+        onCategorySeedConsumed: () => setState(() => _txCategorySeed = null),
         fxTransfers: _fxTransfers ?? const [],
         onConfirmFxTransfer: (id) async {
           try {
@@ -5852,14 +5876,9 @@ class _DashboardScreenState extends State<DashboardScreen>
               // Clicking a month group jumps to Transactions filtered
               // to that month — the cash-flow chart becomes a drill-in.
               onMonthSelected: (monthIso) {
-                final parts = monthIso.split('-');
-                if (parts.length < 2) return;
-                final year = int.tryParse(parts[0]);
-                final month = int.tryParse(parts[1]);
-                if (year == null || month == null) return;
-                final start = DateTime(year, month, 1);
-                final end = DateTime(year, month + 1, 0); // last of month
-                setState(() => _txDateSeed = (start: start, end: end));
+                final window = monthWindow(monthIso);
+                if (window == null) return;
+                setState(() => _txDateSeed = window);
                 _goToNav(NavId.transactions);
               },
             ),

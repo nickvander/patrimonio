@@ -76,6 +76,10 @@ TransactionsTab _tab(
   NumberFormat? currencyFormat,
   String targetCurrency = 'USD',
   double usdMxnRate = 0,
+  ({DateTime start, DateTime end})? dateSeed,
+  VoidCallback? onDateSeedConsumed,
+  String? categorySeed,
+  VoidCallback? onCategorySeedConsumed,
 }) {
   return TransactionsTab(
     transactions: txs,
@@ -87,6 +91,10 @@ TransactionsTab _tab(
     hasMore: hasMore,
     singleAccountContext: singleAccountContext,
     runningBalanceAnchor: runningBalanceAnchor,
+    dateSeed: dateSeed,
+    onDateSeedConsumed: onDateSeedConsumed,
+    categorySeed: categorySeed,
+    onCategorySeedConsumed: onCategorySeedConsumed,
     onUpdate: updates == null
         ? null
         : (
@@ -728,4 +736,185 @@ void main() {
       );
     },
   );
+
+  group('Bell drill-down — one-shot categorySeed (+ dateSeed)', () {
+    // A spike drill-down fixture: two rows in the seeded category (one
+    // inside the seeded month, one the month before) and one out-of-
+    // category row inside the month. Dates are fixed (not now-relative)
+    // because the seed pins an absolute window.
+    Map<String, dynamic> tx(
+      String id,
+      String date,
+      String categoryDetailed,
+      String categoryPrimary,
+    ) => {
+      'id': id,
+      'date': date,
+      'amount': -25.0,
+      'currency': 'USD',
+      'description': 'TX $id',
+      'user_description': 'Row $id',
+      'category_detailed': categoryDetailed,
+      'category': categoryPrimary,
+      'account_name': 'Checking',
+    };
+
+    List<Map<String, dynamic>> fixture() => [
+      tx(
+        'gas-jul',
+        '2026-07-15',
+        'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY',
+        'RENT_AND_UTILITIES',
+      ),
+      tx(
+        'food-jul',
+        '2026-07-10',
+        'FOOD_AND_DRINK_GROCERIES',
+        'FOOD_AND_DRINK',
+      ),
+      tx(
+        'gas-jun',
+        '2026-06-15',
+        'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY',
+        'RENT_AND_UTILITIES',
+      ),
+    ];
+
+    ({DateTime start, DateTime end}) july() =>
+        (start: DateTime(2026, 7, 1), end: DateTime(2026, 7, 31));
+
+    testWidgets(
+      'both seeds filter the rows, render dismissible chips, and each '
+      'consumed callback fires exactly once',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        var dateConsumed = 0, catConsumed = 0;
+        await tester.pumpWidget(
+          _unboundedHost(
+            _tab(
+              fixture(),
+              categorySeed: 'Gas & electric',
+              dateSeed: july(),
+              onCategorySeedConsumed: () => catConsumed++,
+              onDateSeedConsumed: () => dateConsumed++,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Only the in-category, in-month row survives the seeded filter.
+        expect(find.text('Row gas-jul'), findsOneWidget);
+        expect(find.text('Row gas-jun'), findsNothing);
+        expect(find.text('Row food-jul'), findsNothing);
+
+        // Both filters surface as dismissible chips (the undo affordance).
+        expect(
+          find.widgetWithText(InputChip, 'Gas & electric'),
+          findsOneWidget,
+        );
+        expect(find.widgetWithText(InputChip, 'Jul 1–Jul 31'), findsOneWidget);
+
+        // One-shot contract: applied once, reported once.
+        expect((dateConsumed, catConsumed), (1, 1));
+      },
+    );
+
+    testWidgets('dismissing the chips restores the hidden rows', (
+      tester,
+    ) async {
+      _setViewSize(tester, const Size(1200, 900));
+      await tester.pumpWidget(
+        _unboundedHost(
+          _tab(fixture(), categorySeed: 'Gas & electric', dateSeed: july()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Row food-jul'), findsNothing);
+
+      // Drop the category chip: the other July row reappears; the June
+      // row stays hidden behind the still-active date window.
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(InputChip, 'Gas & electric'),
+          matching: find.byIcon(Icons.clear),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Row food-jul'), findsOneWidget);
+      expect(find.text('Row gas-jun'), findsNothing);
+
+      // Drop the date chip too: everything is back.
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(InputChip, 'Jul 1–Jul 31'),
+          matching: find.byIcon(Icons.clear),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Row gas-jun'), findsOneWidget);
+      expect(find.text('Row gas-jul'), findsOneWidget);
+    });
+
+    testWidgets(
+      'one-shot regression: a rebuild with the SAME seed values does not '
+      're-apply after the user cleared the filters',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        var dateConsumed = 0, catConsumed = 0;
+        Widget host() => _unboundedHost(
+          _tab(
+            fixture(),
+            categorySeed: 'Gas & electric',
+            dateSeed: july(),
+            onCategorySeedConsumed: () => catConsumed++,
+            onDateSeedConsumed: () => dateConsumed++,
+          ),
+        );
+        await tester.pumpWidget(host());
+        await tester.pumpAndSettle();
+        expect(find.text('Row gas-jun'), findsNothing);
+
+        // The user clears everything…
+        await tester.tap(find.text('Clear all'));
+        await tester.pumpAndSettle();
+        expect(find.text('Row gas-jun'), findsOneWidget);
+
+        // …then a dashboard rebuild hands the tab the SAME seed values
+        // (records/strings compare equal). They must NOT re-apply.
+        await tester.pumpWidget(host());
+        await tester.pumpAndSettle();
+        expect(find.text('Row gas-jun'), findsOneWidget);
+        expect(find.text('Row food-jul'), findsOneWidget);
+        expect(find.byType(InputChip), findsNothing);
+        expect((dateConsumed, catConsumed), (1, 1));
+      },
+    );
+
+    testWidgets(
+      'a date-only seed (chart month tap) leaves category state untouched',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        var dateConsumed = 0, catConsumed = 0;
+        await tester.pumpWidget(
+          _unboundedHost(
+            _tab(
+              fixture(),
+              dateSeed: july(),
+              onCategorySeedConsumed: () => catConsumed++,
+              onDateSeedConsumed: () => dateConsumed++,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Date window applied; no category filter materialized.
+        expect(find.text('Row gas-jul'), findsOneWidget);
+        expect(find.text('Row food-jul'), findsOneWidget);
+        expect(find.text('Row gas-jun'), findsNothing);
+        expect(find.widgetWithText(InputChip, 'Jul 1–Jul 31'), findsOneWidget);
+        expect(find.widgetWithText(InputChip, 'Gas & electric'), findsNothing);
+        expect((dateConsumed, catConsumed), (1, 0));
+      },
+    );
+  });
 }

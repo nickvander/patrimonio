@@ -148,9 +148,18 @@ List<AppNotification> deriveNotifications({
   /// supersedes a same-merchant lower-priced one).
   List<dynamic> subscriptions = const [],
 
-  /// Jump to the Cash-flow tab when a spending-insight / subscription row is
-  /// tapped.
-  VoidCallback? onJumpToSpending,
+  /// Drill into a spending-spike row: the Transactions tab is seeded with
+  /// the category's PRETTIFIED label (the same string the row displayed —
+  /// TxFilters.categories matches prettified labels, so passing the raw
+  /// uppercased code would silently show zero rows) plus the insight's
+  /// `recent_month` ('YYYY-MM'; may be empty when the payload lacked it).
+  void Function(String categoryLabel, String recentMonth)?
+  onJumpToSpendingCategory,
+
+  /// Drill into a subscription price-hike row: the Transactions tab's
+  /// search is seeded with the merchant, verbatim (same jump the
+  /// SubscriptionsCard's merchant tap performs).
+  void Function(String merchant)? onJumpToMerchant,
 
   /// Accounts the sync auto-archived because Plaid stopped returning them
   /// (the account was closed at the bank). From GET /api/accounts/archived.
@@ -523,7 +532,11 @@ List<AppNotification> deriveNotifications({
             lookback,
             money(s.avg * conversionFactor, targetCurrency),
           ),
-          onTap: onJumpToSpending,
+          // Pass the prettified label (never s.code — see the param doc)
+          // and the month, so the tap lands on the actual transactions.
+          onTap: onJumpToSpendingCategory == null
+              ? null
+              : () => onJumpToSpendingCategory(s.label, recentMonth),
         ),
       );
     }
@@ -603,7 +616,11 @@ List<AppNotification> deriveNotifications({
             money(h.now, h.cur),
             money(h.was, h.cur),
           ),
-          onTap: onJumpToSpending,
+          // Merchant verbatim (not the lowercased id form) — it seeds the
+          // search box, where casing is what the user recognizes.
+          onTap: onJumpToMerchant == null
+              ? null
+              : () => onJumpToMerchant(h.merchant),
         ),
       );
     }

@@ -241,6 +241,17 @@ class TransactionsTab extends StatefulWidget {
   /// can clear its own copy and stop re-applying it on rebuilds.
   final VoidCallback? onDateSeedConsumed;
 
+  /// Category drill-down seed (a bell spending-spike tap). A PRETTIFIED
+  /// category label — the same string `TxFilters.categories` matches
+  /// against — dropped into the category filter with the same one-shot
+  /// semantics as [dateSeed]: applied once, then user edits stick.
+  final String? categorySeed;
+
+  /// Fires after the widget has consumed [categorySeed]. Deliberately
+  /// separate from [onDateSeedConsumed] — a date-only caller (chart
+  /// month tap) must not half-clear category state, and vice versa.
+  final VoidCallback? onCategorySeedConsumed;
+
   /// Detected cross-currency cash transfers — indexed by source/dest
   /// transaction id in the detail modal to show "Linked to <leg>".
   /// Defaults to empty so older call sites compile without changes.
@@ -334,6 +345,8 @@ class TransactionsTab extends StatefulWidget {
     this.highlightedTxId,
     this.dateSeed,
     this.onDateSeedConsumed,
+    this.categorySeed,
+    this.onCategorySeedConsumed,
     this.fxTransfers = const [],
     this.onDetectFxTransfers,
     this.onConfirmFxTransfer,
@@ -472,7 +485,10 @@ class TransactionsTabState extends State<TransactionsTab> {
       _searchController.text = seed;
       _appliedOverride = seed;
     }
-    _maybeApplyDateSeed(widget.dateSeed);
+    _maybeApplySeeds(
+      dateSeed: widget.dateSeed,
+      categorySeed: widget.categorySeed,
+    );
   }
 
   @override
@@ -486,28 +502,50 @@ class TransactionsTabState extends State<TransactionsTab> {
         _appliedOverride = seed;
       });
     }
-    if (widget.dateSeed != null && widget.dateSeed != oldWidget.dateSeed) {
-      _maybeApplyDateSeed(widget.dateSeed);
+    // One-shot: each seed re-applies only when it CHANGED from the
+    // previous widget — a dashboard rebuild carrying the same value
+    // (or a value the user has since edited away) is ignored.
+    final dateChanged =
+        widget.dateSeed != null && widget.dateSeed != oldWidget.dateSeed;
+    final categoryChanged =
+        widget.categorySeed != null &&
+        widget.categorySeed != oldWidget.categorySeed;
+    if (dateChanged || categoryChanged) {
+      _maybeApplySeeds(
+        dateSeed: dateChanged ? widget.dateSeed : null,
+        categorySeed: categoryChanged ? widget.categorySeed : null,
+      );
     }
   }
 
-  /// Drop a chart-tap date window into the active filters. Pushes the
-  /// `onDateSeedConsumed` callback so the dashboard clears its copy
-  /// and manual filter edits aren't overwritten on the next rebuild.
-  void _maybeApplyDateSeed(({DateTime start, DateTime end})? seed) {
-    if (seed == null) return;
+  /// Drop drill-down seeds (a chart-tap date window and/or a bell-tap
+  /// category label) into the active filters, both in ONE setState so a
+  /// dependent fetch can never observe half-applied filters. Pushes the
+  /// per-seed consumed callbacks so the dashboard clears its copies and
+  /// manual filter edits aren't overwritten on the next rebuild.
+  void _maybeApplySeeds({
+    ({DateTime start, DateTime end})? dateSeed,
+    String? categorySeed,
+  }) {
+    if (dateSeed == null && categorySeed == null) return;
     // Schedule for after the current build so initState callers don't
     // setState during the build pass.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
-        _filters = _filters.copyWith(
-          dateRange: TxDateRange.custom,
-          customStart: seed.start,
-          customEnd: seed.end,
-        );
+        if (dateSeed != null) {
+          _filters = _filters.copyWith(
+            dateRange: TxDateRange.custom,
+            customStart: dateSeed.start,
+            customEnd: dateSeed.end,
+          );
+        }
+        if (categorySeed != null) {
+          _filters = _filters.copyWith(categories: {categorySeed});
+        }
       });
-      widget.onDateSeedConsumed?.call();
+      if (dateSeed != null) widget.onDateSeedConsumed?.call();
+      if (categorySeed != null) widget.onCategorySeedConsumed?.call();
     });
   }
 

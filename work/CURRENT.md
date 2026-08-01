@@ -1,7 +1,45 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-30 (notifications retire themselves)
-> **Branch:** `main`.
+> **Last updated:** 2026-08-01 (bell spike/hike rows drill down)
+> **Branch:** `main` (uncommitted working tree — pending review).
+
+## 2026-08-01 — Spending-spike and price-hike bell rows now drill down
+
+Reported from the phone: tapping *"Gas & electric up 230%"* in the bell just
+switched to the Cash flow tab, top of page, period "This month" — nothing
+about the category the alert was about. `onJumpToSpending` was a bare
+`_goToNav(NavId.cashFlow)`; the context the panel had already computed
+(category label, insight month, merchant) was thrown away at the tap.
+
+Spec came out of a subagent evaluation panel (interaction UX + product value
++ eng feasibility → PM synthesis); implementation + adversarial verification
+by dev subagents. Frontend-only, no new l10n strings:
+
+* **Spike rows** now land on **Transactions filtered to that category for the
+  insight's `recent_month`** — the purchases behind the alert, with the
+  existing dismissible filter chips as context/undo. The callback passes the
+  *prettified* label the row displayed (never the uppercased id code — the
+  filter matches prettified labels, so the code would silently show zero
+  rows); pinned by en + es-MX widget tests.
+* **Subscription price-hike rows** land on Transactions with the merchant
+  seeded into search (same jump the SubscriptionsCard merchant tap ships),
+  so the was→now charge history reads as adjacent rows.
+* **`TransactionsTab.categorySeed`** — new one-shot seed mirroring the
+  `dateSeed` contract exactly (separate consumed callback; both seeds applied
+  in ONE post-frame setState so a fetch can't observe half-applied filters;
+  `didUpdateWidget` re-applies only changed seeds).
+* **`utils/month_window.dart`** — shared `'YYYY-MM'` → month-window helper
+  (null on malformed/out-of-range/full-date input; Dec→Jan rollover safe);
+  the cash-flow trends chart month tap refactored onto it.
+* Tests: notifications_panel (25), transactions_tab (30, new "Bell
+  drill-down" group incl. one-shot regressions), month_window (4). Full
+  suite 792 green; analyzer/formatter clean.
+
+Deferred P1s (evaluators liked them, PM cut for scope): comparison banner
+over the seeded list ("Jul: X · 3-mo avg: Y · +230%", needs l10n),
+account-scoping the largest-move row, making the net-worth row tappable,
+an insight-detail sheet with a "set budget" CTA, scroll-to-institution on
+sync rows.
 
 ## 2026-07-30 — Condition-backed notifications now retire themselves
 
