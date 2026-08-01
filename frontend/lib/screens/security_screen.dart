@@ -391,12 +391,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
     final parts = <String>[];
     if (browser.isNotEmpty) parts.add(browser);
     if (os.isNotEmpty) parts.add(l.secOnOs(os));
-    if (parts.isEmpty)
+    if (parts.isEmpty) {
       parts.add(
         ua.isEmpty
             ? l.secUnknownDevice
             : ua.substring(0, ua.length > 40 ? 40 : ua.length),
       );
+    }
     if (s.ipAddress != null && s.ipAddress!.isNotEmpty) {
       parts.add('· ${s.ipAddress}');
     }
@@ -406,11 +407,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
   String _browserName(String ua) {
     final lower = ua.toLowerCase();
     if (lower.contains('edg/')) return 'Edge';
-    if (lower.contains('chrome/') && !lower.contains('chromium/'))
+    if (lower.contains('chrome/') && !lower.contains('chromium/')) {
       return 'Chrome';
+    }
     if (lower.contains('firefox/')) return 'Firefox';
-    if (lower.contains('safari/') && !lower.contains('chrome/'))
+    if (lower.contains('safari/') && !lower.contains('chrome/')) {
       return 'Safari';
+    }
     if (lower.contains('curl/')) return 'curl';
     if (lower.contains('playwright')) return 'Playwright';
     return '';

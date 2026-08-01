@@ -71,6 +71,11 @@ jobs:
       # The stricter panic/unwrap restriction lints are documented guidance in
       # .agent/skills/rust-backend/rust-conventions.md rather than gated here
       # (the existing codebase carries too much pre-existing debt to deny them).
+      # NO `cargo fmt --check` here yet: the backend tree is NOT rustfmt-clean
+      # (79 of 97 files, ~1090 hunks as of b262467), so gating it would fail
+      # every build. It carries the same hazard the frontend just shed — see
+      # AGENTS.md "Enforcement" — and wants the same one-shot sweep before this
+      # gate can be turned on.
       - name: cargo clippy (warnings are errors)
         working-directory: backend
         run: cargo clippy --all-targets -- -D warnings
@@ -87,6 +92,15 @@ jobs:
       - name: flutter pub get
         working-directory: frontend
         run: flutter pub get
+      # Formatting gate. The Dart tree went unformatted for a long time (197 of
+      # 252 files), which made `dart format` — and any editor's format-on-save —
+      # a hazard: touching one file reflowed the whole thing and buried the real
+      # change in the diff. b262467 formatted it; this keeps it formatted.
+      # Generated l10n is included deliberately: gen-l10n already emits
+      # formatted output, so it stays clean without an exclusion.
+      - name: dart format (the tree is formatter-clean; keep it that way)
+        working-directory: frontend
+        run: dart format --output=none --set-exit-if-changed lib test
       - name: flutter analyze (errors + warnings fatal; infos are not)
         working-directory: frontend
         run: flutter analyze --no-fatal-infos

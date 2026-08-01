@@ -221,8 +221,10 @@ class CashFlowTrendsChart extends StatelessWidget {
                                             if (spot == null) return;
                                             final idx =
                                                 spot.touchedBarGroupIndex;
-                                            if (idx < 0 || idx >= trends.length)
+                                            if (idx < 0 ||
+                                                idx >= trends.length) {
                                               return;
+                                            }
                                             final month = trends[idx]['month'];
                                             if (month is String &&
                                                 month.isNotEmpty) {
@@ -310,8 +312,9 @@ class CashFlowTrendsChart extends StatelessWidget {
                                           // Skip zero (visual baseline) and any tick that
                                           // sits within 8% of maxY — those get squished
                                           // against the top of the chart frame.
-                                          if (value == 0)
+                                          if (value == 0) {
                                             return const SizedBox();
+                                          }
                                           if (maxY > 0 &&
                                               value >= maxY * 0.92) {
                                             return const SizedBox();

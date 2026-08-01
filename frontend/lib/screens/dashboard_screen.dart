@@ -428,8 +428,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Re-read thresholds from localStorage after the account panel saves one, so
   // the notifications bell reflects the change without a full reload.
   void _reloadAccountAlerts() {
-    if (mounted)
+    if (mounted) {
       setState(() => _accountAlerts = Preferences.getAccountAlerts());
+    }
   }
 
   @override

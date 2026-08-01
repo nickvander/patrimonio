@@ -1,0 +1,12 @@
+# Commits that only moved whitespace around. `git blame` should look straight
+# through them to whoever last changed the code for a real reason.
+#
+# Enable it once per clone (it is a local setting, not a repo one):
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub honours this file automatically in its blame view.
+
+# style(frontend): dart format the tree — 197 of 252 Dart files, formatter
+# output verbatim, no behaviour change.
+b262467aae54927b4cfc915ac0d0cd7a26f7dece
