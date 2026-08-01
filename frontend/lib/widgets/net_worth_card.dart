@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +8,7 @@ import '../components/date_range_selector.dart';
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../theme/typography.dart';
+import '../utils/chart_time_axis.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/net_worth_delta.dart';
@@ -731,21 +734,65 @@ class _NetWorthCardState extends State<NetWorthCard> {
     return (count / maxLabels).ceil().clamp(1, count);
   }
 
+  /// The sample indices the bottom axis will actually label, mirroring the
+  /// filtering `getTitlesWidget` applies below: fl_chart ticks at multiples of
+  /// the step, and any tick too close to the final one is dropped rather than
+  /// allowed to collide with it.
+  List<int> _bottomLabelIndices(int count, int step, double chartWidth) {
+    if (count <= 0) return const [];
+    final unitPx = chartWidth / (count - 1).clamp(1, 1 << 30);
+    final out = <int>[];
+    for (int i = 0; i < count; i += step) {
+      if (i != count - 1 && (count - 1 - i) * unitPx < 60) continue;
+      out.add(i);
+    }
+    if (out.isEmpty || out.last != count - 1) out.add(count - 1);
+    return out;
+  }
+
   Widget _renderLineChart(List<dynamic> data,
       List<MapEntry<String, Color>> institutions, double chartWidth) {
     if (data.isEmpty) return const SizedBox.shrink();
 
-    // Bottom-axis label format follows the FILTERED data's real span, not
-    // the selected range chip: 1Y/ALL over a few weeks of history used to
-    // paint four identical "Jul 2026" ticks. Short spans get day precision.
+    // Bottom-axis label format follows the FILTERED data's real span, not the
+    // selected range chip — then escalates if the ticks at THIS density would
+    // still repeat themselves (see `nonRepeatingDateFormat`).
     final firstDate = DateTime.tryParse(data.first['date']?.toString() ?? '');
     final lastDate = DateTime.tryParse(data.last['date']?.toString() ?? '');
     final spanDays = (firstDate != null && lastDate != null)
         ? lastDate.difference(firstDate).inDays.abs()
         : null;
-    final bottomLabelFormat = (spanDays != null && spanDays < 120)
-        ? DateFormat('MMM d')
-        : DateFormat('MMM y');
+
+    List<DateTime> ticksFor(double width) => [
+          for (final i in _bottomLabelIndices(
+              data.length, _bottomLabelStep(data.length, width), width))
+            if (DateTime.tryParse(data[i]['date']?.toString() ?? '')
+                case final DateTime d)
+              d,
+        ];
+    double halfWidestLabel(List<DateTime> ticks, DateFormat f) => ticks.isEmpty
+        ? 0.0
+        : ticks.map((d) => axisTickTextWidth(f.format(d))).reduce(math.max) / 2;
+
+    // The final tick sits ON the plot's right edge with its label centred
+    // there, so half of it hung past the card and was clipped ("Aug 1" read as
+    // "Aug"). Reserve half the widest label's width on the right. The left
+    // edge needs no such reserve: the y-axis column already gives the first
+    // label somewhere to overhang into.
+    //
+    // Two passes, because the reserve narrows the plot, which changes how many
+    // ticks fit, which changes the widest label. Settling it that way rather
+    // than iterating keeps it deterministic — and it can only err toward a
+    // slightly wider margin, never a clipped label: a narrower plot thins
+    // labels further, and fewer, coarser labels are never wider than the ones
+    // measured in pass one.
+    final firstPass = ticksFor(chartWidth);
+    final bottomOverhang = halfWidestLabel(
+        firstPass, nonRepeatingDateFormat(firstPass, spanDays: spanDays));
+    final plotWidth = (chartWidth - bottomOverhang).clamp(1.0, chartWidth);
+    final labelStep = _bottomLabelStep(data.length, plotWidth);
+    final bottomLabelFormat =
+        nonRepeatingDateFormat(ticksFor(plotWidth), spanDays: spanDays);
 
     // For a true "where the total comes from" stacked-area visualisation we
     // build a series of cumulative lines from the top down. Filling each
@@ -840,7 +887,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
     // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
     // LineChart's built-in handling kept it pinned on mobile web. The inline
     // LineTouchData below is unchanged; the wrapper only owns show/dismiss.
-    return TransientTooltipLineChart(
+    final chart = TransientTooltipLineChart(
       data: LineChartData(
         lineTouchData: LineTouchData(
           // Snap-to-nearest-x feel: a very large threshold makes the
@@ -1015,7 +1062,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 22,
-              interval: _bottomLabelStep(data.length, chartWidth).toDouble(),
+              interval: labelStep.toDouble(),
               getTitlesWidget: (value, meta) {
                 final int index = value.toInt();
                 // Only label real samples: fl_chart emits ticks at every
@@ -1029,7 +1076,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 // Keep the last label; drop any earlier tick that would
                 // paint within ~60px of it — a "Jul 2026" tick one sample
                 // before the end used to collide with the final label.
-                final unitPx = chartWidth / (data.length - 1).clamp(1, 1 << 30);
+                final unitPx = plotWidth / (data.length - 1).clamp(1, 1 << 30);
                 final isLast = index == data.length - 1;
                 if (!isLast && (data.length - 1 - index) * unitPx < 60) {
                   return const SizedBox.shrink();
@@ -1134,6 +1181,15 @@ class _NetWorthCardState extends State<NetWorthCard> {
           ),
         ],
       ),
+    );
+
+    // The right inset is what stops the final x-label being clipped by the
+    // card edge (see `bottomOverhang`): fl_chart has no plot-padding knob, so
+    // the whole chart is narrowed instead, which moves the last tick — and its
+    // centred label — back inside.
+    return Padding(
+      padding: EdgeInsets.only(right: bottomOverhang),
+      child: chart,
     );
   }
 }

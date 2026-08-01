@@ -146,6 +146,15 @@ List<num> _axisWidthCandidates(double minValue, double maxValue) {
   return candidates;
 }
 
+/// Laid-out width of one chart tick label, in the axis label style.
+///
+/// Public sibling of the money-axis measurement above, for axes whose ticks
+/// aren't money — the net-worth chart measures its widest DATE label to know
+/// how far the final, centre-anchored tick overhangs the plot. Lives here so
+/// the "name Inter explicitly" caveat below has exactly one home.
+double axisTickTextWidth(String text, {double fontSize = 10}) =>
+    _tickTextWidth(text, fontSize);
+
 /// Laid-out width of one tick label in the axis label style. Inter is named
 /// explicitly because chart ticks inherit the UI family through
 /// `DefaultTextStyle`, which a bare TextPainter doesn't see.
