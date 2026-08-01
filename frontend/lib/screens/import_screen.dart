@@ -47,6 +47,7 @@ class _ImportScreenState extends State<ImportScreen> {
   Map<String, List<int>> _fileGroups = {};
   List<dynamic>? _accounts;
   String? _selectedAccountId;
+
   /// Per-account statement coverage ("how far my imported statements reach"),
   /// fetched best-effort in [initState] and rendered as the "Statement
   /// coverage" card on the landing state. Null = still loading / never
@@ -75,6 +76,7 @@ class _ImportScreenState extends State<ImportScreen> {
   DateTime? _minDate;
   DateTime? _maxDate;
   String? _message;
+
   /// Whether `_message` represents a failure. Tracked explicitly rather
   /// than sniffing the message text for "failed" — the copy is now
   /// localized, so substring matching on English words is unreliable.
@@ -96,6 +98,7 @@ class _ImportScreenState extends State<ImportScreen> {
   /// frozen — so we render a "Reading N files…" status while the
   /// flag is true.
   bool _isReadingFiles = false;
+
   /// File count the drop handler told us about (only set during a
   /// drop — for picker-initiated reads we don't know the count
   /// until the OS dialog returns).
@@ -172,9 +175,7 @@ class _ImportScreenState extends State<ImportScreen> {
     if (_isUploading) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context).impWaitForUpload),
-        ),
+        SnackBar(content: Text(AppLocalizations.of(context).impWaitForUpload)),
       );
       return;
     }
@@ -359,8 +360,9 @@ class _ImportScreenState extends State<ImportScreen> {
     // The only unrecoverable case: a single file over the hard cap (it
     // can't be batched). Individual statements are ~3-5 MB, so this is
     // rare — but give a precise message instead of a silent 413.
-    final tooBig =
-        _selectedFiles.where((f) => f.size > _maxUploadBytes).toList();
+    final tooBig = _selectedFiles
+        .where((f) => f.size > _maxUploadBytes)
+        .toList();
     if (tooBig.isNotEmpty) {
       final f = tooBig.first;
       final mb = (f.size / (1024 * 1024)).toStringAsFixed(1);
@@ -387,14 +389,15 @@ class _ImportScreenState extends State<ImportScreen> {
             ? null
             : _passwordController.text.trim(),
         maxBatchBytes: _perBatchBytes,
-        onProgress: ({
-          required List<ImportFileStatus> files,
-          required int done,
-          required int total,
-        }) {
-          if (!mounted) return;
-          setState(() => _fileStatuses = files);
-        },
+        onProgress:
+            ({
+              required List<ImportFileStatus> files,
+              required int done,
+              required int total,
+            }) {
+              if (!mounted) return;
+              setState(() => _fileStatuses = files);
+            },
       );
 
       setState(() {
@@ -423,8 +426,9 @@ class _ImportScreenState extends State<ImportScreen> {
       if (response['status'] == 'success' && _previewTransactions != null) {
         final autoDeselected =
             _previewTransactions!.length - _selectedIndices.length;
-        final msg =
-            l.impFoundTransactions(response['transactions_count'] as int);
+        final msg = l.impFoundTransactions(
+          response['transactions_count'] as int,
+        );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -458,10 +462,9 @@ class _ImportScreenState extends State<ImportScreen> {
   Future<void> _openCreateAccount({String? secondaryLabel}) async {
     final cur = (_previewTransactions?.isNotEmpty ?? false)
         ? (_previewTransactions!.first['currency']?.toString().toUpperCase() ??
-            'MXN')
+              'MXN')
         : 'MXN';
-    final existingIds =
-        (_accounts ?? const []).map((a) => a['id']).toSet();
+    final existingIds = (_accounts ?? const []).map((a) => a['id']).toSet();
 
     // Suggest a starting balance from this section's movements. Statements
     // like Nu don't print a per-row balance, but the net of a section's rows
@@ -500,7 +503,8 @@ class _ImportScreenState extends State<ImportScreen> {
         suggestedName: infoName ?? secondaryLabel,
         // Cetes imports default to "Bonds"; cajitas (secondary) default to
         // "Savings" since they're savings vaults.
-        suggestedType: (info?['account_type'] as String?) ??
+        suggestedType:
+            (info?['account_type'] as String?) ??
             (secondaryLabel != null ? 'Savings' : null),
         suggestedClabe: info?['clabe'] as String?,
         suggestedHolder: info?['holder_name'] as String?,
@@ -515,14 +519,17 @@ class _ImportScreenState extends State<ImportScreen> {
   /// that wasn't there before (robust against duplicate names). Fire-and-
   /// forget so it fits AddAccountDialog's VoidCallback. [secondaryLabel]
   /// assigns the new account to that bundled section's slot (null = primary).
-  void _selectNewlyCreatedAccount(Set<dynamic> existingIds, String? secondaryLabel) {
+  void _selectNewlyCreatedAccount(
+    Set<dynamic> existingIds,
+    String? secondaryLabel,
+  ) {
     () async {
       await _fetchAccounts();
       if (!mounted) return;
       final created = (_accounts ?? const []).cast<dynamic>().firstWhere(
-            (a) => !existingIds.contains(a['id']),
-            orElse: () => null,
-          );
+        (a) => !existingIds.contains(a['id']),
+        orElse: () => null,
+      );
       if (created != null) {
         final id = created['id']?.toString();
         setState(() {
@@ -546,7 +553,8 @@ class _ImportScreenState extends State<ImportScreen> {
     if (_previewTransactions == null) return 0;
     var n = 0;
     for (final i in _selectedIndices) {
-      if ((_previewTransactions![i]['account_label'] ?? '').toString() == label) {
+      if ((_previewTransactions![i]['account_label'] ?? '').toString() ==
+          label) {
         n++;
       }
     }
@@ -666,8 +674,9 @@ class _ImportScreenState extends State<ImportScreen> {
   /// transaction count. A bar scales to any batch size (118 files read
   /// cleanly), unlike a 3-digit count crammed inside a spinner ring.
   Widget _buildUploadHeader(AppLocalizations l) {
-    final total =
-        _fileStatuses.isEmpty ? _selectedFiles.length : _fileStatuses.length;
+    final total = _fileStatuses.isEmpty
+        ? _selectedFiles.length
+        : _fileStatuses.length;
     final done = _fileStatuses.where((s) => s.isDone).length;
     final txns = _fileStatuses
         .where((s) => s.status == 'ok')
@@ -725,15 +734,21 @@ class _ImportScreenState extends State<ImportScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.document_scanner_outlined,
-              size: 14, color: context.textFaint),
+          Icon(
+            Icons.document_scanner_outlined,
+            size: 14,
+            color: context.textFaint,
+          ),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
               l.impOcrHint,
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 11.5, color: context.textSubtle, height: 1.3),
+                fontSize: 11.5,
+                color: context.textSubtle,
+                height: 1.3,
+              ),
             ),
           ),
         ],
@@ -758,8 +773,11 @@ class _ImportScreenState extends State<ImportScreen> {
       ),
       child: Text(
         text,
-        style:
-            TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: color),
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
@@ -773,7 +791,10 @@ class _ImportScreenState extends State<ImportScreen> {
     final info = _accountInfo;
     final accounts = _accounts;
     if (info == null || accounts == null || accounts.isEmpty) return;
-    final clabe = (info['clabe'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+    final clabe = (info['clabe'] ?? '').toString().replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
     final inst = (info['institution'] ?? '').toString().toLowerCase();
 
     if (clabe.isNotEmpty) {
@@ -792,8 +813,10 @@ class _ImportScreenState extends State<ImportScreen> {
       // and grabbed by a different account that merely shares that word (e.g. a
       // Plaid "Fidelity" brokerage). Exact institution_name beats the key below.
       for (final a in accounts) {
-        final ainst =
-            (a['institution_name'] ?? '').toString().toLowerCase().trim();
+        final ainst = (a['institution_name'] ?? '')
+            .toString()
+            .toLowerCase()
+            .trim();
         if (ainst.isNotEmpty && ainst == inst) {
           _selectedAccountId = a['id']?.toString();
           _accountCue = _AccountCue.matched;
@@ -808,8 +831,8 @@ class _ImportScreenState extends State<ImportScreen> {
           ? RegExp('\\b${RegExp.escape(key)}\\b', caseSensitive: false)
           : null;
       for (final a in accounts) {
-        final hay =
-            '${a['institution_name'] ?? ''} ${a['name'] ?? ''}'.toLowerCase();
+        final hay = '${a['institution_name'] ?? ''} ${a['name'] ?? ''}'
+            .toLowerCase();
         if (keyRe != null && keyRe.hasMatch(hay)) {
           _selectedAccountId = a['id']?.toString();
           _accountCue = _AccountCue.matched;
@@ -829,9 +852,9 @@ class _ImportScreenState extends State<ImportScreen> {
   /// Name of the currently-selected account, for the "matched" cue.
   String _selectedAccountName() {
     final a = (_accounts ?? const []).cast<dynamic>().firstWhere(
-          (a) => a['id']?.toString() == _selectedAccountId,
-          orElse: () => null,
-        );
+      (a) => a['id']?.toString() == _selectedAccountId,
+      orElse: () => null,
+    );
     if (a == null) return '';
     final inst = (a['institution_name'] ?? '').toString();
     final name = (a['name'] ?? '').toString();
@@ -840,11 +863,11 @@ class _ImportScreenState extends State<ImportScreen> {
 
   static const _monthsEn = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
   static const _monthsEs = [
     'ene', 'feb', 'mar', 'abr', 'may', 'jun', //
-    'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+    'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
   ];
 
   /// Compact, localized date-range label ("Jan – Dec 2025", "ene – dic 2025",
@@ -903,12 +926,14 @@ class _ImportScreenState extends State<ImportScreen> {
         final name = (c['account_name'] ?? '').toString();
         final title = inst.isNotEmpty ? '$inst · $name' : name;
 
-        final covered =
-            DateTime.tryParse((c['last_covered_date'] ?? '').toString());
+        final covered = DateTime.tryParse(
+          (c['last_covered_date'] ?? '').toString(),
+        );
         final through = covered != null
             ? l.impCoverageThrough(_formatMonthYear(covered, es))
             : '';
-        final isStale = covered != null &&
+        final isStale =
+            covered != null &&
             now.difference(covered).inDays > _coverageStaleAfterDays;
 
         final file = (c['last_import_file'] ?? '').toString();
@@ -918,72 +943,86 @@ class _ImportScreenState extends State<ImportScreen> {
           if (batchCount > 0) l.impCoverageImports(batchCount),
         ];
 
-        rows.add(Padding(
-          padding: EdgeInsets.only(top: i == 0 ? 0 : 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.event_available_outlined,
+        rows.add(
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.event_available_outlined,
                   size: 18,
-                  color: isStale ? context.warning : context.textSubtle),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: context.textPrimary,
-                      ),
-                    ),
-                    if (through.isNotEmpty) ...[
-                      const SizedBox(height: 2),
+                  color: isStale ? context.warning : context.textSubtle,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        through,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: isStale ? context.warning : context.textSubtle,
-                        ),
-                      ),
-                    ],
-                    if (secondaryParts.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        secondaryParts.join('  ·  '),
+                        title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style:
-                            TextStyle(fontSize: 11, color: context.textFaint),
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                        ),
                       ),
-                    ],
-                    if (isStale) ...[
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Icon(Icons.update, size: 13, color: context.warning),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              l.impCoverageMaybeDue,
-                              style: TextStyle(
-                                  fontSize: 11.5, color: context.warning),
-                            ),
+                      if (through.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          through,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: isStale
+                                ? context.warning
+                                : context.textSubtle,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
+                      if (secondaryParts.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          secondaryParts.join('  ·  '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textFaint,
+                          ),
+                        ),
+                      ],
+                      if (isStale) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.update,
+                              size: 13,
+                              color: context.warning,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                l.impCoverageMaybeDue,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: context.warning,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ));
+        );
       }
       inner = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1006,13 +1045,18 @@ class _ImportScreenState extends State<ImportScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.fact_check_outlined,
-                      size: 18, color: context.textSubtle),
+                  Icon(
+                    Icons.fact_check_outlined,
+                    size: 18,
+                    color: context.textSubtle,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     l.impCoverageTitle,
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -1056,8 +1100,10 @@ class _ImportScreenState extends State<ImportScreen> {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration:
-                      BoxDecoration(color: accent, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 6),
               ],
@@ -1104,11 +1150,11 @@ class _ImportScreenState extends State<ImportScreen> {
     final n = _secondaryLabels.length;
     final text = es
         ? 'Este estado de cuenta también incluye $n cajita(s)/cuenta(s): '
-            '$names. Asígnalas (o crea una subcuenta) en la tarjeta de abajo, '
-            'o esos movimientos no se importarán.'
+              '$names. Asígnalas (o crea una subcuenta) en la tarjeta de abajo, '
+              'o esos movimientos no se importarán.'
         : 'This statement also bundles $n cajita(s)/account(s): $names. '
-            'Assign each (or create a sub-account) in the card below, or those '
-            "rows won't be imported.";
+              'Assign each (or create a sub-account) in the card below, or those '
+              "rows won't be imported.";
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(12),
@@ -1126,7 +1172,10 @@ class _ImportScreenState extends State<ImportScreen> {
             child: Text(
               text,
               style: TextStyle(
-                  fontSize: 12.5, height: 1.35, color: context.textPrimary),
+                fontSize: 12.5,
+                height: 1.35,
+                color: context.textPrimary,
+              ),
             ),
           ),
         ],
@@ -1143,7 +1192,9 @@ class _ImportScreenState extends State<ImportScreen> {
     final es = Localizations.localeOf(context).languageCode == 'es';
     final cur = (txns.first['currency'] ?? 'MXN').toString();
     final fmt = moneyFormat(cur);
-    final nFiles = _fileGroups.isEmpty ? _selectedFiles.length : _fileGroups.length;
+    final nFiles = _fileGroups.isEmpty
+        ? _selectedFiles.length
+        : _fileGroups.length;
     final range = (_minDate != null && _maxDate != null)
         ? _formatDateRange(_minDate!, _maxDate!, es)
         : null;
@@ -1181,34 +1232,35 @@ class _ImportScreenState extends State<ImportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LayoutBuilder(builder: (ctx, c) {
-              final n = tiles.length;
-              double width(double max) => max >= 620
-                  ? (max - (n - 1) * 10) / n
-                  : max >= 420
-                      ? (max - 10) / 2 - 0.5
-                      : max;
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: tiles
-                    .map((t) =>
-                        SizedBox(width: width(c.maxWidth), child: t))
-                    .toList(),
-              );
-            }),
+            LayoutBuilder(
+              builder: (ctx, c) {
+                final n = tiles.length;
+                double width(double max) => max >= 620
+                    ? (max - (n - 1) * 10) / n
+                    : max >= 420
+                    ? (max - 10) / 2 - 0.5
+                    : max;
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: tiles
+                      .map((t) => SizedBox(width: width(c.maxWidth), child: t))
+                      .toList(),
+                );
+              },
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.description_outlined,
-                    size: 14, color: context.textFaint),
+                Icon(
+                  Icons.description_outlined,
+                  size: 14,
+                  color: context.textFaint,
+                ),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    [
-                      l.impSummaryFiles(nFiles),
-                      ?range,
-                    ].join('  ·  '),
+                    [l.impSummaryFiles(nFiles), ?range].join('  ·  '),
                     style: TextStyle(fontSize: 12, color: context.textSubtle),
                   ),
                 ),
@@ -1290,8 +1342,9 @@ class _ImportScreenState extends State<ImportScreen> {
   Widget _buildFileList(AppLocalizations l, {required bool uploading}) {
     final statusByName = {for (final s in _fileStatuses) s.name: s};
     const rowExtent = 39.0;
-    final height =
-        (_selectedFiles.length * rowExtent + 6).clamp(rowExtent, 280).toDouble();
+    final height = (_selectedFiles.length * rowExtent + 6)
+        .clamp(rowExtent, 280)
+        .toDouble();
     return Container(
       height: height,
       decoration: BoxDecoration(
@@ -1334,32 +1387,46 @@ class _ImportScreenState extends State<ImportScreen> {
       switch (st?.status) {
         case 'ok':
           leading = Icon(Icons.check_circle, size: 16, color: context.positive);
-          trailing = Text(l.impFileTransactions(st!.count),
-              style: TextStyle(fontSize: 12, color: context.textSubtle));
+          trailing = Text(
+            l.impFileTransactions(st!.count),
+            style: TextStyle(fontSize: 12, color: context.textSubtle),
+          );
           break;
         case 'failed':
-          leading =
-              Icon(Icons.error_outline, size: 16, color: context.warning);
-          trailing = Text(l.impFileSkipped,
-              style: TextStyle(fontSize: 12, color: context.warning));
+          leading = Icon(Icons.error_outline, size: 16, color: context.warning);
+          trailing = Text(
+            l.impFileSkipped,
+            style: TextStyle(fontSize: 12, color: context.warning),
+          );
           break;
         case 'parsing':
           leading = const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2));
-          trailing = Text(l.impFileParsing,
-              style: TextStyle(fontSize: 12, color: context.textSubtle));
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+          trailing = Text(
+            l.impFileParsing,
+            style: TextStyle(fontSize: 12, color: context.textSubtle),
+          );
           break;
         default:
-          leading = Icon(Icons.schedule_outlined,
-              size: 16, color: context.textFaint);
-          trailing = Text(l.impFileWaiting,
-              style: TextStyle(fontSize: 12, color: context.textFaint));
+          leading = Icon(
+            Icons.schedule_outlined,
+            size: 16,
+            color: context.textFaint,
+          );
+          trailing = Text(
+            l.impFileWaiting,
+            style: TextStyle(fontSize: 12, color: context.textFaint),
+          );
       }
     } else {
-      leading = Icon(Icons.insert_drive_file_outlined,
-          size: 16, color: context.textSubtle);
+      leading = Icon(
+        Icons.insert_drive_file_outlined,
+        size: 16,
+        color: context.textSubtle,
+      );
       trailing = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1418,15 +1485,18 @@ class _ImportScreenState extends State<ImportScreen> {
     for (final i in _selectedIndices) {
       final tx = _previewTransactions![i];
       final label = (tx['account_label'] ?? '').toString();
-      final accountId =
-          label.isEmpty ? _selectedAccountId : _secondaryAccountIds[label];
+      final accountId = label.isEmpty
+          ? _selectedAccountId
+          : _secondaryAccountIds[label];
       if (accountId == null || accountId.isEmpty) {
         if (label.isEmpty) {
           // Primary section with no account selected — the original guard.
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(l.impSelectAccountFirst,
-                  style: TextStyle(color: context.negative)),
+              content: Text(
+                l.impSelectAccountFirst,
+                style: TextStyle(color: context.negative),
+              ),
             ),
           );
           return;
@@ -1438,9 +1508,9 @@ class _ImportScreenState extends State<ImportScreen> {
     }
 
     if (byAccount.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.impNoTransactionsSelected)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.impNoTransactionsSelected)));
       return;
     }
 
@@ -1457,14 +1527,18 @@ class _ImportScreenState extends State<ImportScreen> {
       String? holdingsError;
       // One confirm call per destination account.
       for (final entry in byAccount.entries) {
-        final response =
-            await _apiService.confirmImport(entry.key, entry.value);
+        final response = await _apiService.confirmImport(
+          entry.key,
+          entry.value,
+        );
         if (response['message'] != null) {
           messages.add(response['message'].toString());
         }
         final w = response['warnings'];
         if (w is List) {
-          warnings.addAll(w.whereType<Map>().map((e) => e.cast<String, dynamic>()));
+          warnings.addAll(
+            w.whereType<Map>().map((e) => e.cast<String, dynamic>()),
+          );
         }
       }
 
@@ -1499,16 +1573,18 @@ class _ImportScreenState extends State<ImportScreen> {
       final skippedNote = unassigned.isEmpty
           ? ''
           : (Localizations.localeOf(context).languageCode == 'es'
-              ? ' (secciones sin cuenta omitidas: ${unassigned.join(", ")})'
-              : ' (skipped unassigned sections: ${unassigned.join(", ")})');
+                ? ' (secciones sin cuenta omitidas: ${unassigned.join(", ")})'
+                : ' (skipped unassigned sections: ${unassigned.join(", ")})');
       final base =
           (messages.isEmpty ? l.impImportSuccessful : messages.join(' · ')) +
-              skippedNote;
+          skippedNote;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(holdingsError == null
-              ? base
-              : l.impHoldingsNotAttached(holdingsError)),
+          content: Text(
+            holdingsError == null
+                ? base
+                : l.impHoldingsNotAttached(holdingsError),
+          ),
           backgroundColor: holdingsError == null ? null : context.negative,
         ),
       );
@@ -1526,16 +1602,21 @@ class _ImportScreenState extends State<ImportScreen> {
   /// months) in a dialog so the user can go fetch the gap before relying on
   /// the import being complete.
   Future<void> _showContinuityWarnings(
-      List<Map<String, dynamic>> warnings) async {
+    List<Map<String, dynamic>> warnings,
+  ) async {
     final es = Localizations.localeOf(context).languageCode == 'es';
     // Statements are MXN bank PDFs; format the raw decimal strings as MX$.
     String money(Object? raw) {
       final v = double.tryParse((raw ?? '').toString());
-      return v == null ? (raw ?? '').toString() : formatCurrencyAmount(v, 'MXN');
+      return v == null
+          ? (raw ?? '').toString()
+          : formatCurrencyAmount(v, 'MXN');
     }
 
-    String shortFile(Object? raw) =>
-        (raw ?? '').toString().replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '');
+    String shortFile(Object? raw) => (raw ?? '').toString().replaceAll(
+      RegExp(r'\.pdf$', caseSensitive: false),
+      '',
+    );
 
     await showDialog<void>(
       context: context,
@@ -1593,19 +1674,21 @@ class _ImportScreenState extends State<ImportScreen> {
                                   Text(
                                     '${shortFile(w['from_file'])} → ${shortFile(w['to_file'])}',
                                     style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: context.textPrimary),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.textPrimary,
+                                    ),
                                   ),
                                   Text(
                                     '${es ? 'cierra' : 'closes'} ${money(w['from_balance'])} · '
                                     '${es ? 'abre' : 'opens'} ${money(w['to_balance'])}',
                                     style: TextStyle(
-                                        fontSize: 11.5,
-                                        color: context.textSubtle,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures()
-                                        ]),
+                                      fontSize: 11.5,
+                                      color: context.textSubtle,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1614,12 +1697,13 @@ class _ImportScreenState extends State<ImportScreen> {
                             Text(
                               '${es ? 'Δ' : 'Δ'} ${money(w['diff'])}',
                               style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: context.warning,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ]),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: context.warning,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
                             ),
                           ],
                         );
@@ -1673,12 +1757,16 @@ class _ImportScreenState extends State<ImportScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: context.positive,
                     foregroundColor: context.onAccent(context.positive),
-                    disabledBackgroundColor:
-                        context.positive.withValues(alpha: 0.4),
-                    disabledForegroundColor:
-                        context.onAccent(context.positive).withValues(alpha: 0.7),
+                    disabledBackgroundColor: context.positive.withValues(
+                      alpha: 0.4,
+                    ),
+                    disabledForegroundColor: context
+                        .onAccent(context.positive)
+                        .withValues(alpha: 0.7),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
                   ),
                   onPressed: (_isUploading || n == 0) ? null : _confirmImport,
                   icon: _isUploading
@@ -1686,8 +1774,9 @@ class _ImportScreenState extends State<ImportScreen> {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: context.onAccent(context.positive)),
+                            strokeWidth: 2,
+                            color: context.onAccent(context.positive),
+                          ),
                         )
                       : const Icon(Icons.download_done, size: 18),
                   label: Text(
@@ -1717,17 +1806,16 @@ class _ImportScreenState extends State<ImportScreen> {
             tooltip: l.impCleanupTitle,
             icon: const Icon(Icons.cleaning_services_outlined),
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ImportCleanupScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const ImportCleanupScreen()),
             ),
           ),
         ],
       ),
       // Pinned action bar during review so "Import N" is always visible
       // instead of buried under the (tall) preview list.
-      bottomNavigationBar:
-          _previewTransactions == null ? null : _buildImportActionBar(l),
+      bottomNavigationBar: _previewTransactions == null
+          ? null
+          : _buildImportActionBar(l),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -1758,15 +1846,15 @@ class _ImportScreenState extends State<ImportScreen> {
                     color: (_isUploading || _isReadingFiles)
                         ? context.info.withValues(alpha: 0.06)
                         : _isDragging
-                            ? context.positive.withValues(alpha: 0.08)
-                            : context.tint(0.05),
+                        ? context.positive.withValues(alpha: 0.08)
+                        : context.tint(0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: (_isUploading || _isReadingFiles)
                           ? context.info
                           : _isDragging
-                              ? context.positive
-                              : context.hairline,
+                          ? context.positive
+                          : context.hairline,
                       width: 2,
                     ),
                   ),
@@ -1790,23 +1878,29 @@ class _ImportScreenState extends State<ImportScreen> {
                       // live per-file status. The file count lives in text,
                       // never crammed inside a ring, so 100+ files read cleanly.
                       if (!_isUploading && !_isReadingFiles) ...[
-                        Icon(Icons.upload_file,
-                            size: 56, color: context.positive),
+                        Icon(
+                          Icons.upload_file,
+                          size: 56,
+                          color: context.positive,
+                        ),
                         const SizedBox(height: 14),
                         if (_isDragging)
                           Text(
                             l.impDropToImport,
                             style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: context.positive),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: context.positive,
+                            ),
                           )
                         else if (kIsWeb && _selectedFiles.isEmpty)
                           Text(
                             l.impDropHint,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                fontSize: 13, color: context.textSubtle),
+                              fontSize: 13,
+                              color: context.textSubtle,
+                            ),
                           )
                         else if (!kIsWeb && _selectedFiles.isEmpty)
                           Text(l.impNoFilesSelected),
@@ -1827,19 +1921,22 @@ class _ImportScreenState extends State<ImportScreen> {
                           _readingFileCount == null
                               ? l.impReadingFiles
                               : _readingFileCount == 1
-                                  ? l.impReadingOneFile
-                                  : l.impReadingNFiles(_readingFileCount!),
+                              ? l.impReadingOneFile
+                              : l.impReadingNFiles(_readingFileCount!),
                           style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: context.info),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: context.info,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           l.impReadingHint,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              fontSize: 12, color: context.textSubtle),
+                            fontSize: 12,
+                            color: context.textSubtle,
+                          ),
                         ),
                       ],
                       if (_isUploading) ...[
@@ -1900,7 +1997,9 @@ class _ImportScreenState extends State<ImportScreen> {
                           Text(
                             l.impAssignToAccount,
                             style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold),
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 12),
                           if (_accounts != null)
@@ -1964,8 +2063,10 @@ class _ImportScreenState extends State<ImportScreen> {
                     children: [
                       Flexible(
                         child: Text(
-                          l.impPreviewSelected(_selectedIndices.length,
-                              _previewTransactions!.length),
+                          l.impPreviewSelected(
+                            _selectedIndices.length,
+                            _previewTransactions!.length,
+                          ),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -2011,41 +2112,45 @@ class _ImportScreenState extends State<ImportScreen> {
                   // include/exclude all of that file's rows at once — the
                   // fast way to drop a mis-parsed file. Only shown when the
                   // batch spans more than one file.
-                  Builder(builder: (context) {
-                    final byFile = _fileGroups;
-                    if (byFile.length < 2) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: byFile.entries.map((e) {
-                          final allSelected =
-                              e.value.every(_selectedIndices.contains);
-                          final anySelected =
-                              e.value.any(_selectedIndices.contains);
-                          return FilterChip(
-                            label: Text('${e.key}  (${e.value.length})'),
-                            selected: allSelected,
-                            showCheckmark: true,
-                            onSelected: (_) {
-                              setState(() {
-                                final s = Set<int>.from(_selectedIndices);
-                                // Any part selected → exclude the whole
-                                // file; fully excluded → include it.
-                                if (anySelected) {
-                                  e.value.forEach(s.remove);
-                                } else {
-                                  s.addAll(e.value);
-                                }
-                                _selectedIndices = s;
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    );
-                  }),
+                  Builder(
+                    builder: (context) {
+                      final byFile = _fileGroups;
+                      if (byFile.length < 2) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: byFile.entries.map((e) {
+                            final allSelected = e.value.every(
+                              _selectedIndices.contains,
+                            );
+                            final anySelected = e.value.any(
+                              _selectedIndices.contains,
+                            );
+                            return FilterChip(
+                              label: Text('${e.key}  (${e.value.length})'),
+                              selected: allSelected,
+                              showCheckmark: true,
+                              onSelected: (_) {
+                                setState(() {
+                                  final s = Set<int>.from(_selectedIndices);
+                                  // Any part selected → exclude the whole
+                                  // file; fully excluded → include it.
+                                  if (anySelected) {
+                                    e.value.forEach(s.remove);
+                                  } else {
+                                    s.addAll(e.value);
+                                  }
+                                  _selectedIndices = s;
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      );
+                    },
+                  ),
                   // Bounded-height, self-scrolling list so only the
                   // visible rows are built. The old shrinkWrap +
                   // NeverScrollable list (inside the page scroll view) built
@@ -2054,153 +2159,162 @@ class _ImportScreenState extends State<ImportScreen> {
                   SizedBox(
                     height: MediaQuery.of(context).size.height * 0.62,
                     child: ListView.builder(
-                    itemCount: _previewTransactions!.length,
-                    itemBuilder: (context, index) {
-                      final tx = _previewTransactions![index];
-                      final isSelected = _selectedIndices.contains(index);
-                      final desc = (tx['description'] ?? '')
-                          .toString()
-                          .toUpperCase();
-                      final isAutoDeselected = _autoDeselectPatterns.any(
-                        (p) => desc.contains(p),
-                      );
-                      final isDuplicate = _duplicateIndices.contains(index);
+                      itemCount: _previewTransactions!.length,
+                      itemBuilder: (context, index) {
+                        final tx = _previewTransactions![index];
+                        final isSelected = _selectedIndices.contains(index);
+                        final desc = (tx['description'] ?? '')
+                            .toString()
+                            .toUpperCase();
+                        final isAutoDeselected = _autoDeselectPatterns.any(
+                          (p) => desc.contains(p),
+                        );
+                        final isDuplicate = _duplicateIndices.contains(index);
 
-                      final amount =
-                          double.tryParse('${tx['amount']}') ?? 0.0;
-                      final isIncome = amount >= 0;
-                      void toggle() => setState(() {
-                            final s = Set<int>.from(_selectedIndices);
-                            isSelected ? s.remove(index) : s.add(index);
-                            _selectedIndices = s;
-                          });
-                      final meta = [
-                        (tx['date'] ?? '').toString(),
-                        if (tx['source_file'] != null)
-                          tx['source_file'].toString(),
-                        if ((tx['category'] ?? '').toString().isNotEmpty)
-                          prettyCategory(primary: tx['category'].toString()),
-                      ].where((s) => s.isNotEmpty).join('  ·  ');
-                      // Dense, divider-separated row matching the main
-                      // transactions list (no bulky per-row Card). Tap the row
-                      // or the checkbox to toggle.
-                      return InkWell(
-                        onTap: toggle,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? context.tint(0.04)
-                                : Colors.transparent,
-                            border: Border(
-                              bottom: BorderSide(
-                                color: context.hairline.withValues(alpha: 0.5),
+                        final amount =
+                            double.tryParse('${tx['amount']}') ?? 0.0;
+                        final isIncome = amount >= 0;
+                        void toggle() => setState(() {
+                          final s = Set<int>.from(_selectedIndices);
+                          isSelected ? s.remove(index) : s.add(index);
+                          _selectedIndices = s;
+                        });
+                        final meta = [
+                          (tx['date'] ?? '').toString(),
+                          if (tx['source_file'] != null)
+                            tx['source_file'].toString(),
+                          if ((tx['category'] ?? '').toString().isNotEmpty)
+                            prettyCategory(primary: tx['category'].toString()),
+                        ].where((s) => s.isNotEmpty).join('  ·  ');
+                        // Dense, divider-separated row matching the main
+                        // transactions list (no bulky per-row Card). Tap the row
+                        // or the checkbox to toggle.
+                        return InkWell(
+                          onTap: toggle,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? context.tint(0.04)
+                                  : Colors.transparent,
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: context.hairline.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 2, vertical: 7),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 26,
-                                height: 26,
-                                child: Checkbox(
-                                  value: isSelected,
-                                  activeColor: context.positive,
-                                  visualDensity: VisualDensity.compact,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  onChanged: (_) => toggle(),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 7,
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 26,
+                                  height: 26,
+                                  child: Checkbox(
+                                    value: isSelected,
+                                    activeColor: context.positive,
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    onChanged: (_) => toggle(),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            tx['description'] ?? '',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 13.5,
-                                              fontWeight: FontWeight.w600,
-                                              height: 1.2,
-                                              color: isSelected
-                                                  ? context.textPrimary
-                                                  : context.textFaint,
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              tx['description'] ?? '',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 13.5,
+                                                fontWeight: FontWeight.w600,
+                                                height: 1.2,
+                                                color: isSelected
+                                                    ? context.textPrimary
+                                                    : context.textFaint,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        if (isDuplicate) ...[
-                                          const SizedBox(width: 6),
-                                          _miniBadge(
+                                          if (isDuplicate) ...[
+                                            const SizedBox(width: 6),
+                                            _miniBadge(
                                               l.impAlreadyImported,
-                                              context.warning),
-                                        ],
-                                        if (tx['from_ocr'] == true) ...[
-                                          const SizedBox(width: 6),
-                                          _miniBadge('OCR', context.info),
-                                        ],
-                                      ],
-                                    ),
-                                    const SizedBox(height: 1),
-                                    Text(
-                                      meta,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        height: 1.3,
-                                        color: isSelected
-                                            ? context.textSubtle
-                                            : context.textFaint,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures()
+                                              context.warning,
+                                            ),
+                                          ],
+                                          if (tx['from_ocr'] == true) ...[
+                                            const SizedBox(width: 6),
+                                            _miniBadge('OCR', context.info),
+                                          ],
                                         ],
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(height: 1),
+                                      Text(
+                                        meta,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          height: 1.3,
+                                          color: isSelected
+                                              ? context.textSubtle
+                                              : context.textFaint,
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                formatCurrencyAmount(
-                                  amount,
-                                  (tx['currency'] ?? 'MXN').toString(),
+                                const SizedBox(width: 10),
+                                Text(
+                                  formatCurrencyAmount(
+                                    amount,
+                                    (tx['currency'] ?? 'MXN').toString(),
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: !isSelected
+                                        ? context.textFaint
+                                        : (isIncome
+                                              ? context.positive
+                                              : context.textPrimary),
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
                                 ),
-                                style: TextStyle(
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: !isSelected
-                                      ? context.textFaint
-                                      : (isIncome
-                                          ? context.positive
-                                          : context.textPrimary),
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ],
-                                ),
-                              ),
-                              if (isAutoDeselected) ...[
-                                const SizedBox(width: 8),
-                                Tooltip(
-                                  message: l.impAutoDeselectedTooltip,
-                                  child: Icon(Icons.info_outline,
+                                if (isAutoDeselected) ...[
+                                  const SizedBox(width: 8),
+                                  Tooltip(
+                                    message: l.impAutoDeselectedTooltip,
+                                    child: Icon(
+                                      Icons.info_outline,
                                       size: 15,
-                                      color: context.warning
-                                          .withValues(alpha: 0.8)),
-                                ),
+                                      color: context.warning.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
                     ),
                   ),
                   // Primary "Import" + Cancel now live in the pinned bottom
@@ -2239,13 +2353,18 @@ class _ImportScreenState extends State<ImportScreen> {
                         foregroundColor: context.onAccent(context.positive),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      onPressed: (_isUploading || _isReadingFiles) ? null : _uploadFile,
+                      onPressed: (_isUploading || _isReadingFiles)
+                          ? null
+                          : _uploadFile,
                       child: _isUploading
                           ? CircularProgressIndicator(
-                              color: context.onAccent(context.positive))
+                              color: context.onAccent(context.positive),
+                            )
                           : Text(
                               l.impProcessStatement,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                     ),
                   ),
@@ -2253,47 +2372,51 @@ class _ImportScreenState extends State<ImportScreen> {
               ),
             if (_message != null && _previewTransactions == null) ...[
               const SizedBox(height: 24),
-              Builder(builder: (context) {
-                // Theme-tuned semantic colors instead of raw *Accent shades,
-                // which washed out against the tinted background (the
-                // "hard to read" message). Error/warning/success each get a
-                // matching icon + a high-contrast text color.
-                final Color tone = _messageIsError
-                    ? context.negative
-                    : (_requiresPassword ? context.warning : context.positive);
-                final IconData icon = _messageIsError
-                    ? Icons.error_outline
-                    : (_requiresPassword
-                        ? Icons.lock_outline
-                        : Icons.check_circle_outline);
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: tone.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: tone.withValues(alpha: 0.35)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: Icon(icon, color: tone, size: 20),
-                      ),
-                      Flexible(
-                        child: Text(
-                          _message!,
-                          style: TextStyle(
-                            color: tone,
-                            fontWeight: FontWeight.w600,
-                            height: 1.35,
+              Builder(
+                builder: (context) {
+                  // Theme-tuned semantic colors instead of raw *Accent shades,
+                  // which washed out against the tinted background (the
+                  // "hard to read" message). Error/warning/success each get a
+                  // matching icon + a high-contrast text color.
+                  final Color tone = _messageIsError
+                      ? context.negative
+                      : (_requiresPassword
+                            ? context.warning
+                            : context.positive);
+                  final IconData icon = _messageIsError
+                      ? Icons.error_outline
+                      : (_requiresPassword
+                            ? Icons.lock_outline
+                            : Icons.check_circle_outline);
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: tone.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Icon(icon, color: tone, size: 20),
+                        ),
+                        Flexible(
+                          child: Text(
+                            _message!,
+                            style: TextStyle(
+                              color: tone,
+                              fontWeight: FontWeight.w600,
+                              height: 1.35,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ],
           ],
         ),

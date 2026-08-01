@@ -27,10 +27,7 @@ void main() {
     });
 
     test('normalises Plaid `*` separator', () {
-      expect(
-        cleanTransactionDescription('PAYPAL *NETFLIX'),
-        'Paypal Netflix',
-      );
+      expect(cleanTransactionDescription('PAYPAL *NETFLIX'), 'Paypal Netflix');
     });
 
     test('drops alphanumeric reference codes', () {
@@ -57,17 +54,11 @@ void main() {
 
     test('title-cases dotted abbreviations correctly', () {
       // AMZN.COM should become Amzn.com, not "Amzn.Com".
-      expect(
-        cleanTransactionDescription('AMZN.COM ORDER'),
-        'Amzn.com Order',
-      );
+      expect(cleanTransactionDescription('AMZN.COM ORDER'), 'Amzn.com Order');
     });
 
     test('leaves already-readable strings alone', () {
-      expect(
-        cleanTransactionDescription('Spotify Premium'),
-        'Spotify Premium',
-      );
+      expect(cleanTransactionDescription('Spotify Premium'), 'Spotify Premium');
     });
 
     test('falls back to normalised input when every token is dropped', () {

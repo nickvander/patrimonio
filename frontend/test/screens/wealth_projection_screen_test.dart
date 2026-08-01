@@ -57,27 +57,27 @@ Widget _host() {
         currentNetWorth: 500000.0,
         conversionFactor: 1.0,
         currencyFormat: NumberFormat.currency(symbol: r'$', decimalDigits: 0),
-        projectionFetcher: ({
-          required double startBalance,
-          required double monthlyContribution,
-          required double annualReturnRate,
-          required double annualExpenses,
-          required double withdrawalRate,
-          int years = 30,
-          double annualInflationRate = 0.03,
-          double returnVolatility = 0.13,
-          int? yearsToRetirement,
-          int monteCarloTrials = 1000,
-          double baristaMonthlyIncome = 0.0,
-          double annualTaxDrag = 0.0,
-          bool withdrawalGuardrails = false,
-          bool mxScenario = false,
-          double expensesUsdPortion = 0.0,
-          double expensesMxnPortion = 0.0,
-          double fxAnnualDrift = 0.0,
-          double? usdMxnRate,
-        }) async =>
-            _projection,
+        projectionFetcher:
+            ({
+              required double startBalance,
+              required double monthlyContribution,
+              required double annualReturnRate,
+              required double annualExpenses,
+              required double withdrawalRate,
+              int years = 30,
+              double annualInflationRate = 0.03,
+              double returnVolatility = 0.13,
+              int? yearsToRetirement,
+              int monteCarloTrials = 1000,
+              double baristaMonthlyIncome = 0.0,
+              double annualTaxDrag = 0.0,
+              bool withdrawalGuardrails = false,
+              bool mxScenario = false,
+              double expensesUsdPortion = 0.0,
+              double expensesMxnPortion = 0.0,
+              double fxAnnualDrift = 0.0,
+              double? usdMxnRate,
+            }) async => _projection,
         defaultsFetcher: () async => null,
         dividendsFetcher: () async => _dividends,
         settingReader: (key) async => null,
@@ -100,64 +100,75 @@ void main() {
   // squashing the FIRE milestone tiles. The chart must keep a usable height
   // with the panel both off and on.
   testWidgets(
-      'wide 1440x900: chart keeps a usable height with the dividend outlook '
-      'panel toggled on', (tester) async {
-    _setSize(tester, const Size(1440, 900));
-    await tester.pumpWidget(_host());
-    await tester.pumpAndSettle();
+    'wide 1440x900: chart keeps a usable height with the dividend outlook '
+    'panel toggled on',
+    (tester) async {
+      _setSize(tester, const Size(1440, 900));
+      await tester.pumpWidget(_host());
+      await tester.pumpAndSettle();
 
-    // Panel off: the classic flex layout is untouched — the chart card keeps
-    // its healthy share (~290px card / ~170px plot at this size, same as
-    // before the fix).
-    expect(find.text('Dividend income outlook'), findsNothing);
-    final chartCard = find
-        .ancestor(of: find.text('Net worth projection'), matching: find.byType(Card))
-        .first;
-    expect(tester.getSize(chartCard).height, greaterThanOrEqualTo(260.0));
-    expect(tester.getSize(find.byType(LineChart)).height,
-        greaterThanOrEqualTo(150.0));
+      // Panel off: the classic flex layout is untouched — the chart card keeps
+      // its healthy share (~290px card / ~170px plot at this size, same as
+      // before the fix).
+      expect(find.text('Dividend income outlook'), findsNothing);
+      final chartCard = find
+          .ancestor(
+            of: find.text('Net worth projection'),
+            matching: find.byType(Card),
+          )
+          .first;
+      expect(tester.getSize(chartCard).height, greaterThanOrEqualTo(260.0));
+      expect(
+        tester.getSize(find.byType(LineChart)).height,
+        greaterThanOrEqualTo(150.0),
+      );
 
-    // Toggle the outlook panel on from the controls column.
-    final label = find.text('Show dividend income outlook');
-    await tester.ensureVisible(label);
-    await tester.pumpAndSettle();
-    final toggleRow =
-        find.ancestor(of: label, matching: find.byType(MergeSemantics)).first;
-    await tester
-        .tap(find.descendant(of: toggleRow, matching: find.byType(Switch)));
-    await tester.pumpAndSettle();
+      // Toggle the outlook panel on from the controls column.
+      final label = find.text('Show dividend income outlook');
+      await tester.ensureVisible(label);
+      await tester.pumpAndSettle();
+      final toggleRow = find
+          .ancestor(of: label, matching: find.byType(MergeSemantics))
+          .first;
+      await tester.tap(
+        find.descendant(of: toggleRow, matching: find.byType(Switch)),
+      );
+      await tester.pumpAndSettle();
 
-    // Panel is visible...
-    final panelTitle = find.text('Dividend income outlook');
-    expect(panelTitle, findsOneWidget);
+      // Panel is visible...
+      final panelTitle = find.text('Dividend income outlook');
+      expect(panelTitle, findsOneWidget);
 
-    // ...and the chart still has a usable render-box height (the defect
-    // collapsed it to ~8px here).
-    final chart = find.byType(LineChart);
-    expect(chart, findsOneWidget);
-    expect(tester.getSize(chart).height, greaterThanOrEqualTo(200.0));
+      // ...and the chart still has a usable render-box height (the defect
+      // collapsed it to ~8px here).
+      final chart = find.byType(LineChart);
+      expect(chart, findsOneWidget);
+      expect(tester.getSize(chart).height, greaterThanOrEqualTo(200.0));
 
-    // Reading order preserved: chart, then outlook panel, then FIRE plan.
-    final chartTop = tester.getTopLeft(chart).dy;
-    final panelTop = tester.getTopLeft(panelTitle).dy;
-    final fireTop = tester.getTopLeft(find.text('Your FIRE plan')).dy;
-    expect(chartTop, lessThan(panelTop));
-    expect(panelTop, lessThan(fireTop));
+      // Reading order preserved: chart, then outlook panel, then FIRE plan.
+      final chartTop = tester.getTopLeft(chart).dy;
+      final panelTop = tester.getTopLeft(panelTitle).dy;
+      final fireTop = tester.getTopLeft(find.text('Your FIRE plan')).dy;
+      expect(chartTop, lessThan(panelTop));
+      expect(panelTop, lessThan(fireTop));
 
-    // The FIRE milestone tiles are intact too (not squashed away).
-    expect(find.text('Success rate'), findsOneWidget);
+      // The FIRE milestone tiles are intact too (not squashed away).
+      expect(find.text('Success rate'), findsOneWidget);
 
-    // Toggling back off restores the classic flex layout with a full-height
-    // chart card.
-    await tester
-        .tap(find.descendant(of: toggleRow, matching: find.byType(Switch)));
-    await tester.pumpAndSettle();
-    expect(find.text('Dividend income outlook'), findsNothing);
-    expect(tester.getSize(chartCard).height, greaterThanOrEqualTo(260.0));
-  });
+      // Toggling back off restores the classic flex layout with a full-height
+      // chart card.
+      await tester.tap(
+        find.descendant(of: toggleRow, matching: find.byType(Switch)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Dividend income outlook'), findsNothing);
+      expect(tester.getSize(chartCard).height, greaterThanOrEqualTo(260.0));
+    },
+  );
 
-  testWidgets('tall desktop keeps the flex layout with the panel on',
-      (tester) async {
+  testWidgets('tall desktop keeps the flex layout with the panel on', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1440, 1600));
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
@@ -165,14 +176,18 @@ void main() {
     final label = find.text('Show dividend income outlook');
     await tester.ensureVisible(label);
     await tester.pumpAndSettle();
-    final toggleRow =
-        find.ancestor(of: label, matching: find.byType(MergeSemantics)).first;
-    await tester
-        .tap(find.descendant(of: toggleRow, matching: find.byType(Switch)));
+    final toggleRow = find
+        .ancestor(of: label, matching: find.byType(MergeSemantics))
+        .first;
+    await tester.tap(
+      find.descendant(of: toggleRow, matching: find.byType(Switch)),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Dividend income outlook'), findsOneWidget);
-    expect(tester.getSize(find.byType(LineChart)).height,
-        greaterThanOrEqualTo(200.0));
+    expect(
+      tester.getSize(find.byType(LineChart)).height,
+      greaterThanOrEqualTo(200.0),
+    );
   });
 }

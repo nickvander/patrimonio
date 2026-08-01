@@ -55,7 +55,7 @@ bool _kindCanHover(PointerDeviceKind kind) =>
 LineTouchData standardLineTouch(
   BuildContext context, {
   required List<LineTooltipItem?> Function(BuildContext, List<LineBarSpot>)
-      items,
+  items,
   bool showIndicator = true,
 }) {
   return LineTouchData(
@@ -82,10 +82,9 @@ LineTouchData standardLineTouch(
         }
         return TouchedSpotIndicatorData(
           FlLine(
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withValues(alpha: 0.35),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.35),
             strokeWidth: 1,
           ),
           FlDotData(
@@ -190,10 +189,12 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
       raw.copyWith(
         lineBarsData: [
           for (var i = 0; i < raw.lineBarsData.length; i++)
-            raw.lineBarsData[i].copyWith(showingIndicators: [
-              for (final s in touched)
-                if (s.barIndex == i) s.spotIndex,
-            ]),
+            raw.lineBarsData[i].copyWith(
+              showingIndicators: [
+                for (final s in touched)
+                  if (s.barIndex == i) s.spotIndex,
+              ],
+            ),
         ],
         showingTooltipIndicators: touched.isEmpty
             ? const []
@@ -257,15 +258,17 @@ class _TransientTooltipBarChartState extends State<TransientTooltipBarChart> {
       raw.copyWith(
         barGroups: [
           for (var i = 0; i < raw.barGroups.length; i++)
-            raw.barGroups[i].copyWith(showingTooltipIndicators: [
-              // Bounds-checked against the current data (bar counts change
-              // when the month range or category mix does).
-              if (i == _groupIndex &&
-                  _rodIndex != null &&
-                  _rodIndex! >= 0 &&
-                  _rodIndex! < raw.barGroups[i].barRods.length)
-                _rodIndex!,
-            ]),
+            raw.barGroups[i].copyWith(
+              showingTooltipIndicators: [
+                // Bounds-checked against the current data (bar counts change
+                // when the month range or category mix does).
+                if (i == _groupIndex &&
+                    _rodIndex != null &&
+                    _rodIndex! >= 0 &&
+                    _rodIndex! < raw.barGroups[i].barRods.length)
+                  _rodIndex!,
+              ],
+            ),
         ],
         barTouchData: raw.barTouchData.copyWith(
           handleBuiltInTouches: false,

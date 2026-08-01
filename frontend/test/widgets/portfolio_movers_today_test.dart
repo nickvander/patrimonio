@@ -71,27 +71,29 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
   });
 
-  testWidgets('en: honest all-time title plus a Today section fed by day data',
-      (tester) async {
-    tester.view.physicalSize = const Size(1000, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+  testWidgets(
+    'en: honest all-time title plus a Today section fed by day data',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(_signals());
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(_signals());
+      await tester.pumpAndSettle();
 
-    // The dishonest title is gone; both time frames are labelled.
-    expect(find.textContaining('Top movers (by'), findsNothing);
-    expect(find.text('Top movers today (by \$)'), findsOneWidget);
-    expect(find.text('Best & worst (all time)'), findsOneWidget);
+      // The dishonest title is gone; both time frames are labelled.
+      expect(find.textContaining('Top movers (by'), findsNothing);
+      expect(find.text('Top movers today (by \$)'), findsOneWidget);
+      expect(find.text('Best & worst (all time)'), findsOneWidget);
 
-    // Today ranks day_change_usd: TSLA up, JNJ down.
-    expect(find.text('+\$250.00'), findsOneWidget);
-    expect(find.text('-\$731.53'), findsOneWidget);
-    // All time ranks gain_loss_usd: JNJ up, TSLA down.
-    expect(find.text('+\$5,000.00'), findsOneWidget);
-    expect(find.text('-\$2,000.00'), findsOneWidget);
-  });
+      // Today ranks day_change_usd: TSLA up, JNJ down.
+      expect(find.text('+\$250.00'), findsOneWidget);
+      expect(find.text('-\$731.53'), findsOneWidget);
+      // All time ranks gain_loss_usd: JNJ up, TSLA down.
+      expect(find.text('+\$5,000.00'), findsOneWidget);
+      expect(find.text('-\$2,000.00'), findsOneWidget);
+    },
+  );
 
   testWidgets('es: both time-frame titles localized', (tester) async {
     tester.view.physicalSize = const Size(1000, 1400);
@@ -105,27 +107,28 @@ void main() {
     expect(find.text('Mejores y peores (histórico)'), findsOneWidget);
   });
 
-  testWidgets('day data absent: Today section is omitted, all time remains',
-      (tester) async {
+  testWidgets('day data absent: Today section is omitted, all time remains', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1000, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(_host(
-      PortfolioCard(
-        section: PortfolioSection.signals,
-        portfolioData: {
-          'total_value_usd': 30000.0,
-          'holdings': [
-            _holding('JNJ', gl: 5000.0, day: null),
-          ],
-        },
-        conversionFactor: 1.0,
-        currencyFormat: NumberFormat.currency(locale: 'en_US', symbol: r'$'),
-        targetCurrency: 'USD',
-        usdMxnRate: 17.0,
+    await tester.pumpWidget(
+      _host(
+        PortfolioCard(
+          section: PortfolioSection.signals,
+          portfolioData: {
+            'total_value_usd': 30000.0,
+            'holdings': [_holding('JNJ', gl: 5000.0, day: null)],
+          },
+          conversionFactor: 1.0,
+          currencyFormat: NumberFormat.currency(locale: 'en_US', symbol: r'$'),
+          targetCurrency: 'USD',
+          usdMxnRate: 17.0,
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Top movers today (by \$)'), findsNothing);

@@ -86,6 +86,7 @@ class DebtPayoffCard extends StatefulWidget {
   final List<dynamic> accounts;
   final ApiService apiService;
   final double conversionFactor;
+
   /// USD<->MXN spot rate, used to normalise native account balances to USD
   /// before the payoff simulation (which assumes a single currency).
   final double usdMxnRate;
@@ -189,11 +190,11 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
   // Convert a native-currency term amount to USD, matching how _debts
   // normalises balances, so due-soon amounts line up with the debt rows.
   double _termToUsd(double native, String id) => convertCurrency(
-        native,
-        from: _currencyFor(id),
-        to: 'USD',
-        usdMxnRate: widget.usdMxnRate,
-      );
+    native,
+    from: _currencyFor(id),
+    to: 'USD',
+    usdMxnRate: widget.usdMxnRate,
+  );
 
   // Credit/loan accounts with a positive balance owed.
   List<Debt> get _debts {
@@ -216,14 +217,16 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       if (bal <= 0) continue;
       final id = raw['id'].toString();
       final defApr = cat == AccountCategory.credit ? 0.2299 : 0.0799;
-      out.add(Debt(
-        id: id,
-        name: (raw['nickname']?.toString().trim().isNotEmpty ?? false)
-            ? raw['nickname'].toString()
-            : (raw['name'] ?? '').toString(),
-        balance: bal,
-        aprAnnual: _aprs[id] ?? defApr,
-      ));
+      out.add(
+        Debt(
+          id: id,
+          name: (raw['nickname']?.toString().trim().isNotEmpty ?? false)
+              ? raw['nickname'].toString()
+              : (raw['name'] ?? '').toString(),
+          balance: bal,
+          aprAnnual: _aprs[id] ?? defApr,
+        ),
+      );
     }
     out.sort((a, b) => b.balance.compareTo(a.balance));
     return out;
@@ -233,7 +236,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
   // accounts (the Debt model carries no category); mirrors _debts' filter +
   // USD-normalisation so the counts/amounts line up with the visible rows.
   ({int creditCount, double creditOwed, int loanCount, double loanOwed})
-      get _split {
+  get _split {
     var creditCount = 0;
     var loanCount = 0;
     var creditOwed = 0.0;
@@ -268,7 +271,9 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
   }
 
   double _minTotal(List<Debt> debts) => debts.fold(
-      0.0, (s, d) => s + (d.balance * 0.02 > 25 ? d.balance * 0.02 : 25));
+    0.0,
+    (s, d) => s + (d.balance * 0.02 > 25 ? d.balance * 0.02 : 25),
+  );
 
   String _money(double usd) =>
       widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
@@ -281,19 +286,23 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
 
     final minTotal = _minTotal(debts);
     // Default the budget to 1.5x minimums (rounded), once, when first shown.
-    final budget = _monthlyPayment ??
-        ((minTotal * 1.5) / 50).ceil() * 50.0;
+    final budget = _monthlyPayment ?? ((minTotal * 1.5) / 50).ceil() * 50.0;
     final sliderMax = (minTotal + 4000).ceilToDouble();
     final clampedBudget = budget.clamp(minTotal, sliderMax).toDouble();
 
-    final avalanche =
-        simulatePayoff(debts, clampedBudget, PayoffStrategy.avalanche);
-    final snowball =
-        simulatePayoff(debts, clampedBudget, PayoffStrategy.snowball);
+    final avalanche = simulatePayoff(
+      debts,
+      clampedBudget,
+      PayoffStrategy.avalanche,
+    );
+    final snowball = simulatePayoff(
+      debts,
+      clampedBudget,
+      PayoffStrategy.snowball,
+    );
     final feasible = avalanche.feasible && snowball.feasible;
     // Recommend the lower-interest plan (ties → avalanche).
-    final avalancheWins =
-        avalanche.totalInterest <= snowball.totalInterest;
+    final avalancheWins = avalanche.totalInterest <= snowball.totalInterest;
     final savings = (snowball.totalInterest - avalanche.totalInterest).abs();
 
     final isPhone = MediaQuery.sizeOf(context).width < 720;
@@ -315,11 +324,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
     );
     final Widget strategyComparison = isPhone
         ? Column(
-            children: [
-              avalancheTile,
-              const SizedBox(height: 12),
-              snowballTile,
-            ],
+            children: [avalancheTile, const SizedBox(height: 12), snowballTile],
           )
         : Row(
             children: [
@@ -336,8 +341,10 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       Row(
         children: [
           Expanded(
-            child: Text(l.dpMonthlyPayment,
-                style: TextStyle(color: context.textMuted, fontSize: 14)),
+            child: Text(
+              l.dpMonthlyPayment,
+              style: TextStyle(color: context.textMuted, fontSize: 14),
+            ),
           ),
           Text(
             _money(clampedBudget),
@@ -358,10 +365,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
         onChanged: (v) => setState(() => _monthlyPayment = v),
       ),
       const SizedBox(height: 8),
-      if (!feasible)
-        _infeasibleNote(l)
-      else
-        strategyComparison,
+      if (!feasible) _infeasibleNote(l) else strategyComparison,
       if (feasible && savings > 1) ...[
         const SizedBox(height: 10),
         Center(
@@ -388,119 +392,127 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
         // Width-responsive off the card's OWN constraint (inner
         // LayoutBuilder, per the skill rule), not MediaQuery — the card can
         // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(builder: (context, c) {
-          // House ~420 phone breakpoint off the card interior: compact
-          // chrome — no leading icon, title compressed to a small uppercase
-          // overline (the portfolio_card idiom). Deliberately NOT the <720
-          // MediaQuery `isPhone` above (that gates tiles/padding); the
-          // overline keys off the card's own width.
-          final isPhoneCard = c.maxWidth < 420;
-          return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: LayoutBuilder(
+          builder: (context, c) {
+            // House ~420 phone breakpoint off the card interior: compact
+            // chrome — no leading icon, title compressed to a small uppercase
+            // overline (the portfolio_card idiom). Deliberately NOT the <720
+            // MediaQuery `isPhone` above (that gates tiles/padding); the
+            // overline keys off the card's own width.
+            final isPhoneCard = c.maxWidth < 420;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!isPhoneCard) ...[
-                  Icon(Icons.trending_down_rounded,
-                      color: context.pinkAccent, size: 18),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    isPhoneCard ? l.dpTitle.toUpperCase() : l.dpTitle,
-                    style: isPhoneCard
-                        ? TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                            color: context.textSubtle,
-                          )
-                        : TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: context.textPrimary,
-                          ),
-                    // maxLines only on the phone overline; wider layouts
-                    // keep the original wrap behaviour pixel-identical.
-                    maxLines: isPhoneCard ? 1 : null,
-                    overflow: isPhoneCard ? TextOverflow.ellipsis : null,
-                  ),
-                ),
-              ],
-            ),
-            // Header→content gap tightens with the phone overline header.
-            SizedBox(height: isPhoneCard ? 12 : 16),
-            _dueSoonStrip(debts, l),
-            // Phones (the same <720 flag that stacks the strategy tiles):
-            // the 3-up metric row crushes at phone widths, so it wraps to a
-            // 2-column grid (cash-10).
-            _summaryStrip(debts, l, twoUp: isPhone),
-            const SizedBox(height: 16),
-            Divider(height: 1, color: context.hairline),
-            const SizedBox(height: 12),
-            ...debts.map(_debtRow),
-            const SizedBox(height: 8),
-            Divider(height: 24, color: context.hairline),
-            if (!isPhone)
-              ...simulator
-            else ...[
-              // Tap-to-expand simulator header (phones only).
-              InkWell(
-                onTap: () => setState(() => _simExpanded = !_simExpanded),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.tune_rounded,
-                          color: context.tealAccent, size: 18),
+                Row(
+                  children: [
+                    if (!isPhoneCard) ...[
+                      Icon(
+                        Icons.trending_down_rounded,
+                        color: context.pinkAccent,
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l.dpSimulator,
-                              style: TextStyle(
-                                fontSize: 14,
+                    ],
+                    Expanded(
+                      child: Text(
+                        isPhoneCard ? l.dpTitle.toUpperCase() : l.dpTitle,
+                        style: isPhoneCard
+                            ? TextStyle(
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                                color: context.textSubtle,
+                              )
+                            : TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
                                 color: context.textPrimary,
                               ),
-                            ),
-                            if (!_simExpanded) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                summaryLine,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: context.textSubtle,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ],
-                        ),
+                        // maxLines only on the phone overline; wider layouts
+                        // keep the original wrap behaviour pixel-identical.
+                        maxLines: isPhoneCard ? 1 : null,
+                        overflow: isPhoneCard ? TextOverflow.ellipsis : null,
                       ),
-                      Icon(
-                        _simExpanded
-                            ? Icons.expand_less_rounded
-                            : Icons.expand_more_rounded,
-                        color: context.textMuted,
-                        size: 22,
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ),
-              if (_simExpanded) ...[
+                // Header→content gap tightens with the phone overline header.
+                SizedBox(height: isPhoneCard ? 12 : 16),
+                _dueSoonStrip(debts, l),
+                // Phones (the same <720 flag that stacks the strategy tiles):
+                // the 3-up metric row crushes at phone widths, so it wraps to a
+                // 2-column grid (cash-10).
+                _summaryStrip(debts, l, twoUp: isPhone),
+                const SizedBox(height: 16),
+                Divider(height: 1, color: context.hairline),
+                const SizedBox(height: 12),
+                ...debts.map(_debtRow),
                 const SizedBox(height: 8),
-                ...simulator,
+                Divider(height: 24, color: context.hairline),
+                if (!isPhone)
+                  ...simulator
+                else ...[
+                  // Tap-to-expand simulator header (phones only).
+                  InkWell(
+                    onTap: () => setState(() => _simExpanded = !_simExpanded),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            color: context.tealAccent,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l.dpSimulator,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: context.textPrimary,
+                                  ),
+                                ),
+                                if (!_simExpanded) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    summaryLine,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: context.textSubtle,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            _simExpanded
+                                ? Icons.expand_less_rounded
+                                : Icons.expand_more_rounded,
+                            color: context.textMuted,
+                            size: 22,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_simExpanded) ...[
+                    const SizedBox(height: 8),
+                    ...simulator,
+                  ],
+                ],
               ],
-            ],
-          ],
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
   }
@@ -512,19 +524,24 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
   // [twoUp]: phones wrap the strip to a 2-column grid — total owed + monthly
   // interest (the two money headlines) on the first row, weighted APR below —
   // because three money figures side by side crush at phone widths.
-  Widget _summaryStrip(List<Debt> debts, AppLocalizations l,
-      {bool twoUp = false}) {
+  Widget _summaryStrip(
+    List<Debt> debts,
+    AppLocalizations l, {
+    bool twoUp = false,
+  }) {
     final s = DebtSummary.from(debts);
     final split = _split;
     final splitParts = <String>[];
     // gen-l10n orders these placeholder params alphabetically → (amount, count).
     if (split.creditCount > 0) {
       splitParts.add(
-          l.dpSplitCredit(_money(split.creditOwed), '${split.creditCount}'));
+        l.dpSplitCredit(_money(split.creditOwed), '${split.creditCount}'),
+      );
     }
     if (split.loanCount > 0) {
-      splitParts
-          .add(l.dpSplitLoan(_money(split.loanOwed), '${split.loanCount}'));
+      splitParts.add(
+        l.dpSplitLoan(_money(split.loanOwed), '${split.loanCount}'),
+      );
     }
     final totalOwedMetric = _metric(l.dpTotalOwed, _money(s.totalOwed));
     final weightedAprMetric = _metric(
@@ -622,7 +639,9 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
             child: maskAwareNameText(
               d.name,
               TextStyle(
-                  color: context.textPrimary, fontWeight: FontWeight.w600),
+                color: context.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -642,11 +661,9 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
             borderRadius: BorderRadius.circular(8),
             onTap: () => _editApr(d),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: context.pinkAccent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
@@ -737,11 +754,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       final anchor = _dueAnchor(d.id);
       if (anchor == null) continue;
       final due = rollDueForward(anchor, today);
-      entries.add((
-        debt: d,
-        due: due,
-        days: due.difference(todayDate).inDays,
-      ));
+      entries.add((debt: d, due: due, days: due.difference(todayDate).inDays));
     }
     if (entries.isEmpty) return const SizedBox.shrink();
     entries.sort((a, b) => a.due.compareTo(b.due));
@@ -753,8 +766,9 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       final Color urgency = e.days <= 0
           ? context.negative
           : (e.days <= 5 ? context.warning : context.textSubtle);
-      final daysLabel =
-          e.days < 0 ? l.dpOverdue : (e.days == 0 ? l.dpDueToday : l.dpInDays(e.days));
+      final daysLabel = e.days < 0
+          ? l.dpOverdue
+          : (e.days == 0 ? l.dpDueToday : l.dpInDays(e.days));
       final min = _termAmount(e.debt.id, 'minimum_payment');
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
@@ -780,7 +794,8 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
               ),
               if (min != null && min > 0)
                 TextSpan(
-                  text: '  ·  '
+                  text:
+                      '  ·  '
                       '${l.dpMinAmount(_money(_termToUsd(min, e.debt.id)))}',
                 ),
             ],
@@ -841,35 +856,48 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
           Row(
             children: [
               Expanded(
-                child: Text(title,
-                    style: TextStyle(
-                        color: context.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13)),
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
               ),
               if (recommended)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 1),
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: context.positive.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text(l.dpRecommended,
-                      style: TextStyle(
-                          color: context.positive,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold)),
+                  child: Text(
+                    l.dpRecommended,
+                    style: TextStyle(
+                      color: context.positive,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
             ],
           ),
-          Text(subtitle,
-              style: TextStyle(color: context.textFaint, fontSize: 10)),
+          Text(
+            subtitle,
+            style: TextStyle(color: context.textFaint, fontSize: 10),
+          ),
           const SizedBox(height: 8),
           Text(
             l.dpDebtFree(r.months),
             style: TextStyle(
-                color: color, fontWeight: FontWeight.bold, fontSize: 15),
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -899,9 +927,14 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
           Icon(Icons.info_outline, color: color, size: 18),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(l.dpInfeasible,
-                style: TextStyle(
-                    color: color, fontSize: 12.5, fontWeight: FontWeight.w600)),
+            child: Text(
+              l.dpInfeasible,
+              style: TextStyle(
+                color: color,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -920,8 +953,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
         title: Text(l.dpAprDialogTitle),
         content: TextField(
           controller: controller,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           autofocus: true,
           decoration: InputDecoration(
             labelText: l.dpEditApr(d.name),
@@ -930,11 +962,13 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l.actionCancel)),
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.actionCancel),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l.actionSave)),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.actionSave),
+          ),
         ],
       ),
     );
@@ -977,15 +1011,17 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
             children: [
               TextField(
                 controller: stmtCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(labelText: l.dpStatementBalance),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: minCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(labelText: l.dpMinPayment),
               ),
               const SizedBox(height: 12),
@@ -995,8 +1031,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
                     child: Text(
                       '${l.dpDueDate}: '
                       '${dueDate != null ? DateFormat.yMMMd(locale).format(dueDate!) : l.dpDueDateNone}',
-                      style:
-                          TextStyle(color: context.textSubtle, fontSize: 13),
+                      style: TextStyle(color: context.textSubtle, fontSize: 13),
                     ),
                   ),
                   TextButton(
@@ -1017,11 +1052,13 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(dctx, false),
-                child: Text(l.actionCancel)),
+              onPressed: () => Navigator.pop(dctx, false),
+              child: Text(l.actionCancel),
+            ),
             FilledButton(
-                onPressed: () => Navigator.pop(dctx, true),
-                child: Text(l.actionSave)),
+              onPressed: () => Navigator.pop(dctx, true),
+              child: Text(l.actionSave),
+            ),
           ],
         ),
       ),

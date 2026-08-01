@@ -41,9 +41,7 @@ class _AuthGateState extends State<AuthGate> {
 
     switch (_state.phase) {
       case AuthPhase.unknown:
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
       case AuthPhase.needsBootstrap:
         return const BootstrapScreen();
       case AuthPhase.signedOut:

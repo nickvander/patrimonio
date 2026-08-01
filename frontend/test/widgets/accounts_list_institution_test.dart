@@ -10,22 +10,21 @@ import 'package:patrimonio/widgets/accounts_list_widget.dart';
 // total) that expands on tap; a bank with a single account stays a plain row.
 
 Widget _host(List<dynamic> accounts) => MaterialApp(
-      locale: const Locale('en'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: AccountsListWidget(
-            accounts: accounts,
-            conversionFactor: 1.0,
-            currencyFormat:
-                NumberFormat.currency(symbol: r'$', decimalDigits: 2),
-            targetCurrency: 'USD',
-            usdMxnRate: 20.0,
-          ),
-        ),
+  locale: const Locale('en'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: SingleChildScrollView(
+      child: AccountsListWidget(
+        accounts: accounts,
+        conversionFactor: 1.0,
+        currencyFormat: NumberFormat.currency(symbol: r'$', decimalDigits: 2),
+        targetCurrency: 'USD',
+        usdMxnRate: 20.0,
       ),
-    );
+    ),
+  ),
+);
 
 Map<String, dynamic> _acc(
   String name,
@@ -33,23 +32,25 @@ Map<String, dynamic> _acc(
   String inst,
   double bal, {
   String cur = 'USD',
-}) =>
-    {
-      'id': name,
-      'name': name,
-      'account_type': type,
-      'institution_name': inst,
-      'current_balance': bal,
-      'currency': cur,
-    };
+}) => {
+  'id': name,
+  'name': name,
+  'account_type': type,
+  'institution_name': inst,
+  'current_balance': bal,
+  'currency': cur,
+};
 
 void main() {
-  testWidgets('a multi-account bank collapses behind one summary header',
-      (tester) async {
-    await tester.pumpWidget(_host([
-      _acc('SoFi Checking', 'checking', 'SoFi', 100.0),
-      _acc('SoFi Savings', 'savings', 'SoFi', 50.0),
-    ]));
+  testWidgets('a multi-account bank collapses behind one summary header', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host([
+        _acc('SoFi Checking', 'checking', 'SoFi', 100.0),
+        _acc('SoFi Savings', 'savings', 'SoFi', 50.0),
+      ]),
+    );
     await tester.pumpAndSettle();
 
     // One collapsed institution header carrying the account count + name.
@@ -67,11 +68,12 @@ void main() {
     expect(find.text('2 accounts'), findsOneWidget); // header persists
   });
 
-  testWidgets('a single-account bank stays a plain row (no collapse header)',
-      (tester) async {
-    await tester.pumpWidget(_host([
-      _acc('Discover it Card', 'credit card', 'Discover', 25.0),
-    ]));
+  testWidgets('a single-account bank stays a plain row (no collapse header)', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host([_acc('Discover it Card', 'credit card', 'Discover', 25.0)]),
+    );
     await tester.pumpAndSettle();
 
     // The account renders directly; we never synthesize a "1 account" header.
@@ -81,9 +83,9 @@ void main() {
 
   testWidgets('a single-account bank does not repeat the institution label '
       'when the name already conveys it', (tester) async {
-    await tester.pumpWidget(_host([
-      _acc('Banamex', 'checking', 'Banamex', 4000.0, cur: 'MXN'),
-    ]));
+    await tester.pumpWidget(
+      _host([_acc('Banamex', 'checking', 'Banamex', 4000.0, cur: 'MXN')]),
+    );
     await tester.pumpAndSettle();
 
     // "Banamex" shows once (the name) — not stacked as name + institution.
@@ -92,11 +94,18 @@ void main() {
 
   testWidgets('combined header total uses the native figure for a '
       'single-currency bank', (tester) async {
-    await tester.pumpWidget(_host([
-      _acc('Revolut — Cuenta', 'checking', 'Revolut', 0.0, cur: 'MXN'),
-      _acc('Revolut — Instant Access Savings', 'checking', 'Revolut', 25196.30,
-          cur: 'MXN'),
-    ]));
+    await tester.pumpWidget(
+      _host([
+        _acc('Revolut — Cuenta', 'checking', 'Revolut', 0.0, cur: 'MXN'),
+        _acc(
+          'Revolut — Instant Access Savings',
+          'checking',
+          'Revolut',
+          25196.30,
+          cur: 'MXN',
+        ),
+      ]),
+    );
     await tester.pumpAndSettle();
 
     // Two MXN accounts → header shows the MXN total (25,196.30), NOT a
@@ -105,18 +114,19 @@ void main() {
     expect(find.textContaining('25,196'), findsWidgets);
   });
 
-  testWidgets(
-      'sibling credit cards never nest as vaults under a generic card '
+  testWidgets('sibling credit cards never nest as vaults under a generic card '
       '(U.S. Bank "Credit Card" + "Cash +" regression)', (tester) async {
     // Real-world shape: the bank reports one card with the generic name
     // "Credit Card" (contains the type token → product) and one with a pure
     // product name "Cash +" (contains neither type token nor bank name).
     // The vault heuristic used to classify Cash+ as a nicknamed sub-account
     // and nest it under Credit Card with a "base + 1 cards" summary line.
-    await tester.pumpWidget(_host([
-      _acc('Credit Card', 'credit card', 'U.S. Bank', 103.80),
-      _acc('Cash +', 'credit card', 'U.S. Bank', 458.39),
-    ]));
+    await tester.pumpWidget(
+      _host([
+        _acc('Credit Card', 'credit card', 'U.S. Bank', 103.80),
+        _acc('Cash +', 'credit card', 'U.S. Bank', 458.39),
+      ]),
+    );
     await tester.pumpAndSettle();
 
     // One collapsed institution header; expand it.
@@ -135,21 +145,27 @@ void main() {
     expect(find.textContaining('458.39'), findsOneWidget);
   });
 
-  testWidgets(
-      'sibling investment accounts never nest as vaults '
-      '(Vanguard 401(k) under a \$0 Traditional IRA regression)',
-      (tester) async {
+  testWidgets('sibling investment accounts never nest as vaults '
+      '(Vanguard 401(k) under a \$0 Traditional IRA regression)', (
+    tester,
+  ) async {
     // Real-world shape: "Traditional IRA" contains the type token
     // ("investment" not present, but the IRA row was classified product by
     // luck of ordering) while "GOOGLE LLC 401(K) SAVINGS PLAN" matches
     // neither token nor bank — the heuristic nested the 401(k) under the
     // IRA with "$0.00 base + 1 accounts". Vaults are cash-only now.
-    await tester.pumpWidget(_host([
-      _acc('Roth IRA', 'investment', 'Vanguard', 37676.0),
-      _acc('Traditional IRA', 'investment', 'Vanguard', 0.0),
-      _acc('GOOGLE LLC 401(K) SAVINGS PLAN', 'investment', 'Vanguard',
-          530947.0),
-    ]));
+    await tester.pumpWidget(
+      _host([
+        _acc('Roth IRA', 'investment', 'Vanguard', 37676.0),
+        _acc('Traditional IRA', 'investment', 'Vanguard', 0.0),
+        _acc(
+          'GOOGLE LLC 401(K) SAVINGS PLAN',
+          'investment',
+          'Vanguard',
+          530947.0,
+        ),
+      ]),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('3 accounts'), findsOneWidget);

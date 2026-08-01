@@ -22,15 +22,16 @@ class BackendConfig {
   static const _prefsKey = 'patrimonio:backend_base_url';
   static const _cfIdKey = 'patrimonio:backend_cf_access_client_id';
   static const _cfSecretKey = 'patrimonio:backend_cf_access_client_secret';
-  static const _compileDefault =
-      String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  static const _compileDefault = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: '',
+  );
 
   /// The configured backend origin (scheme + host [+ port]), with no trailing
   /// slash and no `/api` suffix — e.g. `https://patrimonio.example.com`. Null
   /// until the user configures one. Held in memory so the synchronous
   /// `api_platform` seam can read it on every request.
-  static final ValueNotifier<String?> baseUrlNotifier =
-      ValueNotifier<String?>(
+  static final ValueNotifier<String?> baseUrlNotifier = ValueNotifier<String?>(
     _compileDefault.isEmpty ? null : normalize(_compileDefault),
   );
 

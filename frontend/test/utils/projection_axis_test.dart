@@ -30,22 +30,19 @@ void main() {
   });
 
   test('prefers a step that divides the horizon (keeps first + last)', () {
-    final step =
-        projectionYearAxisInterval(plotWidth: 400, projectionYears: 45)
-            .toInt();
+    final step = projectionYearAxisInterval(
+      plotWidth: 400,
+      projectionYears: 45,
+    ).toInt();
     expect(45 % step, 0);
   });
 
   test('degenerate width still returns a usable positive step', () {
-    final step =
-        projectionYearAxisInterval(plotWidth: 0, projectionYears: 50);
+    final step = projectionYearAxisInterval(plotWidth: 0, projectionYears: 50);
     expect(step, greaterThan(0));
   });
 
   test('short horizon on a wide plot uses the finest clean step', () {
-    expect(
-      projectionYearAxisInterval(plotWidth: 900, projectionYears: 5),
-      5.0,
-    );
+    expect(projectionYearAxisInterval(plotWidth: 900, projectionYears: 5), 5.0);
   });
 }

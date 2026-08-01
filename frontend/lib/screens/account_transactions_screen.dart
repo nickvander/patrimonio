@@ -28,35 +28,34 @@ import '../widgets/transactions_tab.dart';
 
 /// Signature of one paged, newest-first fetch of an account's
 /// transactions (see [AccountTransactionsScreen.transactionsFetcher]).
-typedef AccountTransactionsFetcher = Future<List<dynamic>> Function({
-  required int limit,
-  required int offset,
-});
+typedef AccountTransactionsFetcher =
+    Future<List<dynamic>> Function({required int limit, required int offset});
 
 /// Signature of the single-row PATCH issued from the detail editors
 /// (see [AccountTransactionsScreen.transactionUpdater]).
-typedef AccountTransactionUpdater = Future<void> Function(
-  String id, {
-  String? userCategory,
-  String? userNotes,
-  String? userDescription,
-  String? accountId,
-});
+typedef AccountTransactionUpdater =
+    Future<void> Function(
+      String id, {
+      String? userCategory,
+      String? userNotes,
+      String? userDescription,
+      String? accountId,
+    });
 
 /// Signature of one fetch of an account's holdings
 /// (see [AccountTransactionsScreen.holdingsFetcher]).
-typedef AccountHoldingsFetcher = Future<List<dynamic>> Function(
-    String accountId);
+typedef AccountHoldingsFetcher =
+    Future<List<dynamic>> Function(String accountId);
 
 /// Signature of the (soft) DELETE behind the holding-row close button
 /// (see [AccountTransactionsScreen.holdingDeleter]).
-typedef AccountHoldingDeleter = Future<void> Function(
-    String accountId, String holdingId);
+typedef AccountHoldingDeleter =
+    Future<void> Function(String accountId, String holdingId);
 
 /// Signature of the restore POST behind the delete-undo snackbar
 /// (see [AccountTransactionsScreen.holdingRestorer]).
-typedef AccountHoldingRestorer = Future<Map<String, dynamic>> Function(
-    String accountId, String holdingId);
+typedef AccountHoldingRestorer =
+    Future<Map<String, dynamic>> Function(String accountId, String holdingId);
 
 /// Per-account transaction history. Rendered as the body of a slide-from-
 /// right side panel via [showAccountTransactionsPanel] — no Scaffold/AppBar
@@ -69,14 +68,17 @@ class AccountTransactionsScreen extends StatefulWidget {
   final String targetCurrency;
   final double usdMxnRate;
   final Function(String, double)? onBalanceUpdate;
+
   /// Optional inline rename action — when wired, the header surfaces a
   /// "Rename" entry in the overflow menu that lets the user set a
   /// nickname without leaving the panel.
   final Future<void> Function(String accountId, String nickname)?
-      onRenameAccount;
+  onRenameAccount;
+
   /// Fired after a low-balance threshold is saved/removed so the opener
   /// (e.g. the dashboard) can refresh its notifications bell immediately.
   final VoidCallback? onAlertsChanged;
+
   /// The opener's server-push stream (the dashboard's single
   /// [RealtimeService] connection — this panel deliberately does NOT open
   /// a second websocket). When wired, a TransactionsChanged/resync push
@@ -84,6 +86,7 @@ class AccountTransactionsScreen extends StatefulWidget {
   /// does, so an edit performed elsewhere (the dashboard Transactions
   /// tab, another tab/device) no longer leaves the open panel stale.
   final Stream<RealtimeEvent>? realtimeEvents;
+
   /// Test seam: one paged, newest-first fetch of this account's
   /// transactions. Production leaves it null and the panel uses
   /// `ApiService.getAccountTransactions` — widget tests inject a fake
@@ -91,10 +94,12 @@ class AccountTransactionsScreen extends StatefulWidget {
   /// on the test VM).
   @visibleForTesting
   final AccountTransactionsFetcher? transactionsFetcher;
+
   /// Test seam: the single-row PATCH behind the detail editors.
   /// Production leaves it null → `ApiService.updateTransaction`.
   @visibleForTesting
   final AccountTransactionUpdater? transactionUpdater;
+
   /// Test seams for the holdings list + the delete-undo flow. Production
   /// leaves them null → `ApiService.getAccountHoldings` /
   /// `.deleteHolding` / `.restoreHolding` (same rationale as
@@ -132,11 +137,13 @@ class AccountTransactionsScreen extends StatefulWidget {
 
 class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   final ApiService _apiService = ApiService();
+
   /// The panel's own nested [ScaffoldMessenger] (see [build]): snackbars
   /// shown through it paint above the panel route instead of being hidden
   /// behind it on the root Scaffold.
   final GlobalKey<ScaffoldMessengerState> _panelMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
+
   /// The delete-undo currently counting down on the panel messenger, if
   /// any. [dispose] hands it over to the root messenger so closing the
   /// panel mid-countdown never strands the Undo affordance.
@@ -256,8 +263,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   Future<void> _fetchHoldings({bool syncBalance = false}) async {
     if (!_isInvestment) return;
     try {
-      final h = await (widget.holdingsFetcher ??
-          _apiService.getAccountHoldings)(_accountId);
+      final h =
+          await (widget.holdingsFetcher ?? _apiService.getAccountHoldings)(
+            _accountId,
+          );
       if (!mounted) return;
       setState(() => _holdings = h);
       if (syncBalance) _syncBalanceFromHoldings(h);
@@ -269,7 +278,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         // behind. No holdings → no dividend income, no fetch needed.
         setState(() => _dividends = const {});
       }
-    } catch (_) {/* best-effort */}
+    } catch (_) {
+      /* best-effort */
+    }
   }
 
   /// Mirror the backend's `recompute_holding_balance` (manual investment
@@ -293,11 +304,15 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     try {
       final divs = await _apiService.getHoldingsDividends(_accountId);
       if (!mounted) return;
-      setState(() => _dividends = {
-            for (final d in divs)
-              if (d is Map && d['symbol'] != null) d['symbol'].toString(): d,
-          });
-    } catch (_) {/* best-effort */}
+      setState(
+        () => _dividends = {
+          for (final d in divs)
+            if (d is Map && d['symbol'] != null) d['symbol'].toString(): d,
+        },
+      );
+    } catch (_) {
+      /* best-effort */
+    }
   }
 
   Future<void> _addHolding() async {
@@ -354,8 +369,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
 
   void _showThresholdDialog() {
     final l = AppLocalizations.of(context);
-    final currency =
-        (widget.account['currency'] ?? 'USD').toString().toUpperCase();
+    final currency = (widget.account['currency'] ?? 'USD')
+        .toString()
+        .toUpperCase();
     final existing = _accountAlerts[_accountId];
     // dispose: local controller, else the dialog leaks it. whenComplete fires
     // once the dialog route is fully popped — after every read of controller.text.
@@ -377,8 +393,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               autofocus: true,
               decoration: InputDecoration(
                 labelText: l.acctxThresholdLabel,
@@ -439,9 +456,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       setState(() => _accountAlerts = previous);
       writeCachedAccountAlerts(previous);
       widget.onAlertsChanged?.call();
-      _messenger.showSnackBar(
-        SnackBar(content: Text(l.dashSettingSaveFailed)),
-      );
+      _messenger.showSnackBar(SnackBar(content: Text(l.dashSettingSaveFailed)));
       return;
     }
 
@@ -450,15 +465,15 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     // this panel route (see build()).
     _messenger.showSnackBar(
       SnackBar(
-        content: Text(
-            value == null ? l.acctxAlertRemoved : l.acctxAlertSaved),
+        content: Text(value == null ? l.acctxAlertRemoved : l.acctxAlertSaved),
       ),
     );
   }
 
   Future<void> _fetchBalanceHistory() async {
-    final history =
-        await _apiService.getAccountBalanceHistory(widget.account['id'].toString());
+    final history = await _apiService.getAccountBalanceHistory(
+      widget.account['id'].toString(),
+    );
     if (mounted) setState(() => _balanceHistory = history);
   }
 
@@ -557,8 +572,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   /// as the dashboard's post-mutation refresh).
   Future<void> _refetchTransactionsInPlace() async {
     final previous = _transactions ?? const [];
-    final limit =
-        txRefetchLimit(loadedCount: previous.length, pageSize: _pageSize);
+    final limit = txRefetchLimit(
+      loadedCount: previous.length,
+      pageSize: _pageSize,
+    );
     try {
       final refetched = await _fetchPage(limit: limit, offset: 0);
       if (!mounted) return;
@@ -591,27 +608,30 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           autofocus: true,
           decoration: InputDecoration(
             labelText: l.acctxNickname,
-            hintText: widget.account['name']?.toString() ?? l.acctxAccountFallback,
+            hintText:
+                widget.account['name']?.toString() ?? l.acctxAccountFallback,
           ),
           onSubmitted: (v) {
             Navigator.pop(context);
             final next = v.trim();
             setState(() => _nickname = next);
-            widget.onRenameAccount
-                ?.call(widget.account['id'].toString(), next);
+            widget.onRenameAccount?.call(widget.account['id'].toString(), next);
           },
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(l.actionCancel)),
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.actionCancel),
+          ),
           FilledButton(
             onPressed: () async {
               final v = controller.text.trim();
               Navigator.pop(context);
               if (mounted) setState(() => _nickname = v);
-              await widget.onRenameAccount
-                  ?.call(widget.account['id'].toString(), v);
+              await widget.onRenameAccount?.call(
+                widget.account['id'].toString(),
+                v,
+              );
             },
             child: Text(l.actionSave),
           ),
@@ -633,8 +653,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     // outflow the balance was higher: balance(date - 1) = balance(date) − amount.
     final sorted = [...txs];
     sorted.sort((a, b) {
-      final ad = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(2000);
-      final bd = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(2000);
+      final ad =
+          DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(2000);
+      final bd =
+          DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(2000);
       return bd.compareTo(ad);
     });
 
@@ -670,8 +692,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     // The sparkline is derived in the account's NATIVE currency (it walks
     // back from `_currentBalance`), so the tooltip formats with the same
     // helper as the panel header — not the dashboard's display currency.
-    final sparkCurrency =
-        (widget.account['currency'] ?? widget.targetCurrency).toString();
+    final sparkCurrency = (widget.account['currency'] ?? widget.targetCurrency)
+        .toString();
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -691,8 +713,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               context,
               items: (ctx, touchedSpots) {
                 return touchedSpots.map((spot) {
-                  final idx =
-                      spot.x.toInt().clamp(0, orderedDays.length - 1);
+                  final idx = spot.x.toInt().clamp(0, orderedDays.length - 1);
                   return LineTooltipItem(
                     '',
                     TextStyle(color: ctx.tooltipOnSurface),
@@ -712,9 +733,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                           color: ctx.tooltipOnSurface,
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
-                          fontFeatures: const [
-                            FontFeature.tabularFigures()
-                          ],
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
@@ -745,18 +764,24 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   void _showEditBalanceDialog() {
     final l = AppLocalizations.of(context);
     final controller = TextEditingController(text: _currentBalance.toString());
-    final currency =
-        (widget.account['currency'] ?? 'USD').toString().toUpperCase();
+    final currency = (widget.account['currency'] ?? 'USD')
+        .toString()
+        .toUpperCase();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: Text(l.acctxUpdateBalanceTitle(
-            (widget.account['name'] ?? l.acctxAccountFallback).toString())),
+        title: Text(
+          l.acctxUpdateBalanceTitle(
+            (widget.account['name'] ?? l.acctxAccountFallback).toString(),
+          ),
+        ),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(
-              decimal: true, signed: true),
+            decimal: true,
+            signed: true,
+          ),
           autofocus: true,
           onSubmitted: (_) {
             final newBalance = double.tryParse(controller.text);
@@ -825,16 +850,16 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   Widget _buildHeader() {
     final l = AppLocalizations.of(context);
     final balance = _currentBalance.abs();
-    final sourceCurrency =
-        (widget.account['currency'] ?? widget.targetCurrency).toString();
+    final sourceCurrency = (widget.account['currency'] ?? widget.targetCurrency)
+        .toString();
     final convertedBalance = convertCurrency(
       balance,
       from: sourceCurrency,
       to: widget.targetCurrency,
       usdMxnRate: widget.usdMxnRate,
     );
-    final needsConversion = widget.usdMxnRate > 0 &&
-        sourceCurrency != widget.targetCurrency;
+    final needsConversion =
+        widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
     final inst = (widget.account['institution_name'] ?? '').toString();
     final name = (widget.account['name'] ?? l.acctxAccountFallback).toString();
 
@@ -906,8 +931,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       child: MergeSemantics(
                         child: ListTile(
                           dense: true,
-                          leading:
-                              const Icon(Icons.drive_file_rename_outline),
+                          leading: const Icon(Icons.drive_file_rename_outline),
                           title: Text(l.acctxRenameAccount),
                         ),
                       ),
@@ -918,11 +942,14 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       child: MergeSemantics(
                         child: ListTile(
                           dense: true,
-                          leading:
-                              const Icon(Icons.notifications_active_outlined),
-                          title: Text(_accountAlerts.containsKey(_accountId)
-                              ? l.acctxEditLowBalanceAlert
-                              : l.acctxSetLowBalanceAlert),
+                          leading: const Icon(
+                            Icons.notifications_active_outlined,
+                          ),
+                          title: Text(
+                            _accountAlerts.containsKey(_accountId)
+                                ? l.acctxEditLowBalanceAlert
+                                : l.acctxSetLowBalanceAlert,
+                          ),
                         ),
                       ),
                     ),
@@ -983,8 +1010,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       return const SizedBox.shrink();
     }
     final l = AppLocalizations.of(context);
-    final currency =
-        (widget.account['currency'] ?? widget.targetCurrency).toString();
+    final currency = (widget.account['currency'] ?? widget.targetCurrency)
+        .toString();
     final color = context.warning;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -1002,7 +1029,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             Expanded(
               child: Text(
                 l.acctxLowBalanceBanner(
-                    formatCurrencyAmount(threshold, currency)),
+                  formatCurrencyAmount(threshold, currency),
+                ),
                 style: TextStyle(
                   color: color,
                   fontWeight: FontWeight.w600,
@@ -1045,10 +1073,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 child: Text(
                   es ? 'POSICIONES' : 'HOLDINGS',
                   style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: context.textSubtle),
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: context.textSubtle,
+                  ),
                 ),
               ),
               const Spacer(),
@@ -1060,8 +1089,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : Icon(Icons.refresh, size: 18, color: context.tealAccent),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          Icons.refresh,
+                          size: 18,
+                          color: context.tealAccent,
+                        ),
                   onPressed: _refreshingHoldings ? null : _refreshHoldings,
                 ),
               if (_isManualAccount)
@@ -1078,8 +1112,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               child: Text(
                 _isManualAccount
                     ? (es
-                        ? 'Sin posiciones todavía. Agrega acciones por símbolo (ticker).'
-                        : 'No holdings yet. Add shares by ticker.')
+                          ? 'Sin posiciones todavía. Agrega acciones por símbolo (ticker).'
+                          : 'No holdings yet. Add shares by ticker.')
                     : (es ? 'Sin posiciones.' : 'No holdings.'),
                 style: TextStyle(fontSize: 12.5, color: context.textFaint),
               ),
@@ -1088,54 +1122,66 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             for (final h in _holdings) _holdingRow(h, fmt, es),
             Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Column(children: [
-                const Divider(height: 16),
-                // A5 (round 3, a11y): totals announce as one node each
-                // ("Total $X" / "Est. annual income (dividends) $Y").
-                MergeSemantics(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(es ? 'Total' : 'Total',
+              child: Column(
+                children: [
+                  const Divider(height: 16),
+                  // A5 (round 3, a11y): totals announce as one node each
+                  // ("Total $X" / "Est. annual income (dividends) $Y").
+                  MergeSemantics(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          es ? 'Total' : 'Total',
                           style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: context.textSubtle)),
-                      Text(fmt.format(total),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: context.textSubtle,
+                          ),
+                        ),
+                        Text(
+                          fmt.format(total),
                           style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: context.textPrimary,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ])),
-                    ],
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                if (_totalDividendIncome() > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: MergeSemantics(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
+                  if (_totalDividendIncome() > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: MergeSemantics(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
                               es
                                   ? 'Ingreso anual estimado (dividendos)'
                                   : 'Est. annual income (dividends)',
                               style: TextStyle(
-                                  fontSize: 11.5, color: context.tealAccent)),
-                          Text(fmt.format(_totalDividendIncome()),
+                                fontSize: 11.5,
+                                color: context.tealAccent,
+                              ),
+                            ),
+                            Text(
+                              fmt.format(_totalDividendIncome()),
                               style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: context.tealAccent,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ])),
-                        ],
+                                fontWeight: FontWeight.w700,
+                                color: context.tealAccent,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ]),
+                ],
+              ),
             ),
           ],
         ],
@@ -1153,8 +1199,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
 
   Widget _dividendLine(String symbol, NumberFormat fmt, bool es) {
     final d = _dividends[symbol];
-    final income =
-        d == null ? 0.0 : ((d['annual_income'] as num?)?.toDouble() ?? 0.0);
+    final income = d == null
+        ? 0.0
+        : ((d['annual_income'] as num?)?.toDouble() ?? 0.0);
     if (d == null || income <= 0) return const SizedBox.shrink();
     final yieldPct = (d['yield_pct'] as num?)?.toDouble();
     final next = d['est_next_ex_date']?.toString();
@@ -1164,12 +1211,14 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         [
           'Div: ${fmt.format(income)}${es ? '/año' : '/yr'}',
           if (yieldPct != null) formatPercent(context, yieldPct, digits: 2),
-          if (next != null && next.isNotEmpty) '${es ? 'próx.' : 'next'} ~$next',
+          if (next != null && next.isNotEmpty)
+            '${es ? 'próx.' : 'next'} ~$next',
         ].join('  ·  '),
         style: TextStyle(
-            fontSize: 11,
-            color: context.tealAccent,
-            fontFeatures: const [FontFeature.tabularFigures()]),
+          fontSize: 11,
+          color: context.tealAccent,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
       ),
     );
   }
@@ -1186,8 +1235,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final value = (h['value'] is num)
         ? (h['value'] as num).toDouble()
         : double.tryParse('${h['value'] ?? ''}');
-    final qtyStr =
-        qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(2);
+    final qtyStr = qty == qty.roundToDouble()
+        ? qty.toStringAsFixed(0)
+        : qty.toStringAsFixed(2);
     // A5 (round 3, a11y): the row's facts read as ONE sentence — "VOO, 10
     // shares, $5,085.80, dividend $66.00 per year" — while the delete X
     // stays its own "Remove VOO" button node OUTSIDE the merge.
@@ -1214,19 +1264,21 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(symbol,
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: context.textPrimary)),
+                        Text(
+                          symbol,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                          ),
+                        ),
                         Text(
                           '$qtyStr ${es ? 'acciones' : 'shares'}'
                           '${price != null ? ' · ${fmt.format(price)}' : ''}',
                           style: TextStyle(
-                              fontSize: 11.5,
-                              color: context.textSubtle,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ]),
+                            fontSize: 11.5,
+                            color: context.textSubtle,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
                         _dividendLine(symbol, fmt, es),
                       ],
@@ -1237,11 +1289,12 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                         ? fmt.format(value)
                         : (es ? 'sin precio' : 'no price'),
                     style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: value != null
-                            ? context.textPrimary
-                            : context.warning,
-                        fontFeatures: const [FontFeature.tabularFigures()]),
+                      fontWeight: FontWeight.w700,
+                      color: value != null
+                          ? context.textPrimary
+                          : context.warning,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ],
               ),
@@ -1314,7 +1367,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     if (confirmed != true) return; // cancel/dismiss → nothing is called
     try {
       await (widget.holdingDeleter ?? apiService.deleteHolding)(
-          accountId, holdingId);
+        accountId,
+        holdingId,
+      );
     } catch (_) {
       return; // best-effort, same policy as before the undo flow
     }
@@ -1327,8 +1382,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final pending = _PendingHoldingUndo(
       rootMessenger: rootMessenger,
       restore: widget.holdingRestorer ?? apiService.restoreHolding,
-      fetchHoldings:
-          widget.holdingsFetcher ?? apiService.getAccountHoldings,
+      fetchHoldings: widget.holdingsFetcher ?? apiService.getAccountHoldings,
       onBalanceUpdate: widget.onBalanceUpdate,
       accountId: accountId,
       holdingId: holdingId,
@@ -1346,8 +1400,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
 
   /// Shows (or, from [dispose], re-shows on the root messenger) the undo
   /// snackbar for [pending] with [duration] left on its countdown.
-  void _showUndoSnackBar(ScaffoldMessengerState messenger,
-      _PendingHoldingUndo pending, Duration duration) {
+  void _showUndoSnackBar(
+    ScaffoldMessengerState messenger,
+    _PendingHoldingUndo pending,
+    Duration duration,
+  ) {
     // One undo window at a time: a second delete replaces the previous
     // snackbar instead of queueing behind its 10-second run.
     messenger.hideCurrentSnackBar();
@@ -1403,11 +1460,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       }
     } on HoldingRestoreGoneException {
       messenger.hideCurrentSnackBar();
-      messenger
-          .showSnackBar(SnackBar(content: Text(pending.restoreGoneText)));
+      messenger.showSnackBar(SnackBar(content: Text(pending.restoreGoneText)));
     } catch (_) {
-      messenger
-          .showSnackBar(SnackBar(content: Text(pending.restoreFailedText)));
+      messenger.showSnackBar(
+        SnackBar(content: Text(pending.restoreFailedText)),
+      );
     }
   }
 
@@ -1419,8 +1476,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
         onPressed: () => setState(() => _showDetails = !showDetails),
-        icon: Icon(showDetails ? Icons.expand_less : Icons.expand_more,
-            size: 18),
+        icon: Icon(
+          showDetails ? Icons.expand_less : Icons.expand_more,
+          size: 18,
+        ),
         label: Text(l.acctDetailsToggle),
         style: TextButton.styleFrom(
           foregroundColor: context.textSubtle,
@@ -1444,10 +1503,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           children: [
             Icon(Icons.error_outline, size: 64, color: context.negative),
             const SizedBox(height: 16),
-            Text(
-              l.acctxLoadError(_error!),
-              textAlign: TextAlign.center,
-            ),
+            Text(l.acctxLoadError(_error!), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _fetchTransactions,
@@ -1502,8 +1558,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       );
     }
 
-    final sourceCurrency =
-        (widget.account['currency'] ?? widget.targetCurrency).toString();
+    final sourceCurrency = (widget.account['currency'] ?? widget.targetCurrency)
+        .toString();
     return Padding(
       // Left inset matches the header's 24px so the CLABE card + transaction
       // list line up with the account name/balance above (was 16 → an 8px
@@ -1513,157 +1569,169 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       // TransactionsTab callbacks below capture the State's own context
       // (guarded by this State's `mounted`), and shadowing it with the
       // LayoutBuilder's would break that pairing.
-      child: LayoutBuilder(builder: (_, constraints) {
-        // Everything that sits ABOVE the transactions list (CLABE card,
-        // balance chart, holdings). These used to be fixed Column children:
-        // on an investment account with a screenful of holdings they
-        // consumed the whole panel, squeezing the Expanded transactions
-        // list to ~zero height — its rows became unreachable, and a mouse
-        // wheel anywhere over this content found no scrollable to act on
-        // (only the inner list's drag-scrollbar did anything). Capping the
-        // block and giving it its own scroll view guarantees the list
-        // keeps real height AND makes wheel/trackpad scrolling work over
-        // the holdings/chart region.
-        final preList = <Widget>[
-          if ((widget.account['clabe'] ?? '').toString().isNotEmpty) ...[
-            ClabeInfoCard(
-              clabe: widget.account['clabe'].toString(),
-              holder: widget.account['holder_name']?.toString(),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (_balanceHistory.length >= 2) ...[
-            AccountBalanceChart(
-              points: _balanceHistory,
-              currency: sourceCurrency,
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (_isInvestment && _holdings.isNotEmpty) ...[
-            _buildHoldings('USD'),
-            const SizedBox(height: 12),
-          ],
-        ];
-        // The account details (CLABE, balance chart, holdings) collapse
-        // behind a toggle so the transactions list — the reason you open a
-        // account — fills the sheet. Default: collapsed on a narrow phone
-        // sheet, open on a wide side panel. When open, the details are
-        // capped to ~40% so the list still gets the majority.
-        final bodyHeight = constraints.maxHeight;
-        // Default collapsed on a short host (the phone bottom sheet) so the
-        // list isn't squeezed to ~2 rows; open on a tall side panel / an
-        // unbounded host where there's room for both.
-        final showDetails =
-            _showDetails ?? (!bodyHeight.isFinite || bodyHeight > 820);
-        final preListCap =
-            bodyHeight.isFinite ? bodyHeight * 0.4 : double.infinity;
-        return Column(
-          children: [
-            if (preList.isNotEmpty) ...[
-              _detailsToggle(showDetails),
-              if (showDetails)
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: preListCap),
-                  child: SingleChildScrollView(
-                    child: Column(children: preList),
-                  ),
-                ),
-              const SizedBox(height: 8),
+      child: LayoutBuilder(
+        builder: (_, constraints) {
+          // Everything that sits ABOVE the transactions list (CLABE card,
+          // balance chart, holdings). These used to be fixed Column children:
+          // on an investment account with a screenful of holdings they
+          // consumed the whole panel, squeezing the Expanded transactions
+          // list to ~zero height — its rows became unreachable, and a mouse
+          // wheel anywhere over this content found no scrollable to act on
+          // (only the inner list's drag-scrollbar did anything). Capping the
+          // block and giving it its own scroll view guarantees the list
+          // keeps real height AND makes wheel/trackpad scrolling work over
+          // the holdings/chart region.
+          final preList = <Widget>[
+            if ((widget.account['clabe'] ?? '').toString().isNotEmpty) ...[
+              ClabeInfoCard(
+                clabe: widget.account['clabe'].toString(),
+                holder: widget.account['holder_name']?.toString(),
+              ),
+              const SizedBox(height: 12),
             ],
-            Expanded(
-            child: TransactionsTab(
-              transactions: _transactions!,
-              accounts: widget.allAccounts,
-              conversionFactor: widget.conversionFactor,
-              currencyFormat: widget.currencyFormat,
-              targetCurrency: widget.targetCurrency,
-              usdMxnRate: widget.usdMxnRate,
-              // Full action set, mirroring the dashboard's wiring (same
-              // ApiService calls, one in-place refetch per mutation).
-              // apiService unlocks "+ Add transaction" + CSV export;
-              // the Add dialog opens preselected on THIS account, and
-              // CSV always confirms because the export covers every
-              // account while the panel shows just one.
-              apiService: _apiService,
-              addTransactionAccountId: _accountId,
-              csvExportConfirmAlways: true,
-              // Single-account host: drop the redundant per-row account
-              // name and show a running "balance after this transaction"
-              // instead. The anchor is the panel header's own native-
-              // currency balance, so estimates and header always agree.
-              singleAccountContext: true,
-              runningBalanceAnchor: _currentBalance,
-              onTransactionAdded: () {
-                _refetchTransactionsInPlace();
-                _fetchBalanceHistory();
-              },
-              onLoadMore: _loadMoreTransactions,
-              hasMore: _hasMore,
-              onUpdate: (id,
-                  {userCategory, userNotes, userDescription, accountId}) async {
-                try {
-                  final AccountTransactionUpdater update =
-                      widget.transactionUpdater ?? _apiService.updateTransaction;
-                  await update(
-                    id,
-                    userCategory: userCategory,
-                    userNotes: userNotes,
-                    userDescription: userDescription,
-                    accountId: accountId,
-                  );
-                  await _refetchTransactionsInPlace();
-                } catch (e) {
-                  if (!mounted) return;
-                  // Panel messenger, not root: a root snackbar would be
-                  // hidden behind this panel route (see build()).
-                  _messenger.showSnackBar(
-                    SnackBar(content: Text(l.acctxUpdateFailed(e.toString()))),
-                  );
-                }
-              },
-              onBulkUpdate: (ids,
-                  {userCategory, accountId, userDescription}) async {
-                // One batched request → one in-place refresh, exactly like
-                // the dashboard (the old panel omitted this, leaving the
-                // bulk bar half-functional).
-                final n = await _apiService.batchUpdateTransactions(
-                  ids,
-                  category: userCategory,
-                  accountId: accountId,
-                  description: userDescription,
-                );
-                await _refetchTransactionsInPlace();
-                return n;
-              },
-              onBulkDelete: (ids) async {
-                for (final id in ids) {
-                  await _apiService.deleteTransaction(id);
-                }
-                await _refetchTransactionsInPlace();
-                _fetchBalanceHistory();
-              },
-              onDelete: (id) async {
-                await _apiService.deleteTransaction(id);
-                await _refetchTransactionsInPlace();
-                _fetchBalanceHistory();
-              },
-              onSplitTransaction: (parentId, splits) async {
-                await _apiService.splitTransaction(parentId, splits);
-                await _refetchTransactionsInPlace();
-              },
-              onUnsplitTransaction: (parentId) async {
-                await _apiService.unsplitTransaction(parentId);
-                await _refetchTransactionsInPlace();
-              },
-              onReplaceSplits: (parentId, splits) async {
-                await _apiService.replaceSplits(parentId, splits);
-                await _refetchTransactionsInPlace();
-              },
-            ),
-            ),
-          ],
-        );
-      }),
+            if (_balanceHistory.length >= 2) ...[
+              AccountBalanceChart(
+                points: _balanceHistory,
+                currency: sourceCurrency,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_isInvestment && _holdings.isNotEmpty) ...[
+              _buildHoldings('USD'),
+              const SizedBox(height: 12),
+            ],
+          ];
+          // The account details (CLABE, balance chart, holdings) collapse
+          // behind a toggle so the transactions list — the reason you open a
+          // account — fills the sheet. Default: collapsed on a narrow phone
+          // sheet, open on a wide side panel. When open, the details are
+          // capped to ~40% so the list still gets the majority.
+          final bodyHeight = constraints.maxHeight;
+          // Default collapsed on a short host (the phone bottom sheet) so the
+          // list isn't squeezed to ~2 rows; open on a tall side panel / an
+          // unbounded host where there's room for both.
+          final showDetails =
+              _showDetails ?? (!bodyHeight.isFinite || bodyHeight > 820);
+          final preListCap = bodyHeight.isFinite
+              ? bodyHeight * 0.4
+              : double.infinity;
+          return Column(
+            children: [
+              if (preList.isNotEmpty) ...[
+                _detailsToggle(showDetails),
+                if (showDetails)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: preListCap),
+                    child: SingleChildScrollView(
+                      child: Column(children: preList),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+              ],
+              Expanded(
+                child: TransactionsTab(
+                  transactions: _transactions!,
+                  accounts: widget.allAccounts,
+                  conversionFactor: widget.conversionFactor,
+                  currencyFormat: widget.currencyFormat,
+                  targetCurrency: widget.targetCurrency,
+                  usdMxnRate: widget.usdMxnRate,
+                  // Full action set, mirroring the dashboard's wiring (same
+                  // ApiService calls, one in-place refetch per mutation).
+                  // apiService unlocks "+ Add transaction" + CSV export;
+                  // the Add dialog opens preselected on THIS account, and
+                  // CSV always confirms because the export covers every
+                  // account while the panel shows just one.
+                  apiService: _apiService,
+                  addTransactionAccountId: _accountId,
+                  csvExportConfirmAlways: true,
+                  // Single-account host: drop the redundant per-row account
+                  // name and show a running "balance after this transaction"
+                  // instead. The anchor is the panel header's own native-
+                  // currency balance, so estimates and header always agree.
+                  singleAccountContext: true,
+                  runningBalanceAnchor: _currentBalance,
+                  onTransactionAdded: () {
+                    _refetchTransactionsInPlace();
+                    _fetchBalanceHistory();
+                  },
+                  onLoadMore: _loadMoreTransactions,
+                  hasMore: _hasMore,
+                  onUpdate:
+                      (
+                        id, {
+                        userCategory,
+                        userNotes,
+                        userDescription,
+                        accountId,
+                      }) async {
+                        try {
+                          final AccountTransactionUpdater update =
+                              widget.transactionUpdater ??
+                              _apiService.updateTransaction;
+                          await update(
+                            id,
+                            userCategory: userCategory,
+                            userNotes: userNotes,
+                            userDescription: userDescription,
+                            accountId: accountId,
+                          );
+                          await _refetchTransactionsInPlace();
+                        } catch (e) {
+                          if (!mounted) return;
+                          // Panel messenger, not root: a root snackbar would be
+                          // hidden behind this panel route (see build()).
+                          _messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(l.acctxUpdateFailed(e.toString())),
+                            ),
+                          );
+                        }
+                      },
+                  onBulkUpdate:
+                      (ids, {userCategory, accountId, userDescription}) async {
+                        // One batched request → one in-place refresh, exactly like
+                        // the dashboard (the old panel omitted this, leaving the
+                        // bulk bar half-functional).
+                        final n = await _apiService.batchUpdateTransactions(
+                          ids,
+                          category: userCategory,
+                          accountId: accountId,
+                          description: userDescription,
+                        );
+                        await _refetchTransactionsInPlace();
+                        return n;
+                      },
+                  onBulkDelete: (ids) async {
+                    for (final id in ids) {
+                      await _apiService.deleteTransaction(id);
+                    }
+                    await _refetchTransactionsInPlace();
+                    _fetchBalanceHistory();
+                  },
+                  onDelete: (id) async {
+                    await _apiService.deleteTransaction(id);
+                    await _refetchTransactionsInPlace();
+                    _fetchBalanceHistory();
+                  },
+                  onSplitTransaction: (parentId, splits) async {
+                    await _apiService.splitTransaction(parentId, splits);
+                    await _refetchTransactionsInPlace();
+                  },
+                  onUnsplitTransaction: (parentId) async {
+                    await _apiService.unsplitTransaction(parentId);
+                    await _refetchTransactionsInPlace();
+                  },
+                  onReplaceSplits: (parentId, splits) async {
+                    await _apiService.replaceSplits(parentId, splits);
+                    await _refetchTransactionsInPlace();
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -1698,6 +1766,7 @@ class _PendingHoldingUndo {
   final String undoText;
   final String restoreGoneText;
   final String restoreFailedText;
+
   /// End of the undo window — [dispose] only re-homes a countdown that
   /// still has time left.
   final DateTime expiresAt;
@@ -1720,7 +1789,9 @@ class _PendingHoldingUndo {
             : double.tryParse('${h['value'] ?? ''}') ?? 0;
       }
       notify(accountId, total);
-    } catch (_) {/* best-effort, like every other balance sync */}
+    } catch (_) {
+      /* best-effort, like every other balance sync */
+    }
   }
 }
 
@@ -1736,10 +1807,10 @@ class _PanelScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        ...super.dragDevices,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.trackpad,
-      };
+    ...super.dragDevices,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+  };
 }
 
 /// Slide-from-right side panel that shows transactions for one account.
@@ -1819,14 +1890,16 @@ Future<void> showAccountTransactionsPanel(
               // onSurface-derived text tokens keep their contrast. Was a
               // hardcoded dark (#15151E) — dark-on-dark in light mode.
               color: Theme.of(ctx).colorScheme.surface,
-              borderRadius:
-                  const BorderRadius.horizontal(left: Radius.circular(20)),
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(20),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(
-                      alpha: Theme.of(ctx).brightness == Brightness.dark
-                          ? 0.4
-                          : 0.18),
+                    alpha: Theme.of(ctx).brightness == Brightness.dark
+                        ? 0.4
+                        : 0.18,
+                  ),
                   blurRadius: 24,
                   offset: const Offset(-4, 0),
                 ),

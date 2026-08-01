@@ -73,8 +73,9 @@ Map<String, String> apiExtraHeaders() {
 Map<String, String> wsHandshakeHeaders() {
   final headers = <String, String>{...apiExtraHeaders()};
   if (_sharedJar.isNotEmpty) {
-    headers['Cookie'] =
-        _sharedJar.values.map((c) => '${c.name}=${c.value}').join('; ');
+    headers['Cookie'] = _sharedJar.values
+        .map((c) => '${c.name}=${c.value}')
+        .join('; ');
   }
   return headers;
 }
@@ -104,9 +105,7 @@ final Map<String, Cookie> _sharedJar = {};
 // in-memory behaviour and widget tests stay isolated.
 // ---------------------------------------------------------------------------
 
-const _secureStorage = FlutterSecureStorage(
-  aOptions: AndroidOptions(),
-);
+const _secureStorage = FlutterSecureStorage(aOptions: AndroidOptions());
 const _cookieStoreKey = 'patrimonio_session_cookies';
 bool _persistenceEnabled = false;
 
@@ -268,8 +267,7 @@ class _CookieClient extends http.BaseClient {
     return http.StreamedResponse(
       ioResp,
       ioResp.statusCode,
-      contentLength:
-          ioResp.contentLength == -1 ? null : ioResp.contentLength,
+      contentLength: ioResp.contentLength == -1 ? null : ioResp.contentLength,
       request: request,
       headers: headers,
       isRedirect: ioResp.isRedirect,

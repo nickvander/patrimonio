@@ -164,7 +164,8 @@ String prettyCategory({
     'TRAVEL_LODGING': 'Hospedaje',
     'BANK_FEES_OVERDRAFT_FEES': 'Comisión por sobregiro',
     'BANK_FEES_ATM_FEES': 'Comisión de cajero',
-    'BANK_FEES_FOREIGN_TRANSACTION_FEES': 'Comisión por transacción internacional',
+    'BANK_FEES_FOREIGN_TRANSACTION_FEES':
+        'Comisión por transacción internacional',
     'RENT_AND_UTILITIES_RENT': 'Renta',
     'RENT_AND_UTILITIES_INTERNET_AND_CABLE': 'Internet y cable',
     'RENT_AND_UTILITIES_TELEPHONE': 'Teléfono',

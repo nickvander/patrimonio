@@ -118,9 +118,10 @@ void main() {
     // higher contrast against the accent fill. The accent-button bug was a
     // hard-coded label that only cleared AA in one theme.
     Color onAccent(Color accent) =>
-        contrastRatio(Colors.white, accent) >= contrastRatio(Colors.black, accent)
-            ? Colors.white
-            : Colors.black;
+        contrastRatio(Colors.white, accent) >=
+            contrastRatio(Colors.black, accent)
+        ? Colors.white
+        : Colors.black;
 
     test('onAccent clears AA on positive(light) fill', () {
       final accent = BrandPalette.positive(Brightness.light);
@@ -142,8 +143,7 @@ void main() {
       // for the default seed; approximated here with a near-black.
       const lightTooltipBg = Color(0xFF313030);
       expect(
-        contrastRatio(
-            BrandPalette.positive(Brightness.dark), lightTooltipBg),
+        contrastRatio(BrandPalette.positive(Brightness.dark), lightTooltipBg),
         greaterThan(4.5),
       );
     });
@@ -153,8 +153,7 @@ void main() {
       // for the default seed; approximated here with a near-white.
       const darkTooltipBg = Color(0xFFE6E1E5);
       expect(
-        contrastRatio(
-            BrandPalette.positive(Brightness.light), darkTooltipBg),
+        contrastRatio(BrandPalette.positive(Brightness.light), darkTooltipBg),
         greaterThan(4.5),
       );
     });
@@ -172,14 +171,18 @@ void main() {
       final scaffold = BrandPalette.scaffoldBackground(Brightness.light);
       final subtle = Colors.black.withValues(alpha: 0.78);
       expect(
-          contrastRatio(composite(subtle, scaffold), scaffold), greaterThan(4.5));
+        contrastRatio(composite(subtle, scaffold), scaffold),
+        greaterThan(4.5),
+      );
     });
 
     test('textFaint on light scaffold passes AA-large', () {
       final scaffold = BrandPalette.scaffoldBackground(Brightness.light);
       final faint = Colors.black.withValues(alpha: 0.65);
       expect(
-          contrastRatio(composite(faint, scaffold), scaffold), greaterThan(3.0));
+        contrastRatio(composite(faint, scaffold), scaffold),
+        greaterThan(3.0),
+      );
     });
 
     test('textSubtle on white card passes AA', () {
@@ -188,8 +191,9 @@ void main() {
       // text is the more common rendering surface than the scaffold.
       final subtle = Colors.black.withValues(alpha: 0.78);
       expect(
-          contrastRatio(composite(subtle, Colors.white), Colors.white),
-          greaterThan(4.5));
+        contrastRatio(composite(subtle, Colors.white), Colors.white),
+        greaterThan(4.5),
+      );
     });
 
     test('textMuted on light scaffold passes AA', () {
@@ -199,7 +203,9 @@ void main() {
       final scaffold = BrandPalette.scaffoldBackground(Brightness.light);
       final muted = Colors.black.withValues(alpha: 0.85);
       expect(
-          contrastRatio(composite(muted, scaffold), scaffold), greaterThan(4.5));
+        contrastRatio(composite(muted, scaffold), scaffold),
+        greaterThan(4.5),
+      );
     });
   });
 }

@@ -3,17 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/widgets/recurring_card.dart';
 
-Widget _wrap(Widget child, {Locale locale = const Locale('en')}) =>
-    MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SingleChildScrollView(child: child)),
-    );
+Widget _wrap(Widget child, {Locale locale = const Locale('en')}) => MaterialApp(
+  locale: locale,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: SingleChildScrollView(child: child)),
+);
 
 /// Collapse NBSP/NNBSP so es assertions don't pin exact codepoints.
-String _normSpace(String s) =>
-    s.replaceAll(' ', ' ').replaceAll(' ', ' ');
+String _normSpace(String s) => s.replaceAll(' ', ' ').replaceAll(' ', ' ');
 
 String _allText(WidgetTester tester) => tester
     .widgetList<Text>(find.byType(Text))
@@ -85,63 +83,67 @@ const Map<String, dynamic> _upcoming = {
 RecurringCard _card({
   Map<String, dynamic>? upcoming,
   List<dynamic> rules = _rules,
-}) =>
-    RecurringCard(
-      upcoming: upcoming,
-      rules: rules,
-      conversionFactor: 1.0,
-      targetCurrency: 'USD',
-      onToggleRule: (_, _) async {},
-      onDeleteRule: (_) async {},
-    );
+}) => RecurringCard(
+  upcoming: upcoming,
+  rules: rules,
+  conversionFactor: 1.0,
+  targetCurrency: 'USD',
+  onToggleRule: (_, _) async {},
+  onDeleteRule: (_) async {},
+);
 
 void main() {
   testWidgets(
-      'en: marks amounts with ISO currency codes and flags them as expected',
-      (tester) async {
-    await tester.pumpWidget(_wrap(_card(upcoming: _upcoming)));
-    await tester.pumpAndSettle();
-    final text = _allText(tester);
+    'en: marks amounts with ISO currency codes and flags them as expected',
+    (tester) async {
+      await tester.pumpWidget(_wrap(_card(upcoming: _upcoming)));
+      await tester.pumpAndSettle();
+      final text = _allText(tester);
 
-    expect(text, contains('Recurring'));
-    expect(text, contains('Expected'));
-    expect(
+      expect(text, contains('Recurring'));
+      expect(text, contains('Expected'));
+      expect(
         text,
         contains(
-            'Expected from your recurring rules — not actual transactions.'));
-    // Per-row amounts carry their own ISO code (spec: currency-labelled
-    // amounts everywhere) — a bare "$" would be ambiguous USD-vs-MXN.
-    expect(text, contains('USD 1,200.00'));
-    expect(text, contains('MXN 20,000.00'));
-    // Header totals: expected in/out, code-labelled.
-    expect(text, contains('Expected in'));
-    expect(text, contains('Expected out'));
-    expect(text, contains('+USD 1,000.00'));
-    expect(text, contains('−USD 1,200.00'));
-  });
+          'Expected from your recurring rules — not actual transactions.',
+        ),
+      );
+      // Per-row amounts carry their own ISO code (spec: currency-labelled
+      // amounts everywhere) — a bare "$" would be ambiguous USD-vs-MXN.
+      expect(text, contains('USD 1,200.00'));
+      expect(text, contains('MXN 20,000.00'));
+      // Header totals: expected in/out, code-labelled.
+      expect(text, contains('Expected in'));
+      expect(text, contains('Expected out'));
+      expect(text, contains('+USD 1,000.00'));
+      expect(text, contains('−USD 1,200.00'));
+    },
+  );
 
   testWidgets('es: mirrors the copy in Spanish', (tester) async {
-    await tester.pumpWidget(_wrap(
-      _card(upcoming: _upcoming),
-      locale: const Locale('es'),
-    ));
+    await tester.pumpWidget(
+      _wrap(_card(upcoming: _upcoming), locale: const Locale('es')),
+    );
     await tester.pumpAndSettle();
     final text = _allText(tester);
 
     expect(text, contains('Recurrentes'));
     expect(text, contains('Previsto'));
     expect(
-        text,
-        contains(
-            'Previsto según tus reglas recurrentes — no son transacciones reales.'));
+      text,
+      contains(
+        'Previsto según tus reglas recurrentes — no son transacciones reales.',
+      ),
+    );
     expect(text, contains('Entradas previstas'));
     expect(text, contains('Salidas previstas'));
     // Codes stay ISO in es too.
     expect(text, contains('MXN 20,000.00'));
   });
 
-  testWidgets('empty rules render the discovery hint, not totals',
-      (tester) async {
+  testWidgets('empty rules render the discovery hint, not totals', (
+    tester,
+  ) async {
     await tester.pumpWidget(_wrap(_card(upcoming: null, rules: const [])));
     await tester.pumpAndSettle();
     final text = _allText(tester);
@@ -150,21 +152,26 @@ void main() {
   });
 
   testWidgets('rules with nothing due this period say so', (tester) async {
-    await tester.pumpWidget(_wrap(_card(
-      upcoming: const {
-        'from': '2026-07-23',
-        'to': '2026-07-31',
-        'items': [],
-        'expected_inflows_usd': 0.0,
-        'expected_outflows_usd': 0.0,
-      },
-    )));
+    await tester.pumpWidget(
+      _wrap(
+        _card(
+          upcoming: const {
+            'from': '2026-07-23',
+            'to': '2026-07-31',
+            'items': [],
+            'expected_inflows_usd': 0.0,
+            'expected_outflows_usd': 0.0,
+          },
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(_allText(tester), contains('Nothing more expected this period.'));
   });
 
-  testWidgets('Manage opens the rules sheet with pause state and amounts',
-      (tester) async {
+  testWidgets('Manage opens the rules sheet with pause state and amounts', (
+    tester,
+  ) async {
     await tester.pumpWidget(_wrap(_card(upcoming: _upcoming)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Manage'));
@@ -178,8 +185,7 @@ void main() {
     // Rule amounts are code-labelled too.
     expect(text, contains('MXN 500.00'));
     // One switch per rule; the paused one is off.
-    final switches =
-        tester.widgetList<Switch>(find.byType(Switch)).toList();
+    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
     expect(switches.length, 2);
     expect(switches.where((s) => s.value).length, 1);
   });

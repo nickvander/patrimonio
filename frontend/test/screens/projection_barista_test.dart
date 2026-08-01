@@ -26,13 +26,17 @@ Future<void> _selectBarista(WidgetTester tester) =>
 
 void main() {
   testWidgets('barista == full FI number: prompt shown, em-dash instead of a '
-      'dollar figure — in the plan card AND the milestone tile',
-      (tester) async {
+      'dollar figure — in the plan card AND the milestone tile', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: fixtureFetcher(
-          (y) => projectionFixture(years: y, baristaFiNumber: 1000000.0)),
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: fixtureFetcher(
+          (y) => projectionFixture(years: y, baristaFiNumber: 1000000.0),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await _selectBarista(tester);
@@ -51,10 +55,13 @@ void main() {
   testWidgets('a genuinely lower barista number renders its figure in the '
       'plan card and the milestone tile', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: fixtureFetcher(
-          (y) => projectionFixture(years: y, baristaFiNumber: 700000.0)),
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: fixtureFetcher(
+          (y) => projectionFixture(years: y, baristaFiNumber: 700000.0),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await _selectBarista(tester);
@@ -65,13 +72,17 @@ void main() {
     expect(find.textContaining("Set 'Barista / pension income'"), findsNothing);
   });
 
-  testWidgets('Full focus (default) still shows the FI number in the tile',
-      (tester) async {
+  testWidgets('Full focus (default) still shows the FI number in the tile', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: fixtureFetcher(
-          (y) => projectionFixture(years: y, baristaFiNumber: 1000000.0)),
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: fixtureFetcher(
+          (y) => projectionFixture(years: y, baristaFiNumber: 1000000.0),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Plan card headline + milestone tile both carry the Full-FIRE number.
@@ -80,8 +91,9 @@ void main() {
     expect(find.text('—'), findsNothing);
   });
 
-  testWidgets('Coast focus swings the tile to the Coast FIRE number',
-      (tester) async {
+  testWidgets('Coast focus swings the tile to the Coast FIRE number', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();

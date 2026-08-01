@@ -20,14 +20,14 @@ class AuthUser {
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
-        id: json['id'] as String,
-        username: json['username'] as String,
-        email: json['email'] as String?,
-        lastLoginAt: json['last_login_at'] == null
-            ? null
-            : DateTime.tryParse(json['last_login_at'] as String),
-        totpEnabled: json['totp_enabled'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    username: json['username'] as String,
+    email: json['email'] as String?,
+    lastLoginAt: json['last_login_at'] == null
+        ? null
+        : DateTime.tryParse(json['last_login_at'] as String),
+    totpEnabled: json['totp_enabled'] as bool? ?? false,
+  );
 }
 
 enum AuthPhase { unknown, needsBootstrap, signedOut, awaitingTotp, signedIn }
@@ -64,10 +64,12 @@ class AuthService {
       if (res['needs_bootstrap'] == true) {
         _emit(const AuthState(AuthPhase.needsBootstrap));
       } else if (res['authenticated'] == true && res['user'] != null) {
-        _emit(AuthState(
-          AuthPhase.signedIn,
-          AuthUser.fromJson(res['user'] as Map<String, dynamic>),
-        ));
+        _emit(
+          AuthState(
+            AuthPhase.signedIn,
+            AuthUser.fromJson(res['user'] as Map<String, dynamic>),
+          ),
+        );
       } else if (res['requires_totp'] == true) {
         // A page refresh during the two-step login flow lands here:
         // the server resolved the cookie to a pending-TOTP session.
@@ -201,6 +203,7 @@ class InviteSummary {
   final bool used;
   final DateTime? usedAt;
   final String? note;
+
   /// 'owner' or 'read_only'. The role the redeemer inherits. Lets the
   /// Security screen flag read-only invites so the inviter can audit
   /// (and revoke) the wrong ones before someone redeems. Defaults to
@@ -241,6 +244,7 @@ class ActiveSession {
   final String? userAgent;
   final String? ipAddress;
   final bool isCurrent;
+
   /// True when `created_at > users.previous_login_at`. The Security
   /// screen renders these with a "New since last visit" pill so the
   /// user can spot a session they don't recognise at a glance.
@@ -259,15 +263,15 @@ class ActiveSession {
   });
 
   factory ActiveSession.fromJson(Map<String, dynamic> json) => ActiveSession(
-        id: json['id'] as String,
-        createdAt: DateTime.parse(json['created_at'] as String),
-        lastSeenAt: DateTime.parse(json['last_seen_at'] as String),
-        expiresAt: DateTime.parse(json['expires_at'] as String),
-        userAgent: json['user_agent'] as String?,
-        ipAddress: json['ip_address'] as String?,
-        isCurrent: json['is_current'] as bool? ?? false,
-        newSinceLastVisit: json['new_since_last_visit'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    lastSeenAt: DateTime.parse(json['last_seen_at'] as String),
+    expiresAt: DateTime.parse(json['expires_at'] as String),
+    userAgent: json['user_agent'] as String?,
+    ipAddress: json['ip_address'] as String?,
+    isCurrent: json['is_current'] as bool? ?? false,
+    newSinceLastVisit: json['new_since_last_visit'] as bool? ?? false,
+  );
 }
 
 /// Returned from /api/auth/login. Either the user is fully signed in
@@ -276,7 +280,5 @@ class LoginOutcome {
   final AuthUser? user;
   final bool requiresTotp;
   const LoginOutcome.complete(AuthUser this.user) : requiresTotp = false;
-  const LoginOutcome.needsTotp()
-      : user = null,
-        requiresTotp = true;
+  const LoginOutcome.needsTotp() : user = null, requiresTotp = true;
 }

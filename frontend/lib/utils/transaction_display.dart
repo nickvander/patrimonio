@@ -105,9 +105,7 @@ String displayLabel(Map<String, dynamic> tx) {
   final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
   final payee = nonEmpty(tx['payment_payee']);
   final payer = nonEmpty(tx['payment_payer']);
-  final paymentSide = amount < 0
-      ? (payee ?? payer)
-      : (payer ?? payee);
+  final paymentSide = amount < 0 ? (payee ?? payer) : (payer ?? payee);
 
   if (desc != null && _looksGeneric(desc)) {
     // Skip past the generic description in favour of any specific

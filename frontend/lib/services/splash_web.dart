@@ -10,11 +10,15 @@ external void _splashDone();
 void splashProgress(int percent, String message) {
   try {
     _splashProgress(percent, message);
-  } catch (_) {/* splash already dismissed / absent */}
+  } catch (_) {
+    /* splash already dismissed / absent */
+  }
 }
 
 void splashDone() {
   try {
     _splashDone();
-  } catch (_) {/* swallow */}
+  } catch (_) {
+    /* swallow */
+  }
 }

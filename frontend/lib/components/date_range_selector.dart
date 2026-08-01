@@ -64,7 +64,9 @@ class DateRangeSelector extends StatelessWidget {
         children: [
           for (final (label, range) in segments)
             if (fill)
-              Expanded(child: _buildSegment(context, label, range, horizontalPadding))
+              Expanded(
+                child: _buildSegment(context, label, range, horizontalPadding),
+              )
             else
               _buildSegment(context, label, range, horizontalPadding),
         ],

@@ -11,14 +11,20 @@ void main() {
 
   test('English by default', () {
     localeNotifier.value = null;
-    expect(prettyCategory(detailed: 'FOOD_AND_DRINK_RESTAURANT'), 'Restaurants');
+    expect(
+      prettyCategory(detailed: 'FOOD_AND_DRINK_RESTAURANT'),
+      'Restaurants',
+    );
     expect(prettyCategory(primary: 'LOAN_PAYMENTS'), 'Loan payment');
     expect(prettyCategory(), 'Uncategorized');
   });
 
   test('es-MX taxonomy when locale is Spanish', () {
     localeNotifier.value = const Locale('es');
-    expect(prettyCategory(detailed: 'FOOD_AND_DRINK_RESTAURANT'), 'Restaurantes');
+    expect(
+      prettyCategory(detailed: 'FOOD_AND_DRINK_RESTAURANT'),
+      'Restaurantes',
+    );
     expect(prettyCategory(primary: 'LOAN_PAYMENTS'), 'Pago de préstamo');
     expect(prettyCategory(detailed: 'TRANSPORTATION_GAS'), 'Gasolina');
     expect(prettyCategory(), 'Sin categoría');
@@ -28,18 +34,24 @@ void main() {
     localeNotifier.value = const Locale('es');
     expect(
       prettyCategory(
-          userCategory: 'Mi etiqueta', detailed: 'FOOD_AND_DRINK_RESTAURANT'),
+        userCategory: 'Mi etiqueta',
+        detailed: 'FOOD_AND_DRINK_RESTAURANT',
+      ),
       'Mi etiqueta',
     );
   });
 
-  test('es falls back to the derived English for an uncovered long-tail code',
-      () {
-    localeNotifier.value = const Locale('es');
-    // Not in either override map → derived sentence-case (English).
-    expect(prettyCategory(detailed: 'SOME_RARE_UNCOVERED_CODE'),
-        'Some rare uncovered code');
-  });
+  test(
+    'es falls back to the derived English for an uncovered long-tail code',
+    () {
+      localeNotifier.value = const Locale('es');
+      // Not in either override map → derived sentence-case (English).
+      expect(
+        prettyCategory(detailed: 'SOME_RARE_UNCOVERED_CODE'),
+        'Some rare uncovered code',
+      );
+    },
+  );
 
   group('distinctPrettyCategories', () {
     test('dedupes, prettifies, prefers user overrides, sorts', () {
@@ -50,8 +62,11 @@ void main() {
         {'category': 'LOAN_PAYMENTS'},
         'not-a-map',
       ];
-      expect(distinctPrettyCategories(txs),
-          ['Loan payment', 'Restaurants', 'Zapatos']);
+      expect(distinctPrettyCategories(txs), [
+        'Loan payment',
+        'Restaurants',
+        'Zapatos',
+      ]);
     });
 
     test('empty input yields no suggestions', () {

@@ -8,5 +8,6 @@
 //
 // Web has `dart.library.js_interop`; native and the Dart test VM take the
 // default (io) impl.
-export 'plaid_oauth_io.dart' if (dart.library.js_interop) 'plaid_oauth_web.dart';
+export 'plaid_oauth_io.dart'
+    if (dart.library.js_interop) 'plaid_oauth_web.dart';
 export 'plaid_oauth_types.dart';

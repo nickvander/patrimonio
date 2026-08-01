@@ -201,11 +201,14 @@ const Map<String, dynamic> _contributions = {
 Widget _host({
   Map<String, dynamic>? settingStore,
   Map<String, dynamic>? unrealized,
+
   /// Make the FBAR fetch throw, to prove a failed section is not rendered as
   /// a finding.
   bool failFbar = false,
+
   /// Server-push channel, for the "does this tab ever refresh?" tests.
   Stream<RealtimeEvent>? realtimeEvents,
+
   /// Counts summary fetches so a test can assert a push caused a reload.
   void Function()? onSummaryFetch,
 }) {
@@ -226,8 +229,9 @@ Widget _host({
         },
         transactionsFetcher: ({required int year}) async => _transactions,
         disposalsFetcher: (int year) async => _disposals,
-        unrealizedFetcher: ({required int year, required String status}) async =>
-            unrealized ?? _unrealized,
+        unrealizedFetcher:
+            ({required int year, required String status}) async =>
+                unrealized ?? _unrealized,
         fbarFetcher: (int year) async {
           if (failFbar) throw Exception('FBAR endpoint unavailable');
           return _fbar;
@@ -256,8 +260,9 @@ void _setSize(WidgetTester tester, Size size) {
 }
 
 void main() {
-  testWidgets('renders disposals with a loss colored red and a gain green',
-      (tester) async {
+  testWidgets('renders disposals with a loss colored red and a gain green', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1100, 1600));
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
@@ -273,8 +278,9 @@ void main() {
     expect(gainText.style!.color, isNot(equals(lossText.style!.color)));
   });
 
-  testWidgets('tax-advantaged disposal is split out, not in the taxable list',
-      (tester) async {
+  testWidgets('tax-advantaged disposal is split out, not in the taxable list', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1100, 1600));
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
@@ -287,11 +293,13 @@ void main() {
     expect(find.text(l.taxGainsSubtotal(r'+$150')), findsOneWidget);
   });
 
-  testWidgets('loads persisted filing status instead of resetting to Single',
-      (tester) async {
+  testWidgets('loads persisted filing status instead of resetting to Single', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1100, 1600));
     await tester.pumpWidget(
-        _host(settingStore: {'tax_filing_status': 'Married'}));
+      _host(settingStore: {'tax_filing_status': 'Married'}),
+    );
     await tester.pumpAndSettle();
 
     final l = await AppLocalizations.delegate.load(const Locale('en'));
@@ -299,8 +307,9 @@ void main() {
     expect(find.text(l.taxFilingMarried), findsWidgets);
   });
 
-  testWidgets('T11: a loss lot renders red and shows a harvest estimate',
-      (tester) async {
+  testWidgets('T11: a loss lot renders red and shows a harvest estimate', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1100, 2600));
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();
@@ -323,49 +332,51 @@ void main() {
   });
 
   testWidgets(
-      'harvest empty state is honest when loss lots exist but the savings '
-      'model recommends none (en + es copy present)', (tester) async {
-    _setSize(tester, const Size(1100, 2600));
-    // A visible loss lot with NO positive savings estimate: it renders in the
-    // bucket table above, but it is not a harvest candidate.
-    final unrealized = <String, dynamic>{
-      ..._unrealized,
-      'lots': [
-        {
-          'symbol': 'PLTR',
-          'name': 'Palantir',
-          'account_name': 'Fidelity Brokerage',
-          'account_type': 'brokerage',
-          'acquired_date': '2025-01-15',
-          'qty': 10,
-          'cost_basis_usd': 500.0,
-          'current_value_usd': 350.0,
-          'unrealized_gain_usd': -150.0, // LOSS, but…
-          'long_term': false,
-          'estimated_tax_savings_usd': 0.0, // …$0 saved under the model
-        },
-      ],
-      'short_term_gain': -150.0,
-    };
-    await tester.pumpWidget(_host(unrealized: unrealized));
-    await tester.pumpAndSettle();
+    'harvest empty state is honest when loss lots exist but the savings '
+    'model recommends none (en + es copy present)',
+    (tester) async {
+      _setSize(tester, const Size(1100, 2600));
+      // A visible loss lot with NO positive savings estimate: it renders in the
+      // bucket table above, but it is not a harvest candidate.
+      final unrealized = <String, dynamic>{
+        ..._unrealized,
+        'lots': [
+          {
+            'symbol': 'PLTR',
+            'name': 'Palantir',
+            'account_name': 'Fidelity Brokerage',
+            'account_type': 'brokerage',
+            'acquired_date': '2025-01-15',
+            'qty': 10,
+            'cost_basis_usd': 500.0,
+            'current_value_usd': 350.0,
+            'unrealized_gain_usd': -150.0, // LOSS, but…
+            'long_term': false,
+            'estimated_tax_savings_usd': 0.0, // …$0 saved under the model
+          },
+        ],
+        'short_term_gain': -150.0,
+      };
+      await tester.pumpWidget(_host(unrealized: unrealized));
+      await tester.pumpAndSettle();
 
-    final l = await AppLocalizations.delegate.load(const Locale('en'));
-    // Regression: the card used to claim "No loss lots to harvest" while the
-    // -$150 loss sat in the table right above it. It must now explain WHY
-    // nothing is recommended instead of denying the losses exist.
-    expect(find.text(l.taxHarvestLossesNoSavings), findsOneWidget);
-    expect(find.text(l.taxNoHarvestCandidates), findsNothing);
+      final l = await AppLocalizations.delegate.load(const Locale('en'));
+      // Regression: the card used to claim "No loss lots to harvest" while the
+      // -$150 loss sat in the table right above it. It must now explain WHY
+      // nothing is recommended instead of denying the losses exist.
+      expect(find.text(l.taxHarvestLossesNoSavings), findsOneWidget);
+      expect(find.text(l.taxNoHarvestCandidates), findsNothing);
 
-    // Both locales carry a real, distinct translation of the new copy.
-    final es = await AppLocalizations.delegate.load(const Locale('es'));
-    expect(es.taxHarvestLossesNoSavings, isNotEmpty);
-    expect(es.taxHarvestLossesNoSavings, isNot(l.taxHarvestLossesNoSavings));
-  });
+      // Both locales carry a real, distinct translation of the new copy.
+      final es = await AppLocalizations.delegate.load(const Locale('es'));
+      expect(es.taxHarvestLossesNoSavings, isNotEmpty);
+      expect(es.taxHarvestLossesNoSavings, isNot(l.taxHarvestLossesNoSavings));
+    },
+  );
 
-  testWidgets(
-      '"no loss lots" copy still shows when there genuinely are none',
-      (tester) async {
+  testWidgets('"no loss lots" copy still shows when there genuinely are none', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1100, 2600));
     final unrealized = <String, dynamic>{
       ..._unrealized,
@@ -410,21 +421,23 @@ void main() {
   });
 
   testWidgets(
-      'year dropdown offers all-history disposal years from by_year, not '
-      'just the (circular) selected-year data', (tester) async {
-    _setSize(tester, const Size(1100, 1600));
-    await tester.pumpWidget(_host());
-    await tester.pumpAndSettle();
+    'year dropdown offers all-history disposal years from by_year, not '
+    'just the (circular) selected-year data',
+    (tester) async {
+      _setSize(tester, const Size(1100, 1600));
+      await tester.pumpWidget(_host());
+      await tester.pumpAndSettle();
 
-    // 2024 exists only in the realized-gains by_year fixture — before the
-    // fix the dropdown derived its options from the year-filtered fetches,
-    // so a past year with disposals was unreachable app-wide.
-    // `.first` = the screen-header year dropdown; the export-pack card at the
-    // bottom now contributes a second DropdownButton<int> (same derived list).
-    await tester.tap(find.byType(DropdownButton<int>).first);
-    await tester.pumpAndSettle();
-    expect(find.text('2024'), findsWidgets);
-  });
+      // 2024 exists only in the realized-gains by_year fixture — before the
+      // fix the dropdown derived its options from the year-filtered fetches,
+      // so a past year with disposals was unreachable app-wide.
+      // `.first` = the screen-header year dropdown; the export-pack card at the
+      // bottom now contributes a second DropdownButton<int> (same derived list).
+      await tester.tap(find.byType(DropdownButton<int>).first);
+      await tester.pumpAndSettle();
+      expect(find.text('2024'), findsWidgets);
+    },
+  );
 
   testWidgets('T15: a contribution row shows remaining room', (tester) async {
     _setSize(tester, const Size(1100, 2600));
@@ -446,29 +459,30 @@ void main() {
     final pushes = StreamController<RealtimeEvent>.broadcast();
     addTearDown(pushes.close);
     var fetches = 0;
-    await tester.pumpWidget(_host(
-      realtimeEvents: pushes.stream,
-      onSummaryFetch: () => fetches++,
-    ));
+    await tester.pumpWidget(
+      _host(realtimeEvents: pushes.stream, onSummaryFetch: () => fetches++),
+    );
     await tester.pumpAndSettle();
     expect(fetches, 1, reason: 'initial load');
 
-    pushes.add(const RealtimeEvent(type: RealtimeEventType.transactionsChanged));
+    pushes.add(
+      const RealtimeEvent(type: RealtimeEventType.transactionsChanged),
+    );
     await tester.pump(const Duration(milliseconds: 450));
     await tester.pumpAndSettle();
     expect(fetches, 2, reason: 'an import elsewhere must refresh this tab');
   });
 
-  testWidgets('the 30s liveness heartbeat is not a reload trigger',
-      (tester) async {
+  testWidgets('the 30s liveness heartbeat is not a reload trigger', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1100, 1600));
     final pushes = StreamController<RealtimeEvent>.broadcast();
     addTearDown(pushes.close);
     var fetches = 0;
-    await tester.pumpWidget(_host(
-      realtimeEvents: pushes.stream,
-      onSummaryFetch: () => fetches++,
-    ));
+    await tester.pumpWidget(
+      _host(realtimeEvents: pushes.stream, onSummaryFetch: () => fetches++),
+    );
     await tester.pumpAndSettle();
 
     pushes.add(const RealtimeEvent(type: RealtimeEventType.heartbeat));
@@ -478,23 +492,32 @@ void main() {
     expect(fetches, 1, reason: 'neither event changes what this tab reports');
   });
 
-  testWidgets('a failed FBAR fetch does not claim there are no foreign accounts',
-      (tester) async {
-    _setSize(tester, const Size(1100, 2600));
-    await tester.pumpWidget(_host(failFbar: true));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'a failed FBAR fetch does not claim there are no foreign accounts',
+    (tester) async {
+      _setSize(tester, const Size(1100, 2600));
+      await tester.pumpWidget(_host(failFbar: true));
+      await tester.pumpAndSettle();
 
-    final l = await AppLocalizations.delegate.load(const Locale('en'));
-    expect(find.text(l.taxSectionLoadFailed), findsOneWidget);
-    expect(find.text(l.taxFbarNoData), findsNothing,
-        reason: 'a dead request is not evidence of no foreign accounts');
-    expect(find.text(l.taxFbarUnder), findsNothing,
-        reason: 'nor of being under the threshold');
-    expect(find.widgetWithText(TextButton, l.taxRetry), findsOneWidget);
-  });
+      final l = await AppLocalizations.delegate.load(const Locale('en'));
+      expect(find.text(l.taxSectionLoadFailed), findsOneWidget);
+      expect(
+        find.text(l.taxFbarNoData),
+        findsNothing,
+        reason: 'a dead request is not evidence of no foreign accounts',
+      );
+      expect(
+        find.text(l.taxFbarUnder),
+        findsNothing,
+        reason: 'nor of being under the threshold',
+      );
+      expect(find.widgetWithText(TextButton, l.taxRetry), findsOneWidget);
+    },
+  );
 
-  testWidgets('the FBAR section still renders normally when it loads',
-      (tester) async {
+  testWidgets('the FBAR section still renders normally when it loads', (
+    tester,
+  ) async {
     _setSize(tester, const Size(1100, 2600));
     await tester.pumpWidget(_host());
     await tester.pumpAndSettle();

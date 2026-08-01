@@ -25,7 +25,10 @@ const double _kTrailingSlotWidth = 48;
 /// "ending in 1234" instead of bullet glyphs) followed by the row's
 /// native-currency balance. Mask regex mirrors [maskAwareNameText].
 String _accountRowSemanticsLabel(
-    AppLocalizations l, String name, String balanceText) {
+  AppLocalizations l,
+  String name,
+  String balanceText,
+) {
   final m = RegExp(r'^(.*\S)\s+••(\S{1,6})$').firstMatch(name);
   if (m == null) return '$name, $balanceText';
   return '${m.group(1)}, ${l.ovwEndingIn(m.group(2)!)}, $balanceText';
@@ -40,22 +43,27 @@ class AccountsListWidget extends StatefulWidget {
   final Function(String, double)? onBalanceUpdate;
   final Function(String)? onDeleteAccount;
   final Function(String accountId, String nickname)? onRenameAccount;
+
   /// Optional callback for the "Revalue" affordance on manual-asset rows
   /// (real estate / private equity / vehicles / etc). Receives the
   /// account id, the new balance, and an optional note about why the
   /// value moved. When null the popup menu entry is hidden.
   final Function(String accountId, double balance, String? notes)?
-      onRevalueAccount;
+  onRevalueAccount;
+
   /// Opens the Add-account dialog directly from the empty state's
   /// "Add an account" button (instead of bouncing to Settings).
   final VoidCallback? onAddAccount;
+
   /// Forwarded to the account panel so a low-balance threshold change
   /// refreshes the dashboard's notifications bell immediately.
   final VoidCallback? onAlertsChanged;
+
   /// Forwarded to the account panel: the dashboard's single realtime
   /// event stream, so an open panel refreshes when a transaction changes
   /// elsewhere (see [AccountTransactionsScreen.realtimeEvents]).
   final Stream<RealtimeEvent>? realtimeEvents;
+
   /// Days after which an import-only account's "as of `<date>`" chip turns
   /// warning-colored. The dashboard passes the user's persisted
   /// `import_staleness_days` setting so chip and banner flip together.
@@ -149,8 +157,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.account_balance_wallet_outlined,
-                    size: 56, color: context.textFaint),
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  size: 56,
+                  color: context.textFaint,
+                ),
                 const SizedBox(height: 14),
                 Text(
                   l.pfNoAccountsYet,
@@ -164,8 +175,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 Text(
                   l.pfNoAccountsBody,
                   textAlign: TextAlign.center,
-                  style:
-                      TextStyle(color: context.textSubtle, fontSize: 12),
+                  style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
                 const SizedBox(height: 18),
                 FilledButton.icon(
@@ -262,7 +272,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     }
 
     final showControls =
-        accounts.length >= _longListThreshold || _hideZero || _search.isNotEmpty;
+        accounts.length >= _longListThreshold ||
+        _hideZero ||
+        _search.isNotEmpty;
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
@@ -295,79 +307,79 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   if (cashAccounts.isNotEmpty)
-                  _buildAccountGroup(
-                    context,
-                    l.pfGroupCash,
-                    cashAccounts,
-                    Icons.wallet_rounded,
-                    false,
-                    context.info,
-                  ),
-                if (investmentAccounts.isNotEmpty)
-                  _buildAccountGroup(
-                    context,
-                    l.pfGroupInvestments,
-                    investmentAccounts,
-                    Icons.show_chart_rounded,
-                    false,
-                    context.tealAccent,
-                  ),
-                if (cryptoAccounts.isNotEmpty)
-                  _buildAccountGroup(
-                    context,
-                    l.pfGroupCrypto,
-                    cryptoAccounts,
-                    Icons.currency_bitcoin_rounded,
-                    false,
-                    context.purpleAccent,
-                  ),
-                if (creditAccounts.isNotEmpty)
-                  _buildAccountGroup(
-                    context,
-                    l.pfGroupCreditCards,
-                    creditAccounts,
-                    Icons.credit_card_rounded,
-                    true,
-                    context.negative,
-                  ),
-                if (loanAccounts.isNotEmpty)
-                  _buildAccountGroup(
-                    context,
-                    l.pfGroupLoans,
-                    loanAccounts,
-                    Icons.home_rounded,
-                    true,
-                    context.yellowAccent,
-                  ),
-                if (realAssetAccounts.isNotEmpty)
-                  _buildAccountGroup(
-                    context,
-                    l.pfGroupRealAssets,
-                    realAssetAccounts,
-                    Icons.maps_home_work_rounded,
-                    false,
-                    context.yellowAccent,
-                  ),
-                if (otherAccounts.isNotEmpty)
-                  _buildAccountGroup(
-                    context,
-                    l.pfGroupOther,
-                    otherAccounts,
-                    Icons.category_outlined,
-                    false,
-                    context.neutralAccent,
-                    // Surface the raw subtypes that fell through so they
-                    // can't sit hidden in Other indefinitely — the UI now
-                    // self-reports its own classifier gaps.
-                    subtitle: unknownTypes.isEmpty
-                        ? null
-                        : l.pfUnknownSubtypes(
-                            unknownTypes.length,
-                            (unknownTypes.toList()..sort()).join(", "),
-                          ),
-                  ),
-              ],
-            ),
+                    _buildAccountGroup(
+                      context,
+                      l.pfGroupCash,
+                      cashAccounts,
+                      Icons.wallet_rounded,
+                      false,
+                      context.info,
+                    ),
+                  if (investmentAccounts.isNotEmpty)
+                    _buildAccountGroup(
+                      context,
+                      l.pfGroupInvestments,
+                      investmentAccounts,
+                      Icons.show_chart_rounded,
+                      false,
+                      context.tealAccent,
+                    ),
+                  if (cryptoAccounts.isNotEmpty)
+                    _buildAccountGroup(
+                      context,
+                      l.pfGroupCrypto,
+                      cryptoAccounts,
+                      Icons.currency_bitcoin_rounded,
+                      false,
+                      context.purpleAccent,
+                    ),
+                  if (creditAccounts.isNotEmpty)
+                    _buildAccountGroup(
+                      context,
+                      l.pfGroupCreditCards,
+                      creditAccounts,
+                      Icons.credit_card_rounded,
+                      true,
+                      context.negative,
+                    ),
+                  if (loanAccounts.isNotEmpty)
+                    _buildAccountGroup(
+                      context,
+                      l.pfGroupLoans,
+                      loanAccounts,
+                      Icons.home_rounded,
+                      true,
+                      context.yellowAccent,
+                    ),
+                  if (realAssetAccounts.isNotEmpty)
+                    _buildAccountGroup(
+                      context,
+                      l.pfGroupRealAssets,
+                      realAssetAccounts,
+                      Icons.maps_home_work_rounded,
+                      false,
+                      context.yellowAccent,
+                    ),
+                  if (otherAccounts.isNotEmpty)
+                    _buildAccountGroup(
+                      context,
+                      l.pfGroupOther,
+                      otherAccounts,
+                      Icons.category_outlined,
+                      false,
+                      context.neutralAccent,
+                      // Surface the raw subtypes that fell through so they
+                      // can't sit hidden in Other indefinitely — the UI now
+                      // self-reports its own classifier gaps.
+                      subtitle: unknownTypes.isEmpty
+                          ? null
+                          : l.pfUnknownSubtypes(
+                              unknownTypes.length,
+                              (unknownTypes.toList()..sort()).join(", "),
+                            ),
+                    ),
+                ],
+              ),
           ],
         ),
       ),
@@ -456,6 +468,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     IconData icon,
     bool isLiability,
     Color accentColor, {
+
     /// Optional second line under the group title. Used by the Other
     /// group to surface the raw `account_type` tokens that fell
     /// through the classifier so the gap is visible at a glance.
@@ -485,21 +498,23 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     final byCurrency = <String, double>{};
     for (final acc in groupAccounts) {
       final cur = (acc['currency'] ?? targetCurrency).toString().toUpperCase();
-      byCurrency[cur] = (byCurrency[cur] ?? 0) +
+      byCurrency[cur] =
+          (byCurrency[cur] ?? 0) +
           ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     }
 
     // Long lists default to collapsed; an active search force-expands every
     // group so matches are visible without hunting through headers.
-    final collapsed =
-        _search.trim().isEmpty ? _collapsed.contains(title) : false;
+    final collapsed = _search.trim().isEmpty
+        ? _collapsed.contains(title)
+        : false;
     void toggle() => setState(() {
-          if (_collapsed.contains(title)) {
-            _collapsed.remove(title);
-          } else {
-            _collapsed.add(title);
-          }
-        });
+      if (_collapsed.contains(title)) {
+        _collapsed.remove(title);
+      } else {
+        _collapsed.add(title);
+      }
+    });
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24.0),
@@ -518,225 +533,238 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           // MergeSemantics + Semantics(button) > InkWell > Exclude).
           MergeSemantics(
             child: Semantics(
-            button: true,
-            label: AppLocalizations.of(context).axGroupAccounts(
-              title,
-              groupAccounts.length,
-              currencyFormat.displayMoney(total),
-            ),
-            hint: collapsed
-                ? AppLocalizations.of(context).axTapToExpand
-                : AppLocalizations.of(context).axTapToCollapse,
-            child: InkWell(
-            onTap: toggle,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: ExcludeSemantics(
-            child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 380;
-              final headerIcon = Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: accentColor, size: 18),
-              );
-              final titleText = Text(
-                '$title · ${groupAccounts.length}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: context.textPrimary,
-                  letterSpacing: 0.2,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              );
-              final chevron = Icon(
-                collapsed ? Icons.chevron_right : Icons.expand_more,
-                size: 20,
-                color: context.textSubtle,
-              );
-              final totalText = Text(
+              button: true,
+              label: AppLocalizations.of(context).axGroupAccounts(
+                title,
+                groupAccounts.length,
                 currencyFormat.displayMoney(total),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: accentColor,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              hint: collapsed
+                  ? AppLocalizations.of(context).axTapToExpand
+                  : AppLocalizations.of(context).axTapToCollapse,
+              child: InkWell(
+                onTap: toggle,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-              );
-
-              // Left inset that lines the subtitle / currency pills up with
-              // the title text's left edge in the header Row:
-              // chevron (20) + gap (4) + icon chip (8 + 18 + 8) + gap (12).
-              // On narrow phones the inset is dropped so the pills and
-              // subtitle align with the card padding and both currency
-              // pills fit one Wrap line.
-              final subLeft = isNarrow ? 0.0 : 70.0;
-
-              // Only worth showing when the group spans >1 currency. Each
-              // currency reads as its own self-labelled pill ("USD 9,591.00")
-              // — never a bare "$" that's ambiguous in a mixed list — and a
-              // foreign currency also shows what it's worth in the reporting
-              // currency ("≈ $3,238") so the pills visibly add up to the
-              // converted headline above them.
-              final targetUpper = targetCurrency.toUpperCase();
-              final currencyEntries = byCurrency.entries.toList()
-                ..sort((a, b) {
-                  double conv(MapEntry<String, double> e) => convertCurrency(
-                        e.value,
-                        from: e.key,
-                        to: targetCurrency,
-                        usdMxnRate: usdMxnRate,
+                child: ExcludeSemantics(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isNarrow = constraints.maxWidth < 380;
+                      final headerIcon = Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(icon, color: accentColor, size: 18),
                       );
-                  return conv(b).compareTo(conv(a));
-                });
-              final currencyLine = byCurrency.length < 2
-                  ? null
-                  : Padding(
-                      padding: EdgeInsets.only(top: 8, left: subLeft),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: currencyEntries.map((e) {
-                          final isTarget = e.key == targetUpper;
-                          final converted = convertCurrency(
-                            e.value,
-                            from: e.key,
-                            to: targetCurrency,
-                            usdMxnRate: usdMxnRate,
-                          );
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: context.tileSurface,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: context.hairline),
-                            ),
-                            child: Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text:
-                                        displayCurrencyWithCode(e.value, e.key),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: context.textSubtle,
+                      final titleText = Text(
+                        '$title · ${groupAccounts.length}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                          letterSpacing: 0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      );
+                      final chevron = Icon(
+                        collapsed ? Icons.chevron_right : Icons.expand_more,
+                        size: 20,
+                        color: context.textSubtle,
+                      );
+                      final totalText = Text(
+                        currencyFormat.displayMoney(total),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: accentColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                      );
+
+                      // Left inset that lines the subtitle / currency pills up with
+                      // the title text's left edge in the header Row:
+                      // chevron (20) + gap (4) + icon chip (8 + 18 + 8) + gap (12).
+                      // On narrow phones the inset is dropped so the pills and
+                      // subtitle align with the card padding and both currency
+                      // pills fit one Wrap line.
+                      final subLeft = isNarrow ? 0.0 : 70.0;
+
+                      // Only worth showing when the group spans >1 currency. Each
+                      // currency reads as its own self-labelled pill ("USD 9,591.00")
+                      // — never a bare "$" that's ambiguous in a mixed list — and a
+                      // foreign currency also shows what it's worth in the reporting
+                      // currency ("≈ $3,238") so the pills visibly add up to the
+                      // converted headline above them.
+                      final targetUpper = targetCurrency.toUpperCase();
+                      final currencyEntries = byCurrency.entries.toList()
+                        ..sort((a, b) {
+                          double conv(MapEntry<String, double> e) =>
+                              convertCurrency(
+                                e.value,
+                                from: e.key,
+                                to: targetCurrency,
+                                usdMxnRate: usdMxnRate,
+                              );
+                          return conv(b).compareTo(conv(a));
+                        });
+                      final currencyLine = byCurrency.length < 2
+                          ? null
+                          : Padding(
+                              padding: EdgeInsets.only(top: 8, left: subLeft),
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: currencyEntries.map((e) {
+                                  final isTarget = e.key == targetUpper;
+                                  final converted = convertCurrency(
+                                    e.value,
+                                    from: e.key,
+                                    to: targetCurrency,
+                                    usdMxnRate: usdMxnRate,
+                                  );
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
                                     ),
-                                  ),
-                                  if (!isTarget)
-                                    TextSpan(
-                                      text:
-                                          '  ≈ ${currencyFormat.displayMoney(converted)}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w400,
-                                        color: context.textFaint,
+                                    decoration: BoxDecoration(
+                                      color: context.tileSurface,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: context.hairline,
                                       ),
                                     ),
-                                ],
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontFeatures: [FontFeature.tabularFigures()],
-                                ),
+                                    child: Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: displayCurrencyWithCode(
+                                              e.value,
+                                              e.key,
+                                            ),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: context.textSubtle,
+                                            ),
+                                          ),
+                                          if (!isTarget)
+                                            TextSpan(
+                                              text:
+                                                  '  ≈ ${currencyFormat.displayMoney(converted)}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w400,
+                                                color: context.textFaint,
+                                              ),
+                                            ),
+                                        ],
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontFeatures: [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    );
+                            );
 
-              final subtitleText = subtitle == null
-                  ? null
-                  : Padding(
-                      padding: EdgeInsets.only(top: 4, left: subLeft),
-                      child: Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: context.textSubtle,
-                          fontStyle: FontStyle.italic,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
+                      final subtitleText = subtitle == null
+                          ? null
+                          : Padding(
+                              padding: EdgeInsets.only(top: 4, left: subLeft),
+                              child: Text(
+                                subtitle,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: context.textSubtle,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
 
-              if (isNarrow) {
-                // Compact header: the total shares the title row (scaled
-                // down if a long number would otherwise squeeze the title
-                // into ellipsis territory) — one row instead of two.
-                return Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          chevron,
-                          const SizedBox(width: 4),
-                          headerIcon,
-                          const SizedBox(width: 12),
-                          Expanded(child: titleText),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: totalText,
-                            ),
+                      if (isNarrow) {
+                        // Compact header: the total shares the title row (scaled
+                        // down if a long number would otherwise squeeze the title
+                        // into ellipsis territory) — one row instead of two.
+                        return Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  chevron,
+                                  const SizedBox(width: 4),
+                                  headerIcon,
+                                  const SizedBox(width: 12),
+                                  Expanded(child: titleText),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: totalText,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              ?subtitleText,
+                              ?currencyLine,
+                            ],
                           ),
-                        ],
-                      ),
-                      ?subtitleText,
-                      ?currencyLine,
-                    ],
-                  ),
-                );
-              }
+                        );
+                      }
 
-              return Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        chevron,
-                        const SizedBox(width: 4),
-                        headerIcon,
-                        const SizedBox(width: 12),
-                        Expanded(child: titleText),
-                        const SizedBox(width: 12),
-                        // Cap the total so a pathological value truncates
-                        // (it has maxLines/ellipsis) instead of overflowing.
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                              maxWidth: constraints.maxWidth * 0.4),
-                          child: totalText,
+                      return Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                chevron,
+                                const SizedBox(width: 4),
+                                headerIcon,
+                                const SizedBox(width: 12),
+                                Expanded(child: titleText),
+                                const SizedBox(width: 12),
+                                // Cap the total so a pathological value truncates
+                                // (it has maxLines/ellipsis) instead of overflowing.
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: constraints.maxWidth * 0.4,
+                                  ),
+                                  child: totalText,
+                                ),
+                              ],
+                            ),
+                            ?subtitleText,
+                            ?currencyLine,
+                          ],
                         ),
-                      ],
-                    ),
-                    ?subtitleText,
-                    ?currencyLine,
-                  ],
+                      );
+                    },
+                  ),
                 ),
-              );
-            },
-            ),
-            ),
-            ),
+              ),
             ),
           ),
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 160),
             sizeCurve: Curves.easeOut,
-            crossFadeState:
-                collapsed ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+            crossFadeState: collapsed
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -758,7 +786,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
   /// This collapses SoFi vaults (Car, Cards, Emergency, Rent, Taxes, etc.)
   /// under SoFi Savings without losing them.
   List<Widget> _renderAccountsWithVaults(
-      BuildContext context, List<dynamic> groupAccounts) {
+    BuildContext context,
+    List<dynamic> groupAccounts,
+  ) {
     // Cluster by INSTITUTION (within the already type-filtered category) so all
     // of a bank's accounts stay together — e.g. SoFi Checking + Savings + its
     // vaults cluster as one "SoFi" block rather than scattering by balance and
@@ -767,10 +797,12 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     final order = <String>[];
     for (final acc in groupAccounts) {
       final inst = (acc['institution_name'] ?? '').toString();
-      clusters.putIfAbsent(inst, () {
-        order.add(inst);
-        return <dynamic>[];
-      }).add(acc);
+      clusters
+          .putIfAbsent(inst, () {
+            order.add(inst);
+            return <dynamic>[];
+          })
+          .add(acc);
     }
 
     final l = AppLocalizations.of(context);
@@ -801,8 +833,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           return false;
         }
         final name = (acc['name'] ?? '').toString().toLowerCase();
-        final typeTok =
-            (acc['account_type'] ?? '').toString().toLowerCase().split(' ').first;
+        final typeTok = (acc['account_type'] ?? '')
+            .toString()
+            .toLowerCase()
+            .split(' ')
+            .first;
         if (typeTok.isNotEmpty && name.contains(typeTok)) return false;
         if (instToken.isNotEmpty && name.contains(instToken)) return false;
         return true;
@@ -819,11 +854,13 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         // header already carries the combined total, so the summary line
         // below it stays total-free instead of repeating the same figure.
         widgets.add(_buildVaultClusterHeader(context, cluster));
-        widgets.add(_CollapsibleVaults(
-          label: _subgroupLabel(context, cluster.first),
-          count: cluster.length,
-          rows: cluster.map((v) => _buildVaultRow(context, v)).toList(),
-        ));
+        widgets.add(
+          _CollapsibleVaults(
+            label: _subgroupLabel(context, cluster.first),
+            count: cluster.length,
+            rows: cluster.map((v) => _buildVaultRow(context, v)).toList(),
+          ),
+        );
         continue;
       }
 
@@ -831,8 +868,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       // savings buckets); otherwise under the last/smallest product. Collapsed
       // by default — one "Vaults · N · $total" line that expands on tap —
       // so a bank with six buckets doesn't eat six rows.
-      final savingsIdx = products.indexWhere((a) =>
-          (a['account_type'] ?? '').toString().toLowerCase().contains('savings'));
+      final savingsIdx = products.indexWhere(
+        (a) => (a['account_type'] ?? '').toString().toLowerCase().contains(
+          'savings',
+        ),
+      );
       final attachIdx = savingsIdx >= 0 ? savingsIdx : products.length - 1;
       // Vault total folded into the attach product's NATIVE currency, so its
       // headline reads as savings + vaults combined.
@@ -855,24 +895,29 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       // products (e.g. SoFi Checking + Savings, Revolut Cuenta + Savings) then
       // reads as a single compact line that expands on tap.
       final inner = <Widget>[];
-      final vaultsLabel =
-          vaults.isEmpty ? null : _subgroupLabel(context, vaults.first);
+      final vaultsLabel = vaults.isEmpty
+          ? null
+          : _subgroupLabel(context, vaults.first);
       for (var i = 0; i < products.length; i++) {
         final isAttach = i == attachIdx && vaults.isNotEmpty;
-        inner.add(_buildAccountRow(
-          context,
-          products[i],
-          vaultExtraNative: isAttach ? vaultExtra : null,
-          vaultCount: isAttach ? vaults.length : null,
-          vaultLabel: isAttach ? vaultsLabel : null,
-          nested: true,
-        ));
+        inner.add(
+          _buildAccountRow(
+            context,
+            products[i],
+            vaultExtraNative: isAttach ? vaultExtra : null,
+            vaultCount: isAttach ? vaults.length : null,
+            vaultLabel: isAttach ? vaultsLabel : null,
+            nested: true,
+          ),
+        );
         if (isAttach) {
-          inner.add(_CollapsibleVaults(
-            label: vaultsLabel!,
-            count: vaults.length,
-            rows: vaults.map((v) => _buildVaultRow(context, v)).toList(),
-          ));
+          inner.add(
+            _CollapsibleVaults(
+              label: vaultsLabel!,
+              count: vaults.length,
+              rows: vaults.map((v) => _buildVaultRow(context, v)).toList(),
+            ),
+          );
         }
       }
 
@@ -880,10 +925,14 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       // (reads the way the user thinks of it — Revolut in MXN), else the
       // target-converted total when it mixes currencies.
       final curs = cluster
-          .map((a) => (a['currency'] ?? targetCurrency).toString().toUpperCase())
+          .map(
+            (a) => (a['currency'] ?? targetCurrency).toString().toUpperCase(),
+          )
           .toSet();
-      final nativeSum = cluster.fold<double>(0.0,
-          (s, a) => s + ((a['current_balance'] ?? 0.0) as num).toDouble().abs());
+      final nativeSum = cluster.fold<double>(
+        0.0,
+        (s, a) => s + ((a['current_balance'] ?? 0.0) as num).toDouble().abs(),
+      );
       final convSum = cluster.fold<double>(
         0.0,
         (s, a) =>
@@ -895,14 +944,16 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               usdMxnRate: usdMxnRate,
             ),
       );
-      widgets.add(_CollapsibleInstitution(
-        institution: inst,
-        countLabel: '${cluster.length} ${l.txAccounts.toLowerCase()}',
-        totalLabel: curs.length == 1
-            ? displayCurrencyAmount(nativeSum, curs.first)
-            : currencyFormat.displayMoney(convSum),
-        rows: inner,
-      ));
+      widgets.add(
+        _CollapsibleInstitution(
+          institution: inst,
+          countLabel: '${cluster.length} ${l.txAccounts.toLowerCase()}',
+          totalLabel: curs.length == 1
+              ? displayCurrencyAmount(nativeSum, curs.first)
+              : currencyFormat.displayMoney(convSum),
+          rows: inner,
+        ),
+      );
     }
     return widgets;
   }
@@ -933,8 +984,12 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       final bal = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
       final cur = (acc['currency'] ?? targetCurrency).toString();
       return sum +
-          convertCurrency(bal,
-              from: cur, to: targetCurrency, usdMxnRate: usdMxnRate);
+          convertCurrency(
+            bal,
+            from: cur,
+            to: targetCurrency,
+            usdMxnRate: usdMxnRate,
+          );
     });
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 8, 6),
@@ -961,8 +1016,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             // maxLines/ellipsis) instead of overflowing — as a non-flex
             // Row child it would otherwise get unbounded width.
             ConstrainedBox(
-              constraints:
-                  BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
               child: Text(
                 currencyFormat.displayMoney(total),
                 style: TextStyle(
@@ -990,8 +1044,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
   /// name and balance stay in the shared row columns.
   Widget _buildVaultRow(BuildContext context, dynamic acc) {
     final l = AppLocalizations.of(context);
-    final balance =
-        ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
+    final balance = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
     final name = (acc['name'] ?? l.pfVault).toString();
 
@@ -1000,65 +1053,65 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     return Semantics(
       button: true,
       label: _accountRowSemanticsLabel(
-          l, name, displayCurrencyAmount(balance, sourceCurrency)),
+        l,
+        name,
+        displayCurrencyAmount(balance, sourceCurrency),
+      ),
       hint: l.ovwOpensAccountDetails,
       child: InkWell(
-      onTap: () {
-        showAccountTransactionsPanel(
-          context,
-          account: acc,
-          allAccounts: accounts,
-          conversionFactor: conversionFactor,
-          currencyFormat: currencyFormat,
-          targetCurrency: targetCurrency,
-          usdMxnRate: usdMxnRate,
-          onBalanceUpdate: onBalanceUpdate,
-          onRenameAccount: onRenameAccount == null
-              ? null
-              : (id, nickname) async => onRenameAccount!(id, nickname),
-          onAlertsChanged: onAlertsChanged,
-          realtimeEvents: realtimeEvents,
-        );
-      },
-      child: ExcludeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 6, 8, 6),
-        child: Row(
-          children: [
-            // Dash marker tucked inside the 16px gutter (4 + 8 + 4) so the
-            // vault name starts in the same column as account rows.
-            Container(
-              width: 8,
-              height: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              color: context.hairline,
-            ),
-            Expanded(
-              child: maskAwareNameText(
-                name,
-                TextStyle(
-                  fontSize: 13,
-                  color: context.textMuted,
+        onTap: () {
+          showAccountTransactionsPanel(
+            context,
+            account: acc,
+            allAccounts: accounts,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            targetCurrency: targetCurrency,
+            usdMxnRate: usdMxnRate,
+            onBalanceUpdate: onBalanceUpdate,
+            onRenameAccount: onRenameAccount == null
+                ? null
+                : (id, nickname) async => onRenameAccount!(id, nickname),
+            onAlertsChanged: onAlertsChanged,
+            realtimeEvents: realtimeEvents,
+          );
+        },
+        child: ExcludeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 6, 8, 6),
+            child: Row(
+              children: [
+                // Dash marker tucked inside the 16px gutter (4 + 8 + 4) so the
+                // vault name starts in the same column as account rows.
+                Container(
+                  width: 8,
+                  height: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  color: context.hairline,
                 ),
-              ),
+                Expanded(
+                  child: maskAwareNameText(
+                    name,
+                    TextStyle(fontSize: 13, color: context.textMuted),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  displayCurrencyAmount(balance, sourceCurrency),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.textMuted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                // Mirrors the account rows' menu-button slot so vault
+                // balances right-align with the row balances above them.
+                const SizedBox(width: _kTrailingSlotWidth),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(
-              displayCurrencyAmount(balance, sourceCurrency),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: context.textMuted,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            // Mirrors the account rows' menu-button slot so vault
-            // balances right-align with the row balances above them.
-            const SizedBox(width: _kTrailingSlotWidth),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -1092,14 +1145,12 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     // default like "PLAID CHECKING 0001" can read as "Joint checking".
     final nickname = (acc['nickname'] ?? '').toString().trim();
     final rawNameValue = (acc['name'] ?? '').toString();
-    final rawName =
-        rawNameValue.isEmpty ? l.pfUnknownAccount : rawNameValue;
+    final rawName = rawNameValue.isEmpty ? l.pfUnknownAccount : rawNameValue;
     final name = nickname.isNotEmpty ? nickname : rawName;
     final inst = (acc['institution_name'] ?? '').toString();
     final hasCrypto =
         acc['ticker_symbol'] != null && acc['crypto_amount'] != null;
-    final needsConversion =
-        usdMxnRate > 0 && sourceCurrency != targetCurrency;
+    final needsConversion = usdMxnRate > 0 && sourceCurrency != targetCurrency;
 
     // Native value — this is the "real" amount the bank reported.
     final nativeText = displayCurrencyAmount(balance, sourceCurrency);
@@ -1132,7 +1183,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     // institution "Banamex" was reading as a tense "Banamex / Banamex" stack.
     final nameLc = name.toLowerCase();
     final instLc = inst.toLowerCase();
-    final nameConveysInst = inst.isNotEmpty &&
+    final nameConveysInst =
+        inst.isNotEmpty &&
         (nameLc == instLc ||
             (instLc.length >= 3 && nameLc.contains(instLc)) ||
             (nameLc.length >= 3 && instLc.contains(nameLc)));
@@ -1180,7 +1232,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             // Locale-aware skeleton, not a hardcoded pattern (es-MX reads
             // "12 jul 2026", en "Jul 12, 2026").
             l.impAsOfDate(
-                DateFormat.yMMMd(l.localeName).format(lastDataAt.toLocal())),
+              DateFormat.yMMMd(l.localeName).format(lastDataAt.toLocal()),
+            ),
             style: TextStyle(
               fontSize: 10,
               fontWeight: isStale ? FontWeight.w600 : FontWeight.w400,
@@ -1290,7 +1343,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                     onDeleteAccount?.call(acc['id']);
                   },
                   style: TextButton.styleFrom(
-                      foregroundColor: context.negative),
+                    foregroundColor: context.negative,
+                  ),
                   child: Text(l.pfDelete),
                 ),
               ],
@@ -1308,8 +1362,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             child: MergeSemantics(
               child: Row(
                 children: [
-                  Icon(Icons.drive_file_rename_outline,
-                      size: 18, color: context.textMuted),
+                  Icon(
+                    Icons.drive_file_rename_outline,
+                    size: 18,
+                    color: context.textMuted,
+                  ),
                   const SizedBox(width: 8),
                   Text(l.pfRename),
                 ],
@@ -1322,8 +1379,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             child: MergeSemantics(
               child: Row(
                 children: [
-                  Icon(Icons.price_change_outlined,
-                      size: 18, color: context.textMuted),
+                  Icon(
+                    Icons.price_change_outlined,
+                    size: 18,
+                    color: context.textMuted,
+                  ),
                   const SizedBox(width: 8),
                   Text(l.pfRevalue),
                 ],
@@ -1335,11 +1395,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           child: MergeSemantics(
             child: Row(
               children: [
-                Icon(Icons.delete_outline,
-                    size: 18, color: context.negative),
+                Icon(Icons.delete_outline, size: 18, color: context.negative),
                 const SizedBox(width: 8),
-                Text(l.pfDelete,
-                    style: TextStyle(color: context.negative)),
+                Text(l.pfDelete, style: TextStyle(color: context.negative)),
               ],
             ),
           ),
@@ -1367,92 +1425,92 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       label: _accountRowSemanticsLabel(l, name, nativeText),
       hint: l.ovwOpensAccountDetails,
       child: InkWell(
-      onTap: () {
-        showAccountTransactionsPanel(
-          context,
-          account: acc,
-          allAccounts: accounts,
-          conversionFactor: conversionFactor,
-          currencyFormat: currencyFormat,
-          targetCurrency: targetCurrency,
-          usdMxnRate: usdMxnRate,
-          onBalanceUpdate: onBalanceUpdate,
-          onRenameAccount: onRenameAccount == null
-              ? null
-              : (id, nickname) async => onRenameAccount!(id, nickname),
-          onAlertsChanged: onAlertsChanged,
-          realtimeEvents: realtimeEvents,
-        );
-      },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // Anything below ~420px logical pixels collapses to a stacked
-          // layout — the balance gets its own row underneath the name.
-          final isNarrow = constraints.maxWidth < 420;
-          if (isNarrow) {
+        onTap: () {
+          showAccountTransactionsPanel(
+            context,
+            account: acc,
+            allAccounts: accounts,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            targetCurrency: targetCurrency,
+            usdMxnRate: usdMxnRate,
+            onBalanceUpdate: onBalanceUpdate,
+            onRenameAccount: onRenameAccount == null
+                ? null
+                : (id, nickname) async => onRenameAccount!(id, nickname),
+            onAlertsChanged: onAlertsChanged,
+            realtimeEvents: realtimeEvents,
+          );
+        },
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Anything below ~420px logical pixels collapses to a stacked
+            // layout — the balance gets its own row underneath the name.
+            final isNarrow = constraints.maxWidth < 420;
+            if (isNarrow) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: ExcludeSemantics(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            primaryName,
+                            secondaryMeta,
+                            asOfChip,
+                            const SizedBox(height: 8),
+                            balanceText,
+                            if (subBalance != null) ...[
+                              const SizedBox(height: 2),
+                              subBalance,
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    menuButton,
+                  ],
+                ),
+              );
+            }
+
             return Padding(
               padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
               child: Row(
+                // .start (like the narrow layout) keeps the name's first line
+                // level with the balance even when only one side has a sub-line.
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: ExcludeSemantics(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          primaryName,
-                          secondaryMeta,
-                          asOfChip,
-                          const SizedBox(height: 8),
-                          balanceText,
-                          if (subBalance != null) ...[
-                            const SizedBox(height: 2),
-                            subBalance,
-                          ],
-                        ],
+                        children: [primaryName, secondaryMeta, asOfChip],
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ExcludeSemantics(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        balanceText,
+                        if (subBalance != null) ...[
+                          const SizedBox(height: 2),
+                          subBalance,
+                        ],
+                      ],
                     ),
                   ),
                   menuButton,
                 ],
               ),
             );
-          }
-
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
-            child: Row(
-              // .start (like the narrow layout) keeps the name's first line
-              // level with the balance even when only one side has a sub-line.
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ExcludeSemantics(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [primaryName, secondaryMeta, asOfChip],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ExcludeSemantics(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      balanceText,
-                      if (subBalance != null) ...[
-                        const SizedBox(height: 2),
-                        subBalance,
-                      ],
-                    ],
-                  ),
-                ),
-                menuButton,
-              ],
-            ),
-          );
-        },
-      ),
+          },
+        ),
       ),
     );
   }
@@ -1464,18 +1522,19 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
   /// call + list refresh via [onRevalueAccount].
   void _showRevalueDialog(BuildContext context, dynamic acc) {
     final l = AppLocalizations.of(context);
-    final currentBalance =
-        ((acc['current_balance'] ?? 0.0) as num).toDouble();
+    final currentBalance = ((acc['current_balance'] ?? 0.0) as num).toDouble();
     // dispose: local controllers, else the dialog leaks them (disposed in
     // whenComplete once the route is fully popped, after the last .text read).
-    final balanceCtrl =
-        TextEditingController(text: currentBalance.toStringAsFixed(2));
+    final balanceCtrl = TextEditingController(
+      text: currentBalance.toStringAsFixed(2),
+    );
     final notesCtrl = TextEditingController();
-    final currency =
-        (acc['currency'] ?? 'USD').toString().toUpperCase();
-    final name = (acc['nickname']?.toString().trim().isNotEmpty == true
-        ? acc['nickname']
-        : acc['name']) ?? l.pfAssetFallback;
+    final currency = (acc['currency'] ?? 'USD').toString().toUpperCase();
+    final name =
+        (acc['nickname']?.toString().trim().isNotEmpty == true
+            ? acc['nickname']
+            : acc['name']) ??
+        l.pfAssetFallback;
 
     showDialog(
       context: context,
@@ -1487,8 +1546,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              l.pfRevalueCurrent(
-                  currentBalance.toStringAsFixed(2), currency),
+              l.pfRevalueCurrent(currentBalance.toStringAsFixed(2), currency),
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
             const SizedBox(height: 12),
@@ -1496,7 +1554,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               controller: balanceCtrl,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true, signed: true),
+                decimal: true,
+                signed: true,
+              ),
               decoration: InputDecoration(
                 labelText: l.pfNewBalance,
                 prefixText: r'$ ',
@@ -1533,8 +1593,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               final parsed = double.tryParse(balanceCtrl.text.trim());
               if (parsed == null) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(
-                      content: Text(l.pfEnterNumericBalance)),
+                  SnackBar(content: Text(l.pfEnterNumericBalance)),
                 );
                 return;
               }
@@ -1652,53 +1711,56 @@ class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
           // hint; the chevron carries no semantics.
           MergeSemantics(
             child: Semantics(
-            button: true,
-            hint: _open
-                ? AppLocalizations.of(context).axTapToCollapse
-                : AppLocalizations.of(context).axTapToExpand,
-            child: InkWell(
-            onTap: () => setState(() => _open = !_open),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              // Same L/R padding as _buildAccountRow so the label shares the
-              // rows' 16px name column and the total shares their right edge.
-              padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${widget.label} · ${widget.count}',
-                      // Same 13px size as the vault cluster header / vault
-                      // rows; the lighter weight + muted color mark it as a
-                      // nested summary rather than a bank-level header.
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.textMuted),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              button: true,
+              hint: _open
+                  ? AppLocalizations.of(context).axTapToCollapse
+                  : AppLocalizations.of(context).axTapToExpand,
+              child: InkWell(
+                onTap: () => setState(() => _open = !_open),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  // Same L/R padding as _buildAccountRow so the label shares the
+                  // rows' 16px name column and the total shares their right edge.
+                  padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${widget.label} · ${widget.count}',
+                          // Same 13px size as the vault cluster header / vault
+                          // rows; the lighter weight + muted color mark it as a
+                          // nested summary rather than a bank-level header.
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: context.textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // Chevron in the same trailing slot as the account rows'
+                      // menu button, keeping the total column aligned.
+                      SizedBox(
+                        width: _kTrailingSlotWidth,
+                        child: Icon(
+                          _open ? Icons.expand_more : Icons.chevron_right,
+                          size: 18,
+                          color: context.textSubtle,
+                        ),
+                      ),
+                    ],
                   ),
-                  // Chevron in the same trailing slot as the account rows'
-                  // menu button, keeping the total column aligned.
-                  SizedBox(
-                    width: _kTrailingSlotWidth,
-                    child: Icon(
-                        _open ? Icons.expand_more : Icons.chevron_right,
-                        size: 18,
-                        color: context.textSubtle),
-                  ),
-                ],
+                ),
               ),
-            ),
-            ),
             ),
           ),
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 160),
             sizeCurve: Curves.easeOut,
-            crossFadeState:
-                _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            crossFadeState: _open
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1739,8 +1801,9 @@ class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final name =
-        widget.institution.isEmpty ? l.pfUnknownAccount : widget.institution;
+    final name = widget.institution.isEmpty
+        ? l.pfUnknownAccount
+        : widget.institution;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1749,79 +1812,87 @@ class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
         // expand/collapse hint; the chevron carries no semantics.
         MergeSemantics(
           child: Semantics(
-          button: true,
-          hint: _open ? l.axTapToCollapse : l.axTapToExpand,
-          child: InkWell(
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            // Same L/R padding as _buildAccountRow so the bank name shares
-            // the account rows' 16px name column.
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-            child: LayoutBuilder(
-              builder: (context, constraints) => Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
+            button: true,
+            hint: _open ? l.axTapToCollapse : l.axTapToExpand,
+            child: InkWell(
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                // Same L/R padding as _buildAccountRow so the bank name shares
+                // the account rows' 16px name column.
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: context.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.countLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.textSubtle,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Cap the total so a pathological value truncates (it has
+                      // maxLines/ellipsis) instead of overflowing — as a non-flex
+                      // Row child it would otherwise get unbounded width.
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth * 0.4,
+                        ),
+                        child: Text(
+                          widget.totalLabel,
                           style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: context.textPrimary),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.countLabel,
-                          style: TextStyle(
-                              fontSize: 12, color: context.textSubtle),
+                      ),
+                      // Chevron lives in the same trailing slot as the account
+                      // rows' menu button, so the total right-aligns exactly with
+                      // the row balances.
+                      SizedBox(
+                        width: _kTrailingSlotWidth,
+                        child: Icon(
+                          _open ? Icons.expand_more : Icons.chevron_right,
+                          size: 20,
+                          color: context.textSubtle,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  // Cap the total so a pathological value truncates (it has
-                  // maxLines/ellipsis) instead of overflowing — as a non-flex
-                  // Row child it would otherwise get unbounded width.
-                  ConstrainedBox(
-                    constraints:
-                        BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
-                    child: Text(
-                      widget.totalLabel,
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: context.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()]),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // Chevron lives in the same trailing slot as the account
-                  // rows' menu button, so the total right-aligns exactly with
-                  // the row balances.
-                  SizedBox(
-                    width: _kTrailingSlotWidth,
-                    child: Icon(
-                        _open ? Icons.expand_more : Icons.chevron_right,
-                        size: 20, color: context.textSubtle),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          ),
           ),
         ),
         AnimatedCrossFade(
           duration: const Duration(milliseconds: 160),
           sizeCurve: Curves.easeOut,
-          crossFadeState:
-              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          crossFadeState: _open
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
           firstChild: const SizedBox(width: double.infinity),
           // The nested rows keep the exact same name/balance columns as
           // single-account rows; a hairline guide rail tucked inside their

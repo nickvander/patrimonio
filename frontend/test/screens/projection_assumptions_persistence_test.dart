@@ -15,22 +15,24 @@ void main() {
   testWidgets('stored assumptions are restored into the sliders and win over '
       'the tracked-data prefill', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      settingReader: readerWith({
-        'monthly_contribution': 2500.0,
-        'annual_return_rate': 0.09,
-        'annual_expenses': 55000.0,
-        'projection_years': 40,
-        'years_to_retirement': 25,
-      }),
-      // Adoption-worthy tracked data that must NOT override the saved blob.
-      defaultsFetcher: () async => {
-        'monthly_contribution': 152.4,
-        'annual_expenses': 30000.0,
-        'annual_income': 2000.0,
-        'months_of_data': 6,
-      },
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingReader: readerWith({
+          'monthly_contribution': 2500.0,
+          'annual_return_rate': 0.09,
+          'annual_expenses': 55000.0,
+          'projection_years': 40,
+          'years_to_retirement': 25,
+        }),
+        // Adoption-worthy tracked data that must NOT override the saved blob.
+        defaultsFetcher: () async => {
+          'monthly_contribution': 152.4,
+          'annual_expenses': 30000.0,
+          'annual_income': 2000.0,
+          'months_of_data': 6,
+        },
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text(r'$2,500'), findsOneWidget);
@@ -45,9 +47,9 @@ void main() {
 
   testWidgets('a malformed blob silently keeps the defaults', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      settingReader: readerWith('not json at all'),
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(settingReader: readerWith('not json at all')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text(r'$1,000'), findsOneWidget); // default contribution
@@ -55,13 +57,14 @@ void main() {
     expect(find.text(r'$40,000'), findsOneWidget); // default expenses
   });
 
-  testWidgets('a committed change writes the assumptions blob',
-      (tester) async {
+  testWidgets('a committed change writes the assumptions blob', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Committing a lifestyle preset is an assumption change.
@@ -84,18 +87,21 @@ void main() {
   // screen fell back to derived defaults and the next committed change
   // persisted those defaults OVER the user's real scenario. A transient
   // network blip on open must not be able to destroy saved assumptions.
-  testWidgets('a read failure does not let defaults overwrite saved values',
-      (tester) async {
+  testWidgets('a read failure does not let defaults overwrite saved values', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     var reads = 0;
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      settingReader: (key) async {
-        reads++;
-        throw Exception('network down');
-      },
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingReader: (key) async {
+          reads++;
+          throw Exception('network down');
+        },
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
 
     final lean = find.widgetWithText(ChoiceChip, 'Lean');
@@ -105,10 +111,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
 
-    expect(writes, isEmpty,
-        reason: 'must not overwrite a scenario we failed to read');
-    expect(reads, greaterThan(1),
-        reason: 'it should retry the read before deciding to write');
+    expect(
+      writes,
+      isEmpty,
+      reason: 'must not overwrite a scenario we failed to read',
+    );
+    expect(
+      reads,
+      greaterThan(1),
+      reason: 'it should retry the read before deciding to write',
+    );
   });
 
   // …but once the read succeeds and confirms there is genuinely nothing
@@ -117,14 +129,16 @@ void main() {
     setTestSize(tester, const Size(1300, 1800));
     var reads = 0;
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      settingReader: (key) async {
-        reads++;
-        if (reads == 1) throw Exception('network down');
-        return null; // nothing saved
-      },
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingReader: (key) async {
+          reads++;
+          if (reads == 1) throw Exception('network down');
+          return null; // nothing saved
+        },
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Two different presets: the first commit spends its turn re-reading,
@@ -138,7 +152,10 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    expect(writes['projection_assumptions'], isNotNull,
-        reason: 'the retried read confirmed nothing was stored');
+    expect(
+      writes['projection_assumptions'],
+      isNotNull,
+      reason: 'the retried read confirmed nothing was stored',
+    );
   });
 }

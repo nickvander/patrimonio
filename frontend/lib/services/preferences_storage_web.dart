@@ -18,5 +18,7 @@ String? prefsRead(String key) {
 void prefsWrite(String key, String value) {
   try {
     web.window.localStorage.setItem(key, value);
-  } catch (_) {/* swallow */}
+  } catch (_) {
+    /* swallow */
+  }
 }

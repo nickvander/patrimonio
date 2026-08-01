@@ -23,14 +23,14 @@ class PasskeySummary {
   });
 
   factory PasskeySummary.fromJson(Map<String, dynamic> json) => PasskeySummary(
-        id: json['id'] as String,
-        nickname: json['nickname'] as String?,
-        createdAt: DateTime.parse(json['created_at'] as String),
-        lastUsedAt: json['last_used_at'] == null
-            ? null
-            : DateTime.parse(json['last_used_at'] as String),
-        authenticatorAttachment: json['authenticator_attachment'] as String?,
-      );
+    id: json['id'] as String,
+    nickname: json['nickname'] as String?,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    lastUsedAt: json['last_used_at'] == null
+        ? null
+        : DateTime.parse(json['last_used_at'] as String),
+    authenticatorAttachment: json['authenticator_attachment'] as String?,
+  );
 
   /// True when this passkey lives on a roaming authenticator (a USB /
   /// NFC security key plugged into whichever machine the user is on),

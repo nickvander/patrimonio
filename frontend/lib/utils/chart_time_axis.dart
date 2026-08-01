@@ -12,7 +12,8 @@ import 'package:intl/intl.dart';
 /// exact (local-midnight arithmetic can slip a day across DST changes).
 /// Output is sorted ascending regardless of input order.
 List<({DateTime date, double close})> dedupeDailyCloses(
-    List<({DateTime date, double close})> points) {
+  List<({DateTime date, double close})> points,
+) {
   final byDay = <DateTime, double>{};
   for (final p in points) {
     byDay[DateTime.utc(p.date.year, p.date.month, p.date.day)] = p.close;

@@ -7,12 +7,10 @@ import 'package:patrimonio/widgets/net_worth_card.dart';
 // there aren't two comparable snapshots or no institution data.
 
 Map<String, dynamic> _point(
-        String date, double netWorth, Map<String, double> byInst) =>
-    {
-      'date': date,
-      'net_worth': netWorth,
-      'by_institution': byInst,
-    };
+  String date,
+  double netWorth,
+  Map<String, double> byInst,
+) => {'date': date, 'net_worth': netWorth, 'by_institution': byInst};
 
 void main() {
   group('topInstitutionMovers', () {
@@ -20,10 +18,7 @@ void main() {
       final history = [
         _point('2026-06-08', 1000, {'Chase': 1000}),
       ];
-      expect(
-        topInstitutionMovers(history, DateTime(2026, 5, 8)),
-        isEmpty,
-      );
+      expect(topInstitutionMovers(history, DateTime(2026, 5, 8)), isEmpty);
     });
 
     test('empty when no snapshot lands within the +/-5 day tolerance', () {
@@ -33,10 +28,7 @@ void main() {
         _point('2026-06-08', 1200, {'Chase': 1200}),
       ];
       // Target one month before latest = 2026-05-08; nearest is 10 days away.
-      expect(
-        topInstitutionMovers(history, DateTime(2026, 5, 8)),
-        isEmpty,
-      );
+      expect(topInstitutionMovers(history, DateTime(2026, 5, 8)), isEmpty);
     });
 
     test('baseline selection snaps to the nearest point within tolerance', () {
@@ -107,10 +99,7 @@ void main() {
         _point('2026-05-08', 1000, {}),
         _point('2026-06-08', 1200, {}),
       ];
-      expect(
-        topInstitutionMovers(history, DateTime(2026, 5, 8)),
-        isEmpty,
-      );
+      expect(topInstitutionMovers(history, DateTime(2026, 5, 8)), isEmpty);
     });
   });
 }

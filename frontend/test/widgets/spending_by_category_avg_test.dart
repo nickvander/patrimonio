@@ -53,34 +53,41 @@ Widget _host(Widget child) {
 
 void main() {
   testWidgets(
-      'sparse category averages over the requested window, not months-with-spend',
-      (tester) async {
-    tester.view.physicalSize = const Size(1000, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+    'sparse category averages over the requested window, not months-with-spend',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-    final api = _SparseSpendApi();
-    final format = moneyFormat('USD');
-    await tester.pumpWidget(_host(SpendingByCategoryCard(
-      apiService: api,
-      conversionFactor: 1.0,
-      currencyFormat: format,
-      months: 12, // externally driven 12-month window
-    )));
-    await tester.pumpAndSettle();
+      final api = _SparseSpendApi();
+      final format = moneyFormat('USD');
+      await tester.pumpWidget(
+        _host(
+          SpendingByCategoryCard(
+            apiService: api,
+            conversionFactor: 1.0,
+            currencyFormat: format,
+            months: 12, // externally driven 12-month window
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(api.requestedMonths, 12);
+      expect(api.requestedMonths, 12);
 
-    // Expected: total / (11 full months + elapsed fraction of the current
-    // month) — computed with the same clock the widget uses. ~$0.39/mo.
-    final expected =
-        format.displayMoney(4.50 / spendingWindowDivisor(12, DateTime.now()));
-    // The pre-fix value divided by the single month that had spending
-    // (its elapsed fraction): ~$6/mo.
-    final buggy =
-        format.displayMoney(4.50 / spendingWindowDivisor(1, DateTime.now()));
+      // Expected: total / (11 full months + elapsed fraction of the current
+      // month) — computed with the same clock the widget uses. ~$0.39/mo.
+      final expected = format.displayMoney(
+        4.50 / spendingWindowDivisor(12, DateTime.now()),
+      );
+      // The pre-fix value divided by the single month that had spending
+      // (its elapsed fraction): ~$6/mo.
+      final buggy = format.displayMoney(
+        4.50 / spendingWindowDivisor(1, DateTime.now()),
+      );
 
-    expect(find.text(expected), findsOneWidget);
-    expect(find.text(buggy), findsNothing);
-  });
+      expect(find.text(expected), findsOneWidget);
+      expect(find.text(buggy), findsNothing);
+    },
+  );
 }

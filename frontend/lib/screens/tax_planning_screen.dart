@@ -19,17 +19,26 @@ import 'tax_planning_logic.dart';
 /// Test seams: the screen fetches through these typedefs so widget tests can
 /// inject fixtures without subclassing ApiService (which pulls package:web
 /// into the test VM — see MEMORY). Defaults wire straight to the real service.
-typedef TaxSummaryFetcher = Future<Map<String, dynamic>> Function(
-    {required int year, required String status});
-typedef TaxTransactionsFetcher = Future<List<dynamic>> Function({required int year});
+typedef TaxSummaryFetcher =
+    Future<Map<String, dynamic>> Function({
+      required int year,
+      required String status,
+    });
+typedef TaxTransactionsFetcher =
+    Future<List<dynamic>> Function({required int year});
 typedef TaxDisposalsFetcher = Future<List<dynamic>> Function(int year);
 typedef SettingReader = Future<dynamic> Function(String key);
 typedef SettingWriter = Future<void> Function(String key, dynamic value);
 // M3 planning sections — same fixtureable-fetcher pattern as above.
-typedef TaxUnrealizedFetcher = Future<Map<String, dynamic>> Function(
-    {required int year, required String status});
+typedef TaxUnrealizedFetcher =
+    Future<Map<String, dynamic>> Function({
+      required int year,
+      required String status,
+    });
 typedef TaxFbarFetcher = Future<Map<String, dynamic>> Function(int year);
-typedef TaxContributionsFetcher = Future<Map<String, dynamic>> Function(int year);
+typedef TaxContributionsFetcher =
+    Future<Map<String, dynamic>> Function(int year);
+
 /// All-history realized-gains response (`/dashboard/realized-gains`); only its
 /// `by_year` list is consumed here, so the year dropdown can offer every year
 /// with disposals (the year-filtered disposals fetch can never see other years).
@@ -112,10 +121,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   List<dynamic>? _taxDisposals;
   Map<String, dynamic>? _unrealized;
   Map<String, dynamic>? _fbar;
+
   /// Optional sections whose fetch failed on the last load — so a missing
   /// payload can be rendered as "couldn't load" rather than as a finding.
   Set<String> _failedSections = const {};
   Map<String, dynamic>? _contributions;
+
   /// `by_year` rows from `/dashboard/realized-gains` — one entry per year
   /// with a disposal, independent of the selected year's filter. Feeds the
   /// year dropdown; kept across refetches so a transient failure while
@@ -130,6 +141,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     'Head of Household',
   ];
   String _filingStatus = 'Single';
+
   /// User-entered annual 401k elective deferral (USD); null = not provided.
   double? _elective401kUsd;
 
@@ -212,7 +224,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     }
     try {
       final stored = await _readSetting(k401kElectiveSettingKey);
-      final n = (stored is num) ? stored.toDouble() : double.tryParse('$stored');
+      final n = (stored is num)
+          ? stored.toDouble()
+          : double.tryParse('$stored');
       if (n != null && n > 0) _elective401kUsd = n;
     } catch (_) {
       // Missing/failed setting → no elective split shown; non-fatal.
@@ -241,7 +255,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     // made on the strength of a request that didn't come back.
     final failed = <String>{};
     Future<Map<String, dynamic>?> soft(
-        String section, Future<Map<String, dynamic>> f) async {
+      String section,
+      Future<Map<String, dynamic>> f,
+    ) async {
       try {
         return await f;
       } catch (e) {
@@ -261,8 +277,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       ]);
       // Secondary planning sections — fail-soft, fetched alongside the core.
       final optional = await Future.wait([
-        soft('unrealized',
-            _fetchUnrealized(year: _selectedYear, status: _filingStatus)),
+        soft(
+          'unrealized',
+          _fetchUnrealized(year: _selectedYear, status: _filingStatus),
+        ),
         soft('fbar', _fetchFbar(_selectedYear)),
         soft('contributions', _fetchContributions(_selectedYear)),
         // Year-dropdown source: all-history by_year, never year-filtered.
@@ -309,7 +327,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       setState(() => _filingStatus = previous);
       _loadTaxData();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).dashSettingSaveFailed),
+        ),
       );
     }
   }
@@ -324,7 +344,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   /// clears it.
   Future<void> _editElective401k(AppLocalizations l, double limit) async {
     final controller = TextEditingController(
-      text: _elective401kUsd != null ? _elective401kUsd!.toStringAsFixed(0) : '',
+      text: _elective401kUsd != null
+          ? _elective401kUsd!.toStringAsFixed(0)
+          : '',
     );
     final result = await showDialog<double?>(
       context: context,
@@ -346,8 +368,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           ),
           TextButton(
             onPressed: () {
-              final v =
-                  double.tryParse(controller.text.replaceAll(',', '').trim());
+              final v = double.tryParse(
+                controller.text.replaceAll(',', '').trim(),
+              );
               Navigator.of(ctx).pop(v ?? 0.0);
             },
             child: Text(l.actionSave),
@@ -370,7 +393,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       if (!mounted) return;
       setState(() => _elective401kUsd = previous);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).dashSettingSaveFailed),
+        ),
       );
     }
   }
@@ -483,8 +508,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
   }
 
-  Widget _buildContent(
-      AppLocalizations l, bool stackControls, bool stackKpis) {
+  Widget _buildContent(AppLocalizations l, bool stackControls, bool stackKpis) {
     final summary = _taxSummary ?? const {};
 
     double usd(String key) =>
@@ -507,7 +531,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     // top of its band, in which case the matching line is hidden.
     final headroom =
         (summary['bracket_headroom'] as Map?)?.cast<String, dynamic>() ??
-            const {};
+        const {};
     double? headroomUsd(String key) {
       final v = headroom[key] as num?;
       return v == null ? null : v.toDouble() * widget.conversionFactor;
@@ -525,8 +549,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final ltcgNextRate = headroomRate('ltcg_next_rate');
 
     final gainsFromLots = summary['gains_from_lots'] == true;
-    final rateUs = ((summary['effective_rate_us'] as num?)?.toDouble() ?? 0) * 100;
-    final rateMx = ((summary['effective_rate_mx'] as num?)?.toDouble() ?? 0) * 100;
+    final rateUs =
+        ((summary['effective_rate_us'] as num?)?.toDouble() ?? 0) * 100;
+    final rateMx =
+        ((summary['effective_rate_mx'] as num?)?.toDouble() ?? 0) * 100;
     final bracketYearUsed =
         (summary['bracket_year_used'] as num?)?.toInt() ?? _selectedYear;
     final constantsUnverified = summary['constants_verified'] == false;
@@ -560,7 +586,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             rateMx: rateMx,
             gainsFromLots: gainsFromLots,
           ),
-          if (ordinaryRoom != null || ltcg0Room != null || ltcg15Room != null) ...[
+          if (ordinaryRoom != null ||
+              ltcg0Room != null ||
+              ltcg15Room != null) ...[
             const SizedBox(height: 16),
             _buildHeadroomCard(
               l,
@@ -664,11 +692,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     if (stackControls) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          title,
-          const SizedBox(height: 12),
-          controls,
-        ],
+        children: [title, const SizedBox(height: 12), controls],
       );
     }
     return Row(
@@ -677,7 +701,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       children: [
         Flexible(child: title),
         const SizedBox(width: 16),
-        Flexible(child: Align(alignment: Alignment.centerRight, child: controls)),
+        Flexible(
+          child: Align(alignment: Alignment.centerRight, child: controls),
+        ),
       ],
     );
   }
@@ -713,10 +739,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           // Single and Married — which re-runs the bracket math — is obvious.
           SegmentedButton<String>(
             segments: _filingStatuses
-                .map((value) => ButtonSegment<String>(
-                      value: value,
-                      label: Text(_filingStatusLabel(l, value)),
-                    ))
+                .map(
+                  (value) => ButtonSegment<String>(
+                    value: value,
+                    label: Text(_filingStatusLabel(l, value)),
+                  ),
+                )
                 .toList(),
             selected: {_filingStatus},
             showSelectedIcon: false,
@@ -736,10 +764,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           DropdownButton<int>(
             value: _selectedYear,
             items: yearItems
-                .map((value) => DropdownMenuItem<int>(
-                      value: value,
-                      child: Text(value.toString()),
-                    ))
+                .map(
+                  (value) => DropdownMenuItem<int>(
+                    value: value,
+                    child: Text(value.toString()),
+                  ),
+                )
                 .toList(),
             onChanged: (v) {
               if (v != null) _onYearChanged(v);
@@ -825,7 +855,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             children: [
               Flexible(
                 child: Text(
-                  l.taxOrdinaryIncome(widget.currencyFormat.format(ordinaryIncome)),
+                  l.taxOrdinaryIncome(
+                    widget.currencyFormat.format(ordinaryIncome),
+                  ),
                   style: TextStyle(fontSize: 12, color: context.textSubtle),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -939,8 +971,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             Text(
               l.taxMxWithheld(
                 widget.currencyFormat.format(isrWithheld),
-                widget.currencyFormat
-                    .format((liabMx - isrWithheld).clamp(0, double.infinity)),
+                widget.currencyFormat.format(
+                  (liabMx - isrWithheld).clamp(0, double.infinity),
+                ),
               ),
               style: TextStyle(fontSize: 11, color: context.textMuted),
             ),
@@ -979,8 +1012,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             ? Text(
                 l.taxMxWithheld(
                   widget.currencyFormat.format(isrWithheld),
-                  widget.currencyFormat
-                      .format((liabMx - isrWithheld).clamp(0, double.infinity)),
+                  widget.currencyFormat.format(
+                    (liabMx - isrWithheld).clamp(0, double.infinity),
+                  ),
                 ),
                 style: TextStyle(fontSize: 11, color: context.textMuted),
               )
@@ -1117,10 +1151,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               rateLine,
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
-            if (extra != null) ...[
-              const SizedBox(height: 6),
-              extra,
-            ],
+            if (extra != null) ...[const SizedBox(height: 6), extra],
             if (showRoughBadge) ...[
               const SizedBox(height: 8),
               _roughEstimateBadge(l),
@@ -1147,20 +1178,22 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final lines = <Widget>[];
     void addLine(String text) {
       if (lines.isNotEmpty) lines.add(const SizedBox(height: 6));
-      lines.add(Text(
-        text,
-        style: TextStyle(fontSize: 12, color: context.textSubtle),
-      ));
+      lines.add(
+        Text(text, style: TextStyle(fontSize: 12, color: context.textSubtle)),
+      );
     }
 
     if (ordinaryRoom != null) {
-      addLine(ordinaryNextRate != null
-          ? l.taxHeadroomOrdinaryRoom(
-              widget.currencyFormat.format(ordinaryRoom),
-              ordinaryNextRate.toStringAsFixed(0),
-            )
-          : l.taxHeadroomOrdinaryRoomTop(
-              widget.currencyFormat.format(ordinaryRoom)));
+      addLine(
+        ordinaryNextRate != null
+            ? l.taxHeadroomOrdinaryRoom(
+                widget.currencyFormat.format(ordinaryRoom),
+                ordinaryNextRate.toStringAsFixed(0),
+              )
+            : l.taxHeadroomOrdinaryRoomTop(
+                widget.currencyFormat.format(ordinaryRoom),
+              ),
+      );
     }
     // 0% room only shows while still in the 0% band; once past it the 15% room
     // (with its 20% next step) is what's left to show.
@@ -1171,10 +1204,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       // The step above the 15% band is always 20% (this line is hidden once the
       // user is already past it), so the next-rate label is a fixed 20 — not the
       // band-relative ltcgNextRate, which is 15 while still in the 0% band.
-      addLine(l.taxHeadroomLtcg15Room(
-        widget.currencyFormat.format(ltcg15Room),
-        '20',
-      ));
+      addLine(
+        l.taxHeadroomLtcg15Room(widget.currencyFormat.format(ltcg15Room), '20'),
+      );
     }
 
     return Card(
@@ -1183,7 +1215,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(l.taxHeadroomTitle, style: TextStyle(color: context.textMuted)),
+            Text(
+              l.taxHeadroomTitle,
+              style: TextStyle(color: context.textMuted),
+            ),
             const SizedBox(height: 8),
             Text(
               l.taxHeadroomSubtitle,
@@ -1283,8 +1318,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          childrenPadding:
-              const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           leading: Icon(Icons.tune, size: 18, color: context.textMuted),
           title: Text(
             l.taxAssumptionsTitle,
@@ -1316,7 +1350,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       child: Text(
                         item,
                         style: TextStyle(
-                            fontSize: 12, color: context.textMuted),
+                          fontSize: 12,
+                          color: context.textMuted,
+                        ),
                       ),
                     ),
                   ],
@@ -1364,7 +1400,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Column(
               children: [
                 for (var i = 0; i < taxable.length; i++) ...[
@@ -1377,8 +1414,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     padding: const EdgeInsets.all(16),
                     child: Text(
                       l.taxNoDisposals,
-                      style:
-                          TextStyle(color: context.textFaint, fontSize: 12),
+                      style: TextStyle(color: context.textFaint, fontSize: 12),
                     ),
                   ),
                 Divider(height: 1, color: context.hairline),
@@ -1486,8 +1522,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
   }
 
-  Widget _advantagedCard(
-      AppLocalizations l, List<Map<String, dynamic>> rows) {
+  Widget _advantagedCard(AppLocalizations l, List<Map<String, dynamic>> rows) {
     return Card(
       elevation: 0,
       color: context.tileSurface,
@@ -1544,14 +1579,14 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final stGain = (data['short_term_gain'] as num?)?.toDouble() ?? 0;
     final ltGain = (data['long_term_gain'] as num?)?.toDouble() ?? 0;
     // Marginal rates behind every harvest savings estimate (fractions 0..1).
-    final ordinaryMarginalPct =
-        (data['ordinary_marginal_rate'] as num?)?.toDouble();
+    final ordinaryMarginalPct = (data['ordinary_marginal_rate'] as num?)
+        ?.toDouble();
     final ltcgMarginalPct = (data['ltcg_marginal_rate'] as num?)?.toDouble();
     // How the year's realized losses flow against gains / the capped ordinary
     // offset / carryforward — echoed from the summary engine's netting, never
     // re-derived in Dart.
-    final netBuckets =
-        (_taxSummary?['net_capital_buckets'] as Map?)?.cast<String, dynamic>();
+    final netBuckets = (_taxSummary?['net_capital_buckets'] as Map?)
+        ?.cast<String, dynamic>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1684,11 +1719,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 ),
                 if (near && (daysRaw is num)) ...[
                   const SizedBox(height: 4),
-                  _nearLongTermChip(
-                    l,
-                    daysRaw.toInt(),
-                    flipDate,
-                  ),
+                  _nearLongTermChip(l, daysRaw.toInt(), flipDate),
                 ],
               ],
             ),
@@ -1785,14 +1816,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
                 '${l.taxHarvestMarginalRate}: '
-                '${[
-                  if (ordinaryMarginalRate != null)
-                    '${l.taxHarvestMarginalOrdinary} '
-                        '${formatPercent(context, ordinaryMarginalRate * 100, digits: 1)}',
-                  if (ltcgMarginalRate != null)
-                    '${l.taxHarvestMarginalLtcg} '
-                        '${formatPercent(context, ltcgMarginalRate * 100, digits: 1)}',
-                ].join(' · ')}',
+                '${[if (ordinaryMarginalRate != null) '${l.taxHarvestMarginalOrdinary} '
+                      '${formatPercent(context, ordinaryMarginalRate * 100, digits: 1)}', if (ltcgMarginalRate != null) '${l.taxHarvestMarginalLtcg} '
+                      '${formatPercent(context, ltcgMarginalRate * 100, digits: 1)}'].join(' · ')}',
                 style: TextStyle(fontSize: 11, color: context.textSubtle),
               ),
             ),
@@ -1837,8 +1863,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
 
     // Server-side netting figures (USD, already non-negative). Absent when the
     // summary hasn't loaded; we still show the candidate totals in that case.
-    double? netUsd(String key) =>
-        (netBuckets?[key] as num?)?.toDouble();
+    double? netUsd(String key) => (netBuckets?[key] as num?)?.toDouble();
     // st/lt_taxable_gain are the gains that REMAIN taxable after netting (not
     // the amount of loss absorbed by gains, which the server doesn't expose).
     final taxableGainsRemaining =
@@ -1917,12 +1942,14 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   }
 
   Widget _harvestRow(
-      AppLocalizations l, Map<String, dynamic> lot, bool unverified) {
+    AppLocalizations l,
+    Map<String, dynamic> lot,
+    bool unverified,
+  ) {
     final symbol = lot['symbol']?.toString() ?? '';
     final name = lot['name']?.toString() ?? '';
     final loss = (lot['unrealized_gain_usd'] as num?)?.toDouble() ?? 0;
-    final savings =
-        (lot['estimated_tax_savings_usd'] as num?)?.toDouble() ?? 0;
+    final savings = (lot['estimated_tax_savings_usd'] as num?)?.toDouble() ?? 0;
     final washRisk = lot['wash_sale_risk'] == true;
     final washSafeAfter = lot['wash_sale_safe_after']?.toString();
 
@@ -1987,8 +2014,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   Flexible(
                     child: Text(
                       l.taxWashSaleSafeAfter(_fmtDate(washSafeAfter)),
-                      style:
-                          TextStyle(color: context.warning, fontSize: 11),
+                      style: TextStyle(color: context.warning, fontSize: 11),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -2055,20 +2081,23 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           ],
           Card(
             elevation: 4,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Icon(Icons.cloud_off_outlined,
-                      size: 16, color: context.warning),
+                  Icon(
+                    Icons.cloud_off_outlined,
+                    size: 16,
+                    color: context.warning,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       l.taxSectionLoadFailed,
-                      style:
-                          TextStyle(color: context.textMuted, fontSize: 12),
+                      style: TextStyle(color: context.textMuted, fontSize: 12),
                     ),
                   ),
                   TextButton(
@@ -2094,8 +2123,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     // No foreign-balance history at all: peak/peak_date are empty and there are
     // no foreign accounts. A green "under threshold" all-clear here is
     // misleading, so render a neutral no-data state instead.
-    final noData =
-        (peakDate == null || peakDate.isEmpty) && accounts.isEmpty;
+    final noData = (peakDate == null || peakDate.isEmpty) && accounts.isEmpty;
 
     final statusColor = noData
         ? context.textMuted
@@ -2111,10 +2139,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         Card(
           elevation: 4,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: EdgeInsets.all(
-                MediaQuery.sizeOf(context).width < 720 ? 16.0 : 20.0),
+              MediaQuery.sizeOf(context).width < 720 ? 16.0 : 20.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2127,12 +2157,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    widget.currencyFormat
-                        .format(peak * widget.conversionFactor),
-                    style: brandDisplayStyle(
-                      fontSize: 26,
-                      color: statusColor,
+                    widget.currencyFormat.format(
+                      peak * widget.conversionFactor,
                     ),
+                    style: brandDisplayStyle(fontSize: 26, color: statusColor),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -2142,8 +2170,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       noData
                           ? Icons.info_outline
                           : (exceeded
-                              ? Icons.flag_outlined
-                              : Icons.check_circle_outline),
+                                ? Icons.flag_outlined
+                                : Icons.check_circle_outline),
                       size: 14,
                       color: statusColor,
                     ),
@@ -2168,22 +2196,27 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     Flexible(
                       child: Text(
                         l.taxFbarThreshold(
-                          widget.currencyFormat
-                              .format(threshold * widget.conversionFactor),
+                          widget.currencyFormat.format(
+                            threshold * widget.conversionFactor,
+                          ),
                         ),
                         style: TextStyle(
-                            color: context.textSubtle, fontSize: 11),
+                          color: context.textSubtle,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                     if (unverified) ...[
                       const SizedBox(width: 8),
-                      Icon(Icons.warning_amber_rounded,
-                          size: 12, color: context.warning),
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 12,
+                        color: context.warning,
+                      ),
                       const SizedBox(width: 2),
                       Text(
                         l.taxConstantsUnverified,
-                        style:
-                            TextStyle(color: context.warning, fontSize: 10),
+                        style: TextStyle(color: context.warning, fontSize: 10),
                       ),
                     ],
                   ],
@@ -2240,8 +2273,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final institution = raw['institution']?.toString() ?? '';
     final country = raw['country']?.toString();
     final currency = raw['currency']?.toString() ?? '';
-    final peakContrib =
-        (raw['peak_contribution_usd'] as num?)?.toDouble() ?? 0;
+    final peakContrib = (raw['peak_contribution_usd'] as num?)?.toDouble() ?? 0;
     final ytdMax = (raw['ytd_max_usd'] as num?)?.toDouble() ?? 0;
     // Backend flag: the institution has no country set, so this row was
     // counted foreign only via the MXN-currency heuristic — surface a
@@ -2286,7 +2318,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     message: l.taxFbarConfirmLocationTooltip,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: context.warning.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
@@ -2294,8 +2328,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.help_outline,
-                              size: 12, color: context.warning),
+                          Icon(
+                            Icons.help_outline,
+                            size: 12,
+                            color: context.warning,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             l.taxFbarConfirmLocation,
@@ -2361,12 +2398,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Column(
               children: [
                 for (var i = 0; i < groups.length; i++) ...[
-                  if (i > 0)
-                    Divider(height: 1, color: context.hairline),
+                  if (i > 0) Divider(height: 1, color: context.hairline),
                   _contributionRow(l, groups[i], unverified),
                 ],
               ],
@@ -2394,8 +2431,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
   }
 
-  Widget _contributionRow(
-      AppLocalizations l, dynamic raw, bool unverified) {
+  Widget _contributionRow(AppLocalizations l, dynamic raw, bool unverified) {
     if (raw is! Map) return const SizedBox.shrink();
     final groupKey = raw['group']?.toString() ?? '';
     final ytd = (raw['ytd_contributions_usd'] as num?)?.toDouble() ?? 0;
@@ -2482,8 +2518,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 Flexible(
                   child: Text(
                     l.taxCatchUpNote(_money(catchUp)),
-                    style:
-                        TextStyle(color: context.textFaint, fontSize: 11),
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -2494,7 +2529,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             const SizedBox(height: 6),
             Text(
               l.taxMegaBackdoorNote(
-                  _money(baseLimit), _money(progress.remainingRoom)),
+                _money(baseLimit),
+                _money(progress.remainingRoom),
+              ),
               style: TextStyle(color: context.textSubtle, fontSize: 11),
             ),
             const SizedBox(height: 4),
@@ -2513,8 +2550,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                         ? l.tax401kElectiveSplit(
                             _money(_elective401kUsd!),
                             _money(baseLimit),
-                            _money((ytd - _elective401kUsd!)
-                                .clamp(0, double.infinity)))
+                            _money(
+                              (ytd - _elective401kUsd!).clamp(
+                                0,
+                                double.infinity,
+                              ),
+                            ),
+                          )
                         : l.tax401kElectiveSet,
                     style: TextStyle(
                       color: context.info,
@@ -2559,8 +2601,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 Expanded(
                   child: Text(
                     l.taxMatchRolloverCaveat,
-                    style:
-                        TextStyle(color: context.textFaint, fontSize: 11),
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
                   ),
                 ),
               ],
@@ -2570,8 +2611,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.warning_amber_rounded,
-                    size: 12, color: context.warning),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 12,
+                  color: context.warning,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   l.taxConstantsUnverified,
@@ -2620,7 +2664,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Column(
               children: [
                 for (var i = 0; i < txns.length; i++) ...[
@@ -2645,8 +2690,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   Widget _buildTaxRow(AppLocalizations l, dynamic tx) {
     final date = DateTime.tryParse(tx['date']?.toString() ?? '');
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
-    final sourceCurrency =
-        (tx['currency'] ?? widget.targetCurrency).toString();
+    final sourceCurrency = (tx['currency'] ?? widget.targetCurrency).toString();
     final amountUsd = (tx['amount_usd'] as num?)?.toDouble();
     final converted = amountUsd != null
         ? amountUsd * widget.conversionFactor
@@ -2656,10 +2700,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             to: widget.targetCurrency,
             usdMxnRate: widget.usdMxnRate,
           );
-    final effectiveCategory =
-        ((tx['user_category'] ?? tx['category']) ?? '').toString().toUpperCase();
+    final effectiveCategory = ((tx['user_category'] ?? tx['category']) ?? '')
+        .toString()
+        .toUpperCase();
     final isIncome =
-        effectiveCategory == 'INCOME' || effectiveCategory.startsWith('INCOME_');
+        effectiveCategory == 'INCOME' ||
+        effectiveCategory.startsWith('INCOME_');
     final iconColor = isIncome ? context.tealAccent : context.purpleAccent;
     final needsConversion = sourceCurrency != widget.targetCurrency;
 
@@ -2757,20 +2803,23 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // A7 (round 3, a11y): every section title is a header landmark, so a
   // screen-reader user can jump between the tab's sections.
   Widget _sectionTitle(String text) => Semantics(
-        container: true,
-        header: true,
-        child: Text(
-          text,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-      );
+    container: true,
+    header: true,
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    ),
+  );
 
   /// On phones (`collapse` true) wrap a secondary section behind a tappable,
   /// collapsed-by-default header — reusing the styled `ExpansionTile` look from
   /// `_buildAssumptions`. On wide screens the section renders inline with its
   /// own title. `body` is lazy so a collapsed section isn't built until opened.
   Widget _maybeCollapse(
-      bool collapse, String title, Widget Function(bool header) body) {
+    bool collapse,
+    String title,
+    Widget Function(bool header) body,
+  ) {
     // Inline (wide): the section renders its own header. Collapsed (phone):
     // the ExpansionTile shows the title, so the body omits its own header.
     if (!collapse) return body(true);
@@ -2784,8 +2833,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          leading: Icon(Icons.insights_rounded,
-              size: 18, color: context.tealAccent),
+          leading: Icon(
+            Icons.insights_rounded,
+            size: 18,
+            color: context.tealAccent,
+          ),
           title: Text(
             title,
             style: TextStyle(
@@ -2841,7 +2893,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       child: Text(
         label,
         style: TextStyle(
-            color: color, fontSize: 10, fontWeight: FontWeight.bold),
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

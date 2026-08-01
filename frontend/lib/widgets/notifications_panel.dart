@@ -54,10 +54,13 @@ const String kServerNotificationIdPrefix = 'srv:';
 List<AppNotification> serverNotificationsToApp({
   required List<dynamic> rows,
   Brightness brightness = Brightness.dark,
+
   /// Opens the FX center sheet (fx_alert rows deep-link to their subject).
   VoidCallback? onOpenFxCenter,
+
   /// Jump to Management/sync (import_stale rows: the fix is an import).
   VoidCallback? onJumpToManagement,
+
   /// Jump to the Lending tab (loan_due rows).
   VoidCallback? onJumpToLending,
 }) {
@@ -69,31 +72,33 @@ List<AppNotification> serverNotificationsToApp({
     final kind = (raw['kind'] ?? '').toString();
     final (IconData icon, Color accent, VoidCallback? onTap) = switch (kind) {
       'fx_alert' => (
-          Icons.currency_exchange,
-          BrandPalette.info(brightness),
-          onOpenFxCenter,
-        ),
+        Icons.currency_exchange,
+        BrandPalette.info(brightness),
+        onOpenFxCenter,
+      ),
       'import_stale' => (
-          Icons.upload_file,
-          BrandPalette.warning(brightness),
-          onJumpToManagement,
-        ),
+        Icons.upload_file,
+        BrandPalette.warning(brightness),
+        onJumpToManagement,
+      ),
       'loan_due' => (
-          Icons.event,
-          BrandPalette.warning(brightness),
-          onJumpToLending,
-        ),
+        Icons.event,
+        BrandPalette.warning(brightness),
+        onJumpToLending,
+      ),
       _ => (Icons.notifications_none, BrandPalette.neutral(brightness), null),
     };
-    out.add(AppNotification(
-      id: '$kServerNotificationIdPrefix$id',
-      icon: icon,
-      accent: accent,
-      title: (raw['title'] ?? '').toString(),
-      detail: (raw['body'] ?? '').toString(),
-      onTap: onTap,
-      createdAt: DateTime.tryParse(raw['created_at']?.toString() ?? ''),
-    ));
+    out.add(
+      AppNotification(
+        id: '$kServerNotificationIdPrefix$id',
+        icon: icon,
+        accent: accent,
+        title: (raw['title'] ?? '').toString(),
+        detail: (raw['body'] ?? '').toString(),
+        onTap: onTap,
+        createdAt: DateTime.tryParse(raw['created_at']?.toString() ?? ''),
+      ),
+    );
   }
   return out;
 }
@@ -104,6 +109,7 @@ List<AppNotification> serverNotificationsToApp({
 /// in memory client-side.
 List<AppNotification> deriveNotifications({
   required AppLocalizations l,
+
   /// Active theme brightness — resolves each row's accent to its
   /// AA-passing shade for the current theme (via `BrandPalette`). Defaults
   /// to dark (the historical neon look) so context-less callers/tests keep
@@ -112,48 +118,61 @@ List<AppNotification> deriveNotifications({
   required List<dynamic> syncData,
   required List<dynamic> netWorthHistory,
   required VoidCallback onJumpToManagement,
+
   /// Upcoming + overdue loan installments from GET /api/loans/reminders.
   /// Empty when lending is off (the endpoint returns []). Each item:
   /// {borrower_name, amount, currency, due_date, installment_number,
   /// days_until, days_overdue}.
   List<dynamic> loanReminders = const [],
+
   /// Jump to the Lending tab when a loan reminder is tapped.
   VoidCallback? onJumpToLending,
+
   /// All accounts (from the dashboard overview) for low-balance alerts.
   List<dynamic> accounts = const [],
+
   /// account_id -> low-balance threshold in that account's native currency.
   Map<String, double> accountAlerts = const {},
+
   /// Opens an account's detail panel when its low-balance row is tapped.
   void Function(Map<String, dynamic> account)? onJumpToAccount,
+
   /// Per-category spend deltas from GET /api/dashboard/spending-insights:
   /// {recent_month, lookback, categories:[{user_category, category_detailed,
   /// category, recent, previous_avg, trailing_avg}]}. Null/absent when the
   /// fetch failed — the spending-up rows simply don't appear.
   Map<String, dynamic>? spendingInsights,
+
   /// Detected recurring outflows from GET /api/dashboard/subscriptions, used
   /// to surface a subscription whose price went up (a higher-priced cluster
   /// supersedes a same-merchant lower-priced one).
   List<dynamic> subscriptions = const [],
+
   /// Jump to the Cash-flow tab when a spending-insight / subscription row is
   /// tapped.
   VoidCallback? onJumpToSpending,
+
   /// Accounts the sync auto-archived because Plaid stopped returning them
   /// (the account was closed at the bank). From GET /api/accounts/archived.
   /// Each item: {id, name, nickname, institution_name, account_type,
   /// current_balance, currency, archived_at}.
   List<dynamic> archivedAccounts = const [],
+
   /// Opens the Hidden/closed items screen when an archived-account row is
   /// tapped (where the user can restore or remove it).
   VoidCallback? onJumpToClosedAccounts,
+
   /// "What changed since your last visit" payload from
   /// GET /api/dashboard/since-last-login (same data as the Overview
   /// banner): {previous_login_at, new_transactions, largest_move?,
   /// sync_errors}. Null when there's no anchor yet (first-ever login) or
   /// the fetch failed — the digest rows simply don't appear.
   Map<String, dynamic>? sinceLastLogin,
+
   /// Jump to the Transactions tab pre-filtered to "since [anchor]" when a
   /// digest row is tapped. Receives the previous-login anchor.
   void Function(DateTime anchor)? onJumpToTransactions,
+
   /// The user's reporting currency, and the factor that takes a USD-stored
   /// figure into it (1.0 for USD, the USD/MXN rate for MXN) — same pair the
   /// Overview cards take.
@@ -177,12 +196,13 @@ List<AppNotification> deriveNotifications({
   //    The server sends exactly one of days_overdue / days_until > 0
   //    per row, so each installment yields at most one notification.
   String money(num v, String cur) => NumberFormat.currency(
-        symbol: cur == 'MXN' ? 'MXN ' : r'$',
-        decimalDigits: 2,
-      ).format(v);
+    symbol: cur == 'MXN' ? 'MXN ' : r'$',
+    decimalDigits: 2,
+  ).format(v);
   for (final raw in loanReminders) {
     if (raw is! Map) continue;
-    final borrower = (raw['borrower_name'] ?? l.lwNotifBorrowerFallback).toString();
+    final borrower = (raw['borrower_name'] ?? l.lwNotifBorrowerFallback)
+        .toString();
     final amount = (raw['amount'] as num?)?.toDouble() ?? 0;
     final cur = (raw['currency'] ?? 'USD').toString();
     final n = (raw['installment_number'] as num?)?.toInt() ?? 0;
@@ -191,40 +211,50 @@ List<AppNotification> deriveNotifications({
     final due = DateTime.tryParse(raw['due_date']?.toString() ?? '');
     final dueStr = due != null ? DateFormat('MMM d').format(due) : '';
     if (overdue > 0) {
-      out.add(AppNotification(
-        id: 'loan_overdue:$borrower:$n',
-        icon: Icons.event_busy,
-        accent: BrandPalette.negative(brightness),
-        title: l.lwNotifRepaymentOverdueTitle(borrower),
-        // gen-l10n orders these alphabetically → (amount, daysOverdue, dueDate, number).
-        detail: l.lwNotifRepaymentOverdueDetail(
-            money(amount, cur), overdue, dueStr, n),
-        onTap: onJumpToLending,
-      ));
+      out.add(
+        AppNotification(
+          id: 'loan_overdue:$borrower:$n',
+          icon: Icons.event_busy,
+          accent: BrandPalette.negative(brightness),
+          title: l.lwNotifRepaymentOverdueTitle(borrower),
+          // gen-l10n orders these alphabetically → (amount, daysOverdue, dueDate, number).
+          detail: l.lwNotifRepaymentOverdueDetail(
+            money(amount, cur),
+            overdue,
+            dueStr,
+            n,
+          ),
+          onTap: onJumpToLending,
+        ),
+      );
     } else if (until > 0) {
-      out.add(AppNotification(
-        id: 'loan_due:$borrower:$n',
-        icon: Icons.event,
-        accent: BrandPalette.warning(brightness),
-        title: l.lwNotifRepaymentDueTitle(borrower, until),
-        // gen-l10n orders these alphabetically → (amount, dueDate, number).
-        detail: l.lwNotifRepaymentDueDetail(money(amount, cur), dueStr, n),
-        onTap: onJumpToLending,
-      ));
+      out.add(
+        AppNotification(
+          id: 'loan_due:$borrower:$n',
+          icon: Icons.event,
+          accent: BrandPalette.warning(brightness),
+          title: l.lwNotifRepaymentDueTitle(borrower, until),
+          // gen-l10n orders these alphabetically → (amount, dueDate, number).
+          detail: l.lwNotifRepaymentDueDetail(money(amount, cur), dueStr, n),
+          onTap: onJumpToLending,
+        ),
+      );
     } else {
       // Due today: days_until and days_overdue are both 0 (the backend only
       // returns reminders within the lead window, so both-zero means today).
       // Without this branch a loan due today produced a reminder row but no
       // notification at all — exactly on the day it matters most.
-      out.add(AppNotification(
-        id: 'loan_due_today:$borrower:$n',
-        icon: Icons.event_available,
-        accent: BrandPalette.warning(brightness),
-        title: l.lwNotifRepaymentDueTodayTitle(borrower),
-        // gen-l10n orders these alphabetically → (amount, number); pass amount first.
-        detail: l.lwNotifRepaymentDueTodayDetail(money(amount, cur), n),
-        onTap: onJumpToLending,
-      ));
+      out.add(
+        AppNotification(
+          id: 'loan_due_today:$borrower:$n',
+          icon: Icons.event_available,
+          accent: BrandPalette.warning(brightness),
+          title: l.lwNotifRepaymentDueTodayTitle(borrower),
+          // gen-l10n orders these alphabetically → (amount, number); pass amount first.
+          detail: l.lwNotifRepaymentDueTodayDetail(money(amount, cur), n),
+          onTap: onJumpToLending,
+        ),
+      );
     }
   }
 
@@ -248,16 +278,21 @@ List<AppNotification> deriveNotifications({
           ? raw['nickname'].toString()
           : (raw['name'] ?? l.lwNotifAccountFallback).toString();
       final cur = (raw['currency'] ?? 'USD').toString();
-      out.add(AppNotification(
-        id: 'low_balance:$id',
-        icon: Icons.account_balance_wallet_outlined,
-        accent: BrandPalette.warning(brightness),
-        title: l.lwNotifLowBalanceTitle(name),
-        detail: l.lwNotifLowBalanceDetail(money(bal, cur), money(threshold, cur)),
-        onTap: onJumpToAccount == null
-            ? null
-            : () => onJumpToAccount(Map<String, dynamic>.from(raw)),
-      ));
+      out.add(
+        AppNotification(
+          id: 'low_balance:$id',
+          icon: Icons.account_balance_wallet_outlined,
+          accent: BrandPalette.warning(brightness),
+          title: l.lwNotifLowBalanceTitle(name),
+          detail: l.lwNotifLowBalanceDetail(
+            money(bal, cur),
+            money(threshold, cur),
+          ),
+          onTap: onJumpToAccount == null
+              ? null
+              : () => onJumpToAccount(Map<String, dynamic>.from(raw)),
+        ),
+      );
     }
   }
 
@@ -267,23 +302,28 @@ List<AppNotification> deriveNotifications({
     final status = raw['sync_status']?.toString();
     final name = (raw['name'] ?? l.lwNotifInstitutionFallback).toString();
     if (status == 'reconnect_required') {
-      out.add(AppNotification(
-        id: 'sync_reconnect:$name',
-        icon: Icons.link_off,
-        accent: BrandPalette.warning(brightness),
-        title: l.lwNotifNeedsReconnectTitle(name),
-        detail: l.lwNotifNeedsReconnectDetail,
-        onTap: onJumpToManagement,
-      ));
+      out.add(
+        AppNotification(
+          id: 'sync_reconnect:$name',
+          icon: Icons.link_off,
+          accent: BrandPalette.warning(brightness),
+          title: l.lwNotifNeedsReconnectTitle(name),
+          detail: l.lwNotifNeedsReconnectDetail,
+          onTap: onJumpToManagement,
+        ),
+      );
     } else if (status == 'error' || status == 'failed') {
-      out.add(AppNotification(
-        id: 'sync_failed:$name',
-        icon: Icons.error_outline,
-        accent: BrandPalette.negative(brightness),
-        title: l.lwNotifSyncFailedTitle(name),
-        detail: (raw['last_sync_error'] ?? l.lwNotifUnknownSyncError).toString(),
-        onTap: onJumpToManagement,
-      ));
+      out.add(
+        AppNotification(
+          id: 'sync_failed:$name',
+          icon: Icons.error_outline,
+          accent: BrandPalette.negative(brightness),
+          title: l.lwNotifSyncFailedTitle(name),
+          detail: (raw['last_sync_error'] ?? l.lwNotifUnknownSyncError)
+              .toString(),
+          onTap: onJumpToManagement,
+        ),
+      );
     } else if (status == 'synced') {
       // Stale sync — over a week since last successful run.
       final raw2 = raw['last_synced_at']?.toString();
@@ -292,15 +332,17 @@ List<AppNotification> deriveNotifications({
         if (dt != null) {
           final days = DateTime.now().difference(dt).inDays;
           if (days >= 7) {
-            out.add(AppNotification(
-              id: 'sync_stale:$name',
-              icon: Icons.access_time,
-              accent: BrandPalette.warning(brightness),
-              // gen-l10n orders these alphabetically → (days, name); pass days first.
-              title: l.lwNotifStaleSyncTitle(days, name),
-              detail: l.lwNotifStaleSyncDetail,
-              onTap: onJumpToManagement,
-            ));
+            out.add(
+              AppNotification(
+                id: 'sync_stale:$name',
+                icon: Icons.access_time,
+                accent: BrandPalette.warning(brightness),
+                // gen-l10n orders these alphabetically → (days, name); pass days first.
+                title: l.lwNotifStaleSyncTitle(days, name),
+                detail: l.lwNotifStaleSyncDetail,
+                onTap: onJumpToManagement,
+              ),
+            );
           }
         }
       }
@@ -315,10 +357,10 @@ List<AppNotification> deriveNotifications({
   if (netWorthHistory.length >= 2) {
     final sorted = [...netWorthHistory];
     sorted.sort((a, b) {
-      final ad = DateTime.tryParse(a['date']?.toString() ?? '') ??
-          DateTime(2000);
-      final bd = DateTime.tryParse(b['date']?.toString() ?? '') ??
-          DateTime(2000);
+      final ad =
+          DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(2000);
+      final bd =
+          DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(2000);
       return ad.compareTo(bd);
     });
     final latest = sorted.last;
@@ -343,23 +385,30 @@ List<AppNotification> deriveNotifications({
         // Stay quiet on a flat day — a sub-0.25% wobble isn't worth a badge.
         if (pct.abs() >= 0.25) {
           final amount = money(delta.abs() * conversionFactor, targetCurrency);
-          final pctStr = formatPercentLocale(l.localeName, pct.abs(), digits: 1);
-          final detail =
-              l.lwNotifNetWorthSinceSyncDetail(DateFormat('MMM d').format(latestDt));
+          final pctStr = formatPercentLocale(
+            l.localeName,
+            pct.abs(),
+            digits: 1,
+          );
+          final detail = l.lwNotifNetWorthSinceSyncDetail(
+            DateFormat('MMM d').format(latestDt),
+          );
           final up = delta >= 0;
-          out.add(AppNotification(
-            id: 'net_worth_since_sync:$latestDateStr',
-            icon: up ? Icons.trending_up : Icons.trending_down,
-            accent: up
-                ? BrandPalette.teal(brightness)
-                : (pct.abs() >= 5
-                    ? BrandPalette.negative(brightness)
-                    : BrandPalette.warning(brightness)),
-            title: up
-                ? l.lwNotifNetWorthUpTitle(amount, pctStr)
-                : l.lwNotifNetWorthDownTitle(amount, pctStr),
-            detail: detail,
-          ));
+          out.add(
+            AppNotification(
+              id: 'net_worth_since_sync:$latestDateStr',
+              icon: up ? Icons.trending_up : Icons.trending_down,
+              accent: up
+                  ? BrandPalette.teal(brightness)
+                  : (pct.abs() >= 5
+                        ? BrandPalette.negative(brightness)
+                        : BrandPalette.warning(brightness)),
+              title: up
+                  ? l.lwNotifNetWorthUpTitle(amount, pctStr)
+                  : l.lwNotifNetWorthDownTitle(amount, pctStr),
+              detail: detail,
+            ),
+          );
         }
       }
     }
@@ -375,45 +424,50 @@ List<AppNotification> deriveNotifications({
   //     section 1 above already surfaces live sync problems and a
   //     duplicate row would double-badge the same condition.
   final sinceAnchorIso = sinceLastLogin?['previous_login_at']?.toString();
-  final sinceAnchor =
-      sinceAnchorIso != null ? DateTime.tryParse(sinceAnchorIso) : null;
+  final sinceAnchor = sinceAnchorIso != null
+      ? DateTime.tryParse(sinceAnchorIso)
+      : null;
   if (sinceAnchor != null) {
     final anchorStr = DateFormat('MMM d').format(sinceAnchor.toLocal());
     final newTx = (sinceLastLogin?['new_transactions'] as num?)?.toInt() ?? 0;
     if (newTx > 0) {
-      out.add(AppNotification(
-        id: 'since_tx:$sinceAnchorIso',
-        icon: Icons.receipt_long,
-        accent: BrandPalette.info(brightness),
-        title: l.lwSinceNewTransactions(newTx),
-        detail: l.lwNotifSinceVisitDetail(anchorStr),
-        onTap: onJumpToTransactions == null
-            ? null
-            : () => onJumpToTransactions(sinceAnchor),
-      ));
-    }
-    final move = sinceLastLogin?['largest_move'];
-    if (move is Map) {
-      final deltaUsd = (move['delta_usd'] as num?)?.toDouble() ?? 0.0;
-      final account =
-          (move['account_name'] ?? l.lwNotifAccountFallback).toString();
-      if (deltaUsd != 0) {
-        final up = deltaUsd >= 0;
-        final signed =
-            '${up ? '+' : '−'}${money(deltaUsd.abs() * conversionFactor, targetCurrency)}';
-        out.add(AppNotification(
-          id: 'since_move:$sinceAnchorIso',
-          icon: up ? Icons.trending_up : Icons.trending_down,
-          accent: up
-              ? BrandPalette.teal(brightness)
-              : BrandPalette.warning(brightness),
-          // gen-l10n orders these alphabetically → (account, amount).
-          title: l.lwSinceLargestMove(account, signed),
+      out.add(
+        AppNotification(
+          id: 'since_tx:$sinceAnchorIso',
+          icon: Icons.receipt_long,
+          accent: BrandPalette.info(brightness),
+          title: l.lwSinceNewTransactions(newTx),
           detail: l.lwNotifSinceVisitDetail(anchorStr),
           onTap: onJumpToTransactions == null
               ? null
               : () => onJumpToTransactions(sinceAnchor),
-        ));
+        ),
+      );
+    }
+    final move = sinceLastLogin?['largest_move'];
+    if (move is Map) {
+      final deltaUsd = (move['delta_usd'] as num?)?.toDouble() ?? 0.0;
+      final account = (move['account_name'] ?? l.lwNotifAccountFallback)
+          .toString();
+      if (deltaUsd != 0) {
+        final up = deltaUsd >= 0;
+        final signed =
+            '${up ? '+' : '−'}${money(deltaUsd.abs() * conversionFactor, targetCurrency)}';
+        out.add(
+          AppNotification(
+            id: 'since_move:$sinceAnchorIso',
+            icon: up ? Icons.trending_up : Icons.trending_down,
+            accent: up
+                ? BrandPalette.teal(brightness)
+                : BrandPalette.warning(brightness),
+            // gen-l10n orders these alphabetically → (account, amount).
+            title: l.lwSinceLargestMove(account, signed),
+            detail: l.lwNotifSinceVisitDetail(anchorStr),
+            onTap: onJumpToTransactions == null
+                ? null
+                : () => onJumpToTransactions(sinceAnchor),
+          ),
+        );
       }
     }
   }
@@ -440,10 +494,14 @@ List<AppNotification> deriveNotifications({
       if (prev < minBaseline || recent <= prev) continue;
       final pct = (recent - prev) / prev;
       if (pct < minJump) continue;
-      final code = (raw['user_category'] ?? raw['category_detailed'] ?? raw['category'] ?? '')
-          .toString()
-          .trim()
-          .toUpperCase();
+      final code =
+          (raw['user_category'] ??
+                  raw['category_detailed'] ??
+                  raw['category'] ??
+                  '')
+              .toString()
+              .trim()
+              .toUpperCase();
       if (skip.contains(code)) continue;
       final label = prettyCategory(
         userCategory: raw['user_category']?.toString(),
@@ -455,16 +513,19 @@ List<AppNotification> deriveNotifications({
     // Biggest absolute increase first; cap at three so the bell stays calm.
     spikes.sort((a, b) => (b.pct * b.avg).compareTo(a.pct * a.avg));
     for (final s in spikes.take(3)) {
-      out.add(AppNotification(
-        id: 'spending_up:${s.code}:$recentMonth',
-        icon: Icons.trending_up,
-        accent: BrandPalette.warning(brightness),
-        title: l.lwNotifSpendingUpTitle(
-            s.label, '${(s.pct * 100).round()}%'),
-        detail: l.lwNotifSpendingUpDetail(
-            lookback, money(s.avg * conversionFactor, targetCurrency)),
-        onTap: onJumpToSpending,
-      ));
+      out.add(
+        AppNotification(
+          id: 'spending_up:${s.code}:$recentMonth',
+          icon: Icons.trending_up,
+          accent: BrandPalette.warning(brightness),
+          title: l.lwNotifSpendingUpTitle(s.label, '${(s.pct * 100).round()}%'),
+          detail: l.lwNotifSpendingUpDetail(
+            lookback,
+            money(s.avg * conversionFactor, targetCurrency),
+          ),
+          onTap: onJumpToSpending,
+        ),
+      );
     }
   }
 
@@ -491,7 +552,8 @@ List<AppNotification> deriveNotifications({
         if (c['status'] != 'active') continue;
         if (current == null ||
             (c['last_charge_date'] ?? '').toString().compareTo(
-                    (current['last_charge_date'] ?? '').toString()) >
+                  (current['last_charge_date'] ?? '').toString(),
+                ) >
                 0) {
           current = c;
         }
@@ -531,15 +593,19 @@ List<AppNotification> deriveNotifications({
     // Largest absolute increase first; cap at three.
     hikes.sort((a, b) => (b.now - b.was).compareTo(a.now - a.was));
     for (final h in hikes.take(3)) {
-      out.add(AppNotification(
-        id: 'sub_price_up:${h.merchant.toLowerCase()}:${h.now.toStringAsFixed(2)}',
-        icon: Icons.price_change_outlined,
-        accent: BrandPalette.warning(brightness),
-        title: l.lwNotifSubPriceUpTitle(h.merchant),
-        detail: l.lwNotifSubPriceUpDetail(
-            money(h.now, h.cur), money(h.was, h.cur)),
-        onTap: onJumpToSpending,
-      ));
+      out.add(
+        AppNotification(
+          id: 'sub_price_up:${h.merchant.toLowerCase()}:${h.now.toStringAsFixed(2)}',
+          icon: Icons.price_change_outlined,
+          accent: BrandPalette.warning(brightness),
+          title: l.lwNotifSubPriceUpTitle(h.merchant),
+          detail: l.lwNotifSubPriceUpDetail(
+            money(h.now, h.cur),
+            money(h.was, h.cur),
+          ),
+          onTap: onJumpToSpending,
+        ),
+      );
     }
   }
 
@@ -550,8 +616,7 @@ List<AppNotification> deriveNotifications({
   //    skipped rather than guessed.
   for (final raw in archivedAccounts) {
     if (raw is! Map) continue;
-    final archivedAt =
-        DateTime.tryParse(raw['archived_at']?.toString() ?? '');
+    final archivedAt = DateTime.tryParse(raw['archived_at']?.toString() ?? '');
     if (archivedAt == null) continue;
     if (DateTime.now().difference(archivedAt).inDays > 30) continue;
     final id = raw['id']?.toString();
@@ -561,14 +626,16 @@ List<AppNotification> deriveNotifications({
     final name = (raw['nickname']?.toString().trim().isNotEmpty ?? false)
         ? raw['nickname'].toString()
         : (raw['name'] ?? l.lwNotifAccountFallback).toString();
-    out.add(AppNotification(
-      id: 'account_archived:$id',
-      icon: Icons.link_off,
-      accent: BrandPalette.neutral(brightness),
-      title: l.lwNotifAccountArchivedTitle(institution),
-      detail: l.lwNotifAccountArchivedDetail(name, institution),
-      onTap: onJumpToClosedAccounts,
-    ));
+    out.add(
+      AppNotification(
+        id: 'account_archived:$id',
+        icon: Icons.link_off,
+        accent: BrandPalette.neutral(brightness),
+        title: l.lwNotifAccountArchivedTitle(institution),
+        detail: l.lwNotifAccountArchivedDetail(name, institution),
+        onTap: onJumpToClosedAccounts,
+      ),
+    );
   }
 
   return out;
@@ -609,8 +676,9 @@ class NotificationsBell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final unseen =
-        notifications.where((n) => !dismissedIds.contains(n.id)).toList();
+    final unseen = notifications
+        .where((n) => !dismissedIds.contains(n.id))
+        .toList();
     final tooltip = unseen.isEmpty
         ? l.lwNotifTooltipNone
         : l.lwNotifTooltipCount(unseen.length);
@@ -636,8 +704,7 @@ class NotificationsBell extends StatelessWidget {
       // covering the app bar and looking detached from the bell that
       // spawned it — the long-standing anchoring complaint.
       position: PopupMenuPosition.under,
-      onOpened: () =>
-          onOpened?.call(notifications.map((n) => n.id).toSet()),
+      onOpened: () => onOpened?.call(notifications.map((n) => n.id).toSet()),
       itemBuilder: (menuContext) {
         if (notifications.isEmpty) {
           return [
@@ -657,8 +724,12 @@ class NotificationsBell extends StatelessWidget {
             padding: EdgeInsets.zero,
             child: SizedBox(
               width: 380,
-              child: _header(context, l, unseen,
-                  onClose: () => Navigator.of(menuContext).pop()),
+              child: _header(
+                context,
+                l,
+                unseen,
+                onClose: () => Navigator.of(menuContext).pop(),
+              ),
             ),
           ),
           ...notifications.map((n) {
@@ -740,8 +811,12 @@ class NotificationsBell extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _header(context, l, unseen,
-                    onClose: () => Navigator.of(sheetCtx).pop()),
+                _header(
+                  context,
+                  l,
+                  unseen,
+                  onClose: () => Navigator.of(sheetCtx).pop(),
+                ),
                 Divider(height: 1, color: context.hairline),
                 if (notifications.isEmpty)
                   Padding(
@@ -793,12 +868,14 @@ class NotificationsBell extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(l.lwNotifHeader,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: context.textPrimary,
-              )),
+          Text(
+            l.lwNotifHeader,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: context.textPrimary,
+            ),
+          ),
           if (unseen.isNotEmpty && onMarkAllRead != null)
             TextButton(
               onPressed: () {
@@ -865,10 +942,7 @@ class NotificationsBell extends StatelessWidget {
                     DateFormat.MMMd(
                       Localizations.localeOf(context).toString(),
                     ).format(n.createdAt!.toLocal()),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: context.textFaint,
-                    ),
+                    style: TextStyle(fontSize: 11, color: context.textFaint),
                   ),
                 ],
               ],

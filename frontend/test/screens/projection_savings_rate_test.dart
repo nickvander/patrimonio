@@ -21,10 +21,9 @@ Future<void> _pump(
   Locale locale = const Locale('en'),
 }) async {
   setTestSize(tester, const Size(1300, 1800));
-  await tester.pumpWidget(buildProjectionHost(
-    defaultsFetcher: () async => defaults,
-    locale: locale,
-  ));
+  await tester.pumpWidget(
+    buildProjectionHost(defaultsFetcher: () async => defaults, locale: locale),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -41,8 +40,9 @@ void main() {
     final slider = find.descendant(
       of: find
           .ancestor(
-              of: find.text('Monthly savings'),
-              matching: find.byType(MergeSemantics))
+            of: find.text('Monthly savings'),
+            matching: find.byType(MergeSemantics),
+          )
           .first,
       matching: find.byType(Slider),
     );
@@ -56,8 +56,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('caption caps at 100% for an outsized contribution',
-      (tester) async {
+  testWidgets('caption caps at 100% for an outsized contribution', (
+    tester,
+  ) async {
     await _pump(tester, const {
       'monthly_contribution': 9000.0, // ×12 = $108k on $18,288 income
       'annual_expenses': 0.0,
@@ -96,21 +97,20 @@ void main() {
   testWidgets('restored saved assumptions still get the caption (income is '
       'fetched without adopting defaults)', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      settingReader: (key) async => key == 'projection_assumptions'
-          ? {'monthly_contribution': 762.0}
-          : null,
-      defaultsFetcher: () async => _income18288,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingReader: (key) async => key == 'projection_assumptions'
+            ? {'monthly_contribution': 762.0}
+            : null,
+        defaultsFetcher: () async => _income18288,
+      ),
+    );
     await tester.pumpAndSettle();
 
     // The saved $762 won over the $152.40 tracked default…
     expect(find.text(r'$762'), findsOneWidget);
     expect(find.text(r'$152'), findsNothing);
     // …but the tracked income still powers the caption: 762×12/18288 = 50%.
-    expect(
-      find.text("You're saving about 50% of your income"),
-      findsOneWidget,
-    );
+    expect(find.text("You're saving about 50% of your income"), findsOneWidget);
   });
 }

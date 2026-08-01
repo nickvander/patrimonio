@@ -3,19 +3,21 @@ import 'package:patrimonio/screens/tax_planning_logic.dart';
 
 void main() {
   group('deriveTaxYears', () {
-    test('unions transaction + disposal years, newest first, with current year',
-        () {
-      final txns = [
-        {'date': '2023-04-01'},
-        {'date': '2021-12-31T00:00:00Z'},
-      ];
-      final disposals = [
-        {'sell_date': '2022-06-15'},
-        {'sell_date': '2021-02-02'},
-      ];
-      final years = deriveTaxYears(txns, disposals, currentYear: 2025);
-      expect(years, [2025, 2023, 2022, 2021]);
-    });
+    test(
+      'unions transaction + disposal years, newest first, with current year',
+      () {
+        final txns = [
+          {'date': '2023-04-01'},
+          {'date': '2021-12-31T00:00:00Z'},
+        ];
+        final disposals = [
+          {'sell_date': '2022-06-15'},
+          {'sell_date': '2021-02-02'},
+        ];
+        final years = deriveTaxYears(txns, disposals, currentYear: 2025);
+        expect(years, [2025, 2023, 2022, 2021]);
+      },
+    );
 
     test('always includes the current year even with no data', () {
       expect(deriveTaxYears(null, null, currentYear: 2025), [2025]);
@@ -49,8 +51,7 @@ void main() {
       expect(years, [2025, 2018]);
     });
 
-    test(
-        'byYear (all-history realized-gains by_year) surfaces years the '
+    test('byYear (all-history realized-gains by_year) surfaces years the '
         'year-filtered fetches can never see — the old circular derivation '
         'made every other year unreachable', () {
       // Viewing 2026: transactions + disposals are filtered to 2026, so on
@@ -65,8 +66,12 @@ void main() {
         {'year': 2025, 'realized_usd': 4053.50},
         {'year': 2026, 'realized_usd': 2969.50},
       ];
-      final years = deriveTaxYears(txns, disposals,
-          currentYear: 2026, byYear: byYear);
+      final years = deriveTaxYears(
+        txns,
+        disposals,
+        currentYear: 2026,
+        byYear: byYear,
+      );
       expect(years, [2026, 2025]);
     });
 
@@ -90,17 +95,23 @@ void main() {
         null,
         null,
         currentYear: 2026,
-        byYear: [2022, {'year': 2021}, {'no_year': true}, 'junk', null, 0],
+        byYear: [
+          2022,
+          {'year': 2021},
+          {'no_year': true},
+          'junk',
+          null,
+          0,
+        ],
       );
       expect(years, [2026, 2022, 2021]);
     });
 
     test('omitting byYear keeps the legacy behavior', () {
       expect(deriveTaxYears(null, null, currentYear: 2025), [2025]);
-      expect(
-        deriveTaxYears(null, null, currentYear: 2025, byYear: null),
-        [2025],
-      );
+      expect(deriveTaxYears(null, null, currentYear: 2025, byYear: null), [
+        2025,
+      ]);
     });
   });
 
@@ -142,17 +153,19 @@ void main() {
       expect(s.advantagedCount, 1);
     });
 
-    test('taxable subtotal reconciles to the capital-gains KPI (excludes wrappers)',
-        () {
-      // The capital_gains headline excludes tax-advantaged accounts, so the
-      // taxable subtotal must too — this is the on-screen reconciliation.
-      final disposals = [
-        {'gain_usd': 1000.0, 'tax_advantaged': false},
-        {'gain_usd': 5000.0, 'tax_advantaged': true},
-      ];
-      final s = gainsSubtotals(disposals);
-      expect(s.taxableGainUsd, 1000.0);
-    });
+    test(
+      'taxable subtotal reconciles to the capital-gains KPI (excludes wrappers)',
+      () {
+        // The capital_gains headline excludes tax-advantaged accounts, so the
+        // taxable subtotal must too — this is the on-screen reconciliation.
+        final disposals = [
+          {'gain_usd': 1000.0, 'tax_advantaged': false},
+          {'gain_usd': 5000.0, 'tax_advantaged': true},
+        ];
+        final s = gainsSubtotals(disposals);
+        expect(s.taxableGainUsd, 1000.0);
+      },
+    );
 
     test('missing tax_advantaged defaults to taxable', () {
       final disposals = [
@@ -216,33 +229,29 @@ void main() {
   });
 
   group('harvestCandidates', () {
-    test('keeps only loss lots with a savings estimate, largest saving first',
-        () {
-      final lots = [
-        {
-          'symbol': 'LOSS_SMALL',
-          'unrealized_gain_usd': -100.0,
-          'estimated_tax_savings_usd': 22.0,
-        },
-        {
-          'symbol': 'LOSS_BIG',
-          'unrealized_gain_usd': -500.0,
-          'estimated_tax_savings_usd': 110.0,
-        },
-        // a gain → never a candidate
-        {
-          'symbol': 'GAIN',
-          'unrealized_gain_usd': 300.0,
-        },
-        // a loss but no estimate → excluded (no phantom $0 saving)
-        {
-          'symbol': 'LOSS_NO_EST',
-          'unrealized_gain_usd': -40.0,
-        },
-      ];
-      final c = harvestCandidates(lots);
-      expect(c.map((m) => m['symbol']), ['LOSS_BIG', 'LOSS_SMALL']);
-    });
+    test(
+      'keeps only loss lots with a savings estimate, largest saving first',
+      () {
+        final lots = [
+          {
+            'symbol': 'LOSS_SMALL',
+            'unrealized_gain_usd': -100.0,
+            'estimated_tax_savings_usd': 22.0,
+          },
+          {
+            'symbol': 'LOSS_BIG',
+            'unrealized_gain_usd': -500.0,
+            'estimated_tax_savings_usd': 110.0,
+          },
+          // a gain → never a candidate
+          {'symbol': 'GAIN', 'unrealized_gain_usd': 300.0},
+          // a loss but no estimate → excluded (no phantom $0 saving)
+          {'symbol': 'LOSS_NO_EST', 'unrealized_gain_usd': -40.0},
+        ];
+        final c = harvestCandidates(lots);
+        expect(c.map((m) => m['symbol']), ['LOSS_BIG', 'LOSS_SMALL']);
+      },
+    );
 
     test('null lots yields no candidates', () {
       expect(harvestCandidates(null), isEmpty);

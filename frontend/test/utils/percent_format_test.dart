@@ -15,44 +15,55 @@ String _normSpace(String s) =>
     s.replaceAll('\u00A0', ' ').replaceAll('\u202F', ' ');
 
 Widget _host(Locale locale, Widget child) => MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: Builder(builder: (context) => child)),
-    );
+  locale: locale,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: Builder(builder: (context) => child)),
+);
 
 void main() {
   group('formatPercent (BuildContext)', () {
-    testWidgets('en renders unchanged: period decimal, no space', (tester) async {
-      await tester.pumpWidget(_host(
-        const Locale('en'),
-        Builder(
-          builder: (context) => Column(children: [
-            Text(formatPercent(context, 12.5, digits: 1)),
-            Text(formatPercent(context, 64.06, digits: 2)),
-            Text(formatPercent(context, 50, digits: 0)),
-            Text(formatPercent(context, -5.0, digits: 1)),
-          ]),
+    testWidgets('en renders unchanged: period decimal, no space', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const Locale('en'),
+          Builder(
+            builder: (context) => Column(
+              children: [
+                Text(formatPercent(context, 12.5, digits: 1)),
+                Text(formatPercent(context, 64.06, digits: 2)),
+                Text(formatPercent(context, 50, digits: 0)),
+                Text(formatPercent(context, -5.0, digits: 1)),
+              ],
+            ),
+          ),
         ),
-      ));
+      );
       expect(find.text('12.5%'), findsOneWidget);
       expect(find.text('64.06%'), findsOneWidget);
       expect(find.text('50%'), findsOneWidget);
       expect(find.text('-5.0%'), findsOneWidget);
     });
 
-    testWidgets('es (es-MX) matches en: period decimal, no space before %',
-        (tester) async {
+    testWidgets('es (es-MX) matches en: period decimal, no space before %', (
+      tester,
+    ) async {
       const k1 = Key('es-1'), k2 = Key('es-2');
-      await tester.pumpWidget(_host(
-        const Locale('es'),
-        Builder(
-          builder: (context) => Column(children: [
-            Text(formatPercent(context, 12.5, digits: 1), key: k1),
-            Text(formatPercent(context, 50, digits: 0), key: k2),
-          ]),
+      await tester.pumpWidget(
+        _host(
+          const Locale('es'),
+          Builder(
+            builder: (context) => Column(
+              children: [
+                Text(formatPercent(context, 12.5, digits: 1), key: k1),
+                Text(formatPercent(context, 50, digits: 0), key: k2),
+              ],
+            ),
+          ),
         ),
-      ));
+      );
       expect(_normSpace(tester.widget<Text>(find.byKey(k1)).data!), '12.5%');
       expect(_normSpace(tester.widget<Text>(find.byKey(k2)).data!), '50%');
     });

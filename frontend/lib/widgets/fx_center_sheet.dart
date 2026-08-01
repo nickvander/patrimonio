@@ -82,7 +82,9 @@ class FxCenterSheet extends StatefulWidget {
 }
 
 class _FxCenterSheetState extends State<FxCenterSheet> {
-  late Map<String, dynamic> _rate = Map<String, dynamic>.from(widget.latestRate);
+  late Map<String, dynamic> _rate = Map<String, dynamic>.from(
+    widget.latestRate,
+  );
   int _rangeDays = 30;
   List<({DateTime date, double close})> _history = const [];
   bool _historyLoading = true;
@@ -127,8 +129,11 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
     try {
       final raw = widget.fetchHistoryOverride != null
           ? await widget.fetchHistoryOverride!(_rangeDays)
-          : await widget.apiService
-              .getExchangeRateHistory(_base, _target, days: _rangeDays);
+          : await widget.apiService.getExchangeRateHistory(
+              _base,
+              _target,
+              days: _rangeDays,
+            );
       if (!mounted) return;
       // Null-aware element: malformed rows parse to null and drop out.
       final points = <({DateTime date, double close})>[
@@ -176,8 +181,11 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
     try {
       final fx = widget.refreshOverride != null
           ? await widget.refreshOverride!()
-          : await widget.apiService
-              .getExchangeRate(_base, _target, force: true);
+          : await widget.apiService.getExchangeRate(
+              _base,
+              _target,
+              force: true,
+            );
       if (!mounted) return;
       setState(() => _rate = fx);
       widget.onRateChanged?.call(fx);
@@ -185,8 +193,9 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
       await _loadHistory();
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.fxcRefreshFailed)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.fxcRefreshFailed)));
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
@@ -200,8 +209,11 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
   void _syncConverterFromBase() {
     final r = _rateValue;
     if (r == null) return;
-    final out =
-        linkedFxAmount(input: _baseCtl.text, rate: r, baseToTarget: true);
+    final out = linkedFxAmount(
+      input: _baseCtl.text,
+      rate: r,
+      baseToTarget: true,
+    );
     if (out != null) _targetCtl.text = out;
   }
 
@@ -225,8 +237,9 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
     final l = AppLocalizations.of(context);
     final threshold = double.tryParse(_alertCtl.text.trim());
     if (threshold == null || threshold <= 0) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.fxcAlertInvalid)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.fxcAlertInvalid)));
       return;
     }
     setState(() => _alertSaving = true);
@@ -234,17 +247,22 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
       if (widget.saveAlertOverride != null) {
         await widget.saveAlertOverride!(threshold);
       } else {
-        await widget.apiService
-            .putFxAlert(base: _base, target: _target, threshold: threshold);
+        await widget.apiService.putFxAlert(
+          base: _base,
+          target: _target,
+          threshold: threshold,
+        );
       }
       if (!mounted) return;
       setState(() => _alert = {'threshold': threshold});
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.fxcAlertSaved)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.fxcAlertSaved)));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.fxcAlertFailed)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.fxcAlertFailed)));
     } finally {
       if (mounted) setState(() => _alertSaving = false);
     }
@@ -264,12 +282,14 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
         _alert = null;
         _alertCtl.clear();
       });
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.fxcAlertCleared)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.fxcAlertCleared)));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.fxcAlertFailed)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.fxcAlertFailed)));
     } finally {
       if (mounted) setState(() => _alertSaving = false);
     }
@@ -292,26 +312,28 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: LayoutBuilder(builder: (ctx, outer) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _rateHeadline(l),
-                      const SizedBox(height: 16),
-                      _rangeToggle(l),
-                      const SizedBox(height: 12),
-                      _sparkline(l, outer.maxWidth),
-                      const SizedBox(height: 24),
-                      _sectionTitle(l.fxcConverterTitle),
-                      const SizedBox(height: 12),
-                      _converter(),
-                      const SizedBox(height: 24),
-                      _sectionTitle(l.fxcAlertTitle),
-                      const SizedBox(height: 8),
-                      _alertSection(l),
-                    ],
-                  );
-                }),
+                child: LayoutBuilder(
+                  builder: (ctx, outer) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _rateHeadline(l),
+                        const SizedBox(height: 16),
+                        _rangeToggle(l),
+                        const SizedBox(height: 12),
+                        _sparkline(l, outer.maxWidth),
+                        const SizedBox(height: 24),
+                        _sectionTitle(l.fxcConverterTitle),
+                        const SizedBox(height: 12),
+                        _converter(),
+                        const SizedBox(height: 24),
+                        _sectionTitle(l.fxcAlertTitle),
+                        const SizedBox(height: 8),
+                        _alertSection(l),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ],
@@ -321,14 +343,14 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
   }
 
   Widget _handle() => Container(
-        width: 40,
-        height: 4,
-        margin: const EdgeInsets.only(top: 12, bottom: 4),
-        decoration: BoxDecoration(
-          color: context.hairline,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      );
+    width: 40,
+    height: 4,
+    margin: const EdgeInsets.only(top: 12, bottom: 4),
+    decoration: BoxDecoration(
+      color: context.hairline,
+      borderRadius: BorderRadius.circular(2),
+    ),
+  );
 
   Widget _header(AppLocalizations l) {
     return Padding(
@@ -419,8 +441,9 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
   /// The last-updated time as ALWAYS-VISIBLE relative text (spec point b —
   /// not hover-only), warning-colored when the rate is >24h stale.
   Widget _updatedLine(AppLocalizations l) {
-    final recorded =
-        DateTime.tryParse((_rate['recorded_at'] ?? '').toString())?.toLocal();
+    final recorded = DateTime.tryParse(
+      (_rate['recorded_at'] ?? '').toString(),
+    )?.toLocal();
     if (recorded == null) {
       return Text(
         l.lwFxUpdatedUnknown,
@@ -432,10 +455,10 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
     final age = diff.inMinutes < 1
         ? l.lwFxUpdatedJustNow
         : diff.inHours < 1
-            ? l.lwFxUpdatedMinutesAgo(diff.inMinutes)
-            : diff.inHours < 24
-                ? l.lwFxUpdatedHoursAgo(diff.inHours)
-                : l.lwFxUpdatedDaysAgo(diff.inDays);
+        ? l.lwFxUpdatedMinutesAgo(diff.inMinutes)
+        : diff.inHours < 24
+        ? l.lwFxUpdatedHoursAgo(diff.inHours)
+        : l.lwFxUpdatedDaysAgo(diff.inDays);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -556,7 +579,9 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
     var maxY = closes.reduce((a, b) => a > b ? a : b);
     // Breathing room so a flat-ish series doesn't hug the edges (and a
     // perfectly flat one still has a nonzero y-range).
-    final pad = (maxY - minY) == 0 ? (maxY.abs() * 0.02 + 0.01) : (maxY - minY) * 0.15;
+    final pad = (maxY - minY) == 0
+        ? (maxY.abs() * 0.02 + 0.01)
+        : (maxY - minY) * 0.15;
     minY -= pad;
     maxY += pad;
 
@@ -621,13 +646,13 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
   }
 
   Widget _sectionTitle(String text) => Text(
-        text,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: context.textMuted,
-        ),
-      );
+    text,
+    style: TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      color: context.textMuted,
+    ),
+  );
 
   /// Two linked amount fields: editing either recomputes the other off
   /// the CURRENT rate. Plain numeric entry (same `[0-9.]` filter as the
@@ -685,8 +710,9 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
             Expanded(
               child: TextField(
                 controller: _alertCtl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
@@ -720,13 +746,20 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(Icons.notifications_active_outlined,
-                  size: 16, color: context.info),
+              Icon(
+                Icons.notifications_active_outlined,
+                size: 16,
+                color: context.info,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  l.fxcAlertActive(localizeNumberString(
-                      context, activeThreshold.toStringAsFixed(2))),
+                  l.fxcAlertActive(
+                    localizeNumberString(
+                      context,
+                      activeThreshold.toStringAsFixed(2),
+                    ),
+                  ),
                   style: TextStyle(fontSize: 12, color: context.textMuted),
                 ),
               ),

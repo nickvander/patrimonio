@@ -65,8 +65,8 @@ Future<T> keepPreviousOnError<T extends Object>(
 /// blip (a cold external quote fetch, a dropped connection on a resuming
 /// device), and the user is often still looking at the screen.
 Duration? silentRetryDelay(int attempt) => switch (attempt) {
-      1 => const Duration(seconds: 5),
-      2 => const Duration(seconds: 15),
-      3 => const Duration(seconds: 45),
-      _ => null,
-    };
+  1 => const Duration(seconds: 5),
+  2 => const Duration(seconds: 15),
+  3 => const Duration(seconds: 45),
+  _ => null,
+};

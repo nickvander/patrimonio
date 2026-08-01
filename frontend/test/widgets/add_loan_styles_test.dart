@@ -11,11 +11,18 @@ class _FakeApiService extends ApiService {
   @override
   Future<List<dynamic>> getLoanPeople() async => const [];
   @override
-  Future<Map<String, dynamic>> getLoansSummary({bool forceRefresh = false}) async =>
-      const {'active_count': 0, 'total_lent': 0, 'total_outstanding': 0};
+  Future<Map<String, dynamic>> getLoansSummary({
+    bool forceRefresh = false,
+  }) async => const {
+    'active_count': 0,
+    'total_lent': 0,
+    'total_outstanding': 0,
+  };
   @override
-  Future<Map<String, dynamic>> getInterestIncome({int? year}) async =>
-      const {'total_interest': 0, 'total_principal': 0};
+  Future<Map<String, dynamic>> getInterestIncome({int? year}) async => const {
+    'total_interest': 0,
+    'total_principal': 0,
+  };
 }
 
 Future<void> _openDialog(WidgetTester tester) async {
@@ -34,8 +41,9 @@ Future<void> _openDialog(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('add-loan chooser shows 3 primary styles, hides the rest',
-      (tester) async {
+  testWidgets('add-loan chooser shows 3 primary styles, hides the rest', (
+    tester,
+  ) async {
     await _openDialog(tester);
 
     // Three everyday styles up front.
@@ -61,8 +69,9 @@ void main() {
     expect(find.text('Interest now, full amount at the end'), findsOneWidget);
   });
 
-  testWidgets('Flat interest offers a set-amount / rate toggle',
-      (tester) async {
+  testWidgets('Flat interest offers a set-amount / rate toggle', (
+    tester,
+  ) async {
     await _openDialog(tester);
 
     await tester.ensureVisible(find.text('Flat interest'));

@@ -79,112 +79,115 @@ class _TaxExportsCardState extends State<TaxExportsCard> {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final isPhone = constraints.maxWidth < 420;
-        final pad = constraints.maxWidth < 720 ? 16.0 : 24.0;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isPhone = constraints.maxWidth < 420;
+          final pad = constraints.maxWidth < 720 ? 16.0 : 24.0;
 
-        final titleBlock = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l.taxExportsTitle,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l.taxExportsSubtitle,
-              style: TextStyle(fontSize: 12, color: context.textMuted),
-            ),
-          ],
-        );
-        final yearSelector = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l.taxYearLabel,
-              style: TextStyle(
-                fontSize: 11,
-                color: context.textSubtle,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            DropdownButton<int>(
-              value: _year,
-              items: yearItems
-                  .map((y) => DropdownMenuItem<int>(
-                        value: y,
-                        child: Text(y.toString()),
-                      ))
-                  .toList(),
-              onChanged: (y) {
-                if (y != null) setState(() => _year = y);
-              },
-              underline: const SizedBox(),
-            ),
-          ],
-        );
-
-        return Padding(
-          padding: EdgeInsets.all(pad),
-          child: Column(
+          final titleBlock = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Phones stack the year selector under the title; wide layouts
-              // keep one header row (inner-constraint breakpoint, per skill).
-              if (isPhone) ...[
-                titleBlock,
-                const SizedBox(height: 8),
-                yearSelector,
-              ] else
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: titleBlock),
-                    const SizedBox(width: 16),
-                    yearSelector,
-                  ],
-                ),
-              const SizedBox(height: 8),
-              _exportTile(
-                icon: Icons.travel_explore,
-                title: l.taxExportsFbar,
-                subtitle: l.taxExportsFbarDesc,
-                onTap: () => _open(
-                  '${widget.baseUrl}/tax/export/fbar?year=$_year&lang=$lang',
+              Text(
+                l.taxExportsTitle,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              _exportTile(
-                icon: Icons.trending_up,
-                title: l.taxExports8949,
-                subtitle: l.taxExports8949Desc,
-                onTap: () => _open(
-                  '${widget.baseUrl}/tax/export/8949?year=$_year',
-                ),
-              ),
-              _exportTile(
-                icon: Icons.percent,
-                title: l.taxExportsScheduleB,
-                subtitle: l.taxExportsScheduleBDesc,
-                onTap: () => _open(
-                  '${widget.baseUrl}/tax/export/schedule-b?year=$_year',
-                ),
-              ),
-              _exportTile(
-                icon: Icons.flag_outlined,
-                title: l.taxExportsMx,
-                subtitle: l.taxExportsMxDesc,
-                onTap: () => _open(
-                  '${widget.baseUrl}/tax/export/mx?year=$_year&status=$status',
-                ),
+              const SizedBox(height: 4),
+              Text(
+                l.taxExportsSubtitle,
+                style: TextStyle(fontSize: 12, color: context.textMuted),
               ),
             ],
-          ),
-        );
-      }),
+          );
+          final yearSelector = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l.taxYearLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.textSubtle,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              DropdownButton<int>(
+                value: _year,
+                items: yearItems
+                    .map(
+                      (y) => DropdownMenuItem<int>(
+                        value: y,
+                        child: Text(y.toString()),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (y) {
+                  if (y != null) setState(() => _year = y);
+                },
+                underline: const SizedBox(),
+              ),
+            ],
+          );
+
+          return Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Phones stack the year selector under the title; wide layouts
+                // keep one header row (inner-constraint breakpoint, per skill).
+                if (isPhone) ...[
+                  titleBlock,
+                  const SizedBox(height: 8),
+                  yearSelector,
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: titleBlock),
+                      const SizedBox(width: 16),
+                      yearSelector,
+                    ],
+                  ),
+                const SizedBox(height: 8),
+                _exportTile(
+                  icon: Icons.travel_explore,
+                  title: l.taxExportsFbar,
+                  subtitle: l.taxExportsFbarDesc,
+                  onTap: () => _open(
+                    '${widget.baseUrl}/tax/export/fbar?year=$_year&lang=$lang',
+                  ),
+                ),
+                _exportTile(
+                  icon: Icons.trending_up,
+                  title: l.taxExports8949,
+                  subtitle: l.taxExports8949Desc,
+                  onTap: () =>
+                      _open('${widget.baseUrl}/tax/export/8949?year=$_year'),
+                ),
+                _exportTile(
+                  icon: Icons.percent,
+                  title: l.taxExportsScheduleB,
+                  subtitle: l.taxExportsScheduleBDesc,
+                  onTap: () => _open(
+                    '${widget.baseUrl}/tax/export/schedule-b?year=$_year',
+                  ),
+                ),
+                _exportTile(
+                  icon: Icons.flag_outlined,
+                  title: l.taxExportsMx,
+                  subtitle: l.taxExportsMxDesc,
+                  onTap: () => _open(
+                    '${widget.baseUrl}/tax/export/mx?year=$_year&status=$status',
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 

@@ -25,27 +25,28 @@ const _serverChecks = <String, String>{
 /// Minimal localized host that renders one Text per check, resolved the
 /// same way buildSetupStatusCard does (key first, server label fallback).
 Widget _host({required Locale locale}) => MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Builder(
-          builder: (context) {
-            final l = AppLocalizations.of(context);
-            return Column(
-              children: [
-                for (final entry in _serverChecks.entries)
-                  Text(setupCheckLabel(l, entry.key, entry.value)),
-              ],
-            );
-          },
-        ),
-      ),
-    );
+  locale: locale,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: Builder(
+      builder: (context) {
+        final l = AppLocalizations.of(context);
+        return Column(
+          children: [
+            for (final entry in _serverChecks.entries)
+              Text(setupCheckLabel(l, entry.key, entry.value)),
+          ],
+        );
+      },
+    ),
+  ),
+);
 
 void main() {
-  testWidgets('es: every launch-setup check label renders in Spanish',
-      (tester) async {
+  testWidgets('es: every launch-setup check label renders in Spanish', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(locale: const Locale('es')));
     await tester.pumpAndSettle();
 
@@ -54,15 +55,18 @@ void main() {
     expect(find.text('Tipos de cambio'), findsOneWidget);
     expect(find.text('OAuth de Coinbase'), findsOneWidget);
     expect(find.text('URL del webhook de Plaid'), findsOneWidget);
-    expect(
-        find.text('Lista de orígenes permitidos (CORS)'), findsOneWidget);
+    expect(find.text('Lista de orígenes permitidos (CORS)'), findsOneWidget);
 
     // The bug being pinned: no row may fall through to the backend's
     // English label when the locale is es.
     for (final english in _serverChecks.values) {
-      expect(find.text(english), findsNothing,
-          reason: 'check rendered the server English label "$english" '
-              'under es — key mapping regressed');
+      expect(
+        find.text(english),
+        findsNothing,
+        reason:
+            'check rendered the server English label "$english" '
+            'under es — key mapping regressed',
+      );
     }
   });
 
@@ -77,21 +81,27 @@ void main() {
     }
   });
 
-  testWidgets('unknown key falls back to the server-provided label',
-      (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('es'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => Text(setupCheckLabel(
-              AppLocalizations.of(context),
-              'future_check',
-              'Some future check')),
+  testWidgets('unknown key falls back to the server-provided label', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('es'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Text(
+              setupCheckLabel(
+                AppLocalizations.of(context),
+                'future_check',
+                'Some future check',
+              ),
+            ),
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     expect(find.text('Some future check'), findsOneWidget);
   });

@@ -59,7 +59,8 @@ const Map<String, dynamic> kDividendsFixture = {
 /// A projection fetcher that returns [build]'s result for the requested
 /// horizon (`years`), so slider-driven refetches stay consistent.
 WealthProjectionFetcher fixtureFetcher(
-    Map<String, dynamic> Function(int years) build) {
+  Map<String, dynamic> Function(int years) build,
+) {
   return ({
     required double startBalance,
     required double monthlyContribution,
@@ -79,8 +80,7 @@ WealthProjectionFetcher fixtureFetcher(
     double expensesMxnPortion = 0.0,
     double fxAnnualDrift = 0.0,
     double? usdMxnRate,
-  }) async =>
-      build(years);
+  }) async => build(years);
 }
 
 /// A "Retire in Mexico" response block matching the backend's
@@ -124,10 +124,12 @@ Widget buildProjectionHost({
         currentNetWorth: currentNetWorth,
         conversionFactor: 1.0,
         usdMxnRate: usdMxnRate,
-        currencyFormat: currencyFormat ??
+        currencyFormat:
+            currencyFormat ??
             NumberFormat.currency(symbol: r'$', decimalDigits: 0),
         projectionFetcher:
-            projectionFetcher ?? fixtureFetcher((y) => projectionFixture(years: y)),
+            projectionFetcher ??
+            fixtureFetcher((y) => projectionFixture(years: y)),
         defaultsFetcher: defaultsFetcher ?? () async => null,
         dividendsFetcher: dividendsFetcher ?? () async => kDividendsFixture,
         settingReader: settingReader ?? (key) async => null,

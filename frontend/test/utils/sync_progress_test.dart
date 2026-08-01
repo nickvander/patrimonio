@@ -20,7 +20,12 @@ void main() {
       expect(syncableInstitutionCount(null), 0);
       expect(syncableInstitutionCount(const []), 0);
       expect(syncableInstitutionCount([1, 'x', null]), 0);
-      expect(syncableInstitutionCount([{'integration_type': null}]), 0);
+      expect(
+        syncableInstitutionCount([
+          {'integration_type': null},
+        ]),
+        0,
+      );
     });
   });
 
@@ -28,7 +33,10 @@ void main() {
     test('counts syncable institutions still in the syncing state', () {
       final data = [
         {'integration_type': 'plaid', 'sync_status': 'syncing'}, // in progress
-        {'integration_type': 'coinbase', 'sync_status': 'syncing'}, // in progress
+        {
+          'integration_type': 'coinbase',
+          'sync_status': 'syncing',
+        }, // in progress
         {'integration_type': 'plaid', 'sync_status': 'synced'}, // done
         {'integration_type': 'plaid', 'sync_status': 'error'}, // done (errored)
       ];
@@ -59,7 +67,12 @@ void main() {
       expect(syncingCount(null), 0);
       expect(syncingCount(const []), 0);
       expect(syncingCount([1, 'x', null]), 0);
-      expect(syncingCount([{'integration_type': 'plaid'}]), 0); // no status
+      expect(
+        syncingCount([
+          {'integration_type': 'plaid'},
+        ]),
+        0,
+      ); // no status
     });
   });
 }

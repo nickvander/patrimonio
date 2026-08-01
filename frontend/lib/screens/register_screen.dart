@@ -86,10 +86,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Text(
                     'Patrimonio',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -103,11 +102,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.color
-                          ?.withValues(alpha: 0.7),
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -168,7 +165,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Text(
                       _error!,
                       style: TextStyle(
-                          color: Theme.of(context).colorScheme.error),
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                     const SizedBox(height: 12),
                   ],

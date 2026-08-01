@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:plaid_flutter/plaid_flutter.dart';
@@ -104,12 +103,18 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
         openPlaidLink(linkToken);
       } else {
         if (!mounted) return;
-        _showError(_responseError(
-            response, AppLocalizations.of(context).cbLinkTokenFailed));
+        _showError(
+          _responseError(
+            response,
+            AppLocalizations.of(context).cbLinkTokenFailed,
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      _showError(AppLocalizations.of(context).cbBackendConnectError(e.toString()));
+      _showError(
+        AppLocalizations.of(context).cbBackendConnectError(e.toString()),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -148,8 +153,12 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
         }
       } else {
         if (!mounted) return;
-        _showError(_responseError(
-            response, AppLocalizations.of(context).cbExchangeTokenFailed));
+        _showError(
+          _responseError(
+            response,
+            AppLocalizations.of(context).cbExchangeTokenFailed,
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -170,8 +179,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
       // Keep fallback below.
     }
     if (mounted) {
-      return AppLocalizations.of(context)
-          .cbHttpError(fallback, response.statusCode);
+      return AppLocalizations.of(
+        context,
+      ).cbHttpError(fallback, response.statusCode);
     }
     return '$fallback: HTTP ${response.statusCode}';
   }
@@ -183,8 +193,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
   void _onExit(LinkExit event) {
     debugPrint("Plaid Exit status: ${event.metadata.status}");
     if (event.error != null && mounted) {
-      _showError(AppLocalizations.of(context)
-          .cbPlaidError(event.error?.message ?? ''));
+      _showError(
+        AppLocalizations.of(context).cbPlaidError(event.error?.message ?? ''),
+      );
     }
   }
 
@@ -223,7 +234,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
                   Text(
                     l.cbSetupIncompleteTitle,
                     style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(

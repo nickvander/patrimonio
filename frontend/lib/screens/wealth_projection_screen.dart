@@ -23,31 +23,32 @@ enum _FireFocus { full, coast, barista }
 /// these typedefs so widget tests can inject fixtures without subclassing
 /// ApiService (which pulls package:web into the test VM). Each defaults to
 /// the real service in production.
-typedef WealthProjectionFetcher = Future<Map<String, dynamic>> Function({
-  required double startBalance,
-  required double monthlyContribution,
-  required double annualReturnRate,
-  required double annualExpenses,
-  required double withdrawalRate,
-  int years,
-  double annualInflationRate,
-  double returnVolatility,
-  int? yearsToRetirement,
-  int monteCarloTrials,
-  double baristaMonthlyIncome,
-  double annualTaxDrag,
-  bool withdrawalGuardrails,
-  bool mxScenario,
-  double expensesUsdPortion,
-  double expensesMxnPortion,
-  double fxAnnualDrift,
-  double? usdMxnRate,
-});
+typedef WealthProjectionFetcher =
+    Future<Map<String, dynamic>> Function({
+      required double startBalance,
+      required double monthlyContribution,
+      required double annualReturnRate,
+      required double annualExpenses,
+      required double withdrawalRate,
+      int years,
+      double annualInflationRate,
+      double returnVolatility,
+      int? yearsToRetirement,
+      int monteCarloTrials,
+      double baristaMonthlyIncome,
+      double annualTaxDrag,
+      bool withdrawalGuardrails,
+      bool mxScenario,
+      double expensesUsdPortion,
+      double expensesMxnPortion,
+      double fxAnnualDrift,
+      double? usdMxnRate,
+    });
 typedef ProjectionDefaultsFetcher = Future<Map<String, dynamic>?> Function();
 typedef PortfolioDividendsFetcher = Future<Map<String, dynamic>?> Function();
 typedef ProjectionSettingReader = Future<dynamic> Function(String key);
-typedef ProjectionSettingWriter = Future<void> Function(
-    String key, dynamic value);
+typedef ProjectionSettingWriter =
+    Future<void> Function(String key, dynamic value);
 
 class WealthProjectionScreen extends StatefulWidget {
   final double currentNetWorth;
@@ -220,8 +221,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // sees why a "7%" return doesn't compound at 7% in today's dollars.
   // real = (1 + nominal) / (1 + inflation) - 1.
   String _fisherHelp(AppLocalizations l) {
-    final real =
-        ((1 + _annualReturnRate) / (1 + _annualInflation) - 1) * 100;
+    final real = ((1 + _annualReturnRate) / (1 + _annualInflation) - 1) * 100;
     final nom = _annualReturnRate * 100;
     final inf = _annualInflation * 100;
     // F6: route through the locale decimal seam (no-op today — es-MX uses
@@ -302,8 +302,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   double get _expensesMax {
     final base = _baselineExpenses ?? _annualExpenses;
     final needed = base * 1.8;
-    final computed =
-        needed <= 200000 ? 200000.0 : (needed / 50000).ceil() * 50000.0;
+    final computed = needed <= 200000
+        ? 200000.0
+        : (needed / 50000).ceil() * 50000.0;
     return math.max(computed, _expensesTypedMax);
   }
 
@@ -341,8 +342,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // or expenses — the saved assumptions already won).
   Future<void> _loadIncomeContext() async {
     try {
-      final fetch =
-          widget.defaultsFetcher ?? _apiService.getProjectionDefaults;
+      final fetch = widget.defaultsFetcher ?? _apiService.getProjectionDefaults;
       final defaults = await fetch();
       if (!mounted || defaults == null) return;
       final income = (defaults['annual_income'] as num?)?.toDouble() ?? 0.0;
@@ -380,28 +380,40 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         // drag range — a persisted typed value (e.g. $12,500/mo) must restore
         // as-is, with the slider max grown to accommodate it.
         _monthlyContribution =
-            (d('monthly_contribution') ?? _monthlyContribution)
-                .clamp(0.0, _typedMoneyCap);
+            (d('monthly_contribution') ?? _monthlyContribution).clamp(
+              0.0,
+              _typedMoneyCap,
+            );
         _savingsMax = _grownMax(_savingsMax, _monthlyContribution, 1000.0);
-        _annualReturnRate =
-            (d('annual_return_rate') ?? _annualReturnRate).clamp(0.0, 0.15);
-        _annualInflation =
-            (d('annual_inflation_rate') ?? _annualInflation).clamp(0.0, 0.06);
-        _annualExpenses = (d('annual_expenses') ?? _annualExpenses)
-            .clamp(_expensesFloor, _typedMoneyCap);
+        _annualReturnRate = (d('annual_return_rate') ?? _annualReturnRate)
+            .clamp(0.0, 0.15);
+        _annualInflation = (d('annual_inflation_rate') ?? _annualInflation)
+            .clamp(0.0, 0.06);
+        _annualExpenses = (d('annual_expenses') ?? _annualExpenses).clamp(
+          _expensesFloor,
+          _typedMoneyCap,
+        );
         if (_annualExpenses > _expensesMax) {
           _expensesTypedMax = _grownMax(0.0, _annualExpenses, 50000.0);
         }
-        _withdrawalRate =
-            (d('withdrawal_rate') ?? _withdrawalRate).clamp(0.02, 0.06);
-        _returnVolatility =
-            (d('return_volatility') ?? _returnVolatility).clamp(0.0, 0.25);
+        _withdrawalRate = (d('withdrawal_rate') ?? _withdrawalRate).clamp(
+          0.02,
+          0.06,
+        );
+        _returnVolatility = (d('return_volatility') ?? _returnVolatility).clamp(
+          0.0,
+          0.25,
+        );
         _baristaMonthlyIncome =
-            (d('barista_monthly_income') ?? _baristaMonthlyIncome)
-                .clamp(0.0, _typedMoneyCap);
+            (d('barista_monthly_income') ?? _baristaMonthlyIncome).clamp(
+              0.0,
+              _typedMoneyCap,
+            );
         _baristaMax = _grownMax(_baristaMax, _baristaMonthlyIncome, 1000.0);
-        _annualTaxDrag =
-            (d('annual_tax_drag') ?? _annualTaxDrag).clamp(0.0, 0.03);
+        _annualTaxDrag = (d('annual_tax_drag') ?? _annualTaxDrag).clamp(
+          0.0,
+          0.03,
+        );
         if (raw['withdrawal_guardrails'] is bool) {
           _withdrawalGuardrails = raw['withdrawal_guardrails'] as bool;
         }
@@ -422,8 +434,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             .clamp(0.0, _typedMoneyCap);
         _mxMxnPortion = (d('annual_expenses_mxn_portion') ?? _mxMxnPortion)
             .clamp(0.0, _typedMoneyCap);
-        _fxAnnualDrift = (d('fx_annual_drift') ?? _fxAnnualDrift)
-            .clamp(_fxDriftMin, _fxDriftMax);
+        _fxAnnualDrift = (d('fx_annual_drift') ?? _fxAnnualDrift).clamp(
+          _fxDriftMin,
+          _fxDriftMax,
+        );
         if (_mxUsdPortion > 0 || _mxMxnPortion > 0) _mxSeeded = true;
         _mxUsdMax = _grownMax(_mxUsdMax, _mxUsdPortion, 10000.0);
         _mxMxnMax = _grownMax(_mxMxnMax, _mxMxnPortion, 100000.0);
@@ -442,22 +456,22 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // F10: the ~10 assumption fields as one JSON blob, written best-effort on
   // every committed change (onChangeEnd / toggle / preset chip).
   Map<String, dynamic> get _assumptionsJson => {
-        'monthly_contribution': _monthlyContribution,
-        'annual_return_rate': _annualReturnRate,
-        'annual_inflation_rate': _annualInflation,
-        'annual_expenses': _annualExpenses,
-        'withdrawal_rate': _withdrawalRate,
-        'return_volatility': _returnVolatility,
-        'barista_monthly_income': _baristaMonthlyIncome,
-        'annual_tax_drag': _annualTaxDrag,
-        'withdrawal_guardrails': _withdrawalGuardrails,
-        'years_to_retirement': _yearsToRetirement,
-        'projection_years': _projectionYears,
-        'mx_scenario': _mxScenario,
-        'annual_expenses_usd_portion': _mxUsdPortion,
-        'annual_expenses_mxn_portion': _mxMxnPortion,
-        'fx_annual_drift': _fxAnnualDrift,
-      };
+    'monthly_contribution': _monthlyContribution,
+    'annual_return_rate': _annualReturnRate,
+    'annual_inflation_rate': _annualInflation,
+    'annual_expenses': _annualExpenses,
+    'withdrawal_rate': _withdrawalRate,
+    'return_volatility': _returnVolatility,
+    'barista_monthly_income': _baristaMonthlyIncome,
+    'annual_tax_drag': _annualTaxDrag,
+    'withdrawal_guardrails': _withdrawalGuardrails,
+    'years_to_retirement': _yearsToRetirement,
+    'projection_years': _projectionYears,
+    'mx_scenario': _mxScenario,
+    'annual_expenses_usd_portion': _mxUsdPortion,
+    'annual_expenses_mxn_portion': _mxMxnPortion,
+    'fx_annual_drift': _fxAnnualDrift,
+  };
 
   Future<void> _persistAssumptions() async {
     if (_assumptionsReadFailed) {
@@ -466,7 +480,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       // successful read (or a confirmed absence) unlocks writing.
       final restored = await _hydrateAssumptions();
       if (_assumptionsReadFailed) {
-        debugPrint('projection: assumptions unreadable — refusing to overwrite');
+        debugPrint(
+          'projection: assumptions unreadable — refusing to overwrite',
+        );
         return;
       }
       // The read came back: whatever it held is now on screen, so there is
@@ -500,8 +516,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // with a tooltip — for a dividend-less portfolio instead of snapping
   // back off after a tap.
   Future<void> _loadDividendData() async {
-    final fetch =
-        widget.dividendsFetcher ?? _apiService.getPortfolioDividends;
+    final fetch = widget.dividendsFetcher ?? _apiService.getPortfolioDividends;
     final data = await fetch();
     if (!mounted) return;
     setState(() {
@@ -545,8 +560,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // effort — falls back to the static defaults, then always runs a projection.
   Future<void> _prefillFromTrackedData() async {
     try {
-      final fetch =
-          widget.defaultsFetcher ?? _apiService.getProjectionDefaults;
+      final fetch = widget.defaultsFetcher ?? _apiService.getProjectionDefaults;
       final defaults = await fetch();
       if (mounted && defaults != null) {
         final contrib = (defaults['monthly_contribution'] as num?)?.toDouble();
@@ -566,8 +580,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             // U2: don't truncate a genuinely high tracked contribution to
             // the drag range — grow the slider max instead.
             _monthlyContribution = contrib.clamp(0.0, _typedMoneyCap);
-            _savingsMax =
-                _grownMax(_savingsMax, _monthlyContribution, 1000.0);
+            _savingsMax = _grownMax(_savingsMax, _monthlyContribution, 1000.0);
             _contributionFromMonths = math.max(months, 1);
           }
           if (months >= 3 && expenses != null && expenses > 0) {
@@ -635,182 +648,192 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final isNarrow = constraints.maxWidth < 800;
-      if (isNarrow) {
-        // Summary-first phone order (research rubric principle 13): the
-        // chart and its verdicts (FIRE strip, milestones) lead; the
-        // assumptions sliders and the glossary move below them. The
-        // sliders still live-update the chart — scrolling back up shows
-        // the new curve.
-        return SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(isPhone: constraints.maxWidth < 420),
-              const SizedBox(height: 16),
-              // Intrinsic height: the card self-sizes (title + legend at
-              // natural height, plot at a guaranteed width-derived height),
-              // so a legend that wraps to extra lines grows the card instead
-              // of squishing the plot — the old fixed 320 box did the latter.
-              _buildChartCard(),
-              // Retire-in-Mexico dual-currency results, directly under the
-              // chart whose curve they annotate.
-              if (_mxPanelOn) ...[
-                const SizedBox(height: 16),
-                _buildMxScenarioPanel(),
-              ],
-              // O2: informational dividend income outlook — sits between the
-              // chart and the FIRE strip; never part of the chart itself.
-              if (_showDividendOutlook && _dividendOutlookAvailable) ...[
-                const SizedBox(height: 16),
-                _buildDividendOutlookPanel(),
-              ],
-              const SizedBox(height: 16),
-              _buildFireStatusStrip(),
-              const SizedBox(height: 16),
-              // Below 800px the milestone row stacks into a 2×2 grid with
-              // self-bounded row heights (handled inside _buildMilestonesRow
-              // off its own LayoutBuilder), so it's safe at intrinsic height
-              // inside this scroll view — no unbounded-height Row blowup (F1).
-              _buildMilestonesRow(),
-              const SizedBox(height: 24),
-              _buildGlossaryCard(),
-              const SizedBox(height: 24),
-              _buildControls(scrollable: false),
-            ],
-          ),
-        );
-      }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 16),
-          _buildGlossaryCard(),
-          const SizedBox(height: 24),
-          Expanded(
-            child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 800;
+        if (isNarrow) {
+          // Summary-first phone order (research rubric principle 13): the
+          // chart and its verdicts (FIRE strip, milestones) lead; the
+          // assumptions sliders and the glossary move below them. The
+          // sliders still live-update the chart — scrolling back up shows
+          // the new curve.
+          return SingleChildScrollView(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(width: 320, child: _buildControls()),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: LayoutBuilder(builder: (context, col) {
-                    final panelOn =
-                        _showDividendOutlook && _dividendOutlookAvailable;
-                    final mxOn = _mxPanelOn;
-                    // The classic desktop look lets the chart (flex 3) and
-                    // the milestone tiles (flex 1) split whatever height the
-                    // fixed-size cards — the FIRE strip and, when toggled on,
-                    // the dividend outlook panel — leave over. On shorter
-                    // windows that fixed content eats the flex space and the
-                    // chart collapses to a sliver (round-3 defect: 1440x900
-                    // with the outlook panel on). Estimate whether the flex
-                    // layout still gives the chart a usable height; when it
-                    // can't, fall back to a scrollable column with fixed
-                    // heights — the same shape the narrow layout uses.
-                    //
-                    // Estimated fixed extents: FIRE strip ~210, outlook
-                    // panel ~230, plus the 16px gaps; the chart takes 3/4 of
-                    // the leftover and needs ~320px of card so the plot
-                    // itself stays ≥ ~200px (title + legend chrome inside the
-                    // card use ~70, padding ~48). The milestone tile row
-                    // (flex 1) needs its ~240px too — the old estimate
-                    // omitted it, so at 1440×900 the flex branch was chosen
-                    // and the OverflowBox painted the tiles past the window
-                    // edge with no way to scroll (F1). (240, was 220: the
-                    // honest income-tile title/subtitle wrap one line taller.)
-                    const chartMinH = 320.0;
-                    const tilesMinH = 240.0;
-                    // The MX scenario panel is another ~250px of fixed
-                    // content; count it or the flex branch collapses the
-                    // chart to a sliver exactly like the F1 dividend-panel
-                    // defect.
-                    final flexAvail = col.maxHeight -
-                        (210.0 +
-                            32.0 +
-                            (panelOn ? 230.0 + 16.0 : 0.0) +
-                            (mxOn ? 250.0 + 16.0 : 0.0));
-                    final flexFits = flexAvail * 0.75 >= chartMinH &&
-                        flexAvail * 0.25 >= tilesMinH;
-                    if (flexFits) {
-                      return Column(
-                        children: [
-                          Expanded(flex: 3, child: _buildChartCard()),
-                          if (mxOn) ...[
-                            const SizedBox(height: 16),
-                            _buildMxScenarioPanel(),
-                          ],
-                          // O2: informational dividend income outlook — sits
-                          // between the chart and the FIRE strip; never part
-                          // of the chart itself.
-                          if (panelOn) ...[
-                            const SizedBox(height: 16),
-                            _buildDividendOutlookPanel(),
-                          ],
-                          const SizedBox(height: 16),
-                          _buildFireStatusStrip(),
-                          const SizedBox(height: 16),
-                          Expanded(
-                            flex: 1,
-                            child: LayoutBuilder(builder: (context, tiles) {
-                              // The 4-up tile row wants ~tilesMinH of height.
-                              // When its flex share comes up shorter, the
-                              // release build has always just painted past
-                              // the window edge; mirror that with an
-                              // OverflowBox instead of tripping the debug
-                              // RenderFlex overflow (which also fails widget
-                              // tests). At healthy heights min == max ==
-                              // share, i.e. a no-op.
-                              return OverflowBox(
-                                alignment: Alignment.topCenter,
-                                minHeight: tiles.maxHeight,
-                                maxHeight:
-                                    math.max(tiles.maxHeight, tilesMinH),
-                                child: _buildMilestonesRow(),
-                              );
-                            }),
-                          ),
-                        ],
-                      );
-                    }
-                    // Scroll fallback: same reading order (chart → outlook →
-                    // FIRE plan → milestone tiles) with the chart pinned to a
-                    // usable height instead of a flex share.
-                    return SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // 360 keeps the plot itself (card minus title +
-                          // legend chrome) comfortably above ~200px.
-                          SizedBox(height: 360, child: _buildChartCard()),
-                          if (mxOn) ...[
-                            const SizedBox(height: 16),
-                            _buildMxScenarioPanel(),
-                          ],
-                          if (panelOn) ...[
-                            const SizedBox(height: 16),
-                            _buildDividendOutlookPanel(),
-                          ],
-                          const SizedBox(height: 16),
-                          _buildFireStatusStrip(),
-                          const SizedBox(height: 16),
-                          // Intrinsic height (not a fixed box): inside a
-                          // scrollable there's no flex space to reclaim, and
-                          // it can't clip the tiles at any width.
-                          _buildMilestonesRow(),
-                        ],
-                      ),
-                    );
-                  }),
-                ),
+                _buildHeader(isPhone: constraints.maxWidth < 420),
+                const SizedBox(height: 16),
+                // Intrinsic height: the card self-sizes (title + legend at
+                // natural height, plot at a guaranteed width-derived height),
+                // so a legend that wraps to extra lines grows the card instead
+                // of squishing the plot — the old fixed 320 box did the latter.
+                _buildChartCard(),
+                // Retire-in-Mexico dual-currency results, directly under the
+                // chart whose curve they annotate.
+                if (_mxPanelOn) ...[
+                  const SizedBox(height: 16),
+                  _buildMxScenarioPanel(),
+                ],
+                // O2: informational dividend income outlook — sits between the
+                // chart and the FIRE strip; never part of the chart itself.
+                if (_showDividendOutlook && _dividendOutlookAvailable) ...[
+                  const SizedBox(height: 16),
+                  _buildDividendOutlookPanel(),
+                ],
+                const SizedBox(height: 16),
+                _buildFireStatusStrip(),
+                const SizedBox(height: 16),
+                // Below 800px the milestone row stacks into a 2×2 grid with
+                // self-bounded row heights (handled inside _buildMilestonesRow
+                // off its own LayoutBuilder), so it's safe at intrinsic height
+                // inside this scroll view — no unbounded-height Row blowup (F1).
+                _buildMilestonesRow(),
+                const SizedBox(height: 24),
+                _buildGlossaryCard(),
+                const SizedBox(height: 24),
+                _buildControls(scrollable: false),
               ],
             ),
-          ),
-        ],
-      );
-    });
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 16),
+            _buildGlossaryCard(),
+            const SizedBox(height: 24),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 320, child: _buildControls()),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, col) {
+                        final panelOn =
+                            _showDividendOutlook && _dividendOutlookAvailable;
+                        final mxOn = _mxPanelOn;
+                        // The classic desktop look lets the chart (flex 3) and
+                        // the milestone tiles (flex 1) split whatever height the
+                        // fixed-size cards — the FIRE strip and, when toggled on,
+                        // the dividend outlook panel — leave over. On shorter
+                        // windows that fixed content eats the flex space and the
+                        // chart collapses to a sliver (round-3 defect: 1440x900
+                        // with the outlook panel on). Estimate whether the flex
+                        // layout still gives the chart a usable height; when it
+                        // can't, fall back to a scrollable column with fixed
+                        // heights — the same shape the narrow layout uses.
+                        //
+                        // Estimated fixed extents: FIRE strip ~210, outlook
+                        // panel ~230, plus the 16px gaps; the chart takes 3/4 of
+                        // the leftover and needs ~320px of card so the plot
+                        // itself stays ≥ ~200px (title + legend chrome inside the
+                        // card use ~70, padding ~48). The milestone tile row
+                        // (flex 1) needs its ~240px too — the old estimate
+                        // omitted it, so at 1440×900 the flex branch was chosen
+                        // and the OverflowBox painted the tiles past the window
+                        // edge with no way to scroll (F1). (240, was 220: the
+                        // honest income-tile title/subtitle wrap one line taller.)
+                        const chartMinH = 320.0;
+                        const tilesMinH = 240.0;
+                        // The MX scenario panel is another ~250px of fixed
+                        // content; count it or the flex branch collapses the
+                        // chart to a sliver exactly like the F1 dividend-panel
+                        // defect.
+                        final flexAvail =
+                            col.maxHeight -
+                            (210.0 +
+                                32.0 +
+                                (panelOn ? 230.0 + 16.0 : 0.0) +
+                                (mxOn ? 250.0 + 16.0 : 0.0));
+                        final flexFits =
+                            flexAvail * 0.75 >= chartMinH &&
+                            flexAvail * 0.25 >= tilesMinH;
+                        if (flexFits) {
+                          return Column(
+                            children: [
+                              Expanded(flex: 3, child: _buildChartCard()),
+                              if (mxOn) ...[
+                                const SizedBox(height: 16),
+                                _buildMxScenarioPanel(),
+                              ],
+                              // O2: informational dividend income outlook — sits
+                              // between the chart and the FIRE strip; never part
+                              // of the chart itself.
+                              if (panelOn) ...[
+                                const SizedBox(height: 16),
+                                _buildDividendOutlookPanel(),
+                              ],
+                              const SizedBox(height: 16),
+                              _buildFireStatusStrip(),
+                              const SizedBox(height: 16),
+                              Expanded(
+                                flex: 1,
+                                child: LayoutBuilder(
+                                  builder: (context, tiles) {
+                                    // The 4-up tile row wants ~tilesMinH of height.
+                                    // When its flex share comes up shorter, the
+                                    // release build has always just painted past
+                                    // the window edge; mirror that with an
+                                    // OverflowBox instead of tripping the debug
+                                    // RenderFlex overflow (which also fails widget
+                                    // tests). At healthy heights min == max ==
+                                    // share, i.e. a no-op.
+                                    return OverflowBox(
+                                      alignment: Alignment.topCenter,
+                                      minHeight: tiles.maxHeight,
+                                      maxHeight: math.max(
+                                        tiles.maxHeight,
+                                        tilesMinH,
+                                      ),
+                                      child: _buildMilestonesRow(),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        // Scroll fallback: same reading order (chart → outlook →
+                        // FIRE plan → milestone tiles) with the chart pinned to a
+                        // usable height instead of a flex share.
+                        return SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // 360 keeps the plot itself (card minus title +
+                              // legend chrome) comfortably above ~200px.
+                              SizedBox(height: 360, child: _buildChartCard()),
+                              if (mxOn) ...[
+                                const SizedBox(height: 16),
+                                _buildMxScenarioPanel(),
+                              ],
+                              if (panelOn) ...[
+                                const SizedBox(height: 16),
+                                _buildDividendOutlookPanel(),
+                              ],
+                              const SizedBox(height: 16),
+                              _buildFireStatusStrip(),
+                              const SizedBox(height: 16),
+                              // Intrinsic height (not a fixed box): inside a
+                              // scrollable there's no flex space to reclaim, and
+                              // it can't clip the tiles at any width.
+                              _buildMilestonesRow(),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildHeader({bool isPhone = false}) {
@@ -845,8 +868,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             // power; the toggle re-expresses the same figures in future nominal
             // dollars (display-only — the underlying math stays real).
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: context.info.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
@@ -854,9 +876,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               child: Text(
                 _showNominal ? l.projNominalNote : l.projRealNote,
                 style: TextStyle(
-                    color: context.info,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
+                  color: context.info,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             // "Show nominal amounts" toggle. A6 (round 3, a11y): the label
@@ -894,27 +917,30 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   Widget _buildGlossaryCard() {
     final l = AppLocalizations.of(context);
     Widget row(String term, String def) => Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                term,
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12.5,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                def,
-                style: TextStyle(
-                    color: context.textMuted, fontSize: 12, height: 1.3),
-              ),
-            ],
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            term,
+            style: TextStyle(
+              color: context.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+            ),
           ),
-        );
+          const SizedBox(height: 2),
+          Text(
+            def,
+            style: TextStyle(
+              color: context.textMuted,
+              fontSize: 12,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ),
+    );
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
@@ -932,7 +958,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     child: Text(
                       l.projGlossaryTitle,
                       style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   Icon(
@@ -988,10 +1016,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // runs setState on each drag tick).
     String? savingsRateCaption;
     if (_annualIncome > 0) {
-      final pct =
-          (_monthlyContribution * 12 / _annualIncome * 100).clamp(0.0, 100.0);
-      savingsRateCaption =
-          l.projSavingsRateCaption(formatPercent(context, pct, digits: 0));
+      final pct = (_monthlyContribution * 12 / _annualIncome * 100).clamp(
+        0.0,
+        100.0,
+      );
+      savingsRateCaption = l.projSavingsRateCaption(
+        formatPercent(context, pct, digits: 0),
+      );
     }
 
     // The 3 primary sliders stay visible at all widths.
@@ -1043,9 +1074,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       _buildSliderControl(
         label: l.projYearsToRetirement,
         value: _yearsToRetirement.toDouble().clamp(
-              0,
-              _projectionYears.toDouble(),
-            ),
+          0,
+          _projectionYears.toDouble(),
+        ),
         min: 0,
         max: _projectionYears.toDouble(),
         divisions: _projectionYears,
@@ -1356,10 +1387,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ),
           ),
         ),
-        if (_advancedExpanded) ...[
-          const SizedBox(height: 8),
-          ...advanced,
-        ],
+        if (_advancedExpanded) ...[const SizedBox(height: 8), ...advanced],
       ],
     );
   }
@@ -1403,8 +1431,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         color: context.positive,
         fontWeight: FontWeight.bold,
         decoration: onTapValue != null ? TextDecoration.underline : null,
-        decorationStyle:
-            onTapValue != null ? TextDecorationStyle.dotted : null,
+        decorationStyle: onTapValue != null ? TextDecorationStyle.dotted : null,
         decorationColor: context.positive,
       ),
     );
@@ -1414,90 +1441,97 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // its purpose and current value.
     return MergeSemantics(
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(color: context.textMuted, fontSize: 14),
-                  ),
-                  if (help != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2, right: 8),
-                      child: Text(
-                        help,
-                        style: TextStyle(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(color: context.textMuted, fontSize: 14),
+                    ),
+                    if (help != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2, right: 8),
+                        child: Text(
+                          help,
+                          style: TextStyle(
                             color: context.textFaint,
                             fontSize: 11,
-                            height: 1.25),
+                            height: 1.25,
+                          ),
+                        ),
                       ),
-                    ),
-                  if (hint != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Row(
-                        children: [
-                          Icon(Icons.auto_awesome,
-                              size: 11, color: context.info),
-                          const SizedBox(width: 4),
-                          // Flexible so longer hints (F3's provenance /
-                          // estimate wording) wrap instead of overflowing
-                          // the 320px controls column.
-                          Flexible(
-                            child: Text(
-                              hint,
-                              style: TextStyle(
+                    if (hint != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 11,
+                              color: context.info,
+                            ),
+                            const SizedBox(width: 4),
+                            // Flexible so longer hints (F3's provenance /
+                            // estimate wording) wrap instead of overflowing
+                            // the 320px controls column.
+                            Flexible(
+                              child: Text(
+                                hint,
+                                style: TextStyle(
                                   color: context.info,
                                   fontSize: 11,
-                                  fontStyle: FontStyle.italic),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-            if (onTapValue == null)
-              valueText
-            else
-              InkWell(
-                onTap: onTapValue,
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: valueText,
+                  ],
                 ),
               ),
-          ],
-        ),
-        Slider(
-          value: value.clamp(min, max),
-          min: min,
-          max: max,
-          divisions: divisions ?? 100,
-          activeColor: context.positive,
-          inactiveColor: context.hairline,
-          onChanged: onChanged,
-          onChangeEnd: onChangeEnd,
-        ),
-        // U3: live caption under the slider (savings rate vs income).
-        if (caption != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              caption,
-              style: TextStyle(color: context.textMuted, fontSize: 11),
-            ),
+              if (onTapValue == null)
+                valueText
+              else
+                InkWell(
+                  onTap: onTapValue,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    child: valueText,
+                  ),
+                ),
+            ],
           ),
-      ],
+          Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            divisions: divisions ?? 100,
+            activeColor: context.positive,
+            inactiveColor: context.hairline,
+            onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
+          ),
+          // U3: live caption under the slider (savings rate vs income).
+          if (caption != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                caption,
+                style: TextStyle(color: context.textMuted, fontSize: 11),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1810,7 +1844,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     var bestX = double.negativeInfinity;
     for (final p in points) {
       if (p is! Map) continue;
-      final x = ((p['year'] as num?)?.toDouble() ?? 0) +
+      final x =
+          ((p['year'] as num?)?.toDouble() ?? 0) +
           ((p['month'] as num?)?.toDouble() ?? 0) / 12.0;
       if (x <= year + 1e-6 && x > bestX) {
         bestX = x;
@@ -1840,8 +1875,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final yieldFrac = yieldPct != null
         ? yieldPct / 100.0
         : (widget.currentNetWorth > 0
-            ? incomeUsd / widget.currentNetWorth
-            : null);
+              ? incomeUsd / widget.currentNetWorth
+              : null);
 
     final yearsToRet = _yearsToRetirement.clamp(0, _projectionYears);
     final nowYear = DateTime.now().year;
@@ -1852,15 +1887,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       if (yieldFrac == null) return null;
       final balance = _medianBalanceAtYear(years);
       if (balance == null) return null;
-      final display = balance *
+      final display =
+          balance *
           yieldFrac *
           widget.conversionFactor *
           _nominalFactor(years.toDouble());
       return widget.currencyFormat.displayMoney(display);
     }
 
-    final todayIncome =
-        widget.currencyFormat.displayMoney(incomeUsd * widget.conversionFactor);
+    final todayIncome = widget.currencyFormat.displayMoney(
+      incomeUsd * widget.conversionFactor,
+    );
     final retIncome = incomeAt(yearsToRet);
     final horizonIncome = incomeAt(_projectionYears);
 
@@ -1871,41 +1908,38 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     Widget row(String label, String value, {String? sub}) => Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style:
-                          TextStyle(color: context.textMuted, fontSize: 13),
-                    ),
-                    if (sub != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
-                        child: Text(
-                          sub,
-                          style: TextStyle(
-                            color: context.textFaint,
-                            fontSize: 11,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures()
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(color: context.textMuted, fontSize: 13),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(value, style: valueStyle),
-            ],
+                if (sub != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      sub,
+                      style: TextStyle(
+                        color: context.textFaint,
+                        fontSize: 11,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        );
+          const SizedBox(width: 12),
+          Text(value, style: valueStyle),
+        ],
+      ),
+    );
 
     // A6 (round 3, a11y): the panel node carries an "informational" hint so
     // assistive tech hears its honesty caveat up front; the rows inside stay
@@ -1914,61 +1948,69 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       container: true,
       hint: l.axInformational,
       child: Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.payments_outlined,
-                    size: 18, color: context.positive),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l.proj3OutlookTitle,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.payments_outlined,
+                    size: 18,
+                    color: context.positive,
                   ),
-                ),
-                // Dollar-basis caption, consistent with the header badge:
-                // "in today's dollars" in real mode, the nominal note when
-                // the nominal toggle rescales the figures.
-                Text(
-                  _showNominal ? l.projNominalNote : l.proj3InTodaysDollars,
-                  style: TextStyle(color: context.textFaint, fontSize: 11),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Divider(color: context.hairline, height: 1),
-            row(
-              l.proj3RowToday,
-              l.proj3PerYear(todayIncome),
-              sub: yieldPct != null
-                  ? l.proj3BlendedYieldNote(yieldPct.toStringAsFixed(2))
-                  : null,
-            ),
-            if (retIncome != null)
-              row(
-                l.proj3RowRetirement('${nowYear + yearsToRet}'),
-                l.proj3PerYearApprox(retIncome),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.proj3OutlookTitle,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  // Dollar-basis caption, consistent with the header badge:
+                  // "in today's dollars" in real mode, the nominal note when
+                  // the nominal toggle rescales the figures.
+                  Text(
+                    _showNominal ? l.projNominalNote : l.proj3InTodaysDollars,
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                  ),
+                ],
               ),
-            if (horizonIncome != null)
+              const SizedBox(height: 4),
+              Divider(color: context.hairline, height: 1),
               row(
-                l.proj3RowHorizon('${nowYear + _projectionYears}'),
-                l.proj3PerYearApprox(horizonIncome),
+                l.proj3RowToday,
+                l.proj3PerYear(todayIncome),
+                sub: yieldPct != null
+                    ? l.proj3BlendedYieldNote(yieldPct.toStringAsFixed(2))
+                    : null,
               ),
-            const SizedBox(height: 12),
-            Text(
-              l.proj3DisclaimerBody,
-              style: TextStyle(
-                  color: context.textMuted, fontSize: 11.5, height: 1.35),
-            ),
-          ],
+              if (retIncome != null)
+                row(
+                  l.proj3RowRetirement('${nowYear + yearsToRet}'),
+                  l.proj3PerYearApprox(retIncome),
+                ),
+              if (horizonIncome != null)
+                row(
+                  l.proj3RowHorizon('${nowYear + _projectionYears}'),
+                  l.proj3PerYearApprox(horizonIncome),
+                ),
+              const SizedBox(height: 12),
+              Text(
+                l.proj3DisclaimerBody,
+                style: TextStyle(
+                  color: context.textMuted,
+                  fontSize: 11.5,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -2006,36 +2048,37 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     Widget row(String label, String value) => Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(color: context.textMuted, fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(value, style: valueStyle),
-            ],
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: context.textMuted, fontSize: 13),
+            ),
           ),
-        );
+          const SizedBox(width: 12),
+          Text(value, style: valueStyle),
+        ],
+      ),
+    );
 
     // gen-l10n orders these alphabetically → (now, retire); the template
     // reads "{now} today → {retire} at retirement", same order.
     final rateLine = l.projMxRateLine(
       localizeNumberString(context, f('fx_rate_today').toStringAsFixed(2)),
       localizeNumberString(
-          context, f('fx_rate_at_retirement').toStringAsFixed(2)),
+        context,
+        f('fx_rate_at_retirement').toStringAsFixed(2),
+      ),
     );
 
     return Semantics(
       container: true,
       hint: l.axInformational,
       child: Card(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
           child: Column(
@@ -2049,7 +2092,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     child: Text(
                       l.projMxPanelTitle,
                       style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   // Dollar-basis caption, consistent with the header badge.
@@ -2061,17 +2106,20 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               const SizedBox(height: 4),
               Divider(color: context.hairline, height: 1),
-              row(l.projFiNumber,
-                  both(f('fi_number_usd'), f('fi_number_mxn'))),
+              row(l.projFiNumber, both(f('fi_number_usd'), f('fi_number_mxn'))),
               row(
                 l.projMxIncomeRow,
-                both(f('monthly_income_at_retirement_usd'),
-                    f('monthly_income_at_retirement_mxn')),
+                both(
+                  f('monthly_income_at_retirement_usd'),
+                  f('monthly_income_at_retirement_mxn'),
+                ),
               ),
               row(
                 l.projMxEffectiveSpend,
                 displayCurrencyWithCode(
-                    f('effective_annual_expenses_usd') * atRet, 'USD'),
+                  f('effective_annual_expenses_usd') * atRet,
+                  'USD',
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -2086,7 +2134,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               Text(
                 l.projMxDisclaimer,
                 style: TextStyle(
-                    color: context.textMuted, fontSize: 11.5, height: 1.35),
+                  color: context.textMuted,
+                  fontSize: 11.5,
+                  height: 1.35,
+                ),
               ),
             ],
           ),
@@ -2139,8 +2190,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           label: Text(
             hasGoal
                 ? l.projGoalHitBy(
-                    widget.currencyFormat
-                        .displayMoney(_goalAmountUsd! * widget.conversionFactor),
+                    widget.currencyFormat.displayMoney(
+                      _goalAmountUsd! * widget.conversionFactor,
+                    ),
                     _goalYear!,
                   )
                 : l.projGoalSetTarget,
@@ -2161,9 +2213,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     } catch (_) {
       if (!mounted) return;
       final l = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.projGoalSaveFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.projGoalSaveFailed)));
     }
   }
 
@@ -2202,10 +2254,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     });
     Preferences.setGoalAmountUsd(usd);
     Preferences.setGoalYear(yr);
-    await _writeGoalSetting({
-      'amount_usd': usd,
-      'year': yr,
-    });
+    await _writeGoalSetting({'amount_usd': usd, 'year': yr});
   }
 
   Widget _buildChartCard() {
@@ -2215,64 +2264,68 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: LayoutBuilder(builder: (context, box) {
-          // Two hosting contexts: the desktop flex branch grants a bounded
-          // height (the plot fills it, as before), while the phone scroll
-          // column is unbounded — there the card sizes itself with a
-          // guaranteed, width-derived plot height. The old fixed
-          // SizedBox(320) around this card let a wrapped legend (es-MX with
-          // band + goal on) starve the Expanded plot to a sliver.
-          final bounded = box.maxHeight.isFinite;
-          final chartHeight = (box.maxWidth * 0.55).clamp(220.0, 320.0);
-          Widget plotSized(Widget child) => bounded
-              ? Expanded(child: child)
-              : SizedBox(height: chartHeight, child: child);
+        child: LayoutBuilder(
+          builder: (context, box) {
+            // Two hosting contexts: the desktop flex branch grants a bounded
+            // height (the plot fills it, as before), while the phone scroll
+            // column is unbounded — there the card sizes itself with a
+            // guaranteed, width-derived plot height. The old fixed
+            // SizedBox(320) around this card let a wrapped legend (es-MX with
+            // band + goal on) starve the Expanded plot to a sliver.
+            final bounded = box.maxHeight.isFinite;
+            final chartHeight = (box.maxWidth * 0.55).clamp(220.0, 320.0);
+            Widget plotSized(Widget child) => bounded
+                ? Expanded(child: child)
+                : SizedBox(height: chartHeight, child: child);
 
-          if (_isLoading) {
-            const spinner = Center(child: CircularProgressIndicator());
-            return bounded
-                ? spinner
-                : SizedBox(height: chartHeight, child: spinner);
-          }
-          // F2: a failed load with nothing cached used to leave a silently
-          // blank card (empty Container from _buildChart, shrunk FIRE strip
-          // and tiles). Say so, and offer a retry.
-          if (_loadFailed && _projectionData == null) {
-            final error = _buildLoadError(l);
-            return bounded
-                ? error
-                : SizedBox(height: chartHeight, child: error);
-          }
-          return Column(
-            mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l.projNetWorthProjection,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
+            if (_isLoading) {
+              const spinner = Center(child: CircularProgressIndicator());
+              return bounded
+                  ? spinner
+                  : SizedBox(height: chartHeight, child: spinner);
+            }
+            // F2: a failed load with nothing cached used to leave a silently
+            // blank card (empty Container from _buildChart, shrunk FIRE strip
+            // and tiles). Say so, and offer a retry.
+            if (_loadFailed && _projectionData == null) {
+              final error = _buildLoadError(l);
+              return bounded
+                  ? error
+                  : SizedBox(height: chartHeight, child: error);
+            }
+            return Column(
+              mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l.projNetWorthProjection,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
-                  FilterChip(
-                    label: Text(l.projRange),
-                    selected: _showBand,
-                    onSelected: (v) => setState(() => _showBand = v),
-                    avatar: Icon(
-                      _showBand ? Icons.area_chart : Icons.show_chart,
-                      size: 16,
+                    FilterChip(
+                      label: Text(l.projRange),
+                      selected: _showBand,
+                      onSelected: (v) => setState(() => _showBand = v),
+                      avatar: Icon(
+                        _showBand ? Icons.area_chart : Icons.show_chart,
+                        size: 16,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              _buildChartLegend(l),
-              const SizedBox(height: 18),
-              plotSized(RepaintBoundary(child: _buildChart())),
-            ],
-          );
-        }),
+                  ],
+                ),
+                _buildChartLegend(l),
+                const SizedBox(height: 18),
+                plotSized(RepaintBoundary(child: _buildChart())),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -2311,40 +2364,39 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       _FireFocus.barista => (context.purpleAccent, l.projTermBarista),
     };
     Widget line(Color c, String label, {bool dashed = false}) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 16,
-              height: 3,
-              child: dashed
-                  ? Row(
-                      // 3 dashes of 4px + two 2px gaps = exactly the 16px box
-                      // (a trailing margin overflowed it by 2px).
-                      children: List.generate(
-                        3,
-                        (i) => Container(
-                          width: 4,
-                          height: 3,
-                          margin: EdgeInsets.only(right: i == 2 ? 0 : 2),
-                          decoration: BoxDecoration(
-                            color: c,
-                            borderRadius: BorderRadius.circular(1),
-                          ),
-                        ),
-                      ),
-                    )
-                  : Container(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 16,
+          height: 3,
+          child: dashed
+              ? Row(
+                  // 3 dashes of 4px + two 2px gaps = exactly the 16px box
+                  // (a trailing margin overflowed it by 2px).
+                  children: List.generate(
+                    3,
+                    (i) => Container(
+                      width: 4,
+                      height: 3,
+                      margin: EdgeInsets.only(right: i == 2 ? 0 : 2),
                       decoration: BoxDecoration(
                         color: c,
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(1),
                       ),
                     ),
-            ),
-            const SizedBox(width: 6),
-            Text(label,
-                style: TextStyle(color: context.textFaint, fontSize: 11)),
-          ],
-        );
+                  ),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    color: c,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(color: context.textFaint, fontSize: 11)),
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Wrap(
@@ -2370,9 +2422,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(l.projBandLegend,
-                    style:
-                        TextStyle(color: context.textFaint, fontSize: 11)),
+                Text(
+                  l.projBandLegend,
+                  style: TextStyle(color: context.textFaint, fontSize: 11),
+                ),
               ],
             ),
         ],
@@ -2385,7 +2438,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   List<FlSpot> _percentileSpots(List<dynamic> pcts, String key) {
     return pcts.map((p) {
       final x = (p['year'] as num).toDouble();
-      final y = (p[key] as num).toDouble() *
+      final y =
+          (p[key] as num).toDouble() *
           widget.conversionFactor *
           _nominalFactor(x);
       return FlSpot(x, y);
@@ -2405,23 +2459,27 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // switching the focus chips visibly moves the goalpost on the chart.
     final (double targetValue, Color targetColor) = switch (_fireFocus) {
       _FireFocus.full => (fiNumber, context.warning),
-      _FireFocus.coast => (coastNumber > 0 ? coastNumber : fiNumber, context.info),
+      _FireFocus.coast => (
+        coastNumber > 0 ? coastNumber : fiNumber,
+        context.info,
+      ),
       // F8: with $0 barista income the backend returns barista_fi_number ==
       // fi_number, so "less than the full FI number" is the real signal that
       // barista income is configured — not merely "> 0".
       _FireFocus.barista => (
-          baristaNumber > 0 && baristaNumber < fiNumber
-              ? baristaNumber
-              : fiNumber,
-          context.purpleAccent
-        ),
+        baristaNumber > 0 && baristaNumber < fiNumber
+            ? baristaNumber
+            : fiNumber,
+        context.purpleAccent,
+      ),
     };
 
     // Expected (deterministic, real-return) path — the bold headline line.
     final spots = points.map((p) {
-      final x = (p['year'] as num).toDouble() +
-          (p['month'] as num).toDouble() / 12.0;
-      final y = (p['balance'] as num).toDouble() *
+      final x =
+          (p['year'] as num).toDouble() + (p['month'] as num).toDouble() / 12.0;
+      final y =
+          (p['balance'] as num).toDouble() *
           widget.conversionFactor *
           _nominalFactor(x);
       return FlSpot(x, y);
@@ -2438,12 +2496,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final p90 = hasBand ? _percentileSpots(pcts, 'p90') : <FlSpot>[];
 
     LineChartBarData faint(List<FlSpot> s) => LineChartBarData(
-          spots: s,
-          isCurved: true,
-          color: context.positive.withValues(alpha: 0.0),
-          barWidth: 0,
-          dotData: const FlDotData(show: false),
-        );
+      spots: s,
+      isCurved: true,
+      color: context.positive.withValues(alpha: 0.0),
+      barWidth: 0,
+      dotData: const FlDotData(show: false),
+    );
 
     // Band bars come first so the percentile fill sits behind the main line.
     final bandBars = hasBand
@@ -2472,10 +2530,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     List<FlSpot> targetSpots(double realUsd) {
       final base = realUsd * widget.conversionFactor;
       if (!_showNominal) {
-        return [
-          FlSpot(0, base),
-          FlSpot(_projectionYears.toDouble(), base),
-        ];
+        return [FlSpot(0, base), FlSpot(_projectionYears.toDouble(), base)];
       }
       return List.generate(
         _projectionYears + 1,
@@ -2488,8 +2543,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // a huge goal used to rescale the axis and flatten the whole chart. An
     // out-of-range goal instead clamps to the top edge as a labelled dashed
     // line, and its vertical year marker still shows.
-    double maxOf(Iterable<FlSpot> s) =>
-        s.fold(0.0, (m, e) => math.max(m, e.y));
+    double maxOf(Iterable<FlSpot> s) => s.fold(0.0, (m, e) => math.max(m, e.y));
     final fireTargetSpots = targetSpots(targetValue);
     var chartMaxY = math.max(maxOf(spots), maxOf(fireTargetSpots));
     if (hasBand) chartMaxY = math.max(chartMaxY, maxOf(p90));
@@ -2520,8 +2574,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final endBalanceUsd = _medianBalanceAtYear(_projectionYears);
     final endDisplay = endBalanceUsd != null
         ? endBalanceUsd *
-            widget.conversionFactor *
-            _nominalFactor(_projectionYears.toDouble())
+              widget.conversionFactor *
+              _nominalFactor(_projectionYears.toDouble())
         : (spots.isNotEmpty ? spots.last.y : 0.0);
     final nowYear = DateTime.now().year;
     final chartSummary = l.axProjectionChart(
@@ -2535,8 +2589,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // The clamped-goal horizontal line carries the goal amount when the goal
     // sits above the y-range (see chartMaxY above).
     final retireX = _yearsToRetirement.clamp(0, _projectionYears);
-    final goalX =
-        _goalYear != null ? (_goalYear! - nowYear).toDouble() : null;
+    final goalX = _goalYear != null ? (_goalYear! - nowYear).toDouble() : null;
     final extraLines = ExtraLinesData(
       verticalLines: [
         if (retireX > 0 && retireX < _projectionYears)
@@ -2647,168 +2700,182 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     ];
     final lineBars = <LineChartBarData>[
       for (var i = 0; i < rawBars.length; i++)
-        rawBars[i].copyWith(showingIndicators: [
-          for (final s in touchedSpots)
-            if (s.barIndex == i) s.spotIndex,
-        ]),
+        rawBars[i].copyWith(
+          showingIndicators: [
+            for (final s in touchedSpots)
+              if (s.barIndex == i) s.spotIndex,
+          ],
+        ),
     ];
 
-    return LayoutBuilder(builder: (context, plot) {
-      // F7: adaptive x-label step computed off the inner plot width (this
-      // builder's constraint minus the 60px reserved for y labels) — a fixed
-      // `interval: 5` overlapped labels on phones with long horizons.
-      final xInterval = projectionYearAxisInterval(
-        plotWidth: math.max(0.0, plot.maxWidth - 60.0),
-        projectionYears: _projectionYears,
-      );
-      return Semantics(
-      container: true,
-      label: chartSummary,
-      child: ExcludeSemantics(
-        child: LineChart(
-      LineChartData(
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (value) =>
-              FlLine(color: context.hairline, strokeWidth: 1),
-        ),
-        titlesData: FlTitlesData(
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: xInterval,
-              // U1: calendar years ("2026, 2031, …"), unifying the axis with
-              // the a11y summary and the dividend panel, which already speak
-              // in calendar years. Locale-neutral, so no l10n key needed.
-              getTitlesWidget: (value, meta) => Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  '${nowYear + value.round()}',
-                  style: TextStyle(color: context.textSubtle, fontSize: 12),
+    return LayoutBuilder(
+      builder: (context, plot) {
+        // F7: adaptive x-label step computed off the inner plot width (this
+        // builder's constraint minus the 60px reserved for y labels) — a fixed
+        // `interval: 5` overlapped labels on phones with long horizons.
+        final xInterval = projectionYearAxisInterval(
+          plotWidth: math.max(0.0, plot.maxWidth - 60.0),
+          projectionYears: _projectionYears,
+        );
+        return Semantics(
+          container: true,
+          label: chartSummary,
+          child: ExcludeSemantics(
+            child: LineChart(
+              LineChartData(
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) =>
+                      FlLine(color: context.hairline, strokeWidth: 1),
+                ),
+                titlesData: FlTitlesData(
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: xInterval,
+                      // U1: calendar years ("2026, 2031, …"), unifying the axis with
+                      // the a11y summary and the dividend panel, which already speak
+                      // in calendar years. Locale-neutral, so no l10n key needed.
+                      getTitlesWidget: (value, meta) => Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          '${nowYear + value.round()}',
+                          style: TextStyle(
+                            color: context.textSubtle,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 60,
+                      getTitlesWidget: (value, meta) {
+                        if (value == 0) return Container();
+                        if (value <= meta.min || value >= meta.max) {
+                          return const SizedBox.shrink();
+                        }
+                        // F6: compact *currency* ticks (skill §5) — a bare "1.5M"
+                        // carried no currency and used Spain-style separators in es.
+                        // House compact ticks — compactSimpleCurrency shows a bare
+                        // "$" for MXN (see compactMoney).
+                        return Text(
+                          compactMoney(
+                            value,
+                            widget.currencyFormat.currencyName ?? 'USD',
+                          ),
+                          style: TextStyle(
+                            color: context.textSubtle,
+                            fontSize: 10,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                // U1: explicit top-of-range (goal excluded — see chartMaxY) + the
+                // retirement/goal markers.
+                maxY: chartMaxY,
+                extraLinesData: extraLines,
+                betweenBarsData: betweenBars,
+                lineBarsData: lineBars,
+                // U6: screen-owned tooltip state (see _chartTouchedSpots). The spots
+                // arrive pre-sorted by y like the built-in handling produced, so the
+                // tooltip renders identically.
+                showingTooltipIndicators: touchedSpots.isEmpty
+                    ? const []
+                    : [ShowingTooltipIndicators(touchedSpots)],
+                lineTouchData: LineTouchData(
+                  touchSpotThreshold: 100000,
+                  distanceCalculator: (touchPoint, spotPixelCoordinates) =>
+                      (touchPoint.dx - spotPixelCoordinates.dx).abs(),
+                  // U6: built-in touch handling left the tooltip pinned after the
+                  // pointer exited the chart — the screen owns the state instead and
+                  // clears it on any dismissing event (pointer exit, pan end,
+                  // long-press end, and — via chartTouchDismisses — the finger-lift
+                  // tap-up that fl_chart's own gating keeps "interested" on mobile
+                  // web, which pinned the tooltip there).
+                  handleBuiltInTouches: false,
+                  touchCallback: (event, response) {
+                    final spots = response?.lineBarSpots;
+                    if (chartTouchDismisses(event) ||
+                        spots == null ||
+                        spots.isEmpty) {
+                      if (_chartTouchedSpots != null) {
+                        setState(() => _chartTouchedSpots = null);
+                      }
+                      return;
+                    }
+                    // Same y-descending order the built-in handler used, so the
+                    // tooltip rows / anchor spot are unchanged.
+                    final sorted = List<LineBarSpot>.of(spots)
+                      ..sort((a, b) => b.y.compareTo(a.y));
+                    if (!_sameTouchedSpots(sorted)) {
+                      setState(() => _chartTouchedSpots = sorted);
+                    }
+                  },
+                  getTouchedSpotIndicator: (barData, spotIndexes) {
+                    return spotIndexes.map((idx) {
+                      return TouchedSpotIndicatorData(
+                        FlLine(color: context.tint(0.35), strokeWidth: 1),
+                        FlDotData(
+                          show: true,
+                          getDotPainter: (spot, percent, bar, i) =>
+                              FlDotCirclePainter(
+                                radius: 5,
+                                color: barData.color ?? context.positive,
+                                strokeWidth: 3,
+                                strokeColor: Theme.of(
+                                  context,
+                                ).colorScheme.surface,
+                              ),
+                        ),
+                      );
+                    }).toList();
+                  },
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => context.tooltipSurface,
+                    // Only the bold expected line carries a meaningful tooltip; the
+                    // invisible band bars would otherwise emit blank rows.
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        final isMain = spot.bar.barWidth >= 4;
+                        if (!isMain) return null;
+                        return LineTooltipItem(
+                          // gen-l10n orders placeholders alphabetically (amount, year)
+                          // regardless of their order in the template string, so pass
+                          // amount first — otherwise the two render swapped.
+                          // U1: calendar year, rounded — "2040 · $894,514", never
+                          // "Year 19.2".
+                          l.projTooltipYearAmount(
+                            widget.currencyFormat.displayMoney(spot.y),
+                            '${(nowYear + spot.x).round()}',
+                          ),
+                          TextStyle(
+                            color: context.tooltipOnSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
                 ),
               ),
             ),
           ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 60,
-              getTitlesWidget: (value, meta) {
-                if (value == 0) return Container();
-                if (value <= meta.min || value >= meta.max) {
-                  return const SizedBox.shrink();
-                }
-                // F6: compact *currency* ticks (skill §5) — a bare "1.5M"
-                // carried no currency and used Spain-style separators in es.
-                // House compact ticks — compactSimpleCurrency shows a bare
-                // "$" for MXN (see compactMoney).
-                return Text(
-                  compactMoney(
-                    value,
-                    widget.currencyFormat.currencyName ?? 'USD',
-                  ),
-                  style: TextStyle(color: context.textSubtle, fontSize: 10),
-                );
-              },
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        // U1: explicit top-of-range (goal excluded — see chartMaxY) + the
-        // retirement/goal markers.
-        maxY: chartMaxY,
-        extraLinesData: extraLines,
-        betweenBarsData: betweenBars,
-        lineBarsData: lineBars,
-        // U6: screen-owned tooltip state (see _chartTouchedSpots). The spots
-        // arrive pre-sorted by y like the built-in handling produced, so the
-        // tooltip renders identically.
-        showingTooltipIndicators: touchedSpots.isEmpty
-            ? const []
-            : [ShowingTooltipIndicators(touchedSpots)],
-        lineTouchData: LineTouchData(
-          touchSpotThreshold: 100000,
-          distanceCalculator: (touchPoint, spotPixelCoordinates) =>
-              (touchPoint.dx - spotPixelCoordinates.dx).abs(),
-          // U6: built-in touch handling left the tooltip pinned after the
-          // pointer exited the chart — the screen owns the state instead and
-          // clears it on any dismissing event (pointer exit, pan end,
-          // long-press end, and — via chartTouchDismisses — the finger-lift
-          // tap-up that fl_chart's own gating keeps "interested" on mobile
-          // web, which pinned the tooltip there).
-          handleBuiltInTouches: false,
-          touchCallback: (event, response) {
-            final spots = response?.lineBarSpots;
-            if (chartTouchDismisses(event) ||
-                spots == null ||
-                spots.isEmpty) {
-              if (_chartTouchedSpots != null) {
-                setState(() => _chartTouchedSpots = null);
-              }
-              return;
-            }
-            // Same y-descending order the built-in handler used, so the
-            // tooltip rows / anchor spot are unchanged.
-            final sorted = List<LineBarSpot>.of(spots)
-              ..sort((a, b) => b.y.compareTo(a.y));
-            if (!_sameTouchedSpots(sorted)) {
-              setState(() => _chartTouchedSpots = sorted);
-            }
-          },
-          getTouchedSpotIndicator: (barData, spotIndexes) {
-            return spotIndexes.map((idx) {
-              return TouchedSpotIndicatorData(
-                FlLine(color: context.tint(0.35), strokeWidth: 1),
-                FlDotData(
-                  show: true,
-                  getDotPainter: (spot, percent, bar, i) =>
-                      FlDotCirclePainter(
-                    radius: 5,
-                    color: barData.color ?? context.positive,
-                    strokeWidth: 3,
-                    strokeColor: Theme.of(context).colorScheme.surface,
-                  ),
-                ),
-              );
-            }).toList();
-          },
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => context.tooltipSurface,
-            // Only the bold expected line carries a meaningful tooltip; the
-            // invisible band bars would otherwise emit blank rows.
-            getTooltipItems: (touchedSpots) {
-              return touchedSpots.map((spot) {
-                final isMain = spot.bar.barWidth >= 4;
-                if (!isMain) return null;
-                return LineTooltipItem(
-                  // gen-l10n orders placeholders alphabetically (amount, year)
-                  // regardless of their order in the template string, so pass
-                  // amount first — otherwise the two render swapped.
-                  // U1: calendar year, rounded — "2040 · $894,514", never
-                  // "Year 19.2".
-                  l.projTooltipYearAmount(
-                    widget.currencyFormat.displayMoney(spot.y),
-                    '${(nowYear + spot.x).round()}',
-                  ),
-                  TextStyle(
-                    color: context.tooltipOnSurface,
-                    fontWeight: FontWeight.bold,
-                  ),
-                );
-              }).toList();
-            },
-          ),
-        ),
-      ),
-        ),
-      ),
-      );
-    });
+        );
+      },
+    );
   }
 
   // FIRE focus card: pick a flavor (Full / Coast / Barista) and the headline
@@ -2858,11 +2925,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         take = yearsToFi == null
             ? l.projFullUnreachable
             : (yearsToFi <= 0
-                ? l.projFullReached
-                // F6: locale decimal seam (no-op today — es-MX uses period
-                // decimals like en).
-                : l.projFullYearsAway(localizeNumberString(
-                    context, yearsToFi.toStringAsFixed(1))));
+                  ? l.projFullReached
+                  // F6: locale decimal seam (no-op today — es-MX uses period
+                  // decimals like en).
+                  : l.projFullYearsAway(
+                      localizeNumberString(
+                        context,
+                        yearsToFi.toStringAsFixed(1),
+                      ),
+                    ));
       case _FireFocus.coast:
         icon = coastAchieved
             ? Icons.check_circle_rounded
@@ -2882,8 +2953,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         // income is $0, so a figure that isn't lower than full FIRE means
         // "not configured" — show the setup prompt, not a misleading number
         // identical to the Full FIRE target.
-        final baristaConfigured =
-            baristaNumber > 0 && baristaNumber < fiNumber;
+        final baristaConfigured = baristaNumber > 0 && baristaNumber < fiNumber;
         number = baristaConfigured
             ? money(baristaNumber, atYears: retireYears)
             : '—';
@@ -2892,18 +2962,20 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     }
 
     Widget chip(_FireFocus f, String label) => ChoiceChip(
-          label: Text(label),
-          selected: _fireFocus == f,
-          visualDensity: VisualDensity.compact,
-          onSelected: (_) => setState(() => _fireFocus = f),
-        );
+      label: Text(label),
+      selected: _fireFocus == f,
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) => setState(() => _fireFocus = f),
+    );
 
     // Lifestyle presets are relative to the user's baseline spend, so
     // "Standard" matches their real expenses and Lean/Fat step around it.
     final base = (_baselineExpenses ??= _annualExpenses);
     Widget lifeChip(String key, String label) {
-      final double value =
-          _presetExpense(key, base).clamp(_expensesFloor, _expensesMax).toDouble();
+      final double value = _presetExpense(
+        key,
+        base,
+      ).clamp(_expensesFloor, _expensesMax).toDouble();
       final active = (_annualExpenses - value).abs() < 500;
       return ChoiceChip(
         label: Text(label),
@@ -2919,20 +2991,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // A labelled axis row: fixed-width caption + its chips, so the Lifestyle
     // and Goal rows line up.
     Widget axis(String label, List<Widget> chips) => Row(
-          children: [
-            SizedBox(
-              width: 64,
-              child: Text(
-                label,
-                style: TextStyle(color: context.textFaint, fontSize: 11),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Wrap(spacing: 8, runSpacing: 8, children: chips),
-            ),
-          ],
-        );
+      children: [
+        SizedBox(
+          width: 64,
+          child: Text(
+            label,
+            style: TextStyle(color: context.textFaint, fontSize: 11),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(child: Wrap(spacing: 8, runSpacing: 8, children: chips)),
+      ],
+    );
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2944,9 +3014,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             Text(
               l.projFirePlanTitle,
               style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700),
+                color: context.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 12),
             // The lifestyle presets scale the SINGLE expense figure, which
@@ -2984,24 +3055,28 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                           Text(
                             title,
                             style: TextStyle(
-                                color: context.textPrimary,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14),
+                              color: context.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Text(
                             number,
                             style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15),
+                              color: color,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
                           ),
                           if (horizonNote != null) ...[
                             const SizedBox(width: 6),
                             Text(
                               horizonNote,
                               style: TextStyle(
-                                  color: context.textSubtle, fontSize: 11),
+                                color: context.textSubtle,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ],
@@ -3010,15 +3085,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                       Text(
                         def,
                         style: TextStyle(
-                            color: context.textMuted,
-                            fontSize: 12,
-                            height: 1.3),
+                          color: context.textMuted,
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         take,
-                        style:
-                            TextStyle(color: context.textFaint, fontSize: 12),
+                        style: TextStyle(
+                          color: context.textFaint,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -3058,126 +3136,136 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final baristaNumber =
         (metrics['barista_fi_number'] as num?)?.toDouble() ?? 0.0;
     final baristaConfigured = baristaNumber > 0 && baristaNumber < fiNumber;
-    String tileMoney(double usd) => widget.currencyFormat
-        .displayMoney(usd * widget.conversionFactor * atRetire);
-    final (String targetTitle, String targetValue, String targetSub,
-        IconData targetIcon, Color targetColor) = switch (_fireFocus) {
+    String tileMoney(double usd) => widget.currencyFormat.displayMoney(
+      usd * widget.conversionFactor * atRetire,
+    );
+    final (
+      String targetTitle,
+      String targetValue,
+      String targetSub,
+      IconData targetIcon,
+      Color targetColor,
+    ) = switch (_fireFocus) {
       _FireFocus.full => (
-          l.projFiNumber,
-          tileMoney(fiNumber),
-          l.projTargetNetWorth,
-          Icons.flag_rounded,
-          context.warning,
-        ),
+        l.projFiNumber,
+        tileMoney(fiNumber),
+        l.projTargetNetWorth,
+        Icons.flag_rounded,
+        context.warning,
+      ),
       _FireFocus.coast => (
-          l.projTermCoast,
-          tileMoney(coastNumber > 0 ? coastNumber : fiNumber),
-          l.projTargetNetWorth,
-          Icons.trending_up_rounded,
-          context.info,
-        ),
+        l.projTermCoast,
+        tileMoney(coastNumber > 0 ? coastNumber : fiNumber),
+        l.projTargetNetWorth,
+        Icons.trending_up_rounded,
+        context.info,
+      ),
       _FireFocus.barista => (
-          l.projTermBarista,
-          baristaConfigured ? tileMoney(baristaNumber) : '—',
-          baristaConfigured ? l.projTargetNetWorth : l.projBaristaPrompt,
-          Icons.local_cafe_rounded,
-          context.purpleAccent,
-        ),
+        l.projTermBarista,
+        baristaConfigured ? tileMoney(baristaNumber) : '—',
+        baristaConfigured ? l.projTargetNetWorth : l.projBaristaPrompt,
+        Icons.local_cafe_rounded,
+        context.purpleAccent,
+      ),
     };
 
-    return LayoutBuilder(builder: (context, constraints) {
-      // Stack into 2×2 below 800px — the same cutover as the screen's narrow
-      // layout, derived from this builder's own width (not MediaQuery), so
-      // the 720–800px band no longer renders a clipped 4-up row (F1).
-      final stacked = constraints.maxWidth < 800;
-      // F12: with retirement at/after the horizon the simulation never
-      // withdraws, so "chance the plan lasts" is vacuous (always ~100%) —
-      // caption it honestly instead.
-      final noRetirementPhase = _yearsToRetirement >= _projectionYears;
-      final cards = <Widget>[
-        _buildMilestoneCard(
-          title: l.projSuccessRate,
-          value: formatPercent(context, successRate * 100, digits: 0),
-          subtitle: noRetirementPhase
-              ? l.projSuccessRateNa
-              : l.projSuccessRateSub,
-          icon: Icons.verified_rounded,
-          color: _successColor(successRate),
-          compact: stacked,
-        ),
-        _buildMilestoneCard(
-          title: targetTitle,
-          value: targetValue,
-          subtitle: targetSub,
-          icon: targetIcon,
-          color: targetColor,
-          compact: stacked,
-        ),
-        _buildMilestoneCard(
-          title: l.projYearsToFi,
-          value: metrics['estimated_years_to_fi'] != null
-              ? localizeNumberString(
-                  context,
-                  (metrics['estimated_years_to_fi'] as num).toStringAsFixed(1),
-                )
-              : '∞',
-          subtitle: l.projEstimate,
-          icon: Icons.speed_rounded,
-          color: context.info,
-          compact: stacked,
-        ),
-        // Honesty pass: this figure is withdrawal rate × the PROJECTED balance
-        // at retirement — not income at the adjacent FI number — so the title
-        // and subtitle say so, and the value rounds to whole dollars
-        // (wholeMoney, not displayMoney): cents would fake precision on an
-        // estimate.
-        _buildMilestoneCard(
-          title: l.projIncomeAtProjectedBalance,
-          value: widget.currencyFormat.wholeMoney(
-            (metrics['monthly_income_at_retirement'] as num).toDouble() *
-                widget.conversionFactor *
-                atRetire,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Stack into 2×2 below 800px — the same cutover as the screen's narrow
+        // layout, derived from this builder's own width (not MediaQuery), so
+        // the 720–800px band no longer renders a clipped 4-up row (F1).
+        final stacked = constraints.maxWidth < 800;
+        // F12: with retirement at/after the horizon the simulation never
+        // withdraws, so "chance the plan lasts" is vacuous (always ~100%) —
+        // caption it honestly instead.
+        final noRetirementPhase = _yearsToRetirement >= _projectionYears;
+        final cards = <Widget>[
+          _buildMilestoneCard(
+            title: l.projSuccessRate,
+            value: formatPercent(context, successRate * 100, digits: 0),
+            subtitle: noRetirementPhase
+                ? l.projSuccessRateNa
+                : l.projSuccessRateSub,
+            icon: Icons.verified_rounded,
+            color: _successColor(successRate),
+            compact: stacked,
           ),
-          subtitle: l.projIncomeAtProjectedBalanceSub,
-          icon: Icons.account_balance_wallet_rounded,
-          color: context.purpleAccent,
-          compact: stacked,
-        ),
-      ];
+          _buildMilestoneCard(
+            title: targetTitle,
+            value: targetValue,
+            subtitle: targetSub,
+            icon: targetIcon,
+            color: targetColor,
+            compact: stacked,
+          ),
+          _buildMilestoneCard(
+            title: l.projYearsToFi,
+            value: metrics['estimated_years_to_fi'] != null
+                ? localizeNumberString(
+                    context,
+                    (metrics['estimated_years_to_fi'] as num).toStringAsFixed(
+                      1,
+                    ),
+                  )
+                : '∞',
+            subtitle: l.projEstimate,
+            icon: Icons.speed_rounded,
+            color: context.info,
+            compact: stacked,
+          ),
+          // Honesty pass: this figure is withdrawal rate × the PROJECTED balance
+          // at retirement — not income at the adjacent FI number — so the title
+          // and subtitle say so, and the value rounds to whole dollars
+          // (wholeMoney, not displayMoney): cents would fake precision on an
+          // estimate.
+          _buildMilestoneCard(
+            title: l.projIncomeAtProjectedBalance,
+            value: widget.currencyFormat.wholeMoney(
+              (metrics['monthly_income_at_retirement'] as num).toDouble() *
+                  widget.conversionFactor *
+                  atRetire,
+            ),
+            subtitle: l.projIncomeAtProjectedBalanceSub,
+            icon: Icons.account_balance_wallet_rounded,
+            color: context.purpleAccent,
+            compact: stacked,
+          ),
+        ];
 
-      if (stacked) {
-        // Each 2-up row is bounded to its content height: inside the narrow
-        // layout's SingleChildScrollView an unbounded stretch-Row let the
-        // tiles blow up to fill infinite height and never paint (F1).
-        // IntrinsicHeight keeps the two cards equal-height without a fixed
-        // number that longer (es) strings could overflow.
-        Widget pair(Widget a, Widget b) => IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [a, const SizedBox(width: 16), b],
-              ),
-            );
-        return Column(
+        if (stacked) {
+          // Each 2-up row is bounded to its content height: inside the narrow
+          // layout's SingleChildScrollView an unbounded stretch-Row let the
+          // tiles blow up to fill infinite height and never paint (F1).
+          // IntrinsicHeight keeps the two cards equal-height without a fixed
+          // number that longer (es) strings could overflow.
+          Widget pair(Widget a, Widget b) => IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [a, const SizedBox(width: 16), b],
+            ),
+          );
+          return Column(
+            children: [
+              pair(cards[0], cards[1]),
+              const SizedBox(height: 16),
+              pair(cards[2], cards[3]),
+            ],
+          );
+        }
+
+        return Row(
           children: [
-            pair(cards[0], cards[1]),
-            const SizedBox(height: 16),
-            pair(cards[2], cards[3]),
+            cards[0],
+            const SizedBox(width: 16),
+            cards[1],
+            const SizedBox(width: 16),
+            cards[2],
+            const SizedBox(width: 16),
+            cards[3],
           ],
         );
-      }
-
-      return Row(
-        children: [
-          cards[0],
-          const SizedBox(width: 16),
-          cards[1],
-          const SizedBox(width: 16),
-          cards[2],
-          const SizedBox(width: 16),
-          cards[3],
-        ],
-      );
-    });
+      },
+    );
   }
 
   Widget _buildMilestoneCard({
@@ -3261,8 +3349,9 @@ class _ValueEntryDialog extends StatefulWidget {
 }
 
 class _ValueEntryDialogState extends State<_ValueEntryDialog> {
-  late final TextEditingController _ctrl =
-      TextEditingController(text: widget.initialValue);
+  late final TextEditingController _ctrl = TextEditingController(
+    text: widget.initialValue,
+  );
   String? _error;
 
   @override
@@ -3277,7 +3366,8 @@ class _ValueEntryDialogState extends State<_ValueEntryDialog> {
     // U5: integer fields (years) reject fractional input outright — the
     // whole-number range error explains both failure modes.
     final wholeOk = !widget.integerOnly || int.tryParse(text) != null;
-    final ok = v != null &&
+    final ok =
+        v != null &&
         v.isFinite &&
         wholeOk &&
         v >= widget.min &&
@@ -3297,8 +3387,9 @@ class _ValueEntryDialogState extends State<_ValueEntryDialog> {
       content: TextField(
         controller: _ctrl,
         autofocus: true,
-        keyboardType:
-            TextInputType.numberWithOptions(decimal: !widget.integerOnly),
+        keyboardType: TextInputType.numberWithOptions(
+          decimal: !widget.integerOnly,
+        ),
         decoration: InputDecoration(
           labelText: widget.title,
           prefixText: widget.prefixText,
@@ -3309,8 +3400,9 @@ class _ValueEntryDialogState extends State<_ValueEntryDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: Text(l.actionCancel)),
+          onPressed: () => Navigator.pop(context, null),
+          child: Text(l.actionCancel),
+        ),
         FilledButton(onPressed: _save, child: Text(l.actionSave)),
       ],
     );
@@ -3346,10 +3438,12 @@ class _GoalDialog extends StatefulWidget {
 }
 
 class _GoalDialogState extends State<_GoalDialog> {
-  late final TextEditingController _amountCtrl =
-      TextEditingController(text: widget.initialAmount);
-  late final TextEditingController _yearCtrl =
-      TextEditingController(text: widget.initialYear);
+  late final TextEditingController _amountCtrl = TextEditingController(
+    text: widget.initialAmount,
+  );
+  late final TextEditingController _yearCtrl = TextEditingController(
+    text: widget.initialYear,
+  );
   String? _amountError;
   String? _yearError;
 
@@ -3373,8 +3467,9 @@ class _GoalDialogState extends State<_GoalDialog> {
         // placeholders keep their arb metadata order (verified in
         // app_localizations.dart; only synthesized placeholders get
         // alphabetized).
-        _yearError =
-            yearOk ? null : l.projGoalYearRange(widget.minYear, widget.maxYear);
+        _yearError = yearOk
+            ? null
+            : l.projGoalYearRange(widget.minYear, widget.maxYear);
       });
       return;
     }
@@ -3411,8 +3506,9 @@ class _GoalDialogState extends State<_GoalDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: Text(l.actionCancel)),
+          onPressed: () => Navigator.pop(context, null),
+          child: Text(l.actionCancel),
+        ),
         FilledButton(onPressed: _save, child: Text(l.actionSave)),
       ],
     );

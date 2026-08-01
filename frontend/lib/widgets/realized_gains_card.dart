@@ -52,8 +52,9 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
 
   Future<void> _load() async {
     try {
-      final data =
-          await widget.apiService.getRealizedGains(year: _selectedYear);
+      final data = await widget.apiService.getRealizedGains(
+        year: _selectedYear,
+      );
       if (mounted) {
         setState(() {
           _data = data;
@@ -177,12 +178,12 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
     // contains a tax-advantaged row AND the backend sent the subtotal —
     // an older backend without C-C simply never shows it.
     final taxable = (summary['taxable_realized_usd'] as num?)?.toDouble();
-    final hasAdvantaged =
-        disposals.any((d) => d is Map && d['tax_advantaged'] == true);
+    final hasAdvantaged = disposals.any(
+      (d) => d is Map && d['tax_advantaged'] == true,
+    );
     final periodTotal = selYear == null ? total : firstTileUsd;
 
-    final visible =
-        _expanded ? disposals : disposals.take(_maxRows).toList();
+    final visible = _expanded ? disposals : disposals.take(_maxRows).toList();
 
     return _cardShell(
       Column(
@@ -205,9 +206,11 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
                   Row(
                     children: [
                       Expanded(
-                          child: _summaryTile(
-                              l.rgYearTile(firstTileYear.toString()),
-                              firstTileUsd)),
+                        child: _summaryTile(
+                          l.rgYearTile(firstTileYear.toString()),
+                          firstTileUsd,
+                        ),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(child: _summaryTile(l.rgAllTime, total)),
                     ],
@@ -233,11 +236,14 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
                       child: Text(
                         l.rgxNoSalesInYear(firstTileYear.toString()),
                         style: TextStyle(
-                            color: context.textFaint, fontSize: 12),
+                          color: context.textFaint,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ...visible.map(
-                      (d) => _disposalRow(d as Map<String, dynamic>)),
+                    (d) => _disposalRow(d as Map<String, dynamic>),
+                  ),
                   if (disposals.length > _maxRows)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -247,12 +253,13 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
                         child: Semantics(
                           button: true,
                           child: InkWell(
-                            onTap: () =>
-                                setState(() => _expanded = !_expanded),
+                            onTap: () => setState(() => _expanded = !_expanded),
                             borderRadius: BorderRadius.circular(6),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  vertical: 6, horizontal: 4),
+                                vertical: 6,
+                                horizontal: 4,
+                              ),
                               child: Text(
                                 _expanded
                                     ? l.rgShowFewer
@@ -284,13 +291,20 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _yearChip(l.rgxAllYears, _selectedYear == null,
-              () => _selectYear(null),
-              semanticsLabel: l.axAllYears),
+          _yearChip(
+            l.rgxAllYears,
+            _selectedYear == null,
+            () => _selectYear(null),
+            semanticsLabel: l.axAllYears,
+          ),
           for (final y in years) ...[
             const SizedBox(width: 8),
-            _yearChip('$y', _selectedYear == y, () => _selectYear(y),
-                semanticsLabel: l.axYearChip('$y')),
+            _yearChip(
+              '$y',
+              _selectedYear == y,
+              () => _selectYear(y),
+              semanticsLabel: l.axYearChip('$y'),
+            ),
           ],
         ],
       ),
@@ -300,8 +314,12 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   // A2 (round 3, a11y): the custom InkWell pill announces as a selectable
   // button ("Year 2025" / "All years") with its selected state; the inner
   // visual Text is excluded so it isn't read twice.
-  Widget _yearChip(String label, bool selected, VoidCallback onTap,
-      {required String semanticsLabel}) {
+  Widget _yearChip(
+    String label,
+    bool selected,
+    VoidCallback onTap, {
+    required String semanticsLabel,
+  }) {
     return MergeSemantics(
       child: Semantics(
         button: true,
@@ -341,14 +359,18 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   /// planning: the backend computes the subtotal with the same
   /// tax-advantaged account-type list Tax planning uses.
   Widget _taxableCaption(
-      AppLocalizations l, double taxable, double periodTotal) {
+    AppLocalizations l,
+    double taxable,
+    double periodTotal,
+  ) {
     // A2 follow-up (round 3): span-styled text was not surfacing as a
     // readable node, so the caption is an explicit plain-label Semantics
     // container (no button) with the visual spans excluded — screen
     // readers get the whole sentence in one announcement.
     return Semantics(
       container: true,
-      label: '${l.rgxTaxableCaptionPrefix} ${_signedMoney(taxable)} '
+      label:
+          '${l.rgxTaxableCaptionPrefix} ${_signedMoney(taxable)} '
           '${l.rgxTaxableCaptionSuffix(_signedMoney(periodTotal))}',
       child: ExcludeSemantics(
         child: Text.rich(
@@ -361,8 +383,9 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               TextSpan(
-                  text:
-                      ' ${l.rgxTaxableCaptionSuffix(_signedMoney(periodTotal))}'),
+                text:
+                    ' ${l.rgxTaxableCaptionSuffix(_signedMoney(periodTotal))}',
+              ),
             ],
           ),
         ),
@@ -415,8 +438,11 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
               header: true,
               child: Row(
                 children: [
-                  Icon(Icons.trending_up_rounded,
-                      color: context.tealAccent, size: 18),
+                  Icon(
+                    Icons.trending_up_rounded,
+                    color: context.tealAccent,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
@@ -438,11 +464,13 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
           IconButton(
             onPressed: _exportCsv,
             tooltip: l.rgxExportCsvTooltip,
-            icon: Icon(Icons.download_outlined,
-                size: 18, color: context.textMuted),
+            icon: Icon(
+              Icons.download_outlined,
+              size: 18,
+              color: context.textMuted,
+            ),
             padding: EdgeInsets.zero,
-            constraints:
-                const BoxConstraints.tightFor(width: 32, height: 32),
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
             visualDensity: VisualDensity.compact,
           ),
       ],
@@ -510,10 +538,7 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
                   style: TextStyle(color: context.textMuted, fontSize: 12),
                 ),
               ),
-              TextButton(
-                onPressed: _retry,
-                child: Text(l.rgRetry),
-              ),
+              TextButton(onPressed: _retry, child: Text(l.rgRetry)),
             ],
           ),
         ],
@@ -545,27 +570,29 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
       label: '$label, ${_signedMoney(usd)}',
       excludeSemantics: true,
       child: Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.tint(0.04),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: TextStyle(color: context.textMuted, fontSize: 12)),
-          const SizedBox(height: 6),
-          Text(
-            _signedMoney(usd),
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: _pnlColor(usd),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.tint(0.04),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(color: context.textMuted, fontSize: 12),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 6),
+            Text(
+              _signedMoney(usd),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: _pnlColor(usd),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -584,8 +611,9 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
     final account = d['account_name']?.toString() ?? '';
 
     final parsed = DateTime.tryParse(sellDate);
-    final dateLabel =
-        parsed == null ? sellDate : DateFormat.yMMMd().format(parsed);
+    final dateLabel = parsed == null
+        ? sellDate
+        : DateFormat.yMMMd().format(parsed);
     final subLine = account.isEmpty
         ? '$dateLabel · ${l.rgProceeds} ${_money(proceeds)}'
         : '$dateLabel · $account · ${l.rgProceeds} ${_money(proceeds)}';
@@ -607,59 +635,60 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
       label: semanticsLabel,
       excludeSemantics: true,
       child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        symbol.isNotEmpty ? symbol : name,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: context.textPrimary,
-                          fontWeight: FontWeight.w600,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          symbol.isNotEmpty ? symbol : name,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                    if (longTerm is bool) ...[
-                      const SizedBox(width: 8),
-                      _termChip(longTerm ? l.rgLongTerm : l.rgShortTerm,
-                          longTerm),
+                      if (longTerm is bool) ...[
+                        const SizedBox(width: 8),
+                        _termChip(
+                          longTerm ? l.rgLongTerm : l.rgShortTerm,
+                          longTerm,
+                        ),
+                      ],
+                      if (taxAdvantaged) ...[
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: l.rgxTaxAdvTooltip,
+                          child: _pillChip(l.rgxTaxAdvBadge, context.warning),
+                        ),
+                      ],
                     ],
-                    if (taxAdvantaged) ...[
-                      const SizedBox(width: 6),
-                      Tooltip(
-                        message: l.rgxTaxAdvTooltip,
-                        child:
-                            _pillChip(l.rgxTaxAdvBadge, context.warning),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subLine,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: context.textFaint, fontSize: 11),
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subLine,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Text(
-            _signedMoney(pnl),
-            style: TextStyle(
-              color: _pnlColor(pnl),
-              fontWeight: FontWeight.bold,
+            Text(
+              _signedMoney(pnl),
+              style: TextStyle(
+                color: _pnlColor(pnl),
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -677,7 +706,10 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
       child: Text(
         label,
         style: TextStyle(
-            color: color, fontSize: 10, fontWeight: FontWeight.bold),
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

@@ -25,16 +25,14 @@ void main() {
   });
 
   test('dayOffsetSpots keeps real gaps: x is days since the first sample', () {
-    final spots = dayOffsetSpots(dedupeDailyCloses([
-      pt('2026-01-01', 10.0),
-      pt('2026-01-02', 11.0),
-      pt('2026-03-03', 12.0), // 60-day hole
-    ]));
-    expect(spots, const [
-      FlSpot(0, 10.0),
-      FlSpot(1, 11.0),
-      FlSpot(61, 12.0),
-    ]);
+    final spots = dayOffsetSpots(
+      dedupeDailyCloses([
+        pt('2026-01-01', 10.0),
+        pt('2026-01-02', 11.0),
+        pt('2026-03-03', 12.0), // 60-day hole
+      ]),
+    );
+    expect(spots, const [FlSpot(0, 10.0), FlSpot(1, 11.0), FlSpot(61, 12.0)]);
   });
 
   test('dayOffsetSpots on empty input is empty', () {
@@ -54,8 +52,11 @@ void main() {
       // "MMM y" would print "Jul 2026" over and over, so day precision wins.
       final ticks = _days('2026-03-15', [0, 110, 118, 126, 134, 140]);
       final labels = _labels(ticks, spanDays: 140);
-      expect(labels.where((l) => l == 'Jul 2026'), isEmpty,
-          reason: 'the seven-identical-labels bug: $labels');
+      expect(
+        labels.where((l) => l == 'Jul 2026'),
+        isEmpty,
+        reason: 'the seven-identical-labels bug: $labels',
+      );
       _expectNoAdjacentRepeat(labels);
     });
 
@@ -68,19 +69,25 @@ void main() {
       // Unchanged behaviour: a 30-day window reads better as "Mar 15" than
       // "Mar 2026" even though the month format would not have repeated.
       final ticks = _days('2026-03-01', [0, 10, 20, 30]);
-      expect(
-          _labels(ticks, spanDays: 30), ['Mar 1', 'Mar 11', 'Mar 21', 'Mar 31']);
+      expect(_labels(ticks, spanDays: 30), [
+        'Mar 1',
+        'Mar 11',
+        'Mar 21',
+        'Mar 31',
+      ]);
     });
 
-    test('same calendar day in different years falls through to the year form',
-        () {
-      // A short reported span starts the ladder at "MMM d", which collides
-      // here — Jul 4 two years running — so it escalates one rung further.
-      final ticks = [DateTime(2025, 7, 4), DateTime(2026, 7, 4)];
-      final labels = _labels(ticks, spanDays: 40);
-      expect(labels, ['Jul 4, 2025', 'Jul 4, 2026']);
-      _expectNoAdjacentRepeat(labels);
-    });
+    test(
+      'same calendar day in different years falls through to the year form',
+      () {
+        // A short reported span starts the ladder at "MMM d", which collides
+        // here — Jul 4 two years running — so it escalates one rung further.
+        final ticks = [DateTime(2025, 7, 4), DateTime(2026, 7, 4)];
+        final labels = _labels(ticks, spanDays: 40);
+        expect(labels, ['Jul 4, 2025', 'Jul 4, 2026']);
+        _expectNoAdjacentRepeat(labels);
+      },
+    );
 
     test('degenerate inputs do not throw', () {
       expect(_labels(const [], spanDays: 0), isEmpty);
@@ -90,7 +97,6 @@ void main() {
     });
   });
 }
-
 
 // ---------------------------------------------------------------------------
 // nonRepeatingDateFormat — the axis must not print the same label twice in a
@@ -111,7 +117,10 @@ List<String> _labels(List<DateTime> ticks, {int? spanDays}) {
 
 void _expectNoAdjacentRepeat(List<String> labels) {
   for (var i = 1; i < labels.length; i++) {
-    expect(labels[i], isNot(labels[i - 1]),
-        reason: 'adjacent ticks must differ: $labels');
+    expect(
+      labels[i],
+      isNot(labels[i - 1]),
+      reason: 'adjacent ticks must differ: $labels',
+    );
   }
 }

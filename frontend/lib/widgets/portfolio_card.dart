@@ -119,24 +119,29 @@ class PortfolioCard extends StatefulWidget {
   final NumberFormat currencyFormat;
   final String targetCurrency;
   final double usdMxnRate;
+
   /// Optional category filter pushed in from the AllocationHeatmap above.
   /// When non-null, only holdings whose category (or sub-category) match
   /// pass through into the table.
   final String? categoryFilter;
+
   /// Tap handler for clearing the active category filter via a chip on
   /// top of the holdings table.
   final VoidCallback? onClearCategoryFilter;
+
   /// Externally-driven search override (Cmd-K deep-link). When this prop
   /// changes to a non-empty value, the card's internal search query is
   /// seeded to it so a single holding can be deep-linked from the
   /// palette without user typing.
   final String? searchOverride;
+
   /// Used by the holdings slice for the instrument detail sheet (contract
   /// C-F) and the CSV export URLs (contract C-E). Optional so the existing
   /// call sites keep compiling; when absent the card constructs its own —
   /// ApiService instances are stateless (the HTTP client and response
   /// cache are static and shared across every instance).
   final ApiService? apiService;
+
   /// Contract C3-D: awaited after the instrument sheet resolves `true`
   /// (the user set or cleared an asset-class override inside it), so the
   /// owner can re-fetch holdings + allocation and the table/bands reflect
@@ -166,6 +171,7 @@ class PortfolioCard extends StatefulWidget {
 class _PortfolioCardState extends State<PortfolioCard> {
   int? _sortColumnIndex = _kColIndexValue; // Default sort by Value
   bool _isAscending = false;
+
   /// See [PortfolioCard.apiService] — falls back to a private instance so
   /// call sites that don't pass one still get the sheet + CSV exports.
   late final ApiService _apiService = widget.apiService ?? ApiService();
@@ -184,8 +190,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   // deep-link push and doesn't get re-applied on every rebuild.
   String? _appliedOverride;
 
-  late final TextEditingController _searchController =
-      TextEditingController();
+  late final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -235,7 +240,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final q = _searchQuery.toLowerCase().trim();
     final base = _allHoldings
         .where(
-            (h) => holdingMatchesCategoryFilter(h as Map, widget.categoryFilter))
+          (h) => holdingMatchesCategoryFilter(h as Map, widget.categoryFilter),
+        )
         .toList();
     if (q.isEmpty) {
       _holdings = base;
@@ -267,7 +273,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
       // direction: the comparator below compares ascending on
       // (possibly swapped) values, so mapping null to +inf when
       // ascending and -inf when descending pins it to the bottom.
-      double unknownLast(num? v) => v?.toDouble() ??
+      double unknownLast(num? v) =>
+          v?.toDouble() ??
           (ascending ? double.infinity : double.negativeInfinity);
 
       _holdings.sort((a, b) {
@@ -349,7 +356,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final totalValueUsd =
         (widget.portfolioData['total_value_usd'] as num?)?.toDouble() ?? 0.0;
     final totalGainLossUsd =
-        (widget.portfolioData['total_gain_loss_usd'] as num?)?.toDouble() ?? 0.0;
+        (widget.portfolioData['total_gain_loss_usd'] as num?)?.toDouble() ??
+        0.0;
     final totalCostBasisUsd =
         (widget.portfolioData['total_cost_basis_usd'] as num?)?.toDouble() ??
         0.0;
@@ -357,8 +365,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final totalGainLoss = totalGainLossUsd * widget.conversionFactor;
     // Percentage is currency-agnostic, but must come from USD figures so the
     // mixed-currency native sums don't skew it.
-    final totalGainLossPct =
-        totalCostBasisUsd > 0 ? (totalGainLossUsd / totalCostBasisUsd) * 100 : 0.0;
+    final totalGainLossPct = totalCostBasisUsd > 0
+        ? (totalGainLossUsd / totalCostBasisUsd) * 100
+        : 0.0;
 
     // The % above is a return on *cost basis*: its numerator/denominator only
     // cover holdings the institution reports a basis for. The value hero above
@@ -390,171 +399,176 @@ class _PortfolioCardState extends State<PortfolioCard> {
       // Width-responsive off the card's OWN constraint (inner LayoutBuilder,
       // per the skill rule), not MediaQuery — the card can be narrower than
       // the screen (outer tab padding, the 1600px clamp).
-      child: LayoutBuilder(builder: (context, c) {
-        // 688 ≈ the old 720 screen breakpoint minus the outer tab padding.
-        final pad = c.maxWidth < 688 ? 16.0 : 24.0;
-        // House ~420 phone breakpoint: compact chrome (overline title,
-        // tighter section gaps, abbreviated change pills) on phone widths;
-        // wider layouts are unchanged.
-        final isPhone = c.maxWidth < 420;
-        // Shrink the big total-value number so a long "USD 1,234,567.89"
-        // still fits a phone-width card without wrapping or ellipsis.
-        final heroFontSize = c.maxWidth < 400
-            ? 30.0
-            : c.maxWidth < 520
-                ? 36.0
-                : 42.0;
-        // A1 (round 3, a11y): the value caption, hero figure and
-        // change pills read as ONE labelled node — "Portfolio value
-        // $X, all-time +$Y (+Z%), today +$W (+V%)" — instead of four
-        // fragments. excludeSemantics folds the inner Texts away;
-        // the pills' visual tooltips (overlay-based) are unaffected.
-        // Explicit sign on the amount: losses must read "-$500.00", not a
-        // red "$500.00" (the abs() strips the minus, so it's re-applied).
-        final allTimeSign =
-            totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : '';
-        final allTimeText =
-            '$allTimeSign${widget.currencyFormat.displayMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})';
-        // Phones abbreviate the pill amount ("+$53.9K (50.36%)") so the
-        // all-time + today pills fit ONE Wrap row instead of stacking.
-        // Sign handling is identical to the full string above. The a11y
-        // heroLabel below keeps the FULL-precision strings — only the
-        // visual pill text compacts.
-        final allTimePillText = isPhone
-            ? '$allTimeSign${_compactMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})'
-            : allTimeText;
-        final dayText = _dayChangeText();
-        final heroLabel = [
-          l.axPortfolioHero(
-              widget.currencyFormat.displayMoney(totalValue), allTimeText),
-          if (dayText != null) l.axHeroToday(dayText),
-        ].join(', ');
-        final summary = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header landmark so screen readers can jump to the card.
-            // `container: true` per the round-2 lesson at the grouped
-            // account header: without an explicit boundary the header
-            // flag is absorbed by the CARD-level node and the whole
-            // card announces as one giant heading.
-            Semantics(
-              container: true,
-              header: true,
-              child: Text(
-                l.pfInvestmentPortfolio,
-                // Phones: the bottom-nav tab already names this surface,
-                // so the 22px in-card title compresses to a small overline
-                // and gives that first-viewport space back to the data.
-                style: isPhone
-                    ? TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.6,
-                        color: context.textSubtle,
-                      )
-                    : TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
-                        color: context.textPrimary,
-                      ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          // 688 ≈ the old 720 screen breakpoint minus the outer tab padding.
+          final pad = c.maxWidth < 688 ? 16.0 : 24.0;
+          // House ~420 phone breakpoint: compact chrome (overline title,
+          // tighter section gaps, abbreviated change pills) on phone widths;
+          // wider layouts are unchanged.
+          final isPhone = c.maxWidth < 420;
+          // Shrink the big total-value number so a long "USD 1,234,567.89"
+          // still fits a phone-width card without wrapping or ellipsis.
+          final heroFontSize = c.maxWidth < 400
+              ? 30.0
+              : c.maxWidth < 520
+              ? 36.0
+              : 42.0;
+          // A1 (round 3, a11y): the value caption, hero figure and
+          // change pills read as ONE labelled node — "Portfolio value
+          // $X, all-time +$Y (+Z%), today +$W (+V%)" — instead of four
+          // fragments. excludeSemantics folds the inner Texts away;
+          // the pills' visual tooltips (overlay-based) are unaffected.
+          // Explicit sign on the amount: losses must read "-$500.00", not a
+          // red "$500.00" (the abs() strips the minus, so it's re-applied).
+          final allTimeSign = totalGainLoss > 0
+              ? '+'
+              : totalGainLoss < 0
+              ? '-'
+              : '';
+          final allTimeText =
+              '$allTimeSign${widget.currencyFormat.displayMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})';
+          // Phones abbreviate the pill amount ("+$53.9K (50.36%)") so the
+          // all-time + today pills fit ONE Wrap row instead of stacking.
+          // Sign handling is identical to the full string above. The a11y
+          // heroLabel below keeps the FULL-precision strings — only the
+          // visual pill text compacts.
+          final allTimePillText = isPhone
+              ? '$allTimeSign${_compactMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})'
+              : allTimeText;
+          final dayText = _dayChangeText();
+          final heroLabel = [
+            l.axPortfolioHero(
+              widget.currencyFormat.displayMoney(totalValue),
+              allTimeText,
             ),
-            SizedBox(height: isPhone ? 12 : 20),
-            Semantics(
-              container: true,
-              label: heroLabel,
-              excludeSemantics: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l.pfTotalValue,
-                    style: TextStyle(
-                      color: context.textSubtle,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      widget.currencyFormat.displayMoney(totalValue),
-                      style: TextStyle(
-                        fontSize: heroFontSize,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1.0,
-                        height: 1.1,
-                        color: context.textPrimary,
-                        fontFeatures: const [
-                          FontFeature.tabularFigures()
-                        ],
-                      ),
-                      maxLines: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // All-time pill + (when the backend reports it,
-                  // contract C-B) a "today" pill with identical
-                  // geometry. Phones compact the amounts (above) so
-                  // both pills share one row; the Wrap still stacks
-                  // them if an extreme value overflows anyway.
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _heroChangePill(
-                        positive: isPositive,
-                        text: allTimePillText,
-                      ),
-                      ?_buildTodayPill(l, compact: isPhone),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (showCoverage) ...[
-              const SizedBox(height: 6),
-              Text(
-                l.pfReturnCoverage(
-                  _compactMoney(coveredValue),
-                  _compactMoney(totalValue),
-                ),
-                style: TextStyle(
-                  color: context.textSubtle,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  height: 1.3,
-                ),
-                maxLines: 2,
-              ),
-            ],
-          ],
-        );
-        // The donut-by-holding chart was removed: it duplicated the
-        // "Asset distribution" allocation card (two part-to-whole
-        // encodings of the same data) and the holdings table. The hero
-        // now owns the headline number + change; allocation lives in the
-        // one allocation card, per-holding detail in the table below.
-        return Padding(
-          padding: EdgeInsets.all(pad),
-          child: Column(
+            if (dayText != null) l.axHeroToday(dayText),
+          ].join(', ');
+          final summary = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              summary,
-              SizedBox(height: isPhone ? 12 : 24),
-              _buildSummaryKpis(),
-              SizedBox(height: isPhone ? 12 : 16),
-              _buildDualCurrencyPanel(),
+              // Header landmark so screen readers can jump to the card.
+              // `container: true` per the round-2 lesson at the grouped
+              // account header: without an explicit boundary the header
+              // flag is absorbed by the CARD-level node and the whole
+              // card announces as one giant heading.
+              Semantics(
+                container: true,
+                header: true,
+                child: Text(
+                  l.pfInvestmentPortfolio,
+                  // Phones: the bottom-nav tab already names this surface,
+                  // so the 22px in-card title compresses to a small overline
+                  // and gives that first-viewport space back to the data.
+                  style: isPhone
+                      ? TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: context.textSubtle,
+                        )
+                      : TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                          color: context.textPrimary,
+                        ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              SizedBox(height: isPhone ? 12 : 20),
+              Semantics(
+                container: true,
+                label: heroLabel,
+                excludeSemantics: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.pfTotalValue,
+                      style: TextStyle(
+                        color: context.textSubtle,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        widget.currencyFormat.displayMoney(totalValue),
+                        style: TextStyle(
+                          fontSize: heroFontSize,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -1.0,
+                          height: 1.1,
+                          color: context.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        maxLines: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // All-time pill + (when the backend reports it,
+                    // contract C-B) a "today" pill with identical
+                    // geometry. Phones compact the amounts (above) so
+                    // both pills share one row; the Wrap still stacks
+                    // them if an extreme value overflows anyway.
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _heroChangePill(
+                          positive: isPositive,
+                          text: allTimePillText,
+                        ),
+                        ?_buildTodayPill(l, compact: isPhone),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (showCoverage) ...[
+                const SizedBox(height: 6),
+                Text(
+                  l.pfReturnCoverage(
+                    _compactMoney(coveredValue),
+                    _compactMoney(totalValue),
+                  ),
+                  style: TextStyle(
+                    color: context.textSubtle,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
+                  maxLines: 2,
+                ),
+              ],
             ],
-          ),
-        );
-      }),
+          );
+          // The donut-by-holding chart was removed: it duplicated the
+          // "Asset distribution" allocation card (two part-to-whole
+          // encodings of the same data) and the holdings table. The hero
+          // now owns the headline number + change; allocation lives in the
+          // one allocation card, per-holding detail in the table below.
+          return Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                summary,
+                SizedBox(height: isPhone ? 12 : 24),
+                _buildSummaryKpis(),
+                SizedBox(height: isPhone ? 12 : 16),
+                _buildDualCurrencyPanel(),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -571,8 +585,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final color = neutral
         ? context.textMuted
         : positive
-            ? context.positive
-            : context.negative;
+        ? context.positive
+        : context.negative;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -616,20 +630,26 @@ class _PortfolioCardState extends State<PortfolioCard> {
   /// for the phone-width pill; the a11y label always passes false so the
   /// spoken figure stays full-precision.
   String? _dayChangeText({bool compact = false}) {
-    final dayUsd =
-        (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
+    final dayUsd = (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
     if (dayUsd == null) return null;
-    final dayPct =
-        (widget.portfolioData['day_change_pct'] as num?)?.toDouble();
+    final dayPct = (widget.portfolioData['day_change_pct'] as num?)?.toDouble();
     // Explicit sign per figure: negatives must keep their minus ("-$731.53
     // (-1.41%)"), which the .abs() calls below would otherwise strip.
-    final sign = dayUsd > 0 ? '+' : dayUsd < 0 ? '-' : '';
+    final sign = dayUsd > 0
+        ? '+'
+        : dayUsd < 0
+        ? '-'
+        : '';
     final converted = dayUsd * widget.conversionFactor;
     final amount =
         '$sign${compact ? _compactMoney(converted.abs()) : widget.currencyFormat.displayMoney(converted.abs())}';
     return dayPct == null
         ? amount
-        : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${formatPercent(context, dayPct.abs(), digits: 2)})';
+        : '$amount (${dayPct > 0
+              ? '+'
+              : dayPct < 0
+              ? '-'
+              : ''}${formatPercent(context, dayPct.abs(), digits: 2)})';
   }
 
   /// "Today" pill: the portfolio's change since the last stored close
@@ -640,15 +660,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
   /// [compact] routes the displayed amount through [_compactMoney] on
   /// phone widths (the tooltip / a11y strings stay full-precision).
   Widget? _buildTodayPill(AppLocalizations l, {bool compact = false}) {
-    final dayUsd =
-        (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
+    final dayUsd = (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
     if (dayUsd == null) return null;
-    final dayPct =
-        (widget.portfolioData['day_change_pct'] as num?)?.toDouble();
-    final coverage =
-        (widget.portfolioData['day_change_coverage_pct'] as num?)?.toDouble();
-    final asOfRaw =
-        (widget.portfolioData['day_change_as_of'] ?? '').toString();
+    final dayPct = (widget.portfolioData['day_change_pct'] as num?)?.toDouble();
+    final coverage = (widget.portfolioData['day_change_coverage_pct'] as num?)
+        ?.toDouble();
+    final asOfRaw = (widget.portfolioData['day_change_as_of'] ?? '').toString();
     final asOf = DateTime.tryParse(asOfRaw);
 
     final positive = dayUsd > 0;
@@ -667,13 +684,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // trust funds without stored closes) or the latest close pre-dates
     // today (weekend / after a refresh gap).
     final today = DateTime.now();
-    final isStale = asOf != null &&
-        DateTime(asOf.year, asOf.month, asOf.day)
-            .isBefore(DateTime(today.year, today.month, today.day));
+    final isStale =
+        asOf != null &&
+        DateTime(
+          asOf.year,
+          asOf.month,
+          asOf.day,
+        ).isBefore(DateTime(today.year, today.month, today.day));
     final partial = coverage != null && coverage < 99.5;
     if (!isStale && !partial) return pill;
-    final dateLabel =
-        asOf != null ? DateFormat.yMMMd().format(asOf) : asOfRaw;
+    final dateLabel = asOf != null ? DateFormat.yMMMd().format(asOf) : asOfRaw;
     return Tooltip(
       message: l.pfDayPillTooltip(
         dateLabel,
@@ -804,10 +824,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   const SizedBox(width: 6),
                   Text(
                     currencySubtitle,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: context.textSubtle,
-                    ),
+                    style: TextStyle(fontSize: 11, color: context.textSubtle),
                   ),
                 ],
               ),
@@ -882,10 +899,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // converted at one spot rate its percentage is identical to the hero
     // pill right above, so repeating it here cost cramped type for no
     // information. The >=520 branch keeps the full side-by-side comparison.
-    Widget compactRow({
-      required String label,
-      required String totalValueStr,
-    }) {
+    Widget compactRow({required String label, required String totalValueStr}) {
       return Semantics(
         container: true,
         label: '$label: ≈ $totalValueStr',
@@ -971,13 +985,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   totalValueStr: mxnFmt.displayMoney(valMxn),
                 );
         }
-        return Row(
-          children: [
-            usdTile,
-            const SizedBox(width: 12),
-            mxnTile,
-          ],
-        );
+        return Row(children: [usdTile, const SizedBox(width: 12), mxnTile]);
       },
     );
   }
@@ -1001,7 +1009,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     Map<String, dynamic>? top,
     Map<String, dynamic>? gainer,
     Map<String, dynamic>? loser,
-  }) _computeMovers() {
+  })
+  _computeMovers() {
     Map<String, dynamic>? top;
     Map<String, dynamic>? gainer;
     Map<String, dynamic>? loser;
@@ -1009,8 +1018,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       // Rank by USD value so a large MXN position isn't ranked above a larger
       // USD one just because its native number is bigger.
       final v = (h['value_usd'] as num?)?.toDouble() ?? 0.0;
-      if (top == null ||
-          v > ((top['value_usd'] as num?)?.toDouble() ?? 0)) {
+      if (top == null || v > ((top['value_usd'] as num?)?.toDouble() ?? 0)) {
         top = h;
       }
       // Null return % means the institution didn't report a cost
@@ -1049,11 +1057,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
       _KpiTile(
         label: l.pfHoldings,
         value: '${_allHoldings.length}',
-        sub: l.pfAccountsCount(_allHoldings
-            .map((h) => (h['account_name'] ?? '').toString())
-            .toSet()
-            .where((s) => s.isNotEmpty)
-            .length),
+        sub: l.pfAccountsCount(
+          _allHoldings
+              .map((h) => (h['account_name'] ?? '').toString())
+              .toSet()
+              .where((s) => s.isNotEmpty)
+              .length,
+        ),
       ),
       if (top != null)
         _KpiTile(
@@ -1061,26 +1071,30 @@ class _PortfolioCardState extends State<PortfolioCard> {
           value: _displayTicker(top),
           // USD-normalised: a native MXN value here read as "$300,000" for a
           // ~$17k position. value_usd → display via the conversion factor.
-          sub: widget.currencyFormat
-              .displayMoney(((top['value_usd'] as num?)?.toDouble() ?? 0.0) * cf),
+          sub: widget.currencyFormat.displayMoney(
+            ((top['value_usd'] as num?)?.toDouble() ?? 0.0) * cf,
+          ),
           accent: context.tealAccent,
         ),
     ];
 
-    return LayoutBuilder(builder: (ctx, c) {
-      // 2-up even on phones — _KpiTile ellipsizes label/value/sub, so a
-      // ~150px tile is overflow-safe, and stacked full-width tiles wasted
-      // most of the first viewport on narrow screens. 300, not 320: a 390px
-      // phone leaves ~318px here after page (20) + card (16) padding.
-      final perRow = c.maxWidth >= 300 ? 2 : 1;
-      final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children:
-            tiles.map((t) => SizedBox(width: tileWidth, child: t)).toList(),
-      );
-    });
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        // 2-up even on phones — _KpiTile ellipsizes label/value/sub, so a
+        // ~150px tile is overflow-safe, and stacked full-width tiles wasted
+        // most of the first viewport on narrow screens. 300, not 320: a 390px
+        // phone leaves ~318px here after page (20) + card (16) padding.
+        final perRow = c.maxWidth >= 300 ? 2 : 1;
+        final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: tiles
+              .map((t) => SizedBox(width: tileWidth, child: t))
+              .toList(),
+        );
+      },
+    );
   }
 
   /// Signals slice: a thin, scannable strip surfacing the biggest gainer,
@@ -1144,7 +1158,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // figure (day closes present / basis reported).
     final todayMovers = topDollarMovers(_allHoldings, field: 'day_change_usd');
     final allTimeMovers = topDollarMovers(_allHoldings, field: 'gain_loss_usd');
-    final hasDollarMovers = todayMovers.gainers.isNotEmpty ||
+    final hasDollarMovers =
+        todayMovers.gainers.isNotEmpty ||
         todayMovers.losers.isNotEmpty ||
         allTimeMovers.gainers.isNotEmpty ||
         allTimeMovers.losers.isNotEmpty;
@@ -1172,28 +1187,30 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ),
             if (chips.isNotEmpty) ...[
               const SizedBox(height: 10),
-              LayoutBuilder(builder: (ctx, c) {
-                // Side-by-side on wide screens, stacked on phone widths.
-                final perRow = c.maxWidth >= 560 ? chips.length : 1;
-                if (perRow == 1) {
-                  return Column(
+              LayoutBuilder(
+                builder: (ctx, c) {
+                  // Side-by-side on wide screens, stacked on phone widths.
+                  final perRow = c.maxWidth >= 560 ? chips.length : 1;
+                  if (perRow == 1) {
+                    return Column(
+                      children: [
+                        for (var i = 0; i < chips.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 8),
+                          chips[i],
+                        ],
+                      ],
+                    );
+                  }
+                  return Row(
                     children: [
                       for (var i = 0; i < chips.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 8),
-                        chips[i],
+                        if (i > 0) const SizedBox(width: 12),
+                        Expanded(child: chips[i]),
                       ],
                     ],
                   );
-                }
-                return Row(
-                  children: [
-                    for (var i = 0; i < chips.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 12),
-                      Expanded(child: chips[i]),
-                    ],
-                  ],
-                );
-              }),
+                },
+              ),
             ],
             if (hasDollarMovers) ...[
               const SizedBox(height: 16),
@@ -1217,12 +1234,14 @@ class _PortfolioCardState extends State<PortfolioCard> {
   Widget _buildDollarMovers({
     required ({
       List<Map<String, dynamic>> gainers,
-      List<Map<String, dynamic>> losers
-    }) today,
+      List<Map<String, dynamic>> losers,
+    })
+    today,
     required ({
       List<Map<String, dynamic>> gainers,
-      List<Map<String, dynamic>> losers
-    }) allTime,
+      List<Map<String, dynamic>> losers,
+    })
+    allTime,
   }) {
     final l = AppLocalizations.of(context);
     final cf = widget.conversionFactor;
@@ -1298,10 +1317,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // columns (side-by-side on wide, stacked on phone).
     Widget timeFrame(
       String title,
-      ({
-        List<Map<String, dynamic>> gainers,
-        List<Map<String, dynamic>> losers
-      }) movers,
+      ({List<Map<String, dynamic>> gainers, List<Map<String, dynamic>> losers})
+      movers,
       String field,
     ) {
       final columns = <Widget>[
@@ -1336,40 +1353,40 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ),
           ),
           const SizedBox(height: 10),
-          LayoutBuilder(builder: (ctx, c) {
-            // Two columns side-by-side on wide screens, stacked on phone.
-            if (c.maxWidth >= 560 && columns.length == 2) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          LayoutBuilder(
+            builder: (ctx, c) {
+              // Two columns side-by-side on wide screens, stacked on phone.
+              if (c.maxWidth >= 560 && columns.length == 2) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: columns[0]),
+                    const SizedBox(width: 12),
+                    Expanded(child: columns[1]),
+                  ],
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: columns[0]),
-                  const SizedBox(width: 12),
-                  Expanded(child: columns[1]),
+                  for (var i = 0; i < columns.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 12),
+                    columns[i],
+                  ],
                 ],
               );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < columns.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 12),
-                  columns[i],
-                ],
-              ],
-            );
-          }),
+            },
+          ),
         ],
       );
     }
 
     final hasToday = today.gainers.isNotEmpty || today.losers.isNotEmpty;
-    final hasAllTime =
-        allTime.gainers.isNotEmpty || allTime.losers.isNotEmpty;
+    final hasAllTime = allTime.gainers.isNotEmpty || allTime.losers.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasToday)
-          timeFrame(l.pfMoversTodayTitle, today, 'day_change_usd'),
+        if (hasToday) timeFrame(l.pfMoversTodayTitle, today, 'day_change_usd'),
         if (hasToday && hasAllTime) const SizedBox(height: 16),
         if (hasAllTime)
           timeFrame(l.pfBestWorstAllTime, allTime, 'gain_loss_usd'),
@@ -1458,13 +1475,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final entries = byAccount.entries.toList()
       ..sort((a, b) {
         final sa = a.value.fold<double>(
-            0,
-            (s, h) =>
-                s + ((h['value'] as num?)?.toDouble() ?? 0.0));
+          0,
+          (s, h) => s + ((h['value'] as num?)?.toDouble() ?? 0.0),
+        );
         final sb = b.value.fold<double>(
-            0,
-            (s, h) =>
-                s + ((h['value'] as num?)?.toDouble() ?? 0.0));
+          0,
+          (s, h) => s + ((h['value'] as num?)?.toDouble() ?? 0.0),
+        );
         return sb.compareTo(sa);
       });
 
@@ -1481,20 +1498,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
             final vb = ((b['value'] as num?)?.toDouble() ?? 0.0);
             return vb.compareTo(va);
           });
-          final subtotal = list.fold<double>(
-              0,
-              (s, h) =>
-                  s + ((h['value'] as num?)?.toDouble() ?? 0.0)) *
+          final subtotal =
+              list.fold<double>(
+                0,
+                (s, h) => s + ((h['value'] as num?)?.toDouble() ?? 0.0),
+              ) *
               widget.conversionFactor;
-          final inst =
-              (list.first['institution_name'] ?? '').toString();
+          final inst = (list.first['institution_name'] ?? '').toString();
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
               color: context.tint(0.02),
               borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: context.tint(0.05)),
+              border: Border.all(color: context.tint(0.05)),
             ),
             child: Column(
               children: [
@@ -1554,9 +1570,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                             color: context.textPrimary,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures()
-                            ],
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                       ],
@@ -1586,7 +1600,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final isGain = (pct ?? 0) >= 0;
     final rawSym = (h['symbol'] ?? '').toString();
     final rawName = (h['name'] ?? '').toString();
-    final opaque = rawSym.length > 8 ||
+    final opaque =
+        rawSym.length > 8 ||
         (rawSym != rawSym.toUpperCase() && rawSym.length > 4);
     final displaySymbol = opaque
         ? (rawName.isNotEmpty ? rawName : '—')
@@ -1608,7 +1623,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
           displaySymbol,
           _formatQuantity(qty),
           widget.currencyFormat.displayMoney(value),
-          pct == null ? '—' : '${isGain ? '+' : ''}${formatPercent(context, pct, digits: 2)}',
+          pct == null
+              ? '—'
+              : '${isGain ? '+' : ''}${formatPercent(context, pct, digits: 2)}',
         ),
         child: InkWell(
           onTap: canOpenSheet
@@ -1630,81 +1647,85 @@ class _PortfolioCardState extends State<PortfolioCard> {
               : null,
           child: ExcludeSemantics(
             child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Tooltip(
-              message: rawName.isNotEmpty ? rawName : displaySymbol,
-              waitDuration: const Duration(milliseconds: 600),
-              child: Text(
-                displaySymbol,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: context.textPrimary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              l.pfSharesSuffix(_formatQuantity(qty)),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 12,
-                color: context.textMuted,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              widget.currencyFormat.displayMoney(value),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: context.textPrimary,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 64,
-            child: pct == null
-                ? Tooltip(
-                    message: l.pfCostBasisUnavailable,
-                    waitDuration: const Duration(milliseconds: 600),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Tooltip(
+                      message: rawName.isNotEmpty ? rawName : displaySymbol,
+                      waitDuration: const Duration(milliseconds: 600),
+                      child: Text(
+                        displaySymbol,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
                     child: Text(
-                      '—',
+                      l.pfSharesSuffix(_formatQuantity(qty)),
                       textAlign: TextAlign.right,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w700,
                         color: context.textMuted,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                  )
-                : Text(
-                    '${isGain ? '+' : ''}${formatPercent(context, pct, digits: 2)}',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: isGain ? context.positive : context.negative,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      widget.currencyFormat.displayMoney(value),
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ),
-          ),
-        ],
-      ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 64,
+                    child: pct == null
+                        ? Tooltip(
+                            message: l.pfCostBasisUnavailable,
+                            waitDuration: const Duration(milliseconds: 600),
+                            child: Text(
+                              '—',
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: context.textMuted,
+                              ),
+                            ),
+                          )
+                        : Text(
+                            '${isGain ? '+' : ''}${formatPercent(context, pct, digits: 2)}',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isGain
+                                  ? context.positive
+                                  : context.negative,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1741,20 +1762,23 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 child: Semantics(
                   container: true,
                   label: l.axActiveFilter(
-                      categoryFilterLabel(widget.categoryFilter ?? '', l)),
+                    categoryFilterLabel(widget.categoryFilter ?? '', l),
+                  ),
                   child: InputChip(
                     avatar: const Icon(Icons.filter_alt, size: 16),
                     label: ExcludeSemantics(
                       child: Text(
-                          // Prefix-stripped display value: the raw filter
-                          // string is a dimension-scoped key like
-                          // "asset:bonds" (contract C3), not a label. `l`
-                          // maps asset: keys to the allocation band's
-                          // display names.
-                          l.pfCategoryFilter(categoryFilterLabel(
-                              widget.categoryFilter ?? '', l)),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                        // Prefix-stripped display value: the raw filter
+                        // string is a dimension-scoped key like
+                        // "asset:bonds" (contract C3), not a label. `l`
+                        // maps asset: keys to the allocation band's
+                        // display names.
+                        l.pfCategoryFilter(
+                          categoryFilterLabel(widget.categoryFilter ?? '', l),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     onDeleted: widget.onClearCategoryFilter,
                     deleteButtonTooltipMessage: l.axClearFilter,
@@ -1769,153 +1793,154 @@ class _PortfolioCardState extends State<PortfolioCard> {
           // field, then counter + toggle + CSV — while the desktop
           // single-row layout is built from the exact same pieces and
           // stays pixel-identical.
-          LayoutBuilder(builder: (context, constraints) {
-            final narrow = constraints.maxWidth < _kMobileBreakpoint;
-            final searchField = SizedBox(
-              height: 36,
-              child: TextField(
-                controller: _searchController,
-                onChanged: (v) => setState(() {
-                  _searchQuery = v;
-                  _applySearch();
-                  _sort(_sortColumnIndex ?? _kColIndexValue, _isAscending);
-                }),
-                decoration: InputDecoration(
-                  hintText: l.pfSearchHint,
-                  hintStyle: TextStyle(
-                      color: context.textSubtle, fontSize: 13),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    size: 18,
-                    color: context.textSubtle,
-                  ),
-                  filled: true,
-                  fillColor: context.tint(0.05),
-                  contentPadding: const EdgeInsets.symmetric(
-                      vertical: 0, horizontal: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                style: const TextStyle(fontSize: 13),
-              ),
-            );
-            final counter = Text(
-              // Filter-aware counter: with a category filter or a search
-              // active it reads "N of M holdings"; unfiltered it reads the
-              // full "M holdings · K accounts" — except on the narrow
-              // two-row layout, where a compact "M · K accts" keeps BOTH
-              // numbers readable at 390px instead of ellipsizing the
-              // accounts half mid-word.
-              widget.categoryFilter != null || _searchQuery.isNotEmpty
-                  ? l.pfFilterShownOfTotal(shownHoldings, totalHoldings)
-                  : narrow
-                      ? l.fix3HoldingsAccountsCompact(
-                          totalHoldings, accountCount)
-                      : l.pfHoldingsAccountsCount(
-                          totalHoldings, accountCount),
-              maxLines: narrow ? 1 : null,
-              overflow: narrow ? TextOverflow.ellipsis : null,
-              style: TextStyle(fontSize: 12, color: context.textSubtle),
-            );
-            final segmented = SegmentedButton<bool>(
-              segments: [
-                ButtonSegment(
-                  value: false,
-                  // Narrow: the label alone is the affordance — dropping
-                  // the leading icons (plus tighter padding below) is what
-                  // keeps both segments fully on-screen at 320–390px.
-                  icon: narrow
-                      ? null
-                      : const Icon(Icons.list_alt, size: 14),
-                  label: Text(l.pfFlat),
-                ),
-                ButtonSegment(
-                  value: true,
-                  icon: narrow
-                      ? null
-                      : const Icon(Icons.account_tree_outlined, size: 14),
-                  label: Text(l.pfByAccount),
-                ),
-              ],
-              selected: {_groupByAccount},
-              onSelectionChanged: (s) {
-                setState(() => _groupByAccount = s.first);
-                Preferences.setGroupByAccount(s.first);
-              },
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                padding: narrow
-                    ? WidgetStateProperty.all(
-                        const EdgeInsets.symmetric(horizontal: 8))
-                    : null,
-                textStyle: WidgetStateProperty.all(
-                    const TextStyle(fontSize: 12)),
-              ),
-            );
-            // CSV export (contract C-E): browser-native downloads through
-            // the same-origin cookie-auth seam the transactions/tax exports
-            // use. Hidden when there's nothing to export.
-            final csvMenu = _allHoldings.isNotEmpty
-                ? PopupMenuButton<String>(
-                    tooltip: l.pfCsvExportTooltip,
-                    icon: Icon(
-                      Icons.download_outlined,
-                      size: 20,
-                      color: context.textMuted,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < _kMobileBreakpoint;
+              final searchField = SizedBox(
+                height: 36,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (v) => setState(() {
+                    _searchQuery = v;
+                    _applySearch();
+                    _sort(_sortColumnIndex ?? _kColIndexValue, _isAscending);
+                  }),
+                  decoration: InputDecoration(
+                    hintText: l.pfSearchHint,
+                    hintStyle: TextStyle(
+                      color: context.textSubtle,
+                      fontSize: 13,
                     ),
-                    onSelected: (path) =>
-                        openUrlSameTab('${_apiService.baseUrl}$path'),
-                    // A1 (round 3, a11y): MergeSemantics per item so each
-                    // menu entry reads as one node (accounts_list pattern).
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: '/dashboard/holdings/export',
-                        child: MergeSemantics(child: Text(l.pfCsvHoldings)),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 18,
+                      color: context.textSubtle,
+                    ),
+                    filled: true,
+                    fillColor: context.tint(0.05),
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 0,
+                      horizontal: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              );
+              final counter = Text(
+                // Filter-aware counter: with a category filter or a search
+                // active it reads "N of M holdings"; unfiltered it reads the
+                // full "M holdings · K accounts" — except on the narrow
+                // two-row layout, where a compact "M · K accts" keeps BOTH
+                // numbers readable at 390px instead of ellipsizing the
+                // accounts half mid-word.
+                widget.categoryFilter != null || _searchQuery.isNotEmpty
+                    ? l.pfFilterShownOfTotal(shownHoldings, totalHoldings)
+                    : narrow
+                    ? l.fix3HoldingsAccountsCompact(totalHoldings, accountCount)
+                    : l.pfHoldingsAccountsCount(totalHoldings, accountCount),
+                maxLines: narrow ? 1 : null,
+                overflow: narrow ? TextOverflow.ellipsis : null,
+                style: TextStyle(fontSize: 12, color: context.textSubtle),
+              );
+              final segmented = SegmentedButton<bool>(
+                segments: [
+                  ButtonSegment(
+                    value: false,
+                    // Narrow: the label alone is the affordance — dropping
+                    // the leading icons (plus tighter padding below) is what
+                    // keeps both segments fully on-screen at 320–390px.
+                    icon: narrow ? null : const Icon(Icons.list_alt, size: 14),
+                    label: Text(l.pfFlat),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    icon: narrow
+                        ? null
+                        : const Icon(Icons.account_tree_outlined, size: 14),
+                    label: Text(l.pfByAccount),
+                  ),
+                ],
+                selected: {_groupByAccount},
+                onSelectionChanged: (s) {
+                  setState(() => _groupByAccount = s.first);
+                  Preferences.setGroupByAccount(s.first);
+                },
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  padding: narrow
+                      ? WidgetStateProperty.all(
+                          const EdgeInsets.symmetric(horizontal: 8),
+                        )
+                      : null,
+                  textStyle: WidgetStateProperty.all(
+                    const TextStyle(fontSize: 12),
+                  ),
+                ),
+              );
+              // CSV export (contract C-E): browser-native downloads through
+              // the same-origin cookie-auth seam the transactions/tax exports
+              // use. Hidden when there's nothing to export.
+              final csvMenu = _allHoldings.isNotEmpty
+                  ? PopupMenuButton<String>(
+                      tooltip: l.pfCsvExportTooltip,
+                      icon: Icon(
+                        Icons.download_outlined,
+                        size: 20,
+                        color: context.textMuted,
                       ),
-                      PopupMenuItem(
-                        value: '/dashboard/holdings/lots/export',
-                        child: MergeSemantics(child: Text(l.pfCsvLots)),
-                      ),
-                    ],
-                  )
-                : null;
+                      onSelected: (path) =>
+                          openUrlSameTab('${_apiService.baseUrl}$path'),
+                      // A1 (round 3, a11y): MergeSemantics per item so each
+                      // menu entry reads as one node (accounts_list pattern).
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: '/dashboard/holdings/export',
+                          child: MergeSemantics(child: Text(l.pfCsvHoldings)),
+                        ),
+                        PopupMenuItem(
+                          value: '/dashboard/holdings/lots/export',
+                          child: MergeSemantics(child: Text(l.pfCsvLots)),
+                        ),
+                      ],
+                    )
+                  : null;
 
-            if (!narrow) {
-              return Row(
-                children: [
-                  Expanded(child: searchField),
-                  const SizedBox(width: 12),
-                  counter,
-                  const SizedBox(width: 12),
-                  segmented,
-                  if (csvMenu != null) ...[
-                    const SizedBox(width: 4),
-                    csvMenu,
+              if (!narrow) {
+                return Row(
+                  children: [
+                    Expanded(child: searchField),
+                    const SizedBox(width: 12),
+                    counter,
+                    const SizedBox(width: 12),
+                    segmented,
+                    if (csvMenu != null) ...[const SizedBox(width: 4), csvMenu],
                   ],
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  searchField,
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: counter),
+                      const SizedBox(width: 8),
+                      segmented,
+                      if (csvMenu != null) ...[
+                        const SizedBox(width: 4),
+                        csvMenu,
+                      ],
+                    ],
+                  ),
                 ],
               );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                searchField,
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: counter),
-                    const SizedBox(width: 8),
-                    segmented,
-                    if (csvMenu != null) ...[
-                      const SizedBox(width: 4),
-                      csvMenu,
-                    ],
-                  ],
-                ),
-              ],
-            );
-          }),
+            },
+          ),
         ],
       ),
     );
@@ -1949,8 +1974,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
       final filterLabel = search.isNotEmpty
           ? search
           : widget.categoryFilter != null
-              ? categoryFilterLabel(widget.categoryFilter!, l)
-              : '';
+          ? categoryFilterLabel(widget.categoryFilter!, l)
+          : '';
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1991,8 +2016,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     Text(
                       l.pfNoHoldingsBody,
                       textAlign: TextAlign.center,
-                      style:
-                          TextStyle(fontSize: 12, color: context.textSubtle),
+                      style: TextStyle(fontSize: 12, color: context.textSubtle),
                     ),
                   ],
                 ],
@@ -2015,8 +2039,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
         // details-on-demand, and a much lighter scene.
         final showAll =
             _showAllHoldings || _holdings.length <= _kHoldingsPreview;
-        final visibleHoldings =
-            showAll ? _holdings : _holdings.sublist(0, _kHoldingsPreview);
+        final visibleHoldings = showAll
+            ? _holdings
+            : _holdings.sublist(0, _kHoldingsPreview);
 
         final expander = _holdings.length > _kHoldingsPreview
             ? Align(
@@ -2024,9 +2049,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 child: TextButton(
                   onPressed: () =>
                       setState(() => _showAllHoldings = !_showAllHoldings),
-                  child: Text(showAll
-                      ? l.pfHoldingsShowFewer
-                      : l.pfHoldingsShowAll(_holdings.length)),
+                  child: Text(
+                    showAll
+                        ? l.pfHoldingsShowFewer
+                        : l.pfHoldingsShowAll(_holdings.length),
+                  ),
                 ),
               )
             : null;
@@ -2065,19 +2092,20 @@ class _PortfolioCardState extends State<PortfolioCard> {
               children: [
                 _buildTableHeader(),
                 Divider(color: context.hairline, height: 1, thickness: 1),
-                ...visibleHoldings.map((h) => SizedBox(
-                      height: _kRowHeight,
-                      child: _HoldingRowTile(
-                        holding: h,
-                        format: widget.currencyFormat,
-                        targetCurrency: widget.targetCurrency,
-                        usdMxnRate: widget.usdMxnRate,
-                        apiService: _apiService,
-                        conversionFactor: widget.conversionFactor,
-                        onDataRefreshRequested:
-                            widget.onDataRefreshRequested,
-                      ),
-                    )),
+                ...visibleHoldings.map(
+                  (h) => SizedBox(
+                    height: _kRowHeight,
+                    child: _HoldingRowTile(
+                      holding: h,
+                      format: widget.currencyFormat,
+                      targetCurrency: widget.targetCurrency,
+                      usdMxnRate: widget.usdMxnRate,
+                      apiService: _apiService,
+                      conversionFactor: widget.conversionFactor,
+                      onDataRefreshRequested: widget.onDataRefreshRequested,
+                    ),
+                  ),
+                ),
                 ?expander,
               ],
             ),
@@ -2124,8 +2152,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           child: Align(
-            alignment:
-                numeric ? Alignment.centerRight : Alignment.centerLeft,
+            alignment: numeric ? Alignment.centerRight : Alignment.centerLeft,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2170,7 +2197,6 @@ class _PortfolioCardState extends State<PortfolioCard> {
       returnPct: label(l.pfColReturn, 7),
     );
   }
-
 }
 
 /// Trim trailing zeros and pick a sensible precision based on the
@@ -2323,8 +2349,9 @@ class _EdgeFadedHScrollState extends State<_EdgeFadedHScroll> {
           // 16px fade-out on the side(s) with more content, theme-agnostic
           // because it never paints a color of its own.
           shaderCallback: (rect) {
-            final fade =
-                rect.width <= 0 ? 0.0 : (16.0 / rect.width).clamp(0.0, 0.45);
+            final fade = rect.width <= 0
+                ? 0.0
+                : (16.0 / rect.width).clamp(0.0, 0.45);
             return LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
@@ -2462,12 +2489,12 @@ class _HoldingSubtitle extends StatelessWidget {
           }
 
           Text segment(String text) => Text(
-                text,
-                style: style,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-              );
+            text,
+            style: style,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          );
           Text separator() => Text(_sep, style: style, maxLines: 1);
 
           final children = <Widget>[];
@@ -2476,17 +2503,21 @@ class _HoldingSubtitle extends StatelessWidget {
           }
           if (showInst) {
             if (children.isNotEmpty) children.add(separator());
-            children.add(ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: instCap),
-              child: segment(institution),
-            ));
+            children.add(
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: instCap),
+                child: segment(institution),
+              ),
+            );
           }
           if (showAcct) {
             if (children.isNotEmpty) children.add(separator());
-            children.add(ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: acctCap),
-              child: maskAwareNameText(account, style),
-            ));
+            children.add(
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: acctCap),
+                child: maskAwareNameText(account, style),
+              ),
+            );
           }
           return Row(children: children);
         },
@@ -2502,11 +2533,14 @@ class _HoldingRowTile extends StatefulWidget {
   final NumberFormat format;
   final String targetCurrency;
   final double usdMxnRate;
+
   /// For the instrument detail sheet the row opens on tap (contract C-F).
   final ApiService apiService;
+
   /// USD → display-currency factor, forwarded to the sheet so its figures
   /// follow the page's currency toggle.
   final double conversionFactor;
+
   /// See [PortfolioCard.onDataRefreshRequested] (contract C3-D) — awaited
   /// when the sheet reports a classification change.
   final Future<void> Function()? onDataRefreshRequested;
@@ -2571,8 +2605,9 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             usdMxnRate: widget.usdMxnRate,
           );
     final isGain = (gain ?? 0) >= 0;
-    final basisUnavailableMsg =
-        AppLocalizations.of(context).pfCostBasisUnavailable;
+    final basisUnavailableMsg = AppLocalizations.of(
+      context,
+    ).pfCostBasisUnavailable;
 
     final rawSymbol = (h['symbol'] ?? '').toString();
     final rawName = (h['name'] ?? '').toString();
@@ -2581,22 +2616,25 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
     // Plaid emits opaque security_ids (e.g. "3mg4qV4JZycPL4qeZgB...") for
     // un-tickered Vanguard mutual funds. Real tickers are short and upper-
     // case; security_ids are long and mixed-case.
-    final isOpaqueSecurityId = rawSymbol.length > 8 ||
+    final isOpaqueSecurityId =
+        rawSymbol.length > 8 ||
         (rawSymbol != rawSymbol.toUpperCase() && rawSymbol.length > 4);
     final displaySymbol = isOpaqueSecurityId
         ? (rawName.isNotEmpty ? rawName : '—')
         : (rawSymbol.isEmpty
-            ? (rawName.isNotEmpty ? rawName : '?')
-            : rawSymbol);
+              ? (rawName.isNotEmpty ? rawName : '?')
+              : rawSymbol);
     // Secondary line: security name (when it isn't already the display
     // symbol), institution, and account — bullet-separated. Surfacing
     // `account_name` lets users with positions split across several
     // brokerages tell them apart at a glance, so [_HoldingSubtitle] keeps
     // it visible by truncating the fund name / institution first.
-    final subtitleName =
-        (!isOpaqueSecurityId && rawName.isNotEmpty) ? rawName : '';
-    final subtitleAccount =
-        (acctName.isNotEmpty && acctName != instName) ? acctName : '';
+    final subtitleName = (!isOpaqueSecurityId && rawName.isNotEmpty)
+        ? rawName
+        : '';
+    final subtitleAccount = (acctName.isNotEmpty && acctName != instName)
+        ? acctName
+        : '';
     final avatarChar = displaySymbol.isEmpty
         ? '?'
         : displaySymbol.substring(0, 1).toUpperCase();
@@ -2734,14 +2772,17 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
     // A flat (exactly zero) day renders neutral: muted text, no fake green.
     final dayPositive = (dayPct ?? dayUsd ?? 0) > 0;
     final dayFlat = (dayPct ?? 0) == 0 && (dayUsd ?? 0) == 0;
-    String signOf(double v) => v > 0 ? '+' : v < 0 ? '-' : '';
+    String signOf(double v) => v > 0
+        ? '+'
+        : v < 0
+        ? '-'
+        : '';
     final dayColor = dayFlat
         ? context.textMuted
         : dayPositive
-            ? context.positive
-            : context.negative;
-    final dayUnavailableMsg =
-        AppLocalizations.of(context).pfDayUnavailable;
+        ? context.positive
+        : context.negative;
+    final dayUnavailableMsg = AppLocalizations.of(context).pfDayUnavailable;
     final dayCell = Align(
       alignment: Alignment.centerRight,
       child: dayPct == null && dayConverted == null
@@ -2833,12 +2874,12 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       alignment: Alignment.centerRight,
       child: gainPct == null
           ? (gain == null
-              ? Tooltip(
-                  message: basisUnavailableMsg,
-                  waitDuration: const Duration(milliseconds: 600),
-                  child: returnDash,
-                )
-              : returnDash)
+                ? Tooltip(
+                    message: basisUnavailableMsg,
+                    waitDuration: const Duration(milliseconds: 600),
+                    child: returnDash,
+                  )
+                : returnDash)
           : Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -2866,8 +2907,9 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
     final canOpenSheet = rawSymbol.isNotEmpty;
 
     return MouseRegion(
-      cursor:
-          canOpenSheet ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: canOpenSheet
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: InkWell(
@@ -2890,8 +2932,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               }
             : null,
         child: Container(
-          color:
-              _hover ? context.tint(0.05) : Colors.transparent,
+          color: _hover ? context.tint(0.05) : Colors.transparent,
           child: _tableRow(
             asset: asset,
             shares: shares,
@@ -2915,277 +2956,318 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
 /// basis?" — the FX rate column shows exactly what's different. Top-level so
 /// both the desktop row and the mobile collapsed row can open it.
 void showLotBreakdown(BuildContext context, dynamic h) {
-    final l = AppLocalizations.of(context);
-    final lots = ((h['lots'] as List?) ?? const []).cast<dynamic>();
-    final symbol = (h['symbol'] ?? '').toString();
-    final name = (h['name'] ?? '').toString();
-    final title =
-        symbol.isNotEmpty ? symbol : (name.isNotEmpty ? name : l.pfHolding);
+  final l = AppLocalizations.of(context);
+  final lots = ((h['lots'] as List?) ?? const []).cast<dynamic>();
+  final symbol = (h['symbol'] ?? '').toString();
+  final name = (h['name'] ?? '').toString();
+  final title = symbol.isNotEmpty
+      ? symbol
+      : (name.isNotEmpty ? name : l.pfHolding);
 
-    final dateFmt = DateFormat('MMM d, y');
-    final usdFmt = NumberFormat.currency(locale: 'en_US', symbol: r'$');
-    // Current native price per unit, used to derive each lot's current
-    // value (qty × price). Holdings that pre-date the price refresh, or
-    // cash-like rows, may report 0 — in that case the current-value cell
-    // falls back to an em dash rather than a misleading "$0.00".
-    final currentPrice = (h['price'] as num?)?.toDouble() ?? 0.0;
-    // Long-term threshold: a lot held > 365 days qualifies for long-term
-    // capital-gains treatment. Compared against the lot's acquisition date.
-    final now = DateTime.now();
+  final dateFmt = DateFormat('MMM d, y');
+  final usdFmt = NumberFormat.currency(locale: 'en_US', symbol: r'$');
+  // Current native price per unit, used to derive each lot's current
+  // value (qty × price). Holdings that pre-date the price refresh, or
+  // cash-like rows, may report 0 — in that case the current-value cell
+  // falls back to an em dash rather than a misleading "$0.00".
+  final currentPrice = (h['price'] as num?)?.toDouble() ?? 0.0;
+  // Long-term threshold: a lot held > 365 days qualifies for long-term
+  // capital-gains treatment. Compared against the lot's acquisition date.
+  final now = DateTime.now();
 
-    // No lots: institution (e.g. a Plaid investment account) reported a
-    // flat cost basis with no acquisition dates. Show that flat basis with
-    // a tooltip explaining why the per-lot grid is empty, instead of an
-    // empty modal.
-    final hasLots = lots.isNotEmpty;
-    final flatBasisUsd = (h['cost_basis_usd'] as num?)?.toDouble();
+  // No lots: institution (e.g. a Plaid investment account) reported a
+  // flat cost basis with no acquisition dates. Show that flat basis with
+  // a tooltip explaining why the per-lot grid is empty, instead of an
+  // empty modal.
+  final hasLots = lots.isNotEmpty;
+  final flatBasisUsd = (h['cost_basis_usd'] as num?)?.toDouble();
 
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return Dialog(
-          backgroundColor: Theme.of(ctx).colorScheme.surface,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 22, 16, 16),
-              // M1 (round 3): below ~480px of inner width the 6-column
-              // grid wraps its headers ("Acquire d"), ellipsizes dollar
-              // values and squashes the LT/ST chips — swap it for stacked
-              // two-line rows. The ≥480px grid is untouched.
-              child: LayoutBuilder(builder: (_, box) {
-              final narrowLots = box.maxWidth < 480;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // A1 (round 3, a11y): dialog title as a header
-                            // landmark.
-                            Semantics(
-                              header: true,
-                              child: Text(
-                                l.pfLotBreakdownTitle(title),
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  color: context.textPrimary,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              l.pfLotBreakdownSubtitle,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: context.textSubtle,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        tooltip: l.actionClose,
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (!hasLots)
-                    // No per-lot data — show the flat basis the institution
-                    // did report, with a tooltip explaining the gap.
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 16, color: context.textSubtle),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Tooltip(
-                              message: l.pfLotsUnavailableTooltip,
-                              child: Text(
-                                flatBasisUsd == null
-                                    ? l.pfLotsUnavailable
-                                    : '${l.pfFlatCostBasis}: ${usdFmt.format(flatBasisUsd)}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: context.textSubtle,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (narrowLots)
-                    // Two-line stacked rows (no column headers): line 1 =
-                    // "Mar 1, 2024 · 10 sh" + term chip, line 2 = per-unit
-                    // → current value · USD cost. Same figures and
-                    // fallbacks as the wide grid.
-                    Flexible(
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: lots.length,
-                        separatorBuilder: (_, _) => Divider(
-                            height: 1,
-                            color:
-                                context.hairline.withValues(alpha: 0.5)),
-                        itemBuilder: (_, i) => _narrowLotRow(
-                          context,
-                          l,
-                          lots[i] as Map,
-                          currentPrice: currentPrice,
-                          dateFmt: dateFmt,
-                          usdFmt: usdFmt,
-                          now: now,
-                        ),
-                      ),
-                    )
-                  else ...[
-                  // Column header. Six columns, fixed grid so the body
-                  // rows align on a quick scan.
-                  Row(
-                    children: [
-                      _lotHeader(context, l.pfLotAcquired, flex: 3),
-                      _lotHeader(context, l.pfLotQty,
-                          flex: 2, alignRight: true),
-                      _lotHeader(context, l.pfLotCostPerUnit,
-                          flex: 3, alignRight: true),
-                      _lotHeader(context, l.pfLotCurrentValue,
-                          flex: 3, alignRight: true),
-                      _lotHeader(context, l.pfLotUsdCost,
-                          flex: 3, alignRight: true),
-                      _lotHeader(context, l.pfLotTerm, flex: 2, alignRight: true),
-                    ],
-                  ),
-                  Divider(height: 12, color: context.hairline),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: lots.length,
-                      separatorBuilder: (_, _) =>
-                          Divider(height: 1, color: context.hairline.withValues(alpha: 0.5)),
-                      itemBuilder: (_, i) {
-                        final lot = lots[i] as Map;
-                        final acquired = (lot['acquired_at'] ?? '').toString();
-                        DateTime? date;
-                        if (acquired.isNotEmpty) {
-                          date = DateTime.tryParse(acquired);
-                        }
-                        final qty = (lot['qty'] as num?)?.toDouble() ?? 0.0;
-                        final cpu = (lot['cost_per_unit'] as num?)?.toDouble() ?? 0.0;
-                        final ccy = (lot['currency'] ?? 'USD').toString();
-                        final usdCost = (lot['usd_cost'] as num?)?.toDouble() ?? 0.0;
-                        // Current value of the lot = qty × current native
-                        // price. Falls back to an em dash when the price is
-                        // missing (0) so we don't render a fake "$0.00".
-                        final currentVal = qty * currentPrice;
-                        // Long-term = held at least one calendar year. Uses
-                        // the calendar rule (now on/after the same M/D one year
-                        // later) rather than a 365-day count so it matches the
-                        // tax module across leap years. Only computed when the
-                        // acquisition date parsed; unknown shows an em dash.
-                        final isLongTerm = date != null &&
-                            !now.isBefore(DateTime(
-                              date.year + 1,
-                              date.month,
-                              date.day,
-                            ));
-                        // A1 (round 3, a11y): each lot reads as ONE
-                        // sentence — "Acquired Mar 1, 2024, 10 shares at
-                        // $88.10 USD, Long-term" — instead of six cells.
-                        return Semantics(
-                          container: true,
-                          label: l.axLotRow(
-                            date != null ? dateFmt.format(date) : acquired,
-                            qty.toStringAsFixed(
-                                qty == qty.roundToDouble() ? 0 : 4),
-                            '${formatCurrencyAmount(cpu, ccy)} $ccy',
-                            date == null
-                                ? '—'
-                                : (isLongTerm
-                                    ? l.pfLotLongTerm
-                                    : l.pfLotShortTerm),
-                          ),
-                          excludeSemantics: true,
-                          child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
+  showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      return Dialog(
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 22, 16, 16),
+            // M1 (round 3): below ~480px of inner width the 6-column
+            // grid wraps its headers ("Acquire d"), ellipsizes dollar
+            // values and squashes the LT/ST chips — swap it for stacked
+            // two-line rows. The ≥480px grid is untouched.
+            child: LayoutBuilder(
+              builder: (_, box) {
+                final narrowLots = box.maxWidth < 480;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _lotCell(
-                                context,
-                                date != null ? dateFmt.format(date) : acquired,
-                                flex: 3,
+                              // A1 (round 3, a11y): dialog title as a header
+                              // landmark.
+                              Semantics(
+                                header: true,
+                                child: Text(
+                                  l.pfLotBreakdownTitle(title),
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: context.textPrimary,
+                                  ),
+                                ),
                               ),
-                              _lotCell(
-                                context,
-                                qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 4),
-                                flex: 2,
-                                alignRight: true,
-                              ),
-                              _lotCell(
-                                context,
-                                '${formatCurrencyAmount(cpu, ccy)} $ccy',
-                                flex: 3,
-                                alignRight: true,
-                              ),
-                              _lotCell(
-                                context,
-                                currentPrice > 0
-                                    ? '${formatCurrencyAmount(currentVal, ccy)} $ccy'
-                                    : '—',
-                                flex: 3,
-                                alignRight: true,
-                                muted: currentPrice <= 0,
-                              ),
-                              _lotCell(
-                                context,
-                                usdFmt.format(usdCost),
-                                flex: 3,
-                                alignRight: true,
-                                bold: true,
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: date == null
-                                      ? Text(
-                                          '—',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: context.textFaint,
-                                          ),
-                                        )
-                                      : _lotTermBadge(context, isLongTerm),
+                              const SizedBox(height: 4),
+                              Text(
+                                l.pfLotBreakdownSubtitle,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.textSubtle,
                                 ),
                               ),
                             ],
                           ),
-                          ),
-                        );
-                      },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: l.actionClose,
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    if (!hasLots)
+                      // No per-lot data — show the flat basis the institution
+                      // did report, with a tooltip explaining the gap.
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: context.textSubtle,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Tooltip(
+                                message: l.pfLotsUnavailableTooltip,
+                                child: Text(
+                                  flatBasisUsd == null
+                                      ? l.pfLotsUnavailable
+                                      : '${l.pfFlatCostBasis}: ${usdFmt.format(flatBasisUsd)}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: context.textSubtle,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (narrowLots)
+                      // Two-line stacked rows (no column headers): line 1 =
+                      // "Mar 1, 2024 · 10 sh" + term chip, line 2 = per-unit
+                      // → current value · USD cost. Same figures and
+                      // fallbacks as the wide grid.
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: lots.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: context.hairline.withValues(alpha: 0.5),
+                          ),
+                          itemBuilder: (_, i) => _narrowLotRow(
+                            context,
+                            l,
+                            lots[i] as Map,
+                            currentPrice: currentPrice,
+                            dateFmt: dateFmt,
+                            usdFmt: usdFmt,
+                            now: now,
+                          ),
+                        ),
+                      )
+                    else ...[
+                      // Column header. Six columns, fixed grid so the body
+                      // rows align on a quick scan.
+                      Row(
+                        children: [
+                          _lotHeader(context, l.pfLotAcquired, flex: 3),
+                          _lotHeader(
+                            context,
+                            l.pfLotQty,
+                            flex: 2,
+                            alignRight: true,
+                          ),
+                          _lotHeader(
+                            context,
+                            l.pfLotCostPerUnit,
+                            flex: 3,
+                            alignRight: true,
+                          ),
+                          _lotHeader(
+                            context,
+                            l.pfLotCurrentValue,
+                            flex: 3,
+                            alignRight: true,
+                          ),
+                          _lotHeader(
+                            context,
+                            l.pfLotUsdCost,
+                            flex: 3,
+                            alignRight: true,
+                          ),
+                          _lotHeader(
+                            context,
+                            l.pfLotTerm,
+                            flex: 2,
+                            alignRight: true,
+                          ),
+                        ],
+                      ),
+                      Divider(height: 12, color: context.hairline),
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: lots.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: context.hairline.withValues(alpha: 0.5),
+                          ),
+                          itemBuilder: (_, i) {
+                            final lot = lots[i] as Map;
+                            final acquired = (lot['acquired_at'] ?? '')
+                                .toString();
+                            DateTime? date;
+                            if (acquired.isNotEmpty) {
+                              date = DateTime.tryParse(acquired);
+                            }
+                            final qty = (lot['qty'] as num?)?.toDouble() ?? 0.0;
+                            final cpu =
+                                (lot['cost_per_unit'] as num?)?.toDouble() ??
+                                0.0;
+                            final ccy = (lot['currency'] ?? 'USD').toString();
+                            final usdCost =
+                                (lot['usd_cost'] as num?)?.toDouble() ?? 0.0;
+                            // Current value of the lot = qty × current native
+                            // price. Falls back to an em dash when the price is
+                            // missing (0) so we don't render a fake "$0.00".
+                            final currentVal = qty * currentPrice;
+                            // Long-term = held at least one calendar year. Uses
+                            // the calendar rule (now on/after the same M/D one year
+                            // later) rather than a 365-day count so it matches the
+                            // tax module across leap years. Only computed when the
+                            // acquisition date parsed; unknown shows an em dash.
+                            final isLongTerm =
+                                date != null &&
+                                !now.isBefore(
+                                  DateTime(date.year + 1, date.month, date.day),
+                                );
+                            // A1 (round 3, a11y): each lot reads as ONE
+                            // sentence — "Acquired Mar 1, 2024, 10 shares at
+                            // $88.10 USD, Long-term" — instead of six cells.
+                            return Semantics(
+                              container: true,
+                              label: l.axLotRow(
+                                date != null ? dateFmt.format(date) : acquired,
+                                qty.toStringAsFixed(
+                                  qty == qty.roundToDouble() ? 0 : 4,
+                                ),
+                                '${formatCurrencyAmount(cpu, ccy)} $ccy',
+                                date == null
+                                    ? '—'
+                                    : (isLongTerm
+                                          ? l.pfLotLongTerm
+                                          : l.pfLotShortTerm),
+                              ),
+                              excludeSemantics: true,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  children: [
+                                    _lotCell(
+                                      context,
+                                      date != null
+                                          ? dateFmt.format(date)
+                                          : acquired,
+                                      flex: 3,
+                                    ),
+                                    _lotCell(
+                                      context,
+                                      qty.toStringAsFixed(
+                                        qty == qty.roundToDouble() ? 0 : 4,
+                                      ),
+                                      flex: 2,
+                                      alignRight: true,
+                                    ),
+                                    _lotCell(
+                                      context,
+                                      '${formatCurrencyAmount(cpu, ccy)} $ccy',
+                                      flex: 3,
+                                      alignRight: true,
+                                    ),
+                                    _lotCell(
+                                      context,
+                                      currentPrice > 0
+                                          ? '${formatCurrencyAmount(currentVal, ccy)} $ccy'
+                                          : '—',
+                                      flex: 3,
+                                      alignRight: true,
+                                      muted: currentPrice <= 0,
+                                    ),
+                                    _lotCell(
+                                      context,
+                                      usdFmt.format(usdCost),
+                                      flex: 3,
+                                      alignRight: true,
+                                      bold: true,
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: date == null
+                                            ? Text(
+                                                '—',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: context.textFaint,
+                                                ),
+                                              )
+                                            : _lotTermBadge(
+                                                context,
+                                                isLongTerm,
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              );
-              }),
+                );
+              },
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
 /// One stacked lot row for the narrow (<480px) lot-breakdown layout (M1):
 ///   line 1 — `Mar 1, 2024 · 10 sh` (w600) with the LT/ST chip
@@ -3213,16 +3295,17 @@ Widget _narrowLotRow(
   final usdCost = (lot['usd_cost'] as num?)?.toDouble() ?? 0.0;
   final currentVal = qty * currentPrice;
   // Same calendar long-term rule as the wide grid (leap-year safe).
-  final isLongTerm = date != null &&
+  final isLongTerm =
+      date != null &&
       !now.isBefore(DateTime(date.year + 1, date.month, date.day));
   // Fractional lots keep their 4-decimal precision ("0.1181 sh").
-  final qtyStr =
-      qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 4);
+  final qtyStr = qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 4);
   final dateLabel = date != null ? dateFmt.format(date) : acquired;
   // No "now" suffix on the current value and 11px below (round-3 polish):
   // three amounts have to share one line at 390px without splitting the
   // "cost $X" pair across rows.
-  final line2 = '@ ${formatCurrencyAmount(cpu, ccy)} → '
+  final line2 =
+      '@ ${formatCurrencyAmount(cpu, ccy)} → '
       '${currentPrice > 0 ? formatCurrencyAmount(currentVal, ccy) : '—'}'
       ' · ${l.pf3LotCost(usdFmt.format(usdCost))}';
   // A1 (round 3, a11y): same one-sentence node as the wide grid's rows so
@@ -3237,94 +3320,100 @@ Widget _narrowLotRow(
     ),
     excludeSemantics: true,
     child: Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '$dateLabel · ${l.pf3LotQtyShares(qtyStr)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: context.textPrimary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$dateLabel · ${l.pf3LotQtyShares(qtyStr)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            if (date == null)
-              Text(
-                '—',
-                style:
-                    TextStyle(fontSize: 13, color: context.textFaint),
-              )
-            else
-              _lotTermBadge(context, isLongTerm),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          line2,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 11,
-            color: context.textMuted,
-            fontFeatures: const [FontFeature.tabularFigures()],
+              const SizedBox(width: 8),
+              if (date == null)
+                Text(
+                  '—',
+                  style: TextStyle(fontSize: 13, color: context.textFaint),
+                )
+              else
+                _lotTermBadge(context, isLongTerm),
+            ],
           ),
-        ),
-      ],
-    ),
+          const SizedBox(height: 2),
+          Text(
+            line2,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              color: context.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
 
-  Widget _lotHeader(BuildContext context, String text,
-      {int flex = 1, bool alignRight = false}) {
-    return Expanded(
-      flex: flex,
-      child: Align(
-        alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: context.textSubtle,
-            letterSpacing: 0.4,
-          ),
+Widget _lotHeader(
+  BuildContext context,
+  String text, {
+  int flex = 1,
+  bool alignRight = false,
+}) {
+  return Expanded(
+    flex: flex,
+    child: Align(
+      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: context.textSubtle,
+          letterSpacing: 0.4,
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
-  Widget _lotCell(BuildContext context, String text,
-      {int flex = 1,
-      bool alignRight = false,
-      bool bold = false,
-      bool muted = false}) {
-    return Expanded(
-      flex: flex,
-      child: Align(
-        alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-            color: muted ? context.textFaint : context.textPrimary,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+Widget _lotCell(
+  BuildContext context,
+  String text, {
+  int flex = 1,
+  bool alignRight = false,
+  bool bold = false,
+  bool muted = false,
+}) {
+  return Expanded(
+    flex: flex,
+    child: Align(
+      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+          color: muted ? context.textFaint : context.textPrimary,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-    );
+    ),
+  );
 }
 
 /// Small pill flagging whether a lot is long-term (held > 365 days, eligible
@@ -3342,11 +3431,7 @@ Widget _lotTermBadge(BuildContext context, bool isLongTerm) {
     ),
     child: Text(
       isLongTerm ? l.pfLotLongTerm : l.pfLotShortTerm,
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: color,
-      ),
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
     ),
   );
 }
@@ -3377,11 +3462,11 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
   bool _expanded = false;
 
   double _conv(double v, String from) => convertCurrency(
-        v,
-        from: from,
-        to: widget.targetCurrency,
-        usdMxnRate: widget.usdMxnRate,
-      );
+    v,
+    from: from,
+    to: widget.targetCurrency,
+    usdMxnRate: widget.usdMxnRate,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -3389,8 +3474,14 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
     final h = widget.holding;
     final sourceCurrency = (h['currency'] ?? widget.targetCurrency).toString();
     final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
-    final value = _conv((h['value'] as num?)?.toDouble() ?? 0.0, sourceCurrency);
-    final price = _conv((h['price'] as num?)?.toDouble() ?? 0.0, sourceCurrency);
+    final value = _conv(
+      (h['value'] as num?)?.toDouble() ?? 0.0,
+      sourceCurrency,
+    );
+    final price = _conv(
+      (h['price'] as num?)?.toDouble() ?? 0.0,
+      sourceCurrency,
+    );
     // Null = the institution didn't report a cost basis. Render a
     // muted em dash with a tooltip, never a fake green "+0.00%".
     final costBasisSource = (h['cost_basis'] as num?)?.toDouble();
@@ -3406,21 +3497,25 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
     final rawName = (h['name'] ?? '').toString();
     final acctName = (h['account_name'] ?? '').toString();
     final instName = (h['institution_name'] ?? '').toString();
-    final isOpaqueSecurityId = rawSymbol.length > 8 ||
+    final isOpaqueSecurityId =
+        rawSymbol.length > 8 ||
         (rawSymbol != rawSymbol.toUpperCase() && rawSymbol.length > 4);
     final displaySymbol = isOpaqueSecurityId
         ? (rawName.isNotEmpty ? rawName : '—')
         : (rawSymbol.isEmpty
-            ? (rawName.isNotEmpty ? rawName : '?')
-            : rawSymbol);
+              ? (rawName.isNotEmpty ? rawName : '?')
+              : rawSymbol);
     // Same segment split as the desktop table subtitle: the account is the
     // most-protected segment (see [_HoldingSubtitle]) — on a 390px phone it
     // used to be exactly the part the end-first ellipsis cut off.
-    final subtitleName =
-        (!isOpaqueSecurityId && rawName.isNotEmpty) ? rawName : '';
-    final subtitleAccount =
-        (acctName.isNotEmpty && acctName != instName) ? acctName : '';
-    final hasSubtitle = subtitleName.isNotEmpty ||
+    final subtitleName = (!isOpaqueSecurityId && rawName.isNotEmpty)
+        ? rawName
+        : '';
+    final subtitleAccount = (acctName.isNotEmpty && acctName != instName)
+        ? acctName
+        : '';
+    final hasSubtitle =
+        subtitleName.isNotEmpty ||
         instName.isNotEmpty ||
         subtitleAccount.isNotEmpty;
 
@@ -3474,7 +3569,9 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                           institution: instName,
                           account: subtitleAccount,
                           style: TextStyle(
-                              fontSize: 11, color: context.textSubtle),
+                            fontSize: 11,
+                            color: context.textSubtle,
+                          ),
                         ),
                     ],
                   ),
@@ -3539,13 +3636,18 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                 if (acctName.isNotEmpty)
                   _detailRow(l.txAccount, acctName, wrapValue: true),
                 if (instName.isNotEmpty && instName != acctName)
-                  _detailRow(l.lwNotifInstitutionFallback, instName,
-                      wrapValue: true),
+                  _detailRow(
+                    l.lwNotifInstitutionFallback,
+                    instName,
+                    wrapValue: true,
+                  ),
                 _detailRow(l.pfColShares, _formatQuantity(quantity)),
                 _detailRow(l.pfColPrice, widget.format.format(price)),
                 _detailRow(
                   l.pfColCostBasis,
-                  costBasis == null ? '—' : widget.format.displayMoney(costBasis),
+                  costBasis == null
+                      ? '—'
+                      : widget.format.displayMoney(costBasis),
                   color: costBasis == null ? context.textMuted : null,
                   tooltip: costBasis == null ? l.pfCostBasisUnavailable : null,
                 ),
@@ -3557,8 +3659,9 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                   color: gainConverted == null
                       ? context.textMuted
                       : (isGain ? context.positive : context.negative),
-                  tooltip:
-                      gainConverted == null ? l.pfCostBasisUnavailable : null,
+                  tooltip: gainConverted == null
+                      ? l.pfCostBasisUnavailable
+                      : null,
                 ),
                 if (canDrillDown)
                   Align(
@@ -3584,8 +3687,13 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
   /// [wrapValue]: the value is prose (account / institution name) rather
   /// than a figure — render it in full, soft-wrapping across lines, instead
   /// of the single unconstrained line the numeric rows use.
-  Widget _detailRow(String label, String value,
-      {Color? color, String? tooltip, bool wrapValue = false}) {
+  Widget _detailRow(
+    String label,
+    String value, {
+    Color? color,
+    String? tooltip,
+    bool wrapValue = false,
+  }) {
     Widget valueText = Text(
       value,
       softWrap: true,
@@ -3608,8 +3716,9 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment:
-            wrapValue ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        crossAxisAlignment: wrapValue
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           Text(
             label,
@@ -3662,10 +3771,7 @@ class _KpiTile extends StatelessWidget {
               Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(
-                  color: c,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: c, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -3767,8 +3873,9 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     // getPortfolioDividends is best-effort and returns null on failure —
     // a null after loading is the card's error state (with retry), not a
     // silent vanish.
-    final data = await (widget.fetchOverride ??
-        widget.apiService.getPortfolioDividends)();
+    final data =
+        await (widget.fetchOverride ??
+            widget.apiService.getPortfolioDividends)();
     if (!mounted) return;
     setState(() {
       _data = data;
@@ -3802,12 +3909,13 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     // Payers come back income-descending already; keep only the ones that
     // actually pay and cap the list for the glanceable summary.
     final payers = ((data['contributions'] as List<dynamic>?) ?? const [])
-        .where((c) =>
-            ((c as Map)['annual_income_usd'] as num?)?.toDouble() != null &&
-            ((c['annual_income_usd'] as num).toDouble()) > 0)
+        .where(
+          (c) =>
+              ((c as Map)['annual_income_usd'] as num?)?.toDouble() != null &&
+              ((c['annual_income_usd'] as num).toDouble()) > 0,
+        )
         .toList();
-    final upcoming =
-        (data['upcoming_ex_dates'] as List<dynamic>?) ?? const [];
+    final upcoming = (data['upcoming_ex_dates'] as List<dynamic>?) ?? const [];
     // 12-month projected income calendar (additive C4-B field). Absent or
     // empty — an older backend, or nothing projected — renders NOTHING
     // (no toggle): the card must stay pixel-identical against a round-3
@@ -3838,8 +3946,11 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                 header: true,
                 child: Row(
                   children: [
-                    Icon(Icons.payments_outlined,
-                        color: context.tealAccent, size: 18),
+                    Icon(
+                      Icons.payments_outlined,
+                      color: context.tealAccent,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       l.divCardTitle,
@@ -3853,8 +3964,11 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                       const SizedBox(width: 8),
                       Tooltip(
                         message: l.divFxStaleHint,
-                        child: Icon(Icons.error_outline,
-                            size: 15, color: context.warning),
+                        child: Icon(
+                          Icons.error_outline,
+                          size: 15,
+                          color: context.warning,
+                        ),
                       ),
                     ],
                   ],
@@ -3899,17 +4013,20 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                 ),
               ),
               const SizedBox(height: 8),
-              ...(_showAllPayers ? payers : payers.take(_maxPayers))
-                  .map((c) => _payerRow(c as Map<String, dynamic>)),
+              ...(_showAllPayers ? payers : payers.take(_maxPayers)).map(
+                (c) => _payerRow(c as Map<String, dynamic>),
+              ),
               if (payers.length > _maxPayers)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton(
                     onPressed: () =>
                         setState(() => _showAllPayers = !_showAllPayers),
-                    child: Text(_showAllPayers
-                        ? l.pfDivShowFewerPayers
-                        : l.pfDivShowAllPayers(payers.length)),
+                    child: Text(
+                      _showAllPayers
+                          ? l.pfDivShowFewerPayers
+                          : l.pfDivShowAllPayers(payers.length),
+                    ),
                   ),
                 ),
             ],
@@ -3931,8 +4048,9 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
               const SizedBox(height: 8),
               // All the entries the API returns, each with the expected
               // payment amount (per-symbol annual income ÷ payments/yr).
-              ...upcoming.map((e) =>
-                  _exDateRow(e as Map<String, dynamic>, perYearBySymbol)),
+              ...upcoming.map(
+                (e) => _exDateRow(e as Map<String, dynamic>, perYearBySymbol),
+              ),
             ],
             if (calendar.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -3949,9 +4067,9 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                     _showCalendar ? Icons.expand_less : Icons.expand_more,
                     size: 18,
                   ),
-                  label: Text(_showCalendar
-                      ? l.calHideCalendar
-                      : l.calShowCalendar),
+                  label: Text(
+                    _showCalendar ? l.calHideCalendar : l.calShowCalendar,
+                  ),
                 ),
               ),
               if (_showCalendar) ...[
@@ -3986,8 +4104,10 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: TextStyle(color: context.textMuted, fontSize: 12)),
+              Text(
+                label,
+                style: TextStyle(color: context.textMuted, fontSize: 12),
+              ),
               const SizedBox(height: 6),
               Text(
                 value,
@@ -4072,7 +4192,9 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                               ? l.divPaymentsPerYear(perYear)
                               : '${formatPercent(context, yieldPct, digits: 2)} · ${l.divPaymentsPerYear(perYear)}',
                           style: TextStyle(
-                              color: context.textFaint, fontSize: 11),
+                            color: context.textFaint,
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                     ),
@@ -4087,8 +4209,11 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                   ),
                   if (symbol.isNotEmpty) ...[
                     const SizedBox(width: 4),
-                    Icon(Icons.chevron_right,
-                        size: 16, color: context.textFaint),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: context.textFaint,
+                    ),
                   ],
                 ],
               ),
@@ -4103,8 +4228,9 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     final symbol = e['symbol']?.toString() ?? '';
     final dateStr = e['est_next_ex_date']?.toString() ?? '';
     final parsed = DateTime.tryParse(dateStr);
-    final dateLabel =
-        parsed == null ? dateStr : DateFormat.yMMMd().format(parsed);
+    final dateLabel = parsed == null
+        ? dateStr
+        : DateFormat.yMMMd().format(parsed);
     // Expected payment landing around that date: the symbol's projected
     // annual income split across its payments per year.
     final annualUsd = (e['annual_income_usd'] as num?)?.toDouble() ?? 0.0;
@@ -4123,41 +4249,41 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
         ),
         excludeSemantics: true,
         child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              symbol.isNotEmpty ? symbol : '—',
-              style: TextStyle(
-                color: context.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  symbol.isNotEmpty ? symbol : '—',
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+              Text(
+                dateLabel,
+                style: TextStyle(
+                  color: context.textMuted,
+                  fontSize: 12,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                expectedLabel,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
-          Text(
-            dateLabel,
-            style: TextStyle(
-              color: context.textMuted,
-              fontSize: 12,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            expectedLabel,
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
         ),
       ),
     );

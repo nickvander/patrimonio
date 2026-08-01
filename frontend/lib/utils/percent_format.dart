@@ -45,8 +45,7 @@ String formatPercentLocale(String locale, double value, {int digits = 1}) =>
 /// [formatPercent]'s fixed `digits`. Both en and es-MX write `"85%"` (period
 /// decimal, no space before `%`), so this is locale-independent today; the
 /// `context` parameter stays as the seam for any future locale.
-String localizePercentString(BuildContext context, String number) =>
-    '$number%';
+String localizePercentString(BuildContext context, String number) => '$number%';
 
 /// Localizes just the decimal separator of an already-formatted number string
 /// (no percent sign) — e.g. a `"+3.6"` percentage-point delta. es-MX uses

@@ -15,18 +15,25 @@ void main() {
     });
 
     test('maps the data-change events the dashboard reloads on', () {
-      expect(typeOf('{"event":"transactions_changed"}'),
-          RealtimeEventType.transactionsChanged);
-      expect(typeOf('{"event":"accounts_changed"}'),
-          RealtimeEventType.accountsChanged);
-      expect(typeOf('{"event":"fx_rates_updated"}'),
-          RealtimeEventType.fxRatesUpdated);
+      expect(
+        typeOf('{"event":"transactions_changed"}'),
+        RealtimeEventType.transactionsChanged,
+      );
+      expect(
+        typeOf('{"event":"accounts_changed"}'),
+        RealtimeEventType.accountsChanged,
+      );
+      expect(
+        typeOf('{"event":"fx_rates_updated"}'),
+        RealtimeEventType.fxRatesUpdated,
+      );
       expect(typeOf('{"event":"resync"}'), RealtimeEventType.resync);
     });
 
     test('carries the institution name on sync_complete', () {
       final e = parseRealtimeFrame(
-          '{"event":"sync_complete","institution":"Chase"}');
+        '{"event":"sync_complete","institution":"Chase"}',
+      );
       expect(e!.type, RealtimeEventType.syncComplete);
       expect(e.institution, 'Chase');
     });

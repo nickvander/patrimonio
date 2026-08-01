@@ -428,7 +428,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Re-read thresholds from localStorage after the account panel saves one, so
   // the notifications bell reflects the change without a full reload.
   void _reloadAccountAlerts() {
-    if (mounted) setState(() => _accountAlerts = Preferences.getAccountAlerts());
+    if (mounted)
+      setState(() => _accountAlerts = Preferences.getAccountAlerts());
   }
 
   @override
@@ -468,31 +469,78 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// Tax planning and Settings; Settings is always last. The accents are
   /// the same brand hues the old tab list + palette used.
   static const List<_NavDest> _allDestinations = [
-    _NavDest(NavId.overview, 'Overview', 'Home', Icons.dashboard_outlined,
-        BrandPalette.positive, NavTier.primary),
-    _NavDest(NavId.portfolio, 'Portfolio', 'Invest', Icons.pie_chart_outline,
-        BrandPalette.teal, NavTier.primary),
-    _NavDest(NavId.transactions, 'Transactions', 'Activity',
-        Icons.receipt_long_outlined, BrandPalette.info, NavTier.primary),
-    _NavDest(NavId.cashFlow, 'Cash flow', 'Cash',
-        Icons.account_balance_wallet_outlined, BrandPalette.teal,
-        NavTier.primary),
-    _NavDest(NavId.projections, 'Projections', 'Proj.',
-        Icons.trending_up_outlined, BrandPalette.warning, NavTier.secondary),
-    _NavDest(NavId.tax, 'Tax planning', 'Tax', Icons.account_balance_outlined,
-        BrandPalette.purple, NavTier.secondary),
-    _NavDest(NavId.lending, 'Lending', 'Loans', Icons.monetization_on,
-        BrandPalette.teal, NavTier.secondary),
-    _NavDest(NavId.settings, 'Settings', 'Settings', Icons.settings_outlined,
-        BrandPalette.neutral, NavTier.secondary),
+    _NavDest(
+      NavId.overview,
+      'Overview',
+      'Home',
+      Icons.dashboard_outlined,
+      BrandPalette.positive,
+      NavTier.primary,
+    ),
+    _NavDest(
+      NavId.portfolio,
+      'Portfolio',
+      'Invest',
+      Icons.pie_chart_outline,
+      BrandPalette.teal,
+      NavTier.primary,
+    ),
+    _NavDest(
+      NavId.transactions,
+      'Transactions',
+      'Activity',
+      Icons.receipt_long_outlined,
+      BrandPalette.info,
+      NavTier.primary,
+    ),
+    _NavDest(
+      NavId.cashFlow,
+      'Cash flow',
+      'Cash',
+      Icons.account_balance_wallet_outlined,
+      BrandPalette.teal,
+      NavTier.primary,
+    ),
+    _NavDest(
+      NavId.projections,
+      'Projections',
+      'Proj.',
+      Icons.trending_up_outlined,
+      BrandPalette.warning,
+      NavTier.secondary,
+    ),
+    _NavDest(
+      NavId.tax,
+      'Tax planning',
+      'Tax',
+      Icons.account_balance_outlined,
+      BrandPalette.purple,
+      NavTier.secondary,
+    ),
+    _NavDest(
+      NavId.lending,
+      'Lending',
+      'Loans',
+      Icons.monetization_on,
+      BrandPalette.teal,
+      NavTier.secondary,
+    ),
+    _NavDest(
+      NavId.settings,
+      'Settings',
+      'Settings',
+      Icons.settings_outlined,
+      BrandPalette.neutral,
+      NavTier.secondary,
+    ),
   ];
 
   /// The currently-visible sections. Lending is filtered out unless the
   /// module is enabled; everything else is always present.
   List<_NavDest> get _destinations => [
-        for (final d in _allDestinations)
-          if (d.id != NavId.lending || _lendingEnabled) d,
-      ];
+    for (final d in _allDestinations)
+      if (d.id != NavId.lending || _lendingEnabled) d,
+  ];
 
   /// The destination currently on screen. Guarded: `_section` can briefly
   /// point past the list while destinations change (lending toggling off).
@@ -669,8 +717,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final m = tx as Map;
     final amount = (m['amount'] as num?)?.toDouble() ?? 0;
     final currency = (m['currency'] ?? _targetCurrency).toString();
-    final date = DateTime.tryParse((m['date'] ?? '').toString()) ??
-        DateTime.now();
+    final date =
+        DateTime.tryParse((m['date'] ?? '').toString()) ?? DateTime.now();
     // Best borrower guess: counterparty, then merchant, then description.
     final borrower = [
       (m['counterparty_name'] ?? '').toString(),
@@ -731,8 +779,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Navigator.of(sheetCtx).pop();
                 showDialog(
                   context: context,
-                  builder: (_) =>
-                      AddCryptoDialog(exchange: 'bitso', onLinked: _loadAllData),
+                  builder: (_) => AddCryptoDialog(
+                    exchange: 'bitso',
+                    onLinked: _loadAllData,
+                  ),
                 );
               },
             ),
@@ -781,15 +831,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     // conditional Lending section appears here exactly when it's visible.
     final l10n = AppLocalizations.of(context);
     for (final d in _destinations) {
-      items.add(PaletteItem(
-        label: l10n.dashPaletteJumpTo(_navLabel(l10n, d.id)),
-        subtitle: d.id == NavId.lending
-            ? l10n.dashPaletteSectionLending
-            : l10n.dashPaletteSection,
-        icon: d.icon,
-        accent: d.accent(Theme.of(context).brightness),
-        onSelected: () => _goToNav(d.id),
-      ));
+      items.add(
+        PaletteItem(
+          label: l10n.dashPaletteJumpTo(_navLabel(l10n, d.id)),
+          subtitle: d.id == NavId.lending
+              ? l10n.dashPaletteSectionLending
+              : l10n.dashPaletteSection,
+          icon: d.icon,
+          accent: d.accent(Theme.of(context).brightness),
+          onSelected: () => _goToNav(d.id),
+        ),
+      );
     }
 
     final allAccounts = (_overview?['accounts'] as List?) ?? const [];
@@ -798,37 +850,39 @@ class _DashboardScreenState extends State<DashboardScreen>
       final nick = (a['nickname'] ?? '').toString();
       final name = (a['name'] ?? '').toString();
       final inst = (a['institution_name'] ?? '').toString();
-      items.add(PaletteItem(
-        label: nick.isNotEmpty ? '$nick (${a['account_type'] ?? ''})' : name,
-        subtitle: l10n.dashPaletteAccount(inst),
-        icon: Icons.account_balance_wallet_outlined,
-        accent: context.tealAccent,
-        // Deep-link: open the account-detail side panel directly so the
-        // user doesn't have to scroll the accounts column to find it.
-        onSelected: () => showAccountTransactionsPanel(
-          context,
-          account: a,
-          allAccounts: allAccounts,
-          conversionFactor: conversionFactor,
-          currencyFormat: currencyFormat,
-          targetCurrency: _targetCurrency,
-          usdMxnRate: fxRate,
-          onBalanceUpdate: (id, bal) async {
-            try {
-              await _apiService.updateAccountBalance(id, bal);
-              _loadAllData(silent: true);
-            } catch (_) {}
-          },
-          onRenameAccount: (id, nickname) async {
-            try {
-              await _apiService.renameAccount(id, nickname);
-              _loadAllData(silent: true);
-            } catch (_) {}
-          },
-          onAlertsChanged: _reloadAccountAlerts,
-          realtimeEvents: _realtime.events,
+      items.add(
+        PaletteItem(
+          label: nick.isNotEmpty ? '$nick (${a['account_type'] ?? ''})' : name,
+          subtitle: l10n.dashPaletteAccount(inst),
+          icon: Icons.account_balance_wallet_outlined,
+          accent: context.tealAccent,
+          // Deep-link: open the account-detail side panel directly so the
+          // user doesn't have to scroll the accounts column to find it.
+          onSelected: () => showAccountTransactionsPanel(
+            context,
+            account: a,
+            allAccounts: allAccounts,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            targetCurrency: _targetCurrency,
+            usdMxnRate: fxRate,
+            onBalanceUpdate: (id, bal) async {
+              try {
+                await _apiService.updateAccountBalance(id, bal);
+                _loadAllData(silent: true);
+              } catch (_) {}
+            },
+            onRenameAccount: (id, nickname) async {
+              try {
+                await _apiService.renameAccount(id, nickname);
+                _loadAllData(silent: true);
+              } catch (_) {}
+            },
+            onAlertsChanged: _reloadAccountAlerts,
+            realtimeEvents: _realtime.events,
+          ),
         ),
-      ));
+      );
     }
 
     for (final raw in ((_portfolioData?['holdings'] as List?) ?? const [])) {
@@ -838,16 +892,18 @@ class _DashboardScreenState extends State<DashboardScreen>
       // Pick the most specific token we have for the search seed so the
       // holdings table filters to a single row.
       final seed = ticker.isNotEmpty ? ticker : name;
-      items.add(PaletteItem(
-        label: ticker.isNotEmpty ? '$ticker — $name' : name,
-        subtitle: l10n.dashPaletteHolding,
-        icon: Icons.show_chart,
-        accent: context.info,
-        onSelected: () {
-          setState(() => _portfolioSearchOverride = seed);
-          _goToNav(NavId.portfolio);
-        },
-      ));
+      items.add(
+        PaletteItem(
+          label: ticker.isNotEmpty ? '$ticker — $name' : name,
+          subtitle: l10n.dashPaletteHolding,
+          icon: Icons.show_chart,
+          accent: context.info,
+          onSelected: () {
+            setState(() => _portfolioSearchOverride = seed);
+            _goToNav(NavId.portfolio);
+          },
+        ),
+      );
     }
 
     // Cap transactions to a recent window so the palette stays snappy
@@ -861,32 +917,36 @@ class _DashboardScreenState extends State<DashboardScreen>
       // their original "Miscellaneous Debit" text.
       final label = displayLabel(t);
       final id = t['id']?.toString();
-      items.add(PaletteItem(
-        label: label,
-        subtitle: l10n.dashPaletteTransaction(
-            (t['account_name'] ?? '').toString(), (t['date'] ?? '').toString()),
-        icon: Icons.receipt_outlined,
-        accent: context.warning,
-        onSelected: () {
-          setState(() {
-            _transactionsSearchOverride = desc;
-            _highlightedTxId = id;
-          });
-          _goToNav(NavId.transactions);
-          // Clear the pulse after ~2.4s so the row holds for ~1.3s after
-          // the 550ms fade-in completes, then takes 550ms to fade back
-          // out. Subsequent palette picks can pulse fresh because we
-          // gate on the id being the one we just set.
-          if (id != null) {
-            Future.delayed(const Duration(milliseconds: 2400), () {
-              if (!mounted) return;
-              if (_highlightedTxId == id) {
-                setState(() => _highlightedTxId = null);
-              }
+      items.add(
+        PaletteItem(
+          label: label,
+          subtitle: l10n.dashPaletteTransaction(
+            (t['account_name'] ?? '').toString(),
+            (t['date'] ?? '').toString(),
+          ),
+          icon: Icons.receipt_outlined,
+          accent: context.warning,
+          onSelected: () {
+            setState(() {
+              _transactionsSearchOverride = desc;
+              _highlightedTxId = id;
             });
-          }
-        },
-      ));
+            _goToNav(NavId.transactions);
+            // Clear the pulse after ~2.4s so the row holds for ~1.3s after
+            // the 550ms fade-in completes, then takes 550ms to fade back
+            // out. Subsequent palette picks can pulse fresh because we
+            // gate on the id being the one we just set.
+            if (id != null) {
+              Future.delayed(const Duration(milliseconds: 2400), () {
+                if (!mounted) return;
+                if (_highlightedTxId == id) {
+                  setState(() => _highlightedTxId = null);
+                }
+              });
+            }
+          },
+        ),
+      );
     }
 
     return items;
@@ -926,25 +986,36 @@ class _DashboardScreenState extends State<DashboardScreen>
     final accent = context.positive;
     final netWorth =
         ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) *
-            conversionFactor;
+        conversionFactor;
     final targetUpper = _targetCurrency.toUpperCase();
 
     // Native composition, ordered by converted value (dominant currency
     // first). Each foreign currency carries its reporting-currency worth.
-    final entries = ((_overview?['currency_breakdown'] as List?) ?? const [])
-        .map((item) => (
-              cur: (item['currency'] ?? '').toString().toUpperCase(),
-              net: ((item['net'] ?? 0.0) as num).toDouble(),
-            ))
-        .where((e) => e.cur.isNotEmpty)
-        .toList()
-      ..sort((a, b) {
-        final ca = convertCurrency(a.net,
-            from: a.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
-        final cb = convertCurrency(b.net,
-            from: b.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
-        return cb.compareTo(ca);
-      });
+    final entries =
+        ((_overview?['currency_breakdown'] as List?) ?? const [])
+            .map(
+              (item) => (
+                cur: (item['currency'] ?? '').toString().toUpperCase(),
+                net: ((item['net'] ?? 0.0) as num).toDouble(),
+              ),
+            )
+            .where((e) => e.cur.isNotEmpty)
+            .toList()
+          ..sort((a, b) {
+            final ca = convertCurrency(
+              a.net,
+              from: a.cur,
+              to: _targetCurrency,
+              usdMxnRate: usdMxnRate,
+            );
+            final cb = convertCurrency(
+              b.net,
+              from: b.cur,
+              to: _targetCurrency,
+              usdMxnRate: usdMxnRate,
+            );
+            return cb.compareTo(ca);
+          });
 
     Widget? composition;
     if (entries.length >= 2) {
@@ -984,47 +1055,54 @@ class _DashboardScreenState extends State<DashboardScreen>
           // pill fragment.
           MergeSemantics(
             child: Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: entries.map((e) {
-              final isTarget = e.cur == targetUpper;
-              final converted = convertCurrency(e.net,
-                  from: e.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: context.tileSurface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: context.hairline),
-                ),
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: displayCurrencyWithCode(e.net, e.cur),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: context.textPrimary,
-                        ),
-                      ),
-                      if (!isTarget)
+              spacing: 8,
+              runSpacing: 6,
+              children: entries.map((e) {
+                final isTarget = e.cur == targetUpper;
+                final converted = convertCurrency(
+                  e.net,
+                  from: e.cur,
+                  to: _targetCurrency,
+                  usdMxnRate: usdMxnRate,
+                );
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: context.tileSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: context.hairline),
+                  ),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
                         TextSpan(
-                          text: '  ≈ ${currencyFormat.displayMoney(converted)}',
+                          text: displayCurrencyWithCode(e.net, e.cur),
                           style: TextStyle(
-                            fontWeight: FontWeight.w400,
-                            color: context.textFaint,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
                           ),
                         ),
-                    ],
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontFeatures: [FontFeature.tabularFigures()],
+                        if (!isTarget)
+                          TextSpan(
+                            text:
+                                '  ≈ ${currencyFormat.displayMoney(converted)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              color: context.textFaint,
+                            ),
+                          ),
+                      ],
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
             ),
           ),
         ],
@@ -1124,15 +1202,19 @@ class _DashboardScreenState extends State<DashboardScreen>
             borderRadius: BorderRadius.circular(12),
             onTap: () {
               setState(
-                  () => _overviewDetailsExpanded = !_overviewDetailsExpanded);
+                () => _overviewDetailsExpanded = !_overviewDetailsExpanded,
+              );
               Preferences.setOverviewDetailsExpanded(_overviewDetailsExpanded);
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
               child: Row(
                 children: [
-                  Icon(Icons.insights_rounded,
-                      color: context.tealAccent, size: 18),
+                  Icon(
+                    Icons.insights_rounded,
+                    color: context.tealAccent,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -1147,8 +1229,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                         Text(
                           l.ovDetailsSubtitle,
-                          style:
-                              TextStyle(fontSize: 11, color: context.textMuted),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textMuted,
+                          ),
                         ),
                       ],
                     ),
@@ -1186,10 +1270,12 @@ class _DashboardScreenState extends State<DashboardScreen>
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () {
-              setState(() =>
-                  _managementDetailsExpanded = !_managementDetailsExpanded);
+              setState(
+                () => _managementDetailsExpanded = !_managementDetailsExpanded,
+              );
               Preferences.setManagementDetailsExpanded(
-                  _managementDetailsExpanded);
+                _managementDetailsExpanded,
+              );
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
@@ -1210,8 +1296,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                         Text(
                           l.mgmtConnectionsSubtitle,
-                          style:
-                              TextStyle(fontSize: 11, color: context.textMuted),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textMuted,
+                          ),
                         ),
                       ],
                     ),
@@ -1274,7 +1362,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       // left MXN balances at face value, inflating the cash/investment tiles to
       // more than net worth).
       final cur = (acc['currency'] ?? _targetCurrency).toString();
-      final native = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0).abs();
+      final native = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0)
+          .abs();
       final reported = convertCurrency(
         native,
         from: cur,
@@ -1344,10 +1433,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     // cent. USD income is converted with the strip's conversionFactor below.
     final dividendIncome =
         (_portfolioDividends?['projected_annual_income_usd'] as num?)
-                ?.toDouble() ??
-            0.0;
-    final dividendYield =
-        (_portfolioDividends?['blended_yield_pct'] as num?)?.toDouble();
+            ?.toDouble() ??
+        0.0;
+    final dividendYield = (_portfolioDividends?['blended_yield_pct'] as num?)
+        ?.toDouble();
 
     // Net worth is no longer a tile here — it's the dedicated hero block
     // (_buildNetWorthHero) directly above this row, with the native-currency
@@ -1364,14 +1453,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTap: assetAccounts.isEmpty
             ? null
             : () => _showStatDrilldown(
-                  label: l.statAssets,
-                  total: assets,
-                  accent: context.neutralAccent,
-                  rows: assetAccounts,
-                  currencyFormat: currencyFormat,
-                  conversionFactor: conversionFactor,
-                  usdMxnRate: usdMxnRate,
-                ),
+                label: l.statAssets,
+                total: assets,
+                accent: context.neutralAccent,
+                rows: assetAccounts,
+                currencyFormat: currencyFormat,
+                conversionFactor: conversionFactor,
+                usdMxnRate: usdMxnRate,
+              ),
       ),
       _StatTile(
         label: l.statLiabilities,
@@ -1380,14 +1469,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTap: liabilityAccounts.isEmpty
             ? null
             : () => _showStatDrilldown(
-                  label: l.statLiabilities,
-                  total: liabilities,
-                  accent: context.negative,
-                  rows: liabilityAccounts,
-                  currencyFormat: currencyFormat,
-                  conversionFactor: conversionFactor,
-                  usdMxnRate: usdMxnRate,
-                ),
+                label: l.statLiabilities,
+                total: liabilities,
+                accent: context.negative,
+                rows: liabilityAccounts,
+                currencyFormat: currencyFormat,
+                conversionFactor: conversionFactor,
+                usdMxnRate: usdMxnRate,
+              ),
       ),
       _StatTile(
         label: l.statCash,
@@ -1396,14 +1485,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTap: cashAccounts.isEmpty
             ? null
             : () => _showStatDrilldown(
-                  label: l.statCash,
-                  total: cash,
-                  accent: context.info,
-                  rows: cashAccounts,
-                  currencyFormat: currencyFormat,
-                  conversionFactor: conversionFactor,
-                  usdMxnRate: usdMxnRate,
-                ),
+                label: l.statCash,
+                total: cash,
+                accent: context.info,
+                rows: cashAccounts,
+                currencyFormat: currencyFormat,
+                conversionFactor: conversionFactor,
+                usdMxnRate: usdMxnRate,
+              ),
       ),
       _StatTile(
         label: l.statInvestments,
@@ -1417,14 +1506,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTap: investmentAccounts.isEmpty
             ? null
             : () => _showStatDrilldown(
-                  label: l.statInvestments,
-                  total: investments,
-                  accent: context.tealAccent,
-                  rows: investmentAccounts,
-                  currencyFormat: currencyFormat,
-                  conversionFactor: conversionFactor,
-                  usdMxnRate: usdMxnRate,
-                ),
+                label: l.statInvestments,
+                total: investments,
+                accent: context.tealAccent,
+                rows: investmentAccounts,
+                currencyFormat: currencyFormat,
+                conversionFactor: conversionFactor,
+                usdMxnRate: usdMxnRate,
+              ),
       ),
       // Dividends/yr tile (O1): projected annual dividend income across the
       // whole portfolio, with the blended yield in the tooltip. Present only
@@ -1459,14 +1548,14 @@ class _DashboardScreenState extends State<DashboardScreen>
           onTap: realAssetAccounts.isEmpty
               ? null
               : () => _showStatDrilldown(
-                    label: 'Real assets',
-                    total: realAssets,
-                    accent: context.yellowAccent,
-                    rows: realAssetAccounts,
-                    currencyFormat: currencyFormat,
-                    conversionFactor: conversionFactor,
-                    usdMxnRate: usdMxnRate,
-                  ),
+                  label: 'Real assets',
+                  total: realAssets,
+                  accent: context.yellowAccent,
+                  rows: realAssetAccounts,
+                  currencyFormat: currencyFormat,
+                  conversionFactor: conversionFactor,
+                  usdMxnRate: usdMxnRate,
+                ),
         ),
     ];
 
@@ -1481,15 +1570,17 @@ class _DashboardScreenState extends State<DashboardScreen>
           spacing: 12,
           runSpacing: 12,
           children: tiles
-              .map((t) => SizedBox(
-                    // Wide: one row of n tiles. Anything narrower (incl.
-                    // phones) is a 2-up grid — full-width stacked tiles made
-                    // the strip 4–5 rows tall and crowded the hero.
-                    width: c.maxWidth >= 880
-                        ? (c.maxWidth - (n - 1) * 12) / n
-                        : (c.maxWidth - 12) / 2 - 0.5,
-                    child: t,
-                  ))
+              .map(
+                (t) => SizedBox(
+                  // Wide: one row of n tiles. Anything narrower (incl.
+                  // phones) is a 2-up grid — full-width stacked tiles made
+                  // the strip 4–5 rows tall and crowded the hero.
+                  width: c.maxWidth >= 880
+                      ? (c.maxWidth - (n - 1) * 12) / n
+                      : (c.maxWidth - 12) / 2 - 0.5,
+                  child: t,
+                ),
+              )
               .toList(),
         );
       },
@@ -1576,8 +1667,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                     itemBuilder: (ctx, i) {
                       final row = sorted[i];
                       final acc = row.account;
-                      final institution =
-                          (acc['institution_name'] ?? '').toString();
+                      final institution = (acc['institution_name'] ?? '')
+                          .toString();
                       final nickname = (acc['nickname'] ?? '').toString();
                       final name = (acc['name'] ?? '').toString();
                       // Mirror COALESCE(nickname, name): a user-set nickname wins.
@@ -1589,18 +1680,27 @@ class _DashboardScreenState extends State<DashboardScreen>
                       // dual-currency list is self-labelling; the reporting
                       // equivalent sits beneath only when it actually differs.
                       final nativeStr = displayCurrencyWithCode(
-                          row.nativeBalance, row.nativeCurrency);
-                      final reportedStr =
-                          currencyFormat.displayMoney(row.reportedBalance);
-                      final showReported = row.nativeCurrency.toUpperCase() !=
+                        row.nativeBalance,
+                        row.nativeCurrency,
+                      );
+                      final reportedStr = currencyFormat.displayMoney(
+                        row.reportedBalance,
+                      );
+                      final showReported =
+                          row.nativeCurrency.toUpperCase() !=
                           _targetCurrency.toUpperCase();
                       return ListTile(
-                        leading: Icon(Icons.account_balance_wallet_outlined,
-                            size: 20, color: context.textSubtle),
+                        leading: Icon(
+                          Icons.account_balance_wallet_outlined,
+                          size: 20,
+                          color: context.textSubtle,
+                        ),
                         title: Text(
                           title,
                           style: TextStyle(
-                              fontSize: 14, color: context.textPrimary),
+                            fontSize: 14,
+                            color: context.textPrimary,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1620,7 +1720,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                               Text(
                                 l.statDrilldownApprox(reportedStr),
                                 style: TextStyle(
-                                    fontSize: 11, color: context.textSubtle),
+                                  fontSize: 11,
+                                  color: context.textSubtle,
+                                ),
                               ),
                           ],
                         ),
@@ -1709,11 +1811,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     final targetUpper = _targetCurrency.toUpperCase();
     final entries = ((_overview?['currency_breakdown'] as List?) ?? const [])
         .whereType<Map>()
-        .map((item) => (
-              cur: (item['currency'] ?? '').toString().toUpperCase(),
-              assets: ((item['assets'] ?? 0.0) as num).toDouble(),
-              liabilities: ((item['liabilities'] ?? 0.0) as num).toDouble(),
-            ))
+        .map(
+          (item) => (
+            cur: (item['currency'] ?? '').toString().toUpperCase(),
+            assets: ((item['assets'] ?? 0.0) as num).toDouble(),
+            liabilities: ((item['liabilities'] ?? 0.0) as num).toDouble(),
+          ),
+        )
         .where((e) => e.cur.isNotEmpty)
         .toList();
     if (entries.length < 2) return null;
@@ -1721,17 +1825,29 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Dominant currency (by reporting-currency net exposure) first, so the
     // user's primary holdings lead the list.
     entries.sort((a, b) {
-      final ca = convertCurrency(a.assets - a.liabilities,
-          from: a.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
-      final cb = convertCurrency(b.assets - b.liabilities,
-          from: b.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+      final ca = convertCurrency(
+        a.assets - a.liabilities,
+        from: a.cur,
+        to: _targetCurrency,
+        usdMxnRate: usdMxnRate,
+      );
+      final cb = convertCurrency(
+        b.assets - b.liabilities,
+        from: b.cur,
+        to: _targetCurrency,
+        usdMxnRate: usdMxnRate,
+      );
       return cb.abs().compareTo(ca.abs());
     });
 
     Widget leg(String label, double native, String cur, Color color) {
       final isTarget = cur == targetUpper;
-      final converted = convertCurrency(native,
-          from: cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+      final converted = convertCurrency(
+        native,
+        from: cur,
+        to: _targetCurrency,
+        usdMxnRate: usdMxnRate,
+      );
       return Row(
         children: [
           Expanded(
@@ -1745,10 +1861,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               children: [
                 TextSpan(
                   text: displayCurrencyWithCode(native, cur),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: color),
                 ),
                 if (!isTarget)
                   TextSpan(
@@ -1814,11 +1927,19 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
             const SizedBox(height: 4),
-            leg(l.statAssets, entries[i].assets, entries[i].cur,
-                context.textPrimary),
+            leg(
+              l.statAssets,
+              entries[i].assets,
+              entries[i].cur,
+              context.textPrimary,
+            ),
             const SizedBox(height: 2),
-            leg(l.statLiabilities, entries[i].liabilities, entries[i].cur,
-                context.negative),
+            leg(
+              l.statLiabilities,
+              entries[i].liabilities,
+              entries[i].cur,
+              context.negative,
+            ),
           ],
         ],
       ),
@@ -1854,13 +1975,18 @@ class _DashboardScreenState extends State<DashboardScreen>
         : (activeLoans.first['currency'] ?? _targetCurrency).toString();
     // Total still owed (principal + unpaid interest), matching the loan view.
     final totalOutstanding = sumLoansConverted(
-        activeLoans, 'total_owed', summaryCur, usdMxnRate);
+      activeLoans,
+      'total_owed',
+      summaryCur,
+      usdMxnRate,
+    );
 
     // Soonest reminder is the head of the (due_date ASC) list; overdue means
     // any reminder with days_overdue > 0.
     final reminders = _loanReminders.whereType<Map>().toList();
-    final hasOverdue =
-        reminders.any((r) => ((r['days_overdue'] as num?)?.toInt() ?? 0) > 0);
+    final hasOverdue = reminders.any(
+      (r) => ((r['days_overdue'] as num?)?.toInt() ?? 0) > 0,
+    );
     String? soonestLabel;
     if (reminders.isNotEmpty) {
       final next = reminders.first;
@@ -1870,8 +1996,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       final when = overdueDays > 0
           ? l.lendingGlanceOverdueBy(overdueDays)
           : (untilDays == 0
-              ? l.lendingGlanceDueToday
-              : l.lendingGlanceDueIn(untilDays));
+                ? l.lendingGlanceDueToday
+                : l.lendingGlanceDueIn(untilDays));
       soonestLabel = name.isEmpty ? when : '$name · $when';
     }
 
@@ -1888,14 +2014,19 @@ class _DashboardScreenState extends State<DashboardScreen>
             children: [
               Row(
                 children: [
-                  Icon(Icons.volunteer_activism_outlined,
-                      color: context.tealAccent, size: 18),
+                  Icon(
+                    Icons.volunteer_activism_outlined,
+                    color: context.tealAccent,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       l.lendingGlanceTitle,
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   if (hasOverdue)
@@ -1907,8 +2038,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         shape: BoxShape.circle,
                       ),
                     ),
-                  Icon(Icons.chevron_right,
-                      color: context.textMuted, size: 20),
+                  Icon(Icons.chevron_right, color: context.textMuted, size: 20),
                 ],
               ),
               const SizedBox(height: 10),
@@ -1960,9 +2090,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             .where((row) => (row as Map)['id'].toString() != id)
             .toList();
       });
-      messenger.showSnackBar(
-        SnackBar(content: Text(l.accountRestored(label))),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(l.accountRestored(label))));
       // Reflect the restored balance in net worth / the accounts list.
       _loadAllData(silent: true);
     } catch (e) {
@@ -1991,25 +2119,30 @@ class _DashboardScreenState extends State<DashboardScreen>
           InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () => setState(
-                () => _archivedSectionExpanded = !_archivedSectionExpanded),
+              () => _archivedSectionExpanded = !_archivedSectionExpanded,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.inventory_2_outlined,
-                      size: 18, color: context.textMuted),
+                  Icon(
+                    Icons.inventory_2_outlined,
+                    size: 18,
+                    color: context.textMuted,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       l.mgmtArchivedTitle,
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   Text(
                     '(${archived.length})',
-                    style:
-                        TextStyle(fontSize: 12, color: context.textSubtle),
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
                   ),
                   const SizedBox(width: 8),
                   Icon(
@@ -2040,8 +2173,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               child: TextButton.icon(
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                      builder: (_) => const HiddenItemsScreen()),
+                  MaterialPageRoute(builder: (_) => const HiddenItemsScreen()),
                 ).then((_) => _loadAllData(silent: true)),
                 icon: const Icon(Icons.open_in_new, size: 16),
                 label: Text(l.mgmtArchivedManageAll),
@@ -2062,8 +2194,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Mirror COALESCE(nickname, name): a user-set nickname wins.
     final displayName = nickname.isNotEmpty ? nickname : name;
     final archivedAt = (row['archived_at'] ?? '').toString();
-    final title =
-        institution.isEmpty ? displayName : '$institution · $displayName';
+    final title = institution.isEmpty
+        ? displayName
+        : '$institution · $displayName';
     final archivedDate = DateTime.tryParse(archivedAt);
     final subtitle = archivedDate == null
         ? null
@@ -2103,14 +2236,18 @@ class _DashboardScreenState extends State<DashboardScreen>
         // Same responsive 16/24 padding as the tab's other cards
         // (e.g. monthly_cash_flow_card.dart).
         padding: EdgeInsets.all(
-            MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0),
+          MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.visibility_off_outlined,
-                    size: 18, color: context.textSubtle),
+                Icon(
+                  Icons.visibility_off_outlined,
+                  size: 18,
+                  color: context.textSubtle,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   l.dashHiddenFromSubscriptions,
@@ -2123,8 +2260,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(width: 8),
                 Text(
                   '${ignored.length}',
-                  style:
-                      TextStyle(fontSize: 12, color: context.textSubtle),
+                  style: TextStyle(fontSize: 12, color: context.textSubtle),
                 ),
               ],
             ),
@@ -2202,11 +2338,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             SwitchListTile(
               value: _lendingEnabled,
               onChanged: _toggleLending,
-              secondary:
-                  Icon(Icons.monetization_on, color: context.tealAccent),
-              title: Text(l.dashModuleLendingTitle,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600, color: context.textPrimary)),
+              secondary: Icon(Icons.monetization_on, color: context.tealAccent),
+              title: Text(
+                l.dashModuleLendingTitle,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: context.textPrimary,
+                ),
+              ),
               subtitle: Text(
                 l.dashModuleLendingSubtitle,
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
@@ -2218,14 +2357,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: Row(
                   children: [
-                    Icon(Icons.notifications_active_outlined,
-                        size: 18, color: context.textMuted),
+                    Icon(
+                      Icons.notifications_active_outlined,
+                      size: 18,
+                      color: context.textMuted,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         l.dashRemindBeforeRepayment,
                         style: TextStyle(
-                            fontSize: 13, color: context.textPrimary),
+                          fontSize: 13,
+                          color: context.textPrimary,
+                        ),
                       ),
                     ),
                     IconButton(
@@ -2234,21 +2378,25 @@ class _DashboardScreenState extends State<DashboardScreen>
                       onPressed: _lendingReminderLeadDays <= 0
                           ? null
                           : () => _setReminderLeadDays(
-                              _lendingReminderLeadDays - 1),
+                              _lendingReminderLeadDays - 1,
+                            ),
                     ),
-                    Text(l.dashDaysShort(_lendingReminderLeadDays),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: context.textPrimary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        )),
+                    Text(
+                      l.dashDaysShort(_lendingReminderLeadDays),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline, size: 20),
                       tooltip: l.dashMoreDays,
                       onPressed: _lendingReminderLeadDays >= 60
                           ? null
                           : () => _setReminderLeadDays(
-                              _lendingReminderLeadDays + 1),
+                              _lendingReminderLeadDays + 1,
+                            ),
                     ),
                   ],
                 ),
@@ -2260,10 +2408,13 @@ class _DashboardScreenState extends State<DashboardScreen>
             // 5..180 and ±1 taps would make 30→90 a 60-tap trip.
             ListTile(
               leading: Icon(Icons.history_toggle_off, color: context.info),
-              title: Text(l.impStaleThresholdTitle,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: context.textPrimary)),
+              title: Text(
+                l.impStaleThresholdTitle,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: context.textPrimary,
+                ),
+              ),
               subtitle: Text(
                 l.impStaleThresholdSubtitle,
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
@@ -2278,12 +2429,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ? null
                         : () => _setImportStaleDays(_importStaleDays - 5),
                   ),
-                  Text(l.dashDaysShort(_importStaleDays),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: context.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      )),
+                  Text(
+                    l.dashDaysShort(_importStaleDays),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline, size: 20),
                     tooltip: l.dashMoreDays,
@@ -2311,15 +2464,17 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// id + integration_type for every institution). Empty when the user
   /// has no manual institutions — then the whole block disappears.
   List<Widget> _buildImportStaleReminderToggles(AppLocalizations l) {
-    final manual = (_syncData ?? const [])
-        .whereType<Map>()
-        .where((i) => (i['integration_type'] ?? '').toString() == 'manual')
-        .where((i) => (i['id'] ?? '').toString().isNotEmpty)
-        .toList()
-      ..sort((a, b) => (a['name'] ?? '')
-          .toString()
-          .toLowerCase()
-          .compareTo((b['name'] ?? '').toString().toLowerCase()));
+    final manual =
+        (_syncData ?? const [])
+            .whereType<Map>()
+            .where((i) => (i['integration_type'] ?? '').toString() == 'manual')
+            .where((i) => (i['id'] ?? '').toString().isNotEmpty)
+            .toList()
+          ..sort(
+            (a, b) => (a['name'] ?? '').toString().toLowerCase().compareTo(
+              (b['name'] ?? '').toString().toLowerCase(),
+            ),
+          );
     if (manual.isEmpty) return const [];
     return [
       Padding(
@@ -2327,14 +2482,19 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(l.impStaleRemindHeader,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: context.textPrimary)),
+            Text(
+              l.impStaleRemindHeader,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.textPrimary,
+              ),
+            ),
             const SizedBox(height: 2),
-            Text(l.impStaleRemindSubtitle,
-                style: TextStyle(fontSize: 12, color: context.textSubtle)),
+            Text(
+              l.impStaleRemindSubtitle,
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+            ),
           ],
         ),
       ),
@@ -2342,10 +2502,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         SwitchListTile(
           dense: true,
           value: !_importStaleMuted.contains(inst['id'].toString()),
-          onChanged: (v) =>
-              _setImportStaleReminder(inst['id'].toString(), v),
-          title: Text((inst['name'] ?? '').toString(),
-              style: TextStyle(fontSize: 13, color: context.textPrimary)),
+          onChanged: (v) => _setImportStaleReminder(inst['id'].toString(), v),
+          title: Text(
+            (inst['name'] ?? '').toString(),
+            style: TextStyle(fontSize: 13, color: context.textPrimary),
+          ),
         ),
     ];
   }
@@ -2358,21 +2519,21 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// Account & security card on the Settings tab: Security, Hidden &
   /// archived items, Server (native builds), and the confirmed sign-out.
   Widget _buildAccountCard() => SettingsAccountSecurityCard(
-        // Hiding/unhiding accounts or holdings changes totals — refresh
-        // silently, mirroring the kebab's Hidden-items behavior.
-        onHiddenItemsClosed: () {
-          if (mounted) _loadAllData(silent: true);
-        },
-        // The card shows the confirmation dialog itself; this fires only
-        // after the user confirmed.
-        onSignOut: () => AuthService.instance.logout(),
-        // Order matters: logout() needs the current server to revoke the
-        // session; clear() then flips root_gate to BackendSetupScreen.
-        onChangeServer: () async {
-          await AuthService.instance.logout();
-          await BackendConfig.clear();
-        },
-      );
+    // Hiding/unhiding accounts or holdings changes totals — refresh
+    // silently, mirroring the kebab's Hidden-items behavior.
+    onHiddenItemsClosed: () {
+      if (mounted) _loadAllData(silent: true);
+    },
+    // The card shows the confirmation dialog itself; this fires only
+    // after the user confirmed.
+    onSignOut: () => AuthService.instance.logout(),
+    // Order matters: logout() needs the current server to revoke the
+    // session; clear() then flips root_gate to BackendSetupScreen.
+    onChangeServer: () async {
+      await AuthService.instance.logout();
+      await BackendConfig.clear();
+    },
+  );
 
   /// Confirmed sign-out, reusing the Security screen's bilingual strings so
   /// every sign-out entry point reads identically. Called by the first-run
@@ -2397,7 +2558,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!mounted) return;
       setState(() => _lendingReminderLeadDays = prev);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).dashReminderSaveFailed)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).dashReminderSaveFailed),
+        ),
       );
     }
   }
@@ -2413,8 +2576,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       setState(() => _importStaleDays = prev);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content:
-                Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+          content: Text(AppLocalizations.of(context).dashSettingSaveFailed),
+        ),
       );
     }
   }
@@ -2434,7 +2597,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       setState(() => _applyLendingSetting(!enabled));
       _persistSection();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).dashSettingSaveFailed),
+        ),
       );
     }
   }
@@ -2453,8 +2618,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final label = env == 'sandbox'
         ? l.dashEnvSandbox
         : env == 'development'
-            ? l.dashEnvDev
-            : env;
+        ? l.dashEnvDev
+        : env;
     return Tooltip(
       message: l.dashEnvTooltip(env),
       child: Container(
@@ -2488,15 +2653,16 @@ class _DashboardScreenState extends State<DashboardScreen>
     final rate = (_fxRate?['rate'] as num?)?.toDouble();
     // The pair codes are dynamic (backend sends `base`/`target`); don't hardcode
     // USD/MXN so the pill stays correct if the base/target currency ever changes.
-    final base =
-        (_fxRate?['base'] ?? _fxRate?['base_currency'] ?? 'USD').toString();
-    final target =
-        (_fxRate?['target'] ?? _fxRate?['target_currency'] ?? 'MXN').toString();
+    final base = (_fxRate?['base'] ?? _fxRate?['base_currency'] ?? 'USD')
+        .toString();
+    final target = (_fxRate?['target'] ?? _fxRate?['target_currency'] ?? 'MXN')
+        .toString();
     final recordedAtRaw = _fxRate?['recorded_at'] as String?;
     final recordedLocal = recordedAtRaw == null
         ? null
         : DateTime.tryParse(recordedAtRaw)?.toLocal();
-    final isStale = recordedLocal != null &&
+    final isStale =
+        recordedLocal != null &&
         DateTime.now().difference(recordedLocal).inHours > 24;
 
     // Bare rate number for the compact pill, e.g. "17.58" — no currency code,
@@ -2526,21 +2692,23 @@ class _DashboardScreenState extends State<DashboardScreen>
     final freshness = rate == null
         ? l.dashFxLoading
         : recordedLocal == null
-            ? l.dashFxLive
-            : (isStale
-                ? l.dashFxStaleAt(
-                    '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
-                    '${recordedLocal.timeZoneName}')
-                : l.dashFxUpdatedAt(
-                    '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
-                    '${recordedLocal.timeZoneName}'));
+        ? l.dashFxLive
+        : (isStale
+              ? l.dashFxStaleAt(
+                  '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
+                  '${recordedLocal.timeZoneName}',
+                )
+              : l.dashFxUpdatedAt(
+                  '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
+                  '${recordedLocal.timeZoneName}',
+                ));
     // Tooltip / screen-reader label: lead with the full equation
     // ("1 USD = MXN 17.58"), then the freshness/source line the badge already
     // had, then the tap affordance — the pill now opens the FX center.
     final tooltip = rateMoney == null
         ? '$freshness\n${l.fxcPillTapHint}'
         : '${l.dashFxRateEquation(base, rateMoney)}\n$freshness\n'
-            '${l.fxcPillTapHint}';
+              '${l.fxcPillTapHint}';
 
     return Tooltip(
       message: tooltip,
@@ -2562,8 +2730,10 @@ class _DashboardScreenState extends State<DashboardScreen>
               constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
               child: Center(
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: context.tint(0.06),
                     borderRadius: BorderRadius.circular(20),
@@ -2614,10 +2784,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// and the bell's digest rows, so both drill into exactly the rows
   /// they're talking about.
   void _jumpToTransactionsSince(DateTime anchor) {
-    setState(() => _txDateSeed = (
-      start: DateTime(anchor.year, anchor.month, anchor.day),
-      end: DateTime.now(),
-    ));
+    setState(
+      () => _txDateSeed = (
+        start: DateTime(anchor.year, anchor.month, anchor.day),
+        end: DateTime.now(),
+      ),
+    );
     _goToNav(NavId.transactions);
   }
 
@@ -2682,21 +2854,23 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Same payload parse as _buildFxBadge (kept in sync): dynamic pair codes,
     // >24h staleness off recorded_at.
     final rate = (_fxRate?['rate'] as num?)?.toDouble();
-    final base =
-        (_fxRate?['base'] ?? _fxRate?['base_currency'] ?? 'USD').toString();
-    final target =
-        (_fxRate?['target'] ?? _fxRate?['target_currency'] ?? 'MXN').toString();
+    final base = (_fxRate?['base'] ?? _fxRate?['base_currency'] ?? 'USD')
+        .toString();
+    final target = (_fxRate?['target'] ?? _fxRate?['target_currency'] ?? 'MXN')
+        .toString();
     final recordedAtRaw = _fxRate?['recorded_at'] as String?;
     final recordedLocal = recordedAtRaw == null
         ? null
         : DateTime.tryParse(recordedAtRaw)?.toLocal();
-    final isStale = recordedLocal != null &&
+    final isStale =
+        recordedLocal != null &&
         DateTime.now().difference(recordedLocal).inHours > 24;
     final rateBare = rate == null
         ? null
         : localizeNumberString(context, rate.toStringAsFixed(2));
-    final label =
-        rateBare == null ? _targetCurrency : '$_targetCurrency · $rateBare';
+    final label = rateBare == null
+        ? _targetCurrency
+        : '$_targetCurrency · $rateBare';
     final fg = isStale ? context.warning : context.textPrimary;
     // Toggle affordance first, then the full rate equation so the tooltip /
     // screen reader explains both of the chip's facts.
@@ -2704,8 +2878,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final tooltip = rateMoney == null
         ? '${l.currencyToggleTooltip(_targetCurrency)}\n${l.fxcChipHoldHint}'
         : '${l.currencyToggleTooltip(_targetCurrency)}\n'
-            '${l.dashFxRateEquation(base, rateMoney)}\n'
-            '${l.fxcChipHoldHint}';
+              '${l.dashFxRateEquation(base, rateMoney)}\n'
+              '${l.fxcChipHoldHint}';
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -2722,8 +2896,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
           child: Center(
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: context.tint(0.06),
                 borderRadius: BorderRadius.circular(20),
@@ -2802,9 +2975,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  enabled
-                      ? subtitle
-                      : (disabledHint ?? subtitle),
+                  enabled ? subtitle : (disabledHint ?? subtitle),
                   style: TextStyle(
                     fontSize: 12,
                     color: enabled ? context.textMuted : context.textFaint,
@@ -2846,7 +3017,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const ConnectBankScreen(),
+                                  builder: (context) =>
+                                      const ConnectBankScreen(),
                                 ),
                               ).then((_) => _loadAllData(silent: true));
                             }
@@ -2857,7 +3029,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                       icon: Icons.upload_file,
                       title: l.dashImportMxCsvPdf,
                       subtitle: l.dashImportMxCsvPdfSubtitle(
-                          supportedMxBanksSentence()),
+                        supportedMxBanksSentence(),
+                      ),
                       accent: context.info,
                       onPressed: () {
                         Navigator.push(
@@ -2876,9 +3049,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                       onPressed: () {
                         showDialog(
                           context: context,
-                          builder: (context) => AddAccountDialog(
-                            onAccountCreated: _loadAllData,
-                          ),
+                          builder: (context) =>
+                              AddAccountDialog(onAccountCreated: _loadAllData),
                         );
                       },
                     ),
@@ -2966,7 +3138,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context).dashAccountLinkedSuccess),
+            content: Text(
+              AppLocalizations.of(context).dashAccountLinkedSuccess,
+            ),
             backgroundColor: context.positive,
           ),
         );
@@ -2995,39 +3169,45 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (pending == null) return;
     // Clear up front so refreshing the return URL can't replay a spent token.
     clearPlaidOAuth();
-    _listenPlaid((event) async {
-      try {
-        if (pending.mode == 'reconnect') {
-          await _apiService.syncInstitutions();
-          if (mounted) _loadAllData(silent: true);
-        } else {
-          await _apiService.exchangePublicToken(
-            event.publicToken,
-            event.metadata.institution?.name ?? 'Unknown institution',
-          );
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content:
-                  Text(AppLocalizations.of(context).dashAccountLinkedSuccess),
-              backgroundColor: context.positive,
-            ),
-          );
-          _loadAllData(silent: true);
+    _listenPlaid(
+      (event) async {
+        try {
+          if (pending.mode == 'reconnect') {
+            await _apiService.syncInstitutions();
+            if (mounted) _loadAllData(silent: true);
+          } else {
+            await _apiService.exchangePublicToken(
+              event.publicToken,
+              event.metadata.institution?.name ?? 'Unknown institution',
+            );
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context).dashAccountLinkedSuccess,
+                ),
+                backgroundColor: context.positive,
+              ),
+            );
+            _loadAllData(silent: true);
+          }
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppLocalizations.of(context).dashAccountLinkFailed,
+                ),
+                backgroundColor: context.negative,
+              ),
+            );
+          }
         }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppLocalizations.of(context).dashAccountLinkFailed),
-              backgroundColor: context.negative,
-            ),
-          );
-        }
-      }
-    }, (_) {
-      if (mounted) _loadAllData(silent: true);
-    });
+      },
+      (_) {
+        if (mounted) _loadAllData(silent: true);
+      },
+    );
     // Defer the open until after first frame so the overlay/context are ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       resumePlaidLink(pending.token);
@@ -3043,7 +3223,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _refreshData() async {
     try {
       await _apiService.refreshAllStockPrices();
-    } catch (_) {/* best-effort; data reload still proceeds */}
+    } catch (_) {
+      /* best-effort; data reload still proceeds */
+    }
     await _loadAllData(silent: true, forceRefresh: true);
   }
 
@@ -3066,8 +3248,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         accounts: (_overview?['accounts'] as List?) ?? const [],
         apiService: _apiService,
         onCreated: () => _refreshAfterTransactionMutation(),
-        categorySuggestions:
-            distinctPrettyCategories(_transactions ?? const []),
+        categorySuggestions: distinctPrettyCategories(
+          _transactions ?? const [],
+        ),
       ),
     );
   }
@@ -3088,22 +3271,24 @@ class _DashboardScreenState extends State<DashboardScreen>
   ///
   /// [includeFxTransfers] adds the FX-transfer pair list for the mutations
   /// that can change it (confirm / unlink / detect).
-  Future<void> _refreshAfterTransactionMutation(
-      {bool includeFxTransfers = false}) async {
+  Future<void> _refreshAfterTransactionMutation({
+    bool includeFxTransfers = false,
+  }) async {
     // Depth-preserving refetch: ask for as many rows as are already loaded
     // (the user may have cascade-loaded pages for a client-side filter),
     // never fewer than one page and never more than the backend honors.
     // Without this, editing a row under an active filter snapped the list
     // back to page 1 and re-triggered the whole-history cascade.
     final refetchLimit = txRefetchLimit(
-        loadedCount: _transactions?.length ?? 0, pageSize: _txPageSize);
+      loadedCount: _transactions?.length ?? 0,
+      pageSize: _txPageSize,
+    );
     try {
       final data = await fetchAfterTransactionMutation(
         getTransactions: (limit) => _apiService.getTransactions(limit: limit),
         getOverview: _apiService.getDashboardOverview,
         getTrends: _apiService.getTrendData,
-        getFxTransfers:
-            includeFxTransfers ? _apiService.getFxTransfers : null,
+        getFxTransfers: includeFxTransfers ? _apiService.getFxTransfers : null,
         transactionsLimit: refetchLimit,
       );
       if (!mounted) return;
@@ -3191,8 +3376,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       final raw = await _apiService.getTrendData(months: months);
       if (!mounted) return;
       setState(() {
-        _cashFlowTrends =
-            raw.map((e) => e as Map<String, dynamic>).toList();
+        _cashFlowTrends = raw.map((e) => e as Map<String, dynamic>).toList();
         _cashFlowLoading = false;
       });
     } catch (e) {
@@ -3289,8 +3473,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               : (s) => _onCashFlowPeriodChanged(s.first),
           style: ButtonStyle(
             visualDensity: VisualDensity.compact,
-            textStyle:
-                WidgetStateProperty.all(const TextStyle(fontSize: 12)),
+            textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12)),
           ),
         ),
       ),
@@ -3303,9 +3486,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _refreshSubscriptionLists() async {
     final results = await Future.wait([
       _apiService.getSubscriptions().catchError((_) => <dynamic>[]),
-      _apiService
-          .getIgnoredSubscriptions()
-          .catchError((_) => <dynamic>[]),
+      _apiService.getIgnoredSubscriptions().catchError((_) => <dynamic>[]),
     ]);
     if (!mounted) return;
     setState(() {
@@ -3332,8 +3513,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       final upcomingRaw = results[1];
       _recurringUpcoming =
           upcomingRaw is Map<String, dynamic> && upcomingRaw.isNotEmpty
-              ? upcomingRaw
-              : null;
+          ? upcomingRaw
+          : null;
     });
   }
 
@@ -3358,8 +3539,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _loadMoreTransactions({int? limit}) async {
     final pageSize = limit ?? _txPageSize;
     final offset = _transactions?.length ?? 0;
-    final more =
-        await _apiService.getTransactions(limit: pageSize, offset: offset);
+    final more = await _apiService.getTransactions(
+      limit: pageSize,
+      offset: offset,
+    );
     if (!mounted) return;
     setState(() {
       _transactions = [...(_transactions ?? const []), ...more];
@@ -3382,16 +3565,16 @@ class _DashboardScreenState extends State<DashboardScreen>
       final raw = await _apiService.getSetting(_syncBannerSnoozeKey);
       if (raw is! Map) return;
       final until = DateTime.tryParse((raw['until'] ?? '').toString());
-      final ids = (raw['ids'] as List?)
-              ?.map((e) => e.toString())
-              .toSet() ??
-          <String>{};
+      final ids =
+          (raw['ids'] as List?)?.map((e) => e.toString()).toSet() ?? <String>{};
       if (!mounted) return;
       setState(() {
         _syncBannerSnoozeUntil = until;
         _syncBannerSnoozeIds = ids;
       });
-    } catch (_) {/* absent / unreadable → no snooze */}
+    } catch (_) {
+      /* absent / unreadable → no snooze */
+    }
   }
 
   /// Dismiss the sync-error banner for [problemIds] for a week. A NEW
@@ -3407,7 +3590,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         'until': until.toIso8601String(),
         'ids': problemIds.toList(),
       });
-    } catch (_) {/* local dismissal still holds for the session */}
+    } catch (_) {
+      /* local dismissal still holds for the session */
+    }
   }
 
   /// Dismiss (×) on the import-staleness banner: snooze the institutions
@@ -3418,7 +3603,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// re-arms the reminder immediately, and an institution NOT in this
   /// set that goes stale later still banners right away.
   Future<void> _snoozeImportStaleBanner(
-      List<StaleImportInstitution> shown) async {
+    List<StaleImportInstitution> shown,
+  ) async {
     final now = DateTime.now().toUtc();
     final until = now.add(kImportStaleSnoozeWindow);
     final merged = Map<String, ImportStaleSnooze>.from(_importStaleSnoozes)
@@ -3426,8 +3612,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       ..removeWhere((_, s) => !now.isBefore(s.until));
     for (final inst in shown) {
       if (inst.institutionId.isEmpty) continue;
-      merged[inst.institutionId] =
-          ImportStaleSnooze(until: until, dataAsOf: inst.lastDataAt);
+      merged[inst.institutionId] = ImportStaleSnooze(
+        until: until,
+        dataAsOf: inst.lastDataAt,
+      );
     }
     setState(() => _importStaleSnoozes = merged);
     try {
@@ -3438,17 +3626,22 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content:
-                  Text(AppLocalizations.of(context).impStaleSnoozedSnack)),
+            content: Text(AppLocalizations.of(context).impStaleSnoozedSnack),
+          ),
         );
       }
-    } catch (_) {/* local dismissal still holds for the session */}
+    } catch (_) {
+      /* local dismissal still holds for the session */
+    }
   }
 
   /// "Remind me" toggle for one import-only institution (Modules card).
   /// Off = permanently muted: no banner, no bell rows — but the accounts
   /// list "as of" chips stay (data honesty is not muted).
-  Future<void> _setImportStaleReminder(String institutionId, bool remind) async {
+  Future<void> _setImportStaleReminder(
+    String institutionId,
+    bool remind,
+  ) async {
     final prev = _importStaleMuted;
     final next = Set<String>.from(prev);
     if (remind) {
@@ -3458,15 +3651,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     setState(() => _importStaleMuted = next);
     try {
-      await _apiService.putSetting(
-          kImportStaleMutedSettingKey, next.toList());
+      await _apiService.putSetting(kImportStaleMutedSettingKey, next.toList());
     } catch (e) {
       if (!mounted) return;
       setState(() => _importStaleMuted = prev);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content:
-                Text(AppLocalizations.of(context).dashSettingSaveFailed)),
+          content: Text(AppLocalizations.of(context).dashSettingSaveFailed),
+        ),
       );
     }
   }
@@ -3477,7 +3669,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (raw is String && raw.isNotEmpty && mounted) {
         _lenderNameCtrl.text = raw;
       }
-    } catch (_) {/* absent → keep empty (agreement falls back to username) */}
+    } catch (_) {
+      /* absent → keep empty (agreement falls back to username) */
+    }
   }
 
   Future<void> _saveLenderName() async {
@@ -3486,13 +3680,19 @@ class _DashboardScreenState extends State<DashboardScreen>
       await _apiService.putSetting('lender_name', _lenderNameCtrl.text.trim());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context).dashLenderNameSaved)),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).dashLenderNameSaved),
+          ),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context).dashLenderNameSaveFailed)),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).dashLenderNameSaveFailed,
+            ),
+          ),
         );
       }
     } finally {
@@ -3505,23 +3705,33 @@ class _DashboardScreenState extends State<DashboardScreen>
     try {
       final data = await _apiService.getReconnectToken(institutionId);
       final linkToken = data['link_token'];
-      _listenPlaid((_) {
-        debugPrint('Plaid reconnect success');
-        // Defer to the global sync via the public API method so the
-        // dashboard data refreshes once tokens roll forward.
-        _apiService.syncInstitutions().then((_) {
+      _listenPlaid(
+        (_) {
+          debugPrint('Plaid reconnect success');
+          // Defer to the global sync via the public API method so the
+          // dashboard data refreshes once tokens roll forward.
+          _apiService
+              .syncInstitutions()
+              .then((_) {
+                if (mounted) _loadAllData(silent: true);
+              })
+              .catchError((_) {});
+        },
+        (_) {
           if (mounted) _loadAllData(silent: true);
-        }).catchError((_) {});
-      }, (_) {
-        if (mounted) _loadAllData(silent: true);
-      });
+        },
+      );
       // mode:'reconnect' tags the persisted session so an OAuth redirect
       // resumes into a re-sync rather than a new-institution exchange.
       openPlaidLink(linkToken, mode: 'reconnect');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context).dashReconnectFailed(e.toString()))),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).dashReconnectFailed(e.toString()),
+            ),
+          ),
         );
       }
     } finally {
@@ -3548,10 +3758,12 @@ class _DashboardScreenState extends State<DashboardScreen>
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(failed == 0
-              ? l.dashWebhookPushed(updated)
-              // gen-l10n orders these alphabetically → (failed, updated); pass failed first.
-              : l.dashWebhookPartial(failed, updated)),
+          title: Text(
+            failed == 0
+                ? l.dashWebhookPushed(updated)
+                // gen-l10n orders these alphabetically → (failed, updated); pass failed first.
+                : l.dashWebhookPartial(failed, updated),
+          ),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -3582,9 +3794,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           Icon(
                             ok ? Icons.check_circle : Icons.error_outline,
                             size: 16,
-                            color: ok
-                                ? context.positive
-                                : context.negative,
+                            color: ok ? context.positive : context.negative,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -3616,9 +3826,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.dashPushFailed(e.toString()))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.dashPushFailed(e.toString()))));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -3654,7 +3864,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     // return) must not snap a deep-loaded transaction list back to page 1
     // — that visibly reset the list and re-triggered the filter cascade.
     final txLimit = txRefetchLimit(
-        loadedCount: _transactions?.length ?? 0, pageSize: _txPageSize);
+      loadedCount: _transactions?.length ?? 0,
+      pageSize: _txPageSize,
+    );
 
     // A silent refresh must survive ONE endpoint hiccup: `Future.wait`
     // rejects on the first throw, and the silent catch below keeps the old
@@ -3676,19 +3888,31 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     Future<T> soft<T extends Object>(Future<T> read, T? previous) =>
-        keepPreviousOnError(read,
-            previous: previous, silent: silent, onError: noteDegraded);
+        keepPreviousOnError(
+          read,
+          previous: previous,
+          silent: silent,
+          onError: noteDegraded,
+        );
 
     try {
       final results = await Future.wait([
-        soft(_apiService.getDashboardOverview(forceRefresh: forceRefresh),
-            _overview),
-        soft(_apiService.getNetWorthHistory(forceRefresh: forceRefresh),
-            _netWorthHistory),
-        soft(_apiService.getHoldings(forceRefresh: forceRefresh),
-            _portfolioData),
-        soft(_apiService.getCreditUtilization(forceRefresh: forceRefresh),
-            _creditData),
+        soft(
+          _apiService.getDashboardOverview(forceRefresh: forceRefresh),
+          _overview,
+        ),
+        soft(
+          _apiService.getNetWorthHistory(forceRefresh: forceRefresh),
+          _netWorthHistory,
+        ),
+        soft(
+          _apiService.getHoldings(forceRefresh: forceRefresh),
+          _portfolioData,
+        ),
+        soft(
+          _apiService.getCreditUtilization(forceRefresh: forceRefresh),
+          _creditData,
+        ),
         soft(_apiService.getSyncStatus(forceRefresh: forceRefresh), _syncData),
         soft(_apiService.getSetupStatus(), _setupStatus),
         soft(_apiService.getExchangeRate('USD', 'MXN'), _fxRate),
@@ -3701,8 +3925,10 @@ class _DashboardScreenState extends State<DashboardScreen>
             noteDegraded(e);
           },
         ),
-        soft(_apiService.getAllocationData(forceRefresh: forceRefresh),
-            _allocationRaw),
+        soft(
+          _apiService.getAllocationData(forceRefresh: forceRefresh),
+          _allocationRaw,
+        ),
         soft(_apiService.getTrendData(forceRefresh: forceRefresh), _trendData),
         // These two are non-blocking — a failure shouldn't take the
         // whole dashboard down. Wrap each Future so it can't propagate.
@@ -3775,9 +4001,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             .catchError((_) => null),
       ]);
 
-      debugPrint(degraded
-          ? "Data loaded with some reads degraded to their previous value"
-          : "All data loaded successfully");
+      debugPrint(
+        degraded
+            ? "Data loaded with some reads degraded to their previous value"
+            : "All data loaded successfully",
+      );
 
       final allocationRaw = results[8] as List<dynamic>;
       final trendsRaw = results[9] as List<dynamic>;
@@ -3833,14 +4061,17 @@ class _DashboardScreenState extends State<DashboardScreen>
           _lendingReminderLeadDays = leadRaw.toInt().clamp(0, 60);
         }
         final insightsRaw = results[17];
-        _spendingInsights = insightsRaw is Map<String, dynamic> ? insightsRaw : null;
+        _spendingInsights = insightsRaw is Map<String, dynamic>
+            ? insightsRaw
+            : null;
         _archivedAccounts = results[18] as List<dynamic>;
         _loans = results[19] as List<dynamic>;
         _portfolioDividends = results[20] as Map<String, dynamic>?;
         _importStaleDays = staleThresholdFrom(results[21]);
         _recurringRules = results[22] as List<dynamic>;
         final recurringUpcomingRaw = results[23];
-        _recurringUpcoming = recurringUpcomingRaw is Map<String, dynamic> &&
+        _recurringUpcoming =
+            recurringUpcomingRaw is Map<String, dynamic> &&
                 recurringUpcomingRaw.isNotEmpty
             ? recurringUpcomingRaw
             : null;
@@ -3917,7 +4148,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// [_loadAllData] and [_refreshPortfolioData] so a targeted portfolio
   /// refresh keeps the exact same colour + asset-class semantics.
   List<AllocationData> _mapAllocationData(
-      List<dynamic> raw, Brightness brightness) {
+    List<dynamic> raw,
+    Brightness brightness,
+  ) {
     // Allocation slice colours. Pulled through brand tokens so the
     // pie reads against a white card in light mode without each slice
     // having to be hand-tuned. The 6 categories map 1:1 to the
@@ -4034,7 +4267,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _scheduleSyncPollIfNeeded() {
     _syncPollTimer?.cancel();
     final anySyncing = (_syncData ?? const []).any(
-        (e) => e is Map && e['sync_status']?.toString() == 'syncing');
+      (e) => e is Map && e['sync_status']?.toString() == 'syncing',
+    );
     if (!anySyncing) {
       _syncPollAttempts = 0;
       return;
@@ -4067,210 +4301,210 @@ class _DashboardScreenState extends State<DashboardScreen>
     // scroll-away shell below — the bar's contents never change between the
     // two paths.
     final appBar = AppBar(
-          // Compact widths: the slimmed actions row (app-bar audit) leaves
-          // room for the current destination's name, which doubles as a page
-          // heading for screen readers. Uses the full label, not the
-          // bottom-nav short one — the nav abbreviates to fit five items
-          // across ("Proj."), and the title has room for the real name.
-          // Scales down rather than clipping the longest es-MX labels.
-          // First-run keeps the wordmark (its chrome is hidden, so there's
-          // room and no destination to name).
-          title: isCompact
-              ? FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    firstRun
-                        ? 'Patrimonio'
-                        : _navLabel(
-                            AppLocalizations.of(context), _currentDest.id),
-                    maxLines: 1,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                )
-              : const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Patrimonio',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-          actions: [
-            // First-run hides the dashboard chrome (FX, notifications,
-            // currency toggle) because none of it has data yet. Sign
-            // out and theme cycle stay so the user can always escape
-            // or change brightness.
-            if (!firstRun) ...[
-              // Touch-reachable entry to the command palette — the
-              // ⌘K/Ctrl+K shortcut is keyboard-only, so without this the
-              // palette is unreachable on mobile. Gated on !firstRun like
-              // the other data-dependent actions (the palette items need
-              // loaded data).
-              IconButton(
-                icon: const Icon(Icons.search),
-                tooltip: AppLocalizations.of(context).dashSearchCommandsTooltip,
-                onPressed: _openPalette,
+      // Compact widths: the slimmed actions row (app-bar audit) leaves
+      // room for the current destination's name, which doubles as a page
+      // heading for screen readers. Uses the full label, not the
+      // bottom-nav short one — the nav abbreviates to fit five items
+      // across ("Proj."), and the title has room for the real name.
+      // Scales down rather than clipping the longest es-MX labels.
+      // First-run keeps the wordmark (its chrome is hidden, so there's
+      // room and no destination to name).
+      title: isCompact
+          ? FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                firstRun
+                    ? 'Patrimonio'
+                    : _navLabel(AppLocalizations.of(context), _currentDest.id),
+                maxLines: 1,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              // Sandbox / Development indicator.
-              if (!isCompact) _buildEnvChip(),
-              if (!isCompact) const SizedBox(width: 8),
-              // FX pill — wide only. On phones the standalone pill was the
-              // over-budget 4th+ bar action AND a bordered chip with no tap
-              // handler (app-bar audit findings 1-2); the rate now rides
-              // inside the combined currency chip below instead.
-              if (!isCompact) ...[
-                _buildFxBadge(compact: true),
-                const SizedBox(width: 8),
-              ],
-              NotificationsBell(
-                // Server rows already marked read merge into the dismissed
-                // set — the badge/"All clear" reflect only truly-unread.
-                dismissedIds: {..._dismissedNotifs, ..._serverReadIds()},
-                onMarkAllRead: _markNotificationsRead,
-                // Opening the panel marks everything currently shown read
-                // (server-side for inbox rows, localStorage for derived).
-                onOpened: _markNotificationsRead,
-                notifications: [
-                  // Live condition rows first (overdue loans, sync
-                  // failures, low balances, the since-visit digest) —
-                  // the actionable "now" stuff leads the panel.
-                  ...deriveNotifications(
-                  l: AppLocalizations.of(context),
-                  brightness: Theme.of(context).brightness,
-                  syncData: _syncData ?? const [],
-                  netWorthHistory: _netWorthHistory ?? const [],
-                  onJumpToManagement: () => _goToNav(NavId.settings),
-                  loanReminders: _loanReminders,
-                  // No-op when lending is off (the section isn't visible);
-                  // the bell only surfaces loan reminders when it's on.
-                  onJumpToLending: () => _goToNav(NavId.lending),
-                  accounts: (_overview?['accounts'] as List?) ?? const [],
-                  accountAlerts: _accountAlerts,
-                  spendingInsights: _spendingInsights,
-                  subscriptions: _subscriptions ?? const [],
-                  onJumpToSpending: () => _goToNav(NavId.cashFlow),
-                  archivedAccounts: _archivedAccounts ?? const [],
-                  onJumpToClosedAccounts: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const HiddenItemsScreen())),
-                  sinceLastLogin: _sinceLastLogin,
-                  onJumpToTransactions: _jumpToTransactionsSince,
-                  // The bell renders the same USD-stored deltas the Overview
-                  // banner does; without these it reported them as literal USD
-                  // and the two disagreed whenever reporting in MXN.
-                  targetCurrency: _targetCurrency,
-                  conversionFactor: conversionFactor,
-                  onJumpToAccount: (account) => showAccountTransactionsPanel(
-                    context,
-                    account: account,
-                    allAccounts:
-                        (_overview?['accounts'] as List?) ?? const [],
-                    conversionFactor: conversionFactor,
-                    currencyFormat: currencyFormat,
-                    targetCurrency: _targetCurrency,
-                    usdMxnRate: fxRate,
-                    onBalanceUpdate: (id, bal) async {
-                      try {
-                        await _apiService.updateAccountBalance(id, bal);
-                        _loadAllData(silent: true);
-                      } catch (_) {}
-                    },
-                    onRenameAccount: (id, nickname) async {
-                      try {
-                        await _apiService.renameAccount(id, nickname);
-                        _loadAllData(silent: true);
-                      } catch (_) {}
-                    },
-                    onAlertsChanged: _reloadAccountAlerts,
-                    realtimeEvents: _realtime.events,
-                  ),
-                  ),
-                  // Then the server-backed inbox (dated events, newest
-                  // first from the API): FX alert crossings, import
-                  // staleness, loan due reminders — everything fx-center
-                  // and staleness wrote lands in this one list.
-                  //
-                  // Server loan_due rows whose loan already has a derived
-                  // reminder row above are hidden: both describe the same
-                  // installment, and the derived row is richer (localized,
-                  // day-precise, overdue-escalated). The server row still
-                  // exists for cross-device read state and shows on
-                  // clients where the reminders fetch failed.
-                  ...serverNotificationsToApp(
-                    rows: ((_serverNotifications?['notifications'] as List?) ??
-                            const [])
-                        .where((r) {
-                      if (r is! Map || r['kind'] != 'loan_due') return true;
-                      final reminderLoanIds = {
-                        for (final rem in _loanReminders)
-                          if (rem is Map && rem['loan_id'] != null)
-                            rem['loan_id'].toString(),
-                      };
-                      return !reminderLoanIds
-                          .contains(r['link_id']?.toString());
-                    }).toList(),
-                    brightness: Theme.of(context).brightness,
-                    onOpenFxCenter: _openFxCenter,
-                    onJumpToManagement: () => _goToNav(NavId.settings),
-                    onJumpToLending: () => _goToNav(NavId.lending),
-                  ),
-                ],
+            )
+          : const FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Patrimonio',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-            ],
-            // Compact widths get theme selection from the Settings tab
-            // instead — five always-on icons crowded a 360px AppBar. During
-            // first-run the bottom nav (and thus the Settings tab) is
-            // hidden, so the cycle button shows on all widths there.
-            if (!isCompact || firstRun) _ThemeCycleButton(),
-            // First-run escape hatch: language now lives on the Settings
-            // tab, which is hidden with the rest of the nav chrome here —
-            // keep the kebab's EN ⇄ ES toggle on the bar so a
-            // freshly-registered user can switch locale. Tooltip is the
-            // autonym of the language you'd switch TO (deliberately not
-            // localized, matching the Settings-tab language picker).
-            if (firstRun)
-              IconButton(
-                icon: const Icon(Icons.translate),
-                tooltip:
-                    Localizations.localeOf(context).languageCode == 'es'
-                        ? 'English'
-                        : 'Español',
-                onPressed: () {
-                  final next =
-                      Localizations.localeOf(context).languageCode == 'es'
-                          ? 'en'
-                          : 'es';
-                  // Same persist + live-notify pattern as the Settings
-                  // tab's picker.
-                  Preferences.setLocale(next);
-                  localeNotifier.value = Locale(next);
-                },
-              ),
-            // First-run escape hatch: with the nav chrome hidden there is
-            // no other path to sign out, so the bar carries a confirmed
-            // sign-out action (never a direct logout).
-            if (firstRun)
-              IconButton(
-                icon: const Icon(Icons.logout),
-                tooltip: l.dashSignOut,
-                onPressed: _confirmSignOut,
-              ),
-            if (!firstRun)
-              // Compact: one combined "USD · 17.51" chip (48dp target, tap
-              // toggles the display currency, carries the FX rate the
-              // standalone pill used to show). Wide keeps the separate
-              // badge + toggle.
-              isCompact
-                  ? _buildCurrencyFxChip()
-                  : _CurrencyToggleButton(
-                      targetCurrency: _targetCurrency,
-                      onSwap: () => _setTargetCurrency(
-                          _targetCurrency == 'USD' ? 'MXN' : 'USD'),
-                    ),
+            ),
+      actions: [
+        // First-run hides the dashboard chrome (FX, notifications,
+        // currency toggle) because none of it has data yet. Sign
+        // out and theme cycle stay so the user can always escape
+        // or change brightness.
+        if (!firstRun) ...[
+          // Touch-reachable entry to the command palette — the
+          // ⌘K/Ctrl+K shortcut is keyboard-only, so without this the
+          // palette is unreachable on mobile. Gated on !firstRun like
+          // the other data-dependent actions (the palette items need
+          // loaded data).
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: AppLocalizations.of(context).dashSearchCommandsTooltip,
+            onPressed: _openPalette,
+          ),
+          // Sandbox / Development indicator.
+          if (!isCompact) _buildEnvChip(),
+          if (!isCompact) const SizedBox(width: 8),
+          // FX pill — wide only. On phones the standalone pill was the
+          // over-budget 4th+ bar action AND a bordered chip with no tap
+          // handler (app-bar audit findings 1-2); the rate now rides
+          // inside the combined currency chip below instead.
+          if (!isCompact) ...[
+            _buildFxBadge(compact: true),
             const SizedBox(width: 8),
           ],
-        );
+          NotificationsBell(
+            // Server rows already marked read merge into the dismissed
+            // set — the badge/"All clear" reflect only truly-unread.
+            dismissedIds: {..._dismissedNotifs, ..._serverReadIds()},
+            onMarkAllRead: _markNotificationsRead,
+            // Opening the panel marks everything currently shown read
+            // (server-side for inbox rows, localStorage for derived).
+            onOpened: _markNotificationsRead,
+            notifications: [
+              // Live condition rows first (overdue loans, sync
+              // failures, low balances, the since-visit digest) —
+              // the actionable "now" stuff leads the panel.
+              ...deriveNotifications(
+                l: AppLocalizations.of(context),
+                brightness: Theme.of(context).brightness,
+                syncData: _syncData ?? const [],
+                netWorthHistory: _netWorthHistory ?? const [],
+                onJumpToManagement: () => _goToNav(NavId.settings),
+                loanReminders: _loanReminders,
+                // No-op when lending is off (the section isn't visible);
+                // the bell only surfaces loan reminders when it's on.
+                onJumpToLending: () => _goToNav(NavId.lending),
+                accounts: (_overview?['accounts'] as List?) ?? const [],
+                accountAlerts: _accountAlerts,
+                spendingInsights: _spendingInsights,
+                subscriptions: _subscriptions ?? const [],
+                onJumpToSpending: () => _goToNav(NavId.cashFlow),
+                archivedAccounts: _archivedAccounts ?? const [],
+                onJumpToClosedAccounts: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const HiddenItemsScreen()),
+                ),
+                sinceLastLogin: _sinceLastLogin,
+                onJumpToTransactions: _jumpToTransactionsSince,
+                // The bell renders the same USD-stored deltas the Overview
+                // banner does; without these it reported them as literal USD
+                // and the two disagreed whenever reporting in MXN.
+                targetCurrency: _targetCurrency,
+                conversionFactor: conversionFactor,
+                onJumpToAccount: (account) => showAccountTransactionsPanel(
+                  context,
+                  account: account,
+                  allAccounts: (_overview?['accounts'] as List?) ?? const [],
+                  conversionFactor: conversionFactor,
+                  currencyFormat: currencyFormat,
+                  targetCurrency: _targetCurrency,
+                  usdMxnRate: fxRate,
+                  onBalanceUpdate: (id, bal) async {
+                    try {
+                      await _apiService.updateAccountBalance(id, bal);
+                      _loadAllData(silent: true);
+                    } catch (_) {}
+                  },
+                  onRenameAccount: (id, nickname) async {
+                    try {
+                      await _apiService.renameAccount(id, nickname);
+                      _loadAllData(silent: true);
+                    } catch (_) {}
+                  },
+                  onAlertsChanged: _reloadAccountAlerts,
+                  realtimeEvents: _realtime.events,
+                ),
+              ),
+              // Then the server-backed inbox (dated events, newest
+              // first from the API): FX alert crossings, import
+              // staleness, loan due reminders — everything fx-center
+              // and staleness wrote lands in this one list.
+              //
+              // Server loan_due rows whose loan already has a derived
+              // reminder row above are hidden: both describe the same
+              // installment, and the derived row is richer (localized,
+              // day-precise, overdue-escalated). The server row still
+              // exists for cross-device read state and shows on
+              // clients where the reminders fetch failed.
+              ...serverNotificationsToApp(
+                rows:
+                    ((_serverNotifications?['notifications'] as List?) ??
+                            const [])
+                        .where((r) {
+                          if (r is! Map || r['kind'] != 'loan_due') return true;
+                          final reminderLoanIds = {
+                            for (final rem in _loanReminders)
+                              if (rem is Map && rem['loan_id'] != null)
+                                rem['loan_id'].toString(),
+                          };
+                          return !reminderLoanIds.contains(
+                            r['link_id']?.toString(),
+                          );
+                        })
+                        .toList(),
+                brightness: Theme.of(context).brightness,
+                onOpenFxCenter: _openFxCenter,
+                onJumpToManagement: () => _goToNav(NavId.settings),
+                onJumpToLending: () => _goToNav(NavId.lending),
+              ),
+            ],
+          ),
+        ],
+        // Compact widths get theme selection from the Settings tab
+        // instead — five always-on icons crowded a 360px AppBar. During
+        // first-run the bottom nav (and thus the Settings tab) is
+        // hidden, so the cycle button shows on all widths there.
+        if (!isCompact || firstRun) _ThemeCycleButton(),
+        // First-run escape hatch: language now lives on the Settings
+        // tab, which is hidden with the rest of the nav chrome here —
+        // keep the kebab's EN ⇄ ES toggle on the bar so a
+        // freshly-registered user can switch locale. Tooltip is the
+        // autonym of the language you'd switch TO (deliberately not
+        // localized, matching the Settings-tab language picker).
+        if (firstRun)
+          IconButton(
+            icon: const Icon(Icons.translate),
+            tooltip: Localizations.localeOf(context).languageCode == 'es'
+                ? 'English'
+                : 'Español',
+            onPressed: () {
+              final next = Localizations.localeOf(context).languageCode == 'es'
+                  ? 'en'
+                  : 'es';
+              // Same persist + live-notify pattern as the Settings
+              // tab's picker.
+              Preferences.setLocale(next);
+              localeNotifier.value = Locale(next);
+            },
+          ),
+        // First-run escape hatch: with the nav chrome hidden there is
+        // no other path to sign out, so the bar carries a confirmed
+        // sign-out action (never a direct logout).
+        if (firstRun)
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: l.dashSignOut,
+            onPressed: _confirmSignOut,
+          ),
+        if (!firstRun)
+          // Compact: one combined "USD · 17.51" chip (48dp target, tap
+          // toggles the display currency, carries the FX rate the
+          // standalone pill used to show). Wide keeps the separate
+          // badge + toggle.
+          isCompact
+              ? _buildCurrencyFxChip()
+              : _CurrencyToggleButton(
+                  targetCurrency: _targetCurrency,
+                  onSwap: () => _setTargetCurrency(
+                    _targetCurrency == 'USD' ? 'MXN' : 'USD',
+                  ),
+                ),
+        const SizedBox(width: 8),
+      ],
+    );
     // Scroll-away app bar (enter-always + snap): compact non-first-run
     // widths wrap the bar in the collapsing shell driven by _appBarVisible.
     // Wide and first-run keep the static bar untouched.
@@ -4297,59 +4531,61 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Focus(
           autofocus: true,
           child: Scaffold(
-              appBar: topBar,
-              // Narrow screens get a Material 3 bottom nav bar; wide
-              // screens get a left rail (built into the body Row below).
-              bottomNavigationBar:
-                  (!firstRun && isCompact) ? _buildBottomBar() : null,
-              // Thumb-zone quick capture on compact layouts: the Activity
-              // tab's toolbar '+' is hidden (hostProvidesAddFab) and "Add
-              // transaction" moves here, docked above the bottom nav — and
-              // the Home tab gets the same FAB so capturing a transaction
-              // doesn't require a tab switch first. Wide layouts keep the
-              // inline '+' and never show the FAB — both affordances key
-              // off the same isCompact signal, so no width shows both.
-              // Section lookup mirrors _buildBody's clamped indexing so a
-              // transient out-of-range _section can't throw. On Home the
-              // Activity tab may not be mounted yet (IndexedStack mounts
-              // visited sections only), so _openQuickAddTransaction falls
-              // back to opening the shared dialog directly.
-              floatingActionButton: (!firstRun &&
-                      isCompact &&
-                      const {NavId.transactions, NavId.overview}.contains(
-                          _destinations[
-                                  _section.clamp(0, _destinations.length - 1)]
-                              .id))
-                  ? FloatingActionButton(
-                      tooltip: l.txAddTransaction,
-                      onPressed: _openQuickAddTransaction,
-                      child: const Icon(Icons.add),
-                    )
-                  : null,
-              // Scroll-away app bar: every tab's scrollables (tab-level
-              // SingleChildScrollViews, tabs that own internal scrollables,
-              // and the Activity tab's inner virtualised list) bubble
-              // UserScrollNotification up to here, so no tab file changes.
-              // setState fires only when visibility actually flips — i.e. on
-              // scroll-direction changes, never per scrolled pixel. Returning
-              // false keeps the notifications bubbling (AppBar lift-on-scroll
-              // relies on them too). SyncErrorBanner stays inside the pinned
-              // Column — it is an alert and never scrolls away.
-              body: NotificationListener<UserScrollNotification>(
-                onNotification: (n) {
-                  if (isCompact && !firstRun) {
-                    final visible = barVisibleAfter(
-                      direction: n.direction,
-                      axis: n.metrics.axis,
-                      pixels: n.metrics.pixels,
-                    );
-                    if (visible != null && visible != _appBarVisible) {
-                      setState(() => _appBarVisible = visible);
-                    }
+            appBar: topBar,
+            // Narrow screens get a Material 3 bottom nav bar; wide
+            // screens get a left rail (built into the body Row below).
+            bottomNavigationBar: (!firstRun && isCompact)
+                ? _buildBottomBar()
+                : null,
+            // Thumb-zone quick capture on compact layouts: the Activity
+            // tab's toolbar '+' is hidden (hostProvidesAddFab) and "Add
+            // transaction" moves here, docked above the bottom nav — and
+            // the Home tab gets the same FAB so capturing a transaction
+            // doesn't require a tab switch first. Wide layouts keep the
+            // inline '+' and never show the FAB — both affordances key
+            // off the same isCompact signal, so no width shows both.
+            // Section lookup mirrors _buildBody's clamped indexing so a
+            // transient out-of-range _section can't throw. On Home the
+            // Activity tab may not be mounted yet (IndexedStack mounts
+            // visited sections only), so _openQuickAddTransaction falls
+            // back to opening the shared dialog directly.
+            floatingActionButton:
+                (!firstRun &&
+                    isCompact &&
+                    const {NavId.transactions, NavId.overview}.contains(
+                      _destinations[_section.clamp(0, _destinations.length - 1)]
+                          .id,
+                    ))
+                ? FloatingActionButton(
+                    tooltip: l.txAddTransaction,
+                    onPressed: _openQuickAddTransaction,
+                    child: const Icon(Icons.add),
+                  )
+                : null,
+            // Scroll-away app bar: every tab's scrollables (tab-level
+            // SingleChildScrollViews, tabs that own internal scrollables,
+            // and the Activity tab's inner virtualised list) bubble
+            // UserScrollNotification up to here, so no tab file changes.
+            // setState fires only when visibility actually flips — i.e. on
+            // scroll-direction changes, never per scrolled pixel. Returning
+            // false keeps the notifications bubbling (AppBar lift-on-scroll
+            // relies on them too). SyncErrorBanner stays inside the pinned
+            // Column — it is an alert and never scrolls away.
+            body: NotificationListener<UserScrollNotification>(
+              onNotification: (n) {
+                if (isCompact && !firstRun) {
+                  final visible = barVisibleAfter(
+                    direction: n.direction,
+                    axis: n.metrics.axis,
+                    pixels: n.metrics.pixels,
+                  );
+                  if (visible != null && visible != _appBarVisible) {
+                    setState(() => _appBarVisible = visible);
                   }
-                  return false;
-                },
-                child: Column(
+                }
+                return false;
+              },
+              child: Column(
                 children: [
                   if (!firstRun)
                     SyncErrorBanner(
@@ -4401,12 +4637,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                         : _buildBody(),
                   ),
                 ],
-                ),
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildBody() {
@@ -4425,10 +4661,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           children: [
             Icon(Icons.error_outline, size: 64, color: context.negative),
             const SizedBox(height: 16),
-            Text(
-              l.dashErrorLoading(_error ?? ''),
-              textAlign: TextAlign.center,
-            ),
+            Text(l.dashErrorLoading(_error ?? ''), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             ElevatedButton(onPressed: _loadAllData, child: Text(l.dashRetry)),
           ],
@@ -4449,8 +4682,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     // the Activity tab's hostProvidesAddFab flips in lockstep with the
     // FAB's visibility (no width band shows both '+' affordances or none).
     final isCompact = MediaQuery.sizeOf(context).width < 720;
-    Widget buildTabContainer(Widget child,
-        {bool scrollable = true, Future<void> Function()? onRefresh}) {
+    Widget buildTabContainer(
+      Widget child, {
+      bool scrollable = true,
+      Future<void> Function()? onRefresh,
+    }) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       // Extra scrollable space at the very bottom so a transient SnackBar
       // (notably the 30s "Syncing…" one) never sits on top of the last
@@ -4474,7 +4710,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             ? const AlwaysScrollableScrollPhysics()
             : null,
         padding: EdgeInsets.fromLTRB(
-            padding, padding, padding, padding + snackbarClearance),
+          padding,
+          padding,
+          padding,
+          padding + snackbarClearance,
+        ),
         child: content,
       );
       // Mobile-native refresh gesture (mirrors LendingTab). Callers pass the
@@ -4504,9 +4744,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 _loadAllData(silent: true);
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(l.dashUpdateFailed(e.toString()))));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(l.dashUpdateFailed(e.toString()))),
+                );
               }
             },
             onDeleteAccount: (id) async {
@@ -4514,9 +4754,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 await _apiService.deleteAccount(id);
                 _loadAllData(silent: true);
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l.dashAccountDeleted)),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(l.dashAccountDeleted)));
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -4656,8 +4896,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         // snackbar shows the human message, not Dart exception plumbing.
         messenger.showSnackBar(
           SnackBar(
-            content: Text(l.dashSyncFailed(
-                e.toString().replaceFirst('Exception: ', ''))),
+            content: Text(
+              l.dashSyncFailed(e.toString().replaceFirst('Exception: ', '')),
+            ),
           ),
         );
         setState(() => _isSyncing = false);
@@ -4717,8 +4958,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content:
-              Text(hitDeadline ? l.dashSyncStillRunning : l.dashSyncComplete),
+          content: Text(
+            hitDeadline ? l.dashSyncStillRunning : l.dashSyncComplete,
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -4733,8 +4975,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       DateTime? latest;
       for (final inst in (_syncData ?? const [])) {
         if (inst is Map && inst['last_synced_at'] != null) {
-          final dt =
-              DateTime.tryParse(inst['last_synced_at'].toString())?.toLocal();
+          final dt = DateTime.tryParse(
+            inst['last_synced_at'].toString(),
+          )?.toLocal();
           if (dt != null && (latest == null || dt.isAfter(latest))) {
             latest = dt;
           }
@@ -4765,8 +5008,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                   height: 14,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(context.textMuted),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      context.textMuted,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -4783,9 +5027,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               onPressed: runSync,
               icon: const Icon(Icons.refresh, size: 16),
               label: Text(l.dashSyncNow),
-              style: TextButton.styleFrom(
-                foregroundColor: context.info,
-              ),
+              style: TextButton.styleFrom(foregroundColor: context.info),
             ),
         ],
       );
@@ -4797,21 +5039,24 @@ class _DashboardScreenState extends State<DashboardScreen>
         final data = await _apiService.getReconnectToken(institutionId);
         final linkToken = data['link_token'];
 
-        _listenPlaid((event) {
-          debugPrint("Plaid Reconnect Success");
-          runSync();
-        }, (event) {
-          debugPrint("Plaid Reconnect Exit");
-          _loadAllData(silent: true);
-        });
+        _listenPlaid(
+          (event) {
+            debugPrint("Plaid Reconnect Success");
+            runSync();
+          },
+          (event) {
+            debugPrint("Plaid Reconnect Exit");
+            _loadAllData(silent: true);
+          },
+        );
 
         openPlaidLink(linkToken, mode: 'reconnect');
       } catch (e) {
         debugPrint("Reconnect error: $e");
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(l.dashReconnectFailed(e.toString()))));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l.dashReconnectFailed(e.toString()))),
+          );
         }
       } finally {
         setState(() => _isLoading = false);
@@ -4850,8 +5095,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           .where(
             (inst) =>
                 inst is Map &&
-                (inst['integration_type']?.toString().toLowerCase() ??
-                        '')
+                (inst['integration_type']?.toString().toLowerCase() ?? '')
                     .contains('plaid'),
           )
           .length;
@@ -4893,13 +5137,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                     child: Text(
                       l.dashLaunchSetup,
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   if (ready) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: context.positive.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(8),
@@ -4916,9 +5164,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                     IconButton(
                       onPressed: () =>
                           setState(() => _setupExpanded = !_setupExpanded),
-                      icon: Icon(_setupExpanded
-                          ? Icons.expand_less
-                          : Icons.expand_more),
+                      icon: Icon(
+                        _setupExpanded ? Icons.expand_less : Icons.expand_more,
+                      ),
                       tooltip: _setupExpanded
                           ? l.dashSetupHideDetails
                           : l.dashSetupShowDetails,
@@ -4931,102 +5179,108 @@ class _DashboardScreenState extends State<DashboardScreen>
               if (showDetails) ...[
                 const SizedBox(height: 12),
                 Text(
-                  ready
-                      ? l.dashLaunchSetupReady
-                      : l.dashLaunchSetupBlocked,
+                  ready ? l.dashLaunchSetupReady : l.dashLaunchSetupBlocked,
                   style: TextStyle(color: context.textMuted, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
                 ...visibleChecks.map((raw) {
-                final check = raw as Map<String, dynamic>;
-                final configured = check['configured'] == true;
-                final key = check['key']?.toString() ?? '';
-                // Per-row trailing action. Today only the plaid_webhook
-                // row gets one; designed as a switch so future checks
-                // can hook in the same way without growing a wrapper
-                // layer per check.
-                Widget? trailing;
-                if (key == 'plaid_webhook' &&
-                    configured &&
-                    plaidInstitutionCount > 0) {
-                  trailing = TextButton.icon(
-                    onPressed: () => _pushWebhookToAllInstitutions(),
-                    icon: const Icon(Icons.cloud_upload_outlined, size: 16),
-                    label: Text(
-                      l.dashPushToInstitutions(plaidInstitutionCount),
-                    ),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
+                  final check = raw as Map<String, dynamic>;
+                  final configured = check['configured'] == true;
+                  final key = check['key']?.toString() ?? '';
+                  // Per-row trailing action. Today only the plaid_webhook
+                  // row gets one; designed as a switch so future checks
+                  // can hook in the same way without growing a wrapper
+                  // layer per check.
+                  Widget? trailing;
+                  if (key == 'plaid_webhook' &&
+                      configured &&
+                      plaidInstitutionCount > 0) {
+                    trailing = TextButton.icon(
+                      onPressed: () => _pushWebhookToAllInstitutions(),
+                      icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                      label: Text(
+                        l.dashPushToInstitutions(plaidInstitutionCount),
+                      ),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    );
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          configured
+                              ? Icons.check_circle
+                              : check['severity'] == 'optional'
+                              ? Icons.radio_button_unchecked
+                              : Icons.error_outline,
+                          color: configured
+                              ? context.positive
+                              : check['severity'] == 'optional'
+                              ? context.textFaint
+                              : context.warning,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                // Localize by stable key; the server's English
+                                // `label` is only the fallback for keys this
+                                // build doesn't know (newer backend).
+                                setupCheckLabel(
+                                  l,
+                                  key,
+                                  check['label']?.toString() ?? '',
+                                ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                check['detail'] ?? '',
+                                style: TextStyle(
+                                  color: context.textSubtle,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (trailing != null) ...[
+                          const SizedBox(width: 8),
+                          trailing,
+                        ],
+                      ],
                     ),
                   );
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        configured
-                            ? Icons.check_circle
-                            : check['severity'] == 'optional'
-                            ? Icons.radio_button_unchecked
-                            : Icons.error_outline,
-                        color: configured
-                            ? context.positive
-                            : check['severity'] == 'optional'
-                            ? context.textFaint
-                            : context.warning,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              // Localize by stable key; the server's English
-                              // `label` is only the fallback for keys this
-                              // build doesn't know (newer backend).
-                              setupCheckLabel(
-                                  l, key, check['label']?.toString() ?? ''),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
+                }),
+                if (recommended.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  // Dynamic recap of what's still recommended-but-not-set.
+                  // Lists labels from the recommended set; falls back to a
+                  // generic line if all the labels happen to be missing.
+                  Text(
+                    l.dashRecommendedBeforeProduction(
+                      recommended
+                          .map(
+                            (c) => setupCheckLabel(
+                              l,
+                              (c as Map)['key']?.toString() ?? '',
+                              c['label']?.toString() ?? '',
                             ),
-                            Text(
-                              check['detail'] ?? '',
-                              style: TextStyle(
-                                color: context.textSubtle,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (trailing != null) ...[
-                        const SizedBox(width: 8),
-                        trailing,
-                      ],
-                    ],
+                          )
+                          .where((s) => s.isNotEmpty)
+                          .join(', '),
+                    ),
+                    style: TextStyle(color: context.textSubtle, fontSize: 12),
                   ),
-                );
-              }),
-              if (recommended.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                // Dynamic recap of what's still recommended-but-not-set.
-                // Lists labels from the recommended set; falls back to a
-                // generic line if all the labels happen to be missing.
-                Text(
-                  l.dashRecommendedBeforeProduction(recommended
-                      .map((c) => setupCheckLabel(
-                          l,
-                          (c as Map)['key']?.toString() ?? '',
-                          c['label']?.toString() ?? ''))
-                      .where((s) => s.isNotEmpty)
-                      .join(', ')),
-                  style: TextStyle(color: context.textSubtle, fontSize: 12),
-                ),
-              ],
+                ],
               ],
             ],
           ),
@@ -5057,10 +5311,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         children: [
           // Compact skips the floating 20px header — the card renders its
           // own overline title, and the range selector moves in-card.
-          if (!compact) ...[
-            buildNetWorthHeader(),
-            const SizedBox(height: 12),
-          ],
+          if (!compact) ...[buildNetWorthHeader(), const SizedBox(height: 12)],
           // The card sizes itself: header at natural height + a
           // guaranteed chart height inside NetWorthCard. Pinning the card
           // to a fixed box here is what squished the chart to a sliver on
@@ -5091,7 +5342,8 @@ class _DashboardScreenState extends State<DashboardScreen>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: AssetsLiabilitiesBar(
-                typeBreakdown: (_overview?['type_breakdown'] as List?) ?? const [],
+                typeBreakdown:
+                    (_overview?['type_breakdown'] as List?) ?? const [],
                 conversionFactor: conversionFactor,
               ),
             ),
@@ -5246,7 +5498,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     // buildTabContainer's padding uses) — the inner-LayoutBuilder rule
     // applies to cards; this Column spans the screen.
     final cardGap = SizedBox(
-        height: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0);
+      height: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0,
+    );
     final portfolioTab = buildTabContainer(
       Column(
         children: [
@@ -5268,8 +5521,8 @@ class _DashboardScreenState extends State<DashboardScreen>
               currencyFormat: currencyFormat,
               // Current total (same source as the hero above) so the
               // headline never tracks a partial trailing history point.
-              totalValueUsd:
-                  (portfolioData['total_value_usd'] as num?)?.toDouble(),
+              totalValueUsd: (portfolioData['total_value_usd'] as num?)
+                  ?.toDouble(),
             ),
           ),
           cardGap,
@@ -5453,7 +5706,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                       // gen-l10n orders these alphabetically → (checked, inserted); pass checked first.
                       ? l.dashTransfersLinked(
                           (r['checked'] as num? ?? 0).toInt(),
-                          (r['inserted'] as num? ?? 0).toInt())
+                          (r['inserted'] as num? ?? 0).toInt(),
+                        )
                       : l.dashNoNewTransfers,
                 ),
               ),
@@ -5466,23 +5720,26 @@ class _DashboardScreenState extends State<DashboardScreen>
             );
           }
         },
-        onUpdate: (id, {userCategory, userNotes, userDescription, accountId}) async {
-          try {
-            await _apiService.updateTransaction(
-              id,
-              userCategory: userCategory,
-              userNotes: userNotes,
-              userDescription: userDescription,
-              accountId: accountId,
-            );
-            await _refreshAfterTransactionMutation();
-          } catch (e) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l.dashUpdateTransactionFailed(e.toString()))),
-            );
-          }
-        },
+        onUpdate:
+            (id, {userCategory, userNotes, userDescription, accountId}) async {
+              try {
+                await _apiService.updateTransaction(
+                  id,
+                  userCategory: userCategory,
+                  userNotes: userNotes,
+                  userDescription: userDescription,
+                  accountId: accountId,
+                );
+                await _refreshAfterTransactionMutation();
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(l.dashUpdateTransactionFailed(e.toString())),
+                  ),
+                );
+              }
+            },
         // Batch bulk edits into ONE request + ONE refresh (instead of N
         // per-row PATCHes each force-refreshing the whole dashboard).
         onBulkUpdate: (ids, {userCategory, accountId, userDescription}) async {
@@ -5505,9 +5762,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           await _apiService.deleteTransaction(id);
           await _refreshAfterTransactionMutation();
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l.dashTransactionDeleted)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(l.dashTransactionDeleted)));
         },
         // Create a loan pre-filled from an outflow, linking it as the
         // disbursement. LendingTab owns loan people; the borrower here is
@@ -5533,7 +5790,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final cashFlowSeries = _cashFlowTrends ?? _trendData;
     // For single-month periods the card headlines a specific month; for
     // multi-month windows it aggregates and shows a period label instead.
-    final bool cfAggregated = _cashFlowTrends != null &&
+    final bool cfAggregated =
+        _cashFlowTrends != null &&
         (_cashFlowPeriod == CashFlowPeriod.threeMonths ||
             _cashFlowPeriod == CashFlowPeriod.ytd);
     String? cfSelectedMonthIso;
@@ -5699,11 +5957,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                 try {
                   await _apiService.confirmFxTransfer(id);
                   await _refreshAfterTransactionMutation(
-                      includeFxTransfers: true);
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashLinkConfirmed)),
+                    includeFxTransfers: true,
                   );
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(l.dashLinkConfirmed)));
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -5715,11 +5974,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                 try {
                   await _apiService.unlinkFxTransfer(id);
                   await _refreshAfterTransactionMutation(
-                      includeFxTransfers: true);
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashPairUnlinked)),
+                    includeFxTransfers: true,
                   );
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(l.dashPairUnlinked)));
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -5789,174 +6049,186 @@ class _DashboardScreenState extends State<DashboardScreen>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.add_link,
-                          size: 18, color: context.tealAccent),
+                      Icon(Icons.add_link, size: 18, color: context.tealAccent),
                       const SizedBox(width: 8),
                       Text(
                         l.dashAddAccountsTitle,
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  LayoutBuilder(builder: (ctx, c) {
-                    // Full-bleed and stacked while the card is touch-shaped;
-                    // content-sized (bounded) once there is pointer room. The
-                    // old rule was `(c.maxWidth - 16) / 2` with no cap, which
-                    // stretched a two-word label to 565px at 1440. See
-                    // theme/buttons.dart.
-                    final constraints = actionButtonConstraints(c.maxWidth);
-                    Widget tile(IconData icon, String label,
-                        {required Color bg,
+                  LayoutBuilder(
+                    builder: (ctx, c) {
+                      // Full-bleed and stacked while the card is touch-shaped;
+                      // content-sized (bounded) once there is pointer room. The
+                      // old rule was `(c.maxWidth - 16) / 2` with no cap, which
+                      // stretched a two-word label to 565px at 1440. See
+                      // theme/buttons.dart.
+                      final constraints = actionButtonConstraints(c.maxWidth);
+                      Widget tile(
+                        IconData icon,
+                        String label, {
+                        required Color bg,
                         Color? fg,
                         Color? iconColor,
-                        VoidCallback? onPressed}) {
-                      final foreground = fg ?? context.textPrimary;
-                      return ConstrainedBox(
-                        constraints: constraints,
-                        child: ElevatedButton.icon(
-                          icon: Icon(icon, size: 18,
-                              color: iconColor ?? foreground),
-                          label: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            // M3 Expressive "Small" (40dp). The tiles were on
-                            // vertical: 13 + icon 24 ≈ 50dp, which that ramp
-                            // reserves for a hero action.
-                            minimumSize:
-                                const Size(0, kActionButtonHeight),
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 20),
-                            elevation: 0,
-                            backgroundColor: bg,
-                            // Pin foreground so the label stays legible on
-                            // every tinted tile (ElevatedButton's default
-                            // light-mode tonal grey fades into the tint).
-                            foregroundColor: foreground,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        VoidCallback? onPressed,
+                      }) {
+                        final foreground = fg ?? context.textPrimary;
+                        return ConstrainedBox(
+                          constraints: constraints,
+                          child: ElevatedButton.icon(
+                            icon: Icon(
+                              icon,
+                              size: 18,
+                              color: iconColor ?? foreground,
                             ),
-                          ),
-                          onPressed: onPressed,
-                        ),
-                      );
-                    }
-
-                    Widget subLabel(String text) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text(
-                            text.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: context.textSubtle,
-                              letterSpacing: 0.6,
+                            label: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
+                            style: ElevatedButton.styleFrom(
+                              // M3 Expressive "Small" (40dp). The tiles were on
+                              // vertical: 13 + icon 24 ≈ 50dp, which that ramp
+                              // reserves for a hero action.
+                              minimumSize: const Size(0, kActionButtonHeight),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              elevation: 0,
+                              backgroundColor: bg,
+                              // Pin foreground so the label stays legible on
+                              // every tinted tile (ElevatedButton's default
+                              // light-mode tonal grey fades into the tint).
+                              foregroundColor: foreground,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onPressed: onPressed,
                           ),
                         );
+                      }
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        subLabel(l.dashConnectStandardAccounts),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 10,
-                          children: [
-                            tile(
-                              Icons.add_link,
-                              l.dashLinkPlaidUsBanks,
-                              bg: context.accentSoft(context.tealAccent),
-                              onPressed: plaidReady()
-                                  ? () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const ConnectBankScreen(),
-                                        ),
-                                      ).then(
-                                          (_) => _loadAllData(silent: true));
-                                    }
-                                  : null,
-                            ),
-                            tile(
-                              Icons.upload_file,
-                              l.dashImportMxShort,
-                              bg: context.hairline,
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const ImportScreen(),
-                                  ),
-                                ).then((_) => _loadAllData(silent: true));
-                              },
-                            ),
-                            tile(
-                              Icons.add_circle_outline,
-                              l.dashAddManualAccountShort,
-                              bg: context.hairline,
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AddAccountDialog(
-                                      onAccountCreated: _loadAllData),
-                                );
-                              },
-                            ),
-                          ],
+                      Widget subLabel(String text) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          text.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: context.textSubtle,
+                            letterSpacing: 0.6,
+                          ),
                         ),
-                        const SizedBox(height: 20),
-                        Divider(color: context.hairline, height: 1),
-                        const SizedBox(height: 20),
-                        subLabel(l.dashConnectCryptoExchanges),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 10,
-                          children: [
-                            tile(
-                              Icons.login,
-                              l.dashLinkCoinbase,
-                              // Coinbase brand blue (#0052FF) rides the ICON,
-                              // not the fill. As a saturated full-width fill
-                              // it was the loudest element on the page and
-                              // outranked the user's own primary actions —
-                              // a partner's brand colour shouldn't win the
-                              // hierarchy inside our surface. Tonal fill keeps
-                              // this level with its siblings; the mark still
-                              // identifies it.
-                              bg: context.accentSoft(const Color(0xFF0052FF)),
-                              iconColor: const Color(0xFF0052FF),
-                              onPressed: () {
-                                final baseUrl = _apiService.baseUrl;
-                                navigateTo('$baseUrl/auth/coinbase');
-                              },
-                            ),
-                            tile(
-                              Icons.currency_exchange,
-                              l.dashConnectBitso,
-                              bg: context.positive.withValues(alpha: 0.12),
-                              iconColor: context.positive,
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AddCryptoDialog(
-                                    exchange: 'bitso',
-                                    onLinked: _loadAllData,
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
-                  }),
+                      );
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          subLabel(l.dashConnectStandardAccounts),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 10,
+                            children: [
+                              tile(
+                                Icons.add_link,
+                                l.dashLinkPlaidUsBanks,
+                                bg: context.accentSoft(context.tealAccent),
+                                onPressed: plaidReady()
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const ConnectBankScreen(),
+                                          ),
+                                        ).then(
+                                          (_) => _loadAllData(silent: true),
+                                        );
+                                      }
+                                    : null,
+                              ),
+                              tile(
+                                Icons.upload_file,
+                                l.dashImportMxShort,
+                                bg: context.hairline,
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const ImportScreen(),
+                                    ),
+                                  ).then((_) => _loadAllData(silent: true));
+                                },
+                              ),
+                              tile(
+                                Icons.add_circle_outline,
+                                l.dashAddManualAccountShort,
+                                bg: context.hairline,
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AddAccountDialog(
+                                      onAccountCreated: _loadAllData,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          Divider(color: context.hairline, height: 1),
+                          const SizedBox(height: 20),
+                          subLabel(l.dashConnectCryptoExchanges),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 10,
+                            children: [
+                              tile(
+                                Icons.login,
+                                l.dashLinkCoinbase,
+                                // Coinbase brand blue (#0052FF) rides the ICON,
+                                // not the fill. As a saturated full-width fill
+                                // it was the loudest element on the page and
+                                // outranked the user's own primary actions —
+                                // a partner's brand colour shouldn't win the
+                                // hierarchy inside our surface. Tonal fill keeps
+                                // this level with its siblings; the mark still
+                                // identifies it.
+                                bg: context.accentSoft(const Color(0xFF0052FF)),
+                                iconColor: const Color(0xFF0052FF),
+                                onPressed: () {
+                                  final baseUrl = _apiService.baseUrl;
+                                  navigateTo('$baseUrl/auth/coinbase');
+                                },
+                              ),
+                              tile(
+                                Icons.currency_exchange,
+                                l.dashConnectBitso,
+                                bg: context.positive.withValues(alpha: 0.12),
+                                iconColor: context.positive,
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AddCryptoDialog(
+                                      exchange: 'bitso',
+                                      onLinked: _loadAllData,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
@@ -5971,18 +6243,26 @@ class _DashboardScreenState extends State<DashboardScreen>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.badge_outlined,
-                          size: 18, color: context.tealAccent),
+                      Icon(
+                        Icons.badge_outlined,
+                        size: 18,
+                        color: context.tealAccent,
+                      ),
                       const SizedBox(width: 8),
-                      Text(l.dashLenderNameTitle,
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w700)),
+                      Text(
+                        l.dashLenderNameTitle,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(l.dashLenderNameSubtitle,
-                      style:
-                          TextStyle(fontSize: 12, color: context.textSubtle)),
+                  Text(
+                    l.dashLenderNameSubtitle,
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
+                  ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -6006,7 +6286,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2))
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : Text(l.dashSave),
                       ),
                     ],
@@ -6029,21 +6311,21 @@ class _DashboardScreenState extends State<DashboardScreen>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.download,
-                          size: 18, color: context.tealAccent),
+                      Icon(Icons.download, size: 18, color: context.tealAccent),
                       const SizedBox(width: 8),
                       Text(
                         l.dashDataExportTitle,
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
                     l.dashDataExportSubtitle,
-                    style: TextStyle(
-                        fontSize: 12, color: context.textSubtle),
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
                   ),
                   const SizedBox(height: 16),
                   Wrap(
@@ -6054,19 +6336,21 @@ class _DashboardScreenState extends State<DashboardScreen>
                         icon: const Icon(Icons.table_chart_outlined),
                         label: Text(l.dashExportTransactionsCsv),
                         onPressed: () => openUrlSameTab(
-                            _apiService.exportTransactionsCsvUrl()),
+                          _apiService.exportTransactionsCsvUrl(),
+                        ),
                       ),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.receipt_long_outlined),
                         label: Text(l.dashExportTaxCsv),
-                        onPressed: () => openUrlSameTab(
-                            '${_apiService.baseUrl}/tax/export'),
+                        onPressed: () =>
+                            openUrlSameTab('${_apiService.baseUrl}/tax/export'),
                       ),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.picture_as_pdf_outlined),
                         label: Text(l.dashExportTaxPdf),
                         onPressed: () => openUrlSameTab(
-                            '${_apiService.baseUrl}/tax/export/pdf'),
+                          '${_apiService.baseUrl}/tax/export/pdf',
+                        ),
                       ),
                     ],
                   ),
@@ -6075,8 +6359,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                   const SizedBox(height: 8),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.inventory_2_outlined,
-                        color: context.tealAccent),
+                    leading: Icon(
+                      Icons.inventory_2_outlined,
+                      color: context.tealAccent,
+                    ),
                     title: Text(l.dashImportedBatchesTitle),
                     subtitle: Text(l.dashImportedBatchesSubtitle),
                     trailing: const Icon(Icons.chevron_right),
@@ -6100,160 +6386,172 @@ class _DashboardScreenState extends State<DashboardScreen>
           // stays an always-visible sibling below either way.
           ...(() {
             final List<Widget> secondaryControls = <Widget>[
-          // "Sync all" acts on already-connected accounts, so it sits with
-          // the sync-status / FX monitoring row rather than the add-account
-          // actions. Inline spinner instead of a blocking SnackBar.
-          // Content-sized once there's pointer room, full-bleed on a phone.
-          // This was `width: double.infinity` + `vertical: 18`, i.e. a
-          // 1650x56 slab at desktop width — the single worst offender on the
-          // Settings page. See theme/buttons.dart.
-          LayoutBuilder(builder: (ctx, c) {
-            final button = ElevatedButton.icon(
-              icon: _isSyncing
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                            context.textPrimary),
+              // "Sync all" acts on already-connected accounts, so it sits with
+              // the sync-status / FX monitoring row rather than the add-account
+              // actions. Inline spinner instead of a blocking SnackBar.
+              // Content-sized once there's pointer room, full-bleed on a phone.
+              // This was `width: double.infinity` + `vertical: 18`, i.e. a
+              // 1650x56 slab at desktop width — the single worst offender on the
+              // Settings page. See theme/buttons.dart.
+              LayoutBuilder(
+                builder: (ctx, c) {
+                  final button = ElevatedButton.icon(
+                    icon: _isSyncing
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                context.textPrimary,
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.sync, size: 18),
+                    label: Text(
+                      _isSyncing
+                          ? (_syncTotal > 0
+                                ? l.dashSyncingProgress(_syncDone, _syncTotal)
+                                : l.dashSyncingAll)
+                          : l.dashSyncAllAccounts,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, kActionButtonHeight),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      elevation: 0,
+                      backgroundColor: context.accentSoft(context.info),
+                      foregroundColor: context.textPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    )
-                  : const Icon(Icons.sync, size: 18),
-              label: Text(
-                _isSyncing
-                    ? (_syncTotal > 0
-                        ? l.dashSyncingProgress(_syncDone, _syncTotal)
-                        : l.dashSyncingAll)
-                    : l.dashSyncAllAccounts,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(0, kActionButtonHeight),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                elevation: 0,
-                backgroundColor: context.accentSoft(context.info),
-                foregroundColor: context.textPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: _isSyncing ? null : runSync,
-            );
-            final width = actionButtonWidth(c.maxWidth);
-            return Align(
-              alignment: Alignment.centerLeft,
-              child: width == null
-                  ? button
-                  : SizedBox(width: width, child: button),
-            );
-          }),
-          const SizedBox(height: 16),
-          LayoutBuilder(builder: (ctx, c) {
-            // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
-            // into unreadability when forced side-by-side. Stack them.
-            final isNarrow = c.maxWidth < 720;
-            final sync = SyncStatusCard(
-              syncData: _syncData ?? [],
-              onRetrySync: runSync,
-              onRetrySingle: (id) async {
-                try {
-                  await _apiService.syncInstitution(id);
-                  await _refreshData();
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashRetryFailed(e.toString()))),
+                    ),
+                    onPressed: _isSyncing ? null : runSync,
                   );
-                }
-              },
-              onRetryBatch: (ids) async {
-                try {
-                  await _apiService.syncInstitutionsBatch(ids);
-                  await _refreshData();
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashRetryFailed(e.toString()))),
+                  final width = actionButtonWidth(c.maxWidth);
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: width == null
+                        ? button
+                        : SizedBox(width: width, child: button),
                   );
-                }
-              },
-              onReconnect: handleReconnect,
-              onDelete: (id) async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: Text(l.dashDeleteInstitutionTitle),
-                    content: Text(l.dashDeleteInstitutionBody),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: Text(l.actionCancel)),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: TextButton.styleFrom(
-                            foregroundColor: context.negative),
-                        child: Text(l.dashDeleteEverything),
-                      ),
-                    ],
-                  ),
-                );
+                },
+              ),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (ctx, c) {
+                  // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
+                  // into unreadability when forced side-by-side. Stack them.
+                  final isNarrow = c.maxWidth < 720;
+                  final sync = SyncStatusCard(
+                    syncData: _syncData ?? [],
+                    onRetrySync: runSync,
+                    onRetrySingle: (id) async {
+                      try {
+                        await _apiService.syncInstitution(id);
+                        await _refreshData();
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(l.dashRetryFailed(e.toString())),
+                          ),
+                        );
+                      }
+                    },
+                    onRetryBatch: (ids) async {
+                      try {
+                        await _apiService.syncInstitutionsBatch(ids);
+                        await _refreshData();
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(l.dashRetryFailed(e.toString())),
+                          ),
+                        );
+                      }
+                    },
+                    onReconnect: handleReconnect,
+                    onDelete: (id) async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Text(l.dashDeleteInstitutionTitle),
+                          content: Text(l.dashDeleteInstitutionBody),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: Text(l.actionCancel),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: TextButton.styleFrom(
+                                foregroundColor: context.negative,
+                              ),
+                              child: Text(l.dashDeleteEverything),
+                            ),
+                          ],
+                        ),
+                      );
 
-                if (confirm == true) {
-                  try {
-                    await _apiService.deleteInstitution(id);
-                    _loadAllData(silent: true);
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(l.dashDeleteFailed(e.toString()))));
+                      if (confirm == true) {
+                        try {
+                          await _apiService.deleteInstitution(id);
+                          _loadAllData(silent: true);
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(l.dashDeleteFailed(e.toString())),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  );
+                  final fx = FxWidget(
+                    latestRate: _fxRate ?? {},
+                    onRefresh: () async {
+                      try {
+                        final fresh = await _apiService.getExchangeRate(
+                          'USD',
+                          'MXN',
+                          force: true,
+                        );
+                        if (!mounted) return;
+                        setState(() => _fxRate = fresh);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(l.dashFxRateRefreshed)),
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(l.dashRefreshFailed(e.toString())),
+                          ),
+                        );
+                      }
+                    },
+                  );
+                  if (isNarrow) {
+                    return Column(
+                      children: [sync, const SizedBox(height: 16), fx],
+                    );
                   }
-                }
-              },
-            );
-            final fx = FxWidget(
-              latestRate: _fxRate ?? {},
-              onRefresh: () async {
-                try {
-                  final fresh = await _apiService.getExchangeRate(
-                    'USD',
-                    'MXN',
-                    force: true,
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: sync),
+                      const SizedBox(width: 24),
+                      Expanded(child: fx),
+                    ],
                   );
-                  if (!mounted) return;
-                  setState(() => _fxRate = fresh);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashFxRateRefreshed)),
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashRefreshFailed(e.toString()))),
-                  );
-                }
-              },
-            );
-            if (isNarrow) {
-              return Column(
-                children: [
-                  sync,
-                  const SizedBox(height: 16),
-                  fx,
-                ],
-              );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: sync),
-                const SizedBox(width: 24),
-                Expanded(child: fx),
-              ],
-            );
-          }),
-          SizedBox(height: gap),
-          _buildModulesCard(),
+                },
+              ),
+              SizedBox(height: gap),
+              _buildModulesCard(),
             ];
             if (isPhone) {
               return [
@@ -6261,10 +6559,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 _buildManagementDetails(secondaryControls),
               ];
             }
-            return [
-              const SizedBox(height: 24),
-              ...secondaryControls,
-            ];
+            return [const SizedBox(height: 24), ...secondaryControls];
           }()),
           // Auto-archived accounts — a recovery affordance for accounts the
           // sync closed at the bank. Rendered only when something's been
@@ -6375,8 +6670,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         .where((d) => d.tier == NavTier.secondary && d.id != NavId.settings)
         .toList();
     final settings = dests.firstWhere((d) => d.id == NavId.settings);
-    final selectedId =
-        (_section >= 0 && _section < dests.length) ? dests[_section].id : null;
+    final selectedId = (_section >= 0 && _section < dests.length)
+        ? dests[_section].id
+        : null;
     return Container(
       width: 188,
       color: scheme.surface,
@@ -6390,12 +6686,10 @@ class _DashboardScreenState extends State<DashboardScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final d in primary)
-                    _railTile(d, d.id == selectedId),
+                  for (final d in primary) _railTile(d, d.id == selectedId),
                   if (secondary.isNotEmpty)
                     _railGroupLabel(AppLocalizations.of(context).navMoreGroup),
-                  for (final d in secondary)
-                    _railTile(d, d.id == selectedId),
+                  for (final d in secondary) _railTile(d, d.id == selectedId),
                 ],
               ),
             ),
@@ -6444,21 +6738,20 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: Material(
-          color: selected
-              ? accent.withValues(alpha: 0.14)
-              : Colors.transparent,
+          color: selected ? accent.withValues(alpha: 0.14) : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: () => _goToNav(d.id),
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
               child: Row(
                 children: [
-                  Icon(d.icon,
-                      size: 20,
-                      color: selected ? accent : scheme.onSurfaceVariant),
+                  Icon(
+                    d.icon,
+                    size: 20,
+                    color: selected ? accent : scheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -6466,8 +6759,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                         color: selected
                             ? scheme.onSurface
                             : scheme.onSurfaceVariant,
@@ -6489,8 +6783,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     final l = AppLocalizations.of(context);
     final dests = _destinations;
     final primary = dests.where((d) => d.tier == NavTier.primary).toList();
-    final current =
-        (_section >= 0 && _section < dests.length) ? dests[_section] : dests.first;
+    final current = (_section >= 0 && _section < dests.length)
+        ? dests[_section]
+        : dests.first;
     // Highlight the active primary, or "More" (last slot) when a secondary
     // section is showing.
     final primaryIdx = primary.indexWhere((d) => d.id == current.id);
@@ -6507,8 +6802,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       destinations: [
         for (final d in primary)
           NavigationDestination(
-              icon: Icon(d.icon), label: _navShortLabel(l, d.id)),
-        NavigationDestination(icon: const Icon(Icons.more_horiz), label: l.navMore),
+            icon: Icon(d.icon),
+            label: _navShortLabel(l, d.id),
+          ),
+        NavigationDestination(
+          icon: const Icon(Icons.more_horiz),
+          label: l.navMore,
+        ),
       ],
     );
   }
@@ -6520,8 +6820,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Same guarded lookup as _buildBottomBar: which destination is showing
     // right now, so the sheet can tint the active row (the NavigationBar
     // highlight, mirrored) instead of presenting six identical tiles.
-    final current =
-        (_section >= 0 && _section < dests.length) ? dests[_section] : dests.first;
+    final current = (_section >= 0 && _section < dests.length)
+        ? dests[_section]
+        : dests.first;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -6536,18 +6837,20 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Semantics(
                   button: true,
                   child: ListTile(
-                    leading:
-                        Icon(d.icon, color: d.accent(Theme.of(context).brightness)),
+                    leading: Icon(
+                      d.icon,
+                      color: d.accent(Theme.of(context).brightness),
+                    ),
                     title: Text(_navLabel(l, d.id)),
                     // Soft active-destination tint (ListTile.selected also
                     // exposes the state to assistive tech).
                     selected: d.id == current.id,
-                    selectedTileColor: Theme.of(context)
-                        .colorScheme
-                        .secondaryContainer
-                        .withValues(alpha: 0.5),
-                    selectedColor:
-                        Theme.of(context).colorScheme.onSecondaryContainer,
+                    selectedTileColor: Theme.of(
+                      context,
+                    ).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                    selectedColor: Theme.of(
+                      context,
+                    ).colorScheme.onSecondaryContainer,
                     onTap: () {
                       Navigator.of(sheetCtx).pop();
                       _goToNav(d.id);
@@ -6668,11 +6971,7 @@ class _StatTile extends StatelessWidget {
               // tappable, signalling "tap to see the accounts behind this".
               if (onTap != null) ...[
                 const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right,
-                  size: 14,
-                  color: context.textFaint,
-                ),
+                Icon(Icons.chevron_right, size: 14, color: context.textFaint),
               ],
             ],
           ),
@@ -6775,7 +7074,9 @@ class _CurrencyToggleButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Tooltip(
-        message: AppLocalizations.of(context).currencyToggleTooltip(targetCurrency),
+        message: AppLocalizations.of(
+          context,
+        ).currencyToggleTooltip(targetCurrency),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: onSwap,
@@ -6816,22 +7117,22 @@ class _ThemeCycleButton extends StatelessWidget {
   static const _order = [ThemeMode.system, ThemeMode.light, ThemeMode.dark];
 
   IconData _iconFor(ThemeMode m) => switch (m) {
-        ThemeMode.system => Icons.brightness_auto,
-        ThemeMode.light => Icons.light_mode_outlined,
-        ThemeMode.dark => Icons.dark_mode_outlined,
-      };
+    ThemeMode.system => Icons.brightness_auto,
+    ThemeMode.light => Icons.light_mode_outlined,
+    ThemeMode.dark => Icons.dark_mode_outlined,
+  };
 
   String _labelFor(AppLocalizations l, ThemeMode m) => switch (m) {
-        ThemeMode.system => l.dashThemeSystem,
-        ThemeMode.light => l.dashThemeLight,
-        ThemeMode.dark => l.dashThemeDark,
-      };
+    ThemeMode.system => l.dashThemeSystem,
+    ThemeMode.light => l.dashThemeLight,
+    ThemeMode.dark => l.dashThemeDark,
+  };
 
   void _persist(ThemeMode m) => Preferences.setThemeMode(switch (m) {
-        ThemeMode.system => 'system',
-        ThemeMode.light => 'light',
-        ThemeMode.dark => 'dark',
-      });
+    ThemeMode.system => 'system',
+    ThemeMode.light => 'light',
+    ThemeMode.dark => 'dark',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -6887,10 +7188,7 @@ class _ThemeCycleButton extends StatelessWidget {
                 opacity: anim,
                 child: ScaleTransition(scale: anim, child: child),
               ),
-              child: Icon(
-                _iconFor(mode),
-                key: ValueKey(mode),
-              ),
+              child: Icon(_iconFor(mode), key: ValueKey(mode)),
             ),
             onPressed: () {
               final next = _order[(_order.indexOf(mode) + 1) % _order.length];
@@ -7001,7 +7299,9 @@ class SettingsPreferencesCard extends StatelessWidget {
                 Text(
                   l.dashPreferencesTitle,
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
@@ -7023,134 +7323,156 @@ class SettingsPreferencesCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               // Width decisions off the card's INNER constraint (house
               // convention), not the screen.
-              child: LayoutBuilder(builder: (ctx, c) {
-                final label = Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.brightness_6_outlined),
-                    const SizedBox(width: 16),
-                    Text(l.dashThemeMenu,
-                        style: const TextStyle(fontSize: 16)),
-                  ],
-                );
-                // ValueListenableBuilder keeps the selection in step with
-                // theme changes made elsewhere (the wide AppBar's
-                // theme-cycle button writes the same notifier). Rendered as
-                // an M3 Expressive connected button group (2px gaps, no
-                // shared outline, selected segment morphs to a filled
-                // fully-rounded pill) — the classic SegmentedButton's
-                // outline+checkmark read as dated chrome, and equal-flex
-                // segments always fit the card, no scroll guard needed.
-                final picker = ValueListenableBuilder<ThemeMode>(
-                  valueListenable: themeModeNotifier,
-                  builder: (pickerCtx, mode, _) {
-                    final scheme = Theme.of(pickerCtx).colorScheme;
-                    Widget seg(ThemeMode value, IconData icon, String text,
-                        {bool first = false, bool last = false}) {
-                      final selected = mode == value;
-                      // Outer ends stay pill-round; inner corners sit at 8
-                      // until selection morphs the segment fully round.
-                      final radius = BorderRadius.horizontal(
-                        left: Radius.circular(selected || first ? 22 : 8),
-                        right: Radius.circular(selected || last ? 22 : 8),
-                      );
-                      return Expanded(
-                        child: Semantics(
-                          selected: selected,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? scheme.secondaryContainer
-                                  : pickerCtx.tint(0.05),
-                              borderRadius: radius,
-                            ),
-                            child: Material(
-                              type: MaterialType.transparency,
-                              child: InkWell(
+              child: LayoutBuilder(
+                builder: (ctx, c) {
+                  final label = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.brightness_6_outlined),
+                      const SizedBox(width: 16),
+                      Text(
+                        l.dashThemeMenu,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  );
+                  // ValueListenableBuilder keeps the selection in step with
+                  // theme changes made elsewhere (the wide AppBar's
+                  // theme-cycle button writes the same notifier). Rendered as
+                  // an M3 Expressive connected button group (2px gaps, no
+                  // shared outline, selected segment morphs to a filled
+                  // fully-rounded pill) — the classic SegmentedButton's
+                  // outline+checkmark read as dated chrome, and equal-flex
+                  // segments always fit the card, no scroll guard needed.
+                  final picker = ValueListenableBuilder<ThemeMode>(
+                    valueListenable: themeModeNotifier,
+                    builder: (pickerCtx, mode, _) {
+                      final scheme = Theme.of(pickerCtx).colorScheme;
+                      Widget seg(
+                        ThemeMode value,
+                        IconData icon,
+                        String text, {
+                        bool first = false,
+                        bool last = false,
+                      }) {
+                        final selected = mode == value;
+                        // Outer ends stay pill-round; inner corners sit at 8
+                        // until selection morphs the segment fully round.
+                        final radius = BorderRadius.horizontal(
+                          left: Radius.circular(selected || first ? 22 : 8),
+                          right: Radius.circular(selected || last ? 22 : 8),
+                        );
+                        return Expanded(
+                          child: Semantics(
+                            selected: selected,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: selected
+                                    ? scheme.secondaryContainer
+                                    : pickerCtx.tint(0.05),
                                 borderRadius: radius,
-                                onTap: () {
-                                  themeModeNotifier.value = value;
-                                  // Same persist mapping as the AppBar
-                                  // theme controls.
-                                  Preferences.setThemeMode(switch (value) {
-                                    ThemeMode.system => 'system',
-                                    ThemeMode.light => 'light',
-                                    ThemeMode.dark => 'dark',
-                                  });
-                                },
-                                child: Center(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(icon,
+                              ),
+                              child: Material(
+                                type: MaterialType.transparency,
+                                child: InkWell(
+                                  borderRadius: radius,
+                                  onTap: () {
+                                    themeModeNotifier.value = value;
+                                    // Same persist mapping as the AppBar
+                                    // theme controls.
+                                    Preferences.setThemeMode(switch (value) {
+                                      ThemeMode.system => 'system',
+                                      ThemeMode.light => 'light',
+                                      ThemeMode.dark => 'dark',
+                                    });
+                                  },
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          icon,
                                           size: 18,
                                           color: selected
                                               ? scheme.onSecondaryContainer
-                                              : pickerCtx.textSubtle),
-                                      const SizedBox(width: 6),
-                                      Flexible(
-                                        child: Text(
-                                          text,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 13.5,
-                                            fontWeight: selected
-                                                ? FontWeight.w700
-                                                : FontWeight.w600,
-                                            color: selected
-                                                ? scheme.onSecondaryContainer
-                                                : pickerCtx.textSubtle,
+                                              : pickerCtx.textSubtle,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            text,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: selected
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w600,
+                                              color: selected
+                                                  ? scheme.onSecondaryContainer
+                                                  : pickerCtx.textSubtle,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    }
+                        );
+                      }
 
-                    return Row(
+                      return Row(
+                        children: [
+                          seg(
+                            ThemeMode.system,
+                            Icons.brightness_auto,
+                            l.dashThemeSystemShort,
+                            first: true,
+                          ),
+                          const SizedBox(width: 2),
+                          seg(
+                            ThemeMode.light,
+                            Icons.light_mode_outlined,
+                            l.dashThemeLightShort,
+                          ),
+                          const SizedBox(width: 2),
+                          seg(
+                            ThemeMode.dark,
+                            Icons.dark_mode_outlined,
+                            l.dashThemeDarkShort,
+                            last: true,
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                  if (c.maxWidth < 520) {
+                    // Narrow: the group gets its own full-width line under
+                    // the label.
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        seg(ThemeMode.system, Icons.brightness_auto,
-                            l.dashThemeSystemShort, first: true),
-                        const SizedBox(width: 2),
-                        seg(ThemeMode.light, Icons.light_mode_outlined,
-                            l.dashThemeLightShort),
-                        const SizedBox(width: 2),
-                        seg(ThemeMode.dark, Icons.dark_mode_outlined,
-                            l.dashThemeDarkShort, last: true),
+                        Align(alignment: Alignment.centerLeft, child: label),
+                        const SizedBox(height: 12),
+                        picker,
                       ],
                     );
-                  },
-                );
-                if (c.maxWidth < 520) {
-                  // Narrow: the group gets its own full-width line under
-                  // the label.
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  }
+                  return Row(
                     children: [
-                      Align(alignment: Alignment.centerLeft, child: label),
-                      const SizedBox(height: 12),
-                      picker,
+                      Expanded(child: label),
+                      const SizedBox(width: 16),
+                      SizedBox(width: 360, child: picker),
                     ],
                   );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: label),
-                    const SizedBox(width: 16),
-                    SizedBox(width: 360, child: picker),
-                  ],
-                );
-              }),
+                },
+              ),
             ),
           ],
         ),
@@ -7220,13 +7542,18 @@ class SettingsAccountSecurityCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.shield_outlined,
-                    size: 18, color: context.tealAccent),
+                Icon(
+                  Icons.shield_outlined,
+                  size: 18,
+                  color: context.tealAccent,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   l.dashAccountSecurityTitle,
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
@@ -7236,9 +7563,9 @@ class SettingsAccountSecurityCard extends StatelessWidget {
               leading: const Icon(Icons.shield_outlined),
               title: Text(l.dashSecurity),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SecurityScreen()),
-              ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SecurityScreen())),
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -7247,8 +7574,7 @@ class SettingsAccountSecurityCard extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 await Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const HiddenItemsScreen()),
+                  MaterialPageRoute(builder: (_) => const HiddenItemsScreen()),
                 );
                 onHiddenItemsClosed();
               },
@@ -7270,8 +7596,7 @@ class SettingsAccountSecurityCard extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.logout, color: scheme.error),
-              title:
-                  Text(l.dashSignOut, style: TextStyle(color: scheme.error)),
+              title: Text(l.dashSignOut, style: TextStyle(color: scheme.error)),
               onTap: () async {
                 if (await confirmSignOutDialog(context)) onSignOut();
               },
@@ -7297,8 +7622,7 @@ class SettingsAccountSecurityCard extends StatelessWidget {
 /// Collapsed, the shell never reaches height 0 on a phone: an opaque strip of
 /// exactly the status-bar inset remains (painted in the bar's own background
 /// colour), so tab content never renders under the OS status bar.
-class _CollapsingAppBar extends StatelessWidget
-    implements PreferredSizeWidget {
+class _CollapsingAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _CollapsingAppBar({required this.visible, required this.child});
 
   /// Whether the bar is shown. Flipping this triggers the ~200ms snap.
@@ -7357,7 +7681,7 @@ class _CollapsingAppBar extends StatelessWidget
                         child: ColoredBox(
                           color:
                               Theme.of(context).appBarTheme.backgroundColor ??
-                                  Theme.of(context).colorScheme.surface,
+                              Theme.of(context).colorScheme.surface,
                         ),
                       ),
                     ),

@@ -16,30 +16,40 @@ import 'package:patrimonio/l10n/app_localizations.dart';
 // otherwise be an invisible transposition.
 void main() {
   Future<String> render(
-      WidgetTester tester, String Function(AppLocalizations l) pick) async {
+    WidgetTester tester,
+    String Function(AppLocalizations l) pick,
+  ) async {
     late String out;
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('en'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Builder(builder: (context) {
-        out = pick(AppLocalizations.of(context));
-        return const SizedBox();
-      }),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) {
+            out = pick(AppLocalizations.of(context));
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     return out;
   }
 
-  testWidgets('taxHarvestFooterFlow(carryforward, gains, ordinary)',
-      (tester) async {
+  testWidgets('taxHarvestFooterFlow(carryforward, gains, ordinary)', (
+    tester,
+  ) async {
     // template: "{gains} taxable gains remain, {ordinary} offset ..., {carryforward} carried forward"
     final s = await render(
-        tester, (l) => l.taxHarvestFooterFlow('CF', 'GA', 'OR'));
+      tester,
+      (l) => l.taxHarvestFooterFlow('CF', 'GA', 'OR'),
+    );
     expect(
-        s,
-        'GA taxable gains remain, OR offset against income, '
-        'CF carried forward');
+      s,
+      'GA taxable gains remain, OR offset against income, '
+      'CF carried forward',
+    );
   });
 
   testWidgets('lwSinceLargestMove(account, amount)', (tester) async {
@@ -49,34 +59,42 @@ void main() {
   });
 
   testWidgets(
-      'txTransferImpliedRate(dstAmount, dstCurrency, rate, srcAmount, srcCurrency)',
-      (tester) async {
-    // template: "{srcAmount} → {dstAmount} · implied {rate} {dstCurrency}/{srcCurrency}"
-    final s = await render(
-        tester, (l) => l.txTransferImpliedRate('DA', 'DC', 'RT', 'SA', 'SC'));
-    expect(s, 'SA → DA · implied RT DC/SC');
-  });
+    'txTransferImpliedRate(dstAmount, dstCurrency, rate, srcAmount, srcCurrency)',
+    (tester) async {
+      // template: "{srcAmount} → {dstAmount} · implied {rate} {dstCurrency}/{srcCurrency}"
+      final s = await render(
+        tester,
+        (l) => l.txTransferImpliedRate('DA', 'DC', 'RT', 'SA', 'SC'),
+      );
+      expect(s, 'SA → DA · implied RT DC/SC');
+    },
+  );
 
   testWidgets(
-      'lwNotifRepaymentOverdueDetail(amount, daysOverdue, dueDate, number)',
-      (tester) async {
-    // template: "Installment #{number} of {amount} was due {dueDate} ({daysOverdue}d ago)."
-    final s = await render(tester,
-        (l) => l.lwNotifRepaymentOverdueDetail('AM', 'DO', 'DD', 'NU'));
-    expect(s, 'Installment #NU of AM was due DD (DOd ago).');
-  });
+    'lwNotifRepaymentOverdueDetail(amount, daysOverdue, dueDate, number)',
+    (tester) async {
+      // template: "Installment #{number} of {amount} was due {dueDate} ({daysOverdue}d ago)."
+      final s = await render(
+        tester,
+        (l) => l.lwNotifRepaymentOverdueDetail('AM', 'DO', 'DD', 'NU'),
+      );
+      expect(s, 'Installment #NU of AM was due DD (DOd ago).');
+    },
+  );
 
   testWidgets('lwNotifStaleSyncTitle(days, name)', (tester) async {
     // template: "{name} last synced {days}d ago"
-    final s = await render(tester, (l) => l.lwNotifStaleSyncTitle('DAYS', 'NM'));
+    final s = await render(
+      tester,
+      (l) => l.lwNotifStaleSyncTitle('DAYS', 'NM'),
+    );
     expect(s, 'NM last synced DAYSd ago');
   });
 
   testWidgets('projTooltipYearAmount(amount, year)', (tester) async {
     // U1 template: "{year} · {amount}" — synthesized placeholders, so the
     // generated signature is alphabetical: (amount, year), amount FIRST.
-    final s =
-        await render(tester, (l) => l.projTooltipYearAmount('AMT', 'YR'));
+    final s = await render(tester, (l) => l.projTooltipYearAmount('AMT', 'YR'));
     expect(s, 'YR · AMT');
   });
 

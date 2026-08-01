@@ -9,22 +9,21 @@ import 'projection_test_host.dart';
 // the success-rate tile's caption stops claiming "chance the plan lasts".
 
 void main() {
-  testWidgets('en: legend names the average path and the glossary explains it',
-      (tester) async {
-    setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost());
-    await tester.pumpAndSettle();
+  testWidgets(
+    'en: legend names the average path and the glossary explains it',
+    (tester) async {
+      setTestSize(tester, const Size(1300, 1800));
+      await tester.pumpWidget(buildProjectionHost());
+      await tester.pumpAndSettle();
 
-    expect(find.text('Projected (average path)'), findsOneWidget);
+      expect(find.text('Projected (average path)'), findsOneWidget);
 
-    await tester.tap(find.text('What do these terms mean?'));
-    await tester.pumpAndSettle();
-    expect(find.text('The bold projected line'), findsOneWidget);
-    expect(
-      find.textContaining('median', findRichText: true),
-      findsWidgets,
-    );
-  });
+      await tester.tap(find.text('What do these terms mean?'));
+      await tester.pumpAndSettle();
+      expect(find.text('The bold projected line'), findsOneWidget);
+      expect(find.textContaining('median', findRichText: true), findsWidgets);
+    },
+  );
 
   testWidgets('es: legend and glossary sentence localized', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
@@ -38,14 +37,17 @@ void main() {
     expect(find.text('La línea gruesa proyectada'), findsOneWidget);
   });
 
-  testWidgets('F12: retirement == horizon captions the success tile as n/a',
-      (tester) async {
+  testWidgets('F12: retirement == horizon captions the success tile as n/a', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      settingReader: (key) async => key == 'projection_assumptions'
-          ? {'years_to_retirement': 30, 'projection_years': 30}
-          : null,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingReader: (key) async => key == 'projection_assumptions'
+            ? {'years_to_retirement': 30, 'projection_years': 30}
+            : null,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -55,8 +57,9 @@ void main() {
     expect(find.text('Chance the plan lasts the horizon'), findsNothing);
   });
 
-  testWidgets('F12: a normal retirement phase keeps the standard caption',
-      (tester) async {
+  testWidgets('F12: a normal retirement phase keeps the standard caption', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();

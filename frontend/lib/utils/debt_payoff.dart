@@ -71,7 +71,11 @@ PayoffResult simulatePayoff(
   final active = debts.where((d) => d.balance > 0).toList();
   if (active.isEmpty) {
     return const PayoffResult(
-        months: 0, totalInterest: 0, feasible: true, order: []);
+      months: 0,
+      totalInterest: 0,
+      feasible: true,
+      order: [],
+    );
   }
 
   // Fixed payoff order (standard avalanche/snowball: order set once).
@@ -92,8 +96,7 @@ PayoffResult simulatePayoff(
   var months = 0;
 
   while (months < maxMonths) {
-    final outstanding =
-        bal.values.fold(0.0, (s, v) => s + (v > 0 ? v : 0));
+    final outstanding = bal.values.fold(0.0, (s, v) => s + (v > 0 ? v : 0));
     if (outstanding <= 0.005) break;
 
     // 1) Accrue one month of interest.

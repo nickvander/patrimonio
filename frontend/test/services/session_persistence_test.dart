@@ -17,8 +17,10 @@ void main() {
       final expiry = DateTime.utc(2026, 8, 12, 5);
       final cookie = Cookie('patrimonio_session', 'tok-123')..expires = expiry;
 
-      final decoded =
-          decodePersistedCookies(encodeJarCookies([cookie]), DateTime(2026, 7, 13));
+      final decoded = decodePersistedCookies(
+        encodeJarCookies([cookie]),
+        DateTime(2026, 7, 13),
+      );
 
       expect(decoded, hasLength(1));
       expect(decoded.single.name, 'patrimonio_session');
@@ -36,8 +38,11 @@ void main() {
       final stamped = DateTime.parse(entry['expires'] as String);
 
       final expectedMin = DateTime.now().toUtc().add(const Duration(days: 29));
-      expect(stamped.isAfter(expectedMin), isTrue,
-          reason: 'Max-Age should become now + 30d');
+      expect(
+        stamped.isAfter(expectedMin),
+        isTrue,
+        reason: 'Max-Age should become now + 30d',
+      );
     });
   });
 
@@ -47,20 +52,26 @@ void main() {
       final dead = Cookie('b', '2')..expires = DateTime.utc(2026, 1, 1);
 
       final decoded = decodePersistedCookies(
-          encodeJarCookies([live, dead]), DateTime.utc(2026, 7, 13));
+        encodeJarCookies([live, dead]),
+        DateTime.utc(2026, 7, 13),
+      );
 
       expect(decoded.map((c) => c.name), ['a']);
     });
 
     test('survives malformed payloads without throwing', () {
-      expect(decodePersistedCookies('not json at all…', DateTime(2026)),
-          isEmpty);
+      expect(
+        decodePersistedCookies('not json at all…', DateTime(2026)),
+        isEmpty,
+      );
       expect(decodePersistedCookies('{"a":1}', DateTime(2026)), isEmpty);
       expect(
-          decodePersistedCookies(
-              '[{"name":"","value":"x"},{"value":"no-name"},42]',
-              DateTime(2026)),
-          isEmpty);
+        decodePersistedCookies(
+          '[{"name":"","value":"x"},{"value":"no-name"},42]',
+          DateTime(2026),
+        ),
+        isEmpty,
+      );
     });
   });
 }

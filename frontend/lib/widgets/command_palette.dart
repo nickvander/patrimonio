@@ -70,14 +70,17 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final list = _visible;
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      setState(() => _highlight =
-          list.isEmpty ? 0 : (_highlight + 1) % list.length);
+      setState(
+        () => _highlight = list.isEmpty ? 0 : (_highlight + 1) % list.length,
+      );
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      setState(() => _highlight = list.isEmpty
-          ? 0
-          : (_highlight - 1 + list.length) % list.length);
+      setState(
+        () => _highlight = list.isEmpty
+            ? 0
+            : (_highlight - 1 + list.length) % list.length,
+      );
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter) {
@@ -147,9 +150,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                           final it = visible[i];
                           final isHi = i == _highlight;
                           return Container(
-                            color: isHi
-                                ? context.tint(0.06)
-                                : null,
+                            color: isHi ? context.tint(0.06) : null,
                             child: ListTile(
                               dense: true,
                               leading: Container(
@@ -159,14 +160,18 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                                   color: it.accent.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Icon(it.icon,
-                                    color: it.accent, size: 16),
+                                child: Icon(
+                                  it.icon,
+                                  color: it.accent,
+                                  size: 16,
+                                ),
                               ),
                               title: Text(
                                 it.label,
                                 style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -175,8 +180,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                                   : Text(
                                       it.subtitle!,
                                       style: TextStyle(
-                                          fontSize: 11,
-                                          color: context.textSubtle),
+                                        fontSize: 11,
+                                        color: context.textSubtle,
+                                      ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -190,8 +196,10 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                       ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: context.tint(0.03),
                   borderRadius: const BorderRadius.only(
@@ -242,10 +250,7 @@ class _Hint extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(
-          text,
-          style: TextStyle(fontSize: 11, color: context.textSubtle),
-        ),
+        Text(text, style: TextStyle(fontSize: 11, color: context.textSubtle)),
       ],
     );
   }

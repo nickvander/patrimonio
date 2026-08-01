@@ -12,6 +12,7 @@ enum AccountCategory {
   credit,
   crypto,
   loan,
+
   /// Non-financial assets that don't sync with a bank or exchange:
   /// real estate, vehicles, collectibles, private-equity stakes. The
   /// user revalues these manually via the per-row "Revalue" action.

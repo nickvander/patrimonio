@@ -22,6 +22,7 @@ class NetWorthCard extends StatefulWidget {
   final NumberFormat currencyFormat;
   final String reportingCurrency;
   final List<dynamic> sourceBreakdown;
+
   /// USD↔MXN rate, so a native-currency chip can show its reporting-currency
   /// worth ("MXN 56,344.00 ≈ $3,238") — `conversionFactor` only covers
   /// USD→reporting, not the cross needed for a foreign native amount.
@@ -84,20 +85,31 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// reporting-currency value (dominant currency first) — the order the hero
   /// chips render in, so the chart card reads identically to the dashboard.
   List<({String cur, double net})> get _breakdownEntries {
-    final entries = sourceBreakdown
-        .map((item) => (
-              cur: (item['currency'] ?? '').toString().toUpperCase(),
-              net: ((item['net'] ?? 0.0) as num).toDouble(),
-            ))
-        .where((e) => e.cur.isNotEmpty)
-        .toList()
-      ..sort((a, b) {
-        final ca = convertCurrency(a.net,
-            from: a.cur, to: reportingCurrency, usdMxnRate: usdMxnRate);
-        final cb = convertCurrency(b.net,
-            from: b.cur, to: reportingCurrency, usdMxnRate: usdMxnRate);
-        return cb.compareTo(ca);
-      });
+    final entries =
+        sourceBreakdown
+            .map(
+              (item) => (
+                cur: (item['currency'] ?? '').toString().toUpperCase(),
+                net: ((item['net'] ?? 0.0) as num).toDouble(),
+              ),
+            )
+            .where((e) => e.cur.isNotEmpty)
+            .toList()
+          ..sort((a, b) {
+            final ca = convertCurrency(
+              a.net,
+              from: a.cur,
+              to: reportingCurrency,
+              usdMxnRate: usdMxnRate,
+            );
+            final cb = convertCurrency(
+              b.net,
+              from: b.cur,
+              to: reportingCurrency,
+              usdMxnRate: usdMxnRate,
+            );
+            return cb.compareTo(ca);
+          });
     return entries;
   }
 
@@ -153,8 +165,10 @@ class _NetWorthCardState extends State<NetWorthCard> {
             // an Expanded chart inside a fixed-height card collapsed to a
             // sliver with overlapping y labels. Width-derived, clamped so
             // the plot area stays readable from 320px phones to desktop.
-            final chartHeight =
-                (constraints.maxWidth * 0.5).clamp(220.0, 280.0);
+            final chartHeight = (constraints.maxWidth * 0.5).clamp(
+              220.0,
+              280.0,
+            );
             final filtered = _filterByRange(history);
             // Only compute the per-institution slices when the detailed
             // view is actually being shown — saves a meaningful chunk of
@@ -176,7 +190,10 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   // Android while scrubbing.
                   child: RepaintBoundary(
                     child: _buildChart(
-                        filtered, institutions, constraints.maxWidth),
+                      filtered,
+                      institutions,
+                      constraints.maxWidth,
+                    ),
                   ),
                 ),
                 // Phone layout: the range selector lives inside the card,
@@ -266,7 +283,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
   }
 
   Widget _buildHeader(
-      bool isCompact, List<MapEntry<String, Color>> institutions) {
+    bool isCompact,
+    List<MapEntry<String, Color>> institutions,
+  ) {
     // Phone chrome: the dashboard hero block directly above this card
     // already shows the net-worth figure, delta and currency pills, so the
     // in-card summary collapses to a small overline title (the fad9351
@@ -321,8 +340,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          AppLocalizations.of(context)
-              .pfTotalNetWorthCurrency(reportingCurrency),
+          AppLocalizations.of(
+            context,
+          ).pfTotalNetWorthCurrency(reportingCurrency),
           // Inter label above the hero number, kept understated — the big
           // mono number is the star.
           style: brandSectionTitleStyle(
@@ -356,46 +376,48 @@ class _NetWorthCardState extends State<NetWorthCard> {
         // on whether net worth is moving up or down without making the
         // user scrub the chart. Computed from history; hidden when we
         // don't have a comparable point >= 7 days back.
-        Builder(builder: (context) {
-          final deltas = computeMomYoyDeltas(history);
-          final chips = <Widget>[
-            if (deltas.mom != null)
-              _DeltaChip(
-                amount: deltas.mom!.amount * conversionFactor,
-                percentage: deltas.mom!.percentage,
-                label: deltas.mom!.windowLabel,
-                periodTag: deltas.mom!.windowLabel,
-                currencyFormat: currencyFormat,
-              ),
-            if (deltas.yoy != null)
-              _DeltaChip(
-                amount: deltas.yoy!.amount * conversionFactor,
-                percentage: deltas.yoy!.percentage,
-                label: deltas.yoy!.windowLabel,
-                periodTag: deltas.yoy!.windowLabel,
-                currencyFormat: currencyFormat,
-              ),
-          ];
-          // Fall back to the legacy 30d/7d chip when we don't yet have a
-          // month of history (keeps the early-onboarding read useful).
-          if (chips.isEmpty) {
-            final delta = computeNetWorthDelta(history);
-            if (delta == null) return const SizedBox.shrink();
+        Builder(
+          builder: (context) {
+            final deltas = computeMomYoyDeltas(history);
+            final chips = <Widget>[
+              if (deltas.mom != null)
+                _DeltaChip(
+                  amount: deltas.mom!.amount * conversionFactor,
+                  percentage: deltas.mom!.percentage,
+                  label: deltas.mom!.windowLabel,
+                  periodTag: deltas.mom!.windowLabel,
+                  currencyFormat: currencyFormat,
+                ),
+              if (deltas.yoy != null)
+                _DeltaChip(
+                  amount: deltas.yoy!.amount * conversionFactor,
+                  percentage: deltas.yoy!.percentage,
+                  label: deltas.yoy!.windowLabel,
+                  periodTag: deltas.yoy!.windowLabel,
+                  currencyFormat: currencyFormat,
+                ),
+            ];
+            // Fall back to the legacy 30d/7d chip when we don't yet have a
+            // month of history (keeps the early-onboarding read useful).
+            if (chips.isEmpty) {
+              final delta = computeNetWorthDelta(history);
+              if (delta == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _DeltaChip(
+                  amount: delta.amount * conversionFactor,
+                  percentage: delta.percentage,
+                  label: delta.windowLabel,
+                  currencyFormat: currencyFormat,
+                ),
+              );
+            }
             return Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: _DeltaChip(
-                amount: delta.amount * conversionFactor,
-                percentage: delta.percentage,
-                label: delta.windowLabel,
-                currencyFormat: currencyFormat,
-              ),
+              child: Wrap(spacing: 8, runSpacing: 6, children: chips),
             );
-          }
-          return Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Wrap(spacing: 8, runSpacing: 6, children: chips),
-          );
-        }),
+          },
+        ),
         // "Since <baseline>: <total Δ> · <top institution movers>" — the
         // attribution for the MoM delta above. Reuses the same baseline and
         // guards as the chip; collapsed by default.
@@ -412,11 +434,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
               // shows its reporting-currency worth ("MXN 56,344.00 ≈ $3,238"),
               // so the chips visibly add up to the hero number above.
               final isTarget = e.cur == reportingCurrency.toUpperCase();
-              final converted = convertCurrency(e.net,
-                  from: e.cur, to: reportingCurrency, usdMxnRate: usdMxnRate);
+              final converted = convertCurrency(
+                e.net,
+                from: e.cur,
+                to: reportingCurrency,
+                usdMxnRate: usdMxnRate,
+              );
               return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: context.tint(0.05),
                   borderRadius: BorderRadius.circular(6),
@@ -474,11 +499,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
     if (isCompact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          summary,
-          const SizedBox(height: 16),
-          rightSide,
-        ],
+        children: [summary, const SizedBox(height: 16), rightSide],
       );
     }
 
@@ -507,8 +528,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
     if (latestDate == null) return const SizedBox.shrink();
     // Same target the MoM chip diffs against; the movers helper snaps to the
     // nearest snapshot within +/-5 days, matching `computeMomYoyDeltas`.
-    final baselineDate =
-        DateTime(latestDate.year, latestDate.month - 1, latestDate.day);
+    final baselineDate = DateTime(
+      latestDate.year,
+      latestDate.month - 1,
+      latestDate.day,
+    );
     final movers = topInstitutionMovers(history, baselineDate);
     if (movers.isEmpty) return const SizedBox.shrink();
 
@@ -516,8 +540,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
     final totalAmount = mom.amount * conversionFactor;
     final totalUp = totalAmount >= 0;
     final totalColor = totalUp ? context.positive : context.negative;
-    final sinceLabel =
-        l.nwMoversSince(DateFormat('MMM d').format(baselineDate));
+    final sinceLabel = l.nwMoversSince(
+      DateFormat('MMM d').format(baselineDate),
+    );
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -533,11 +558,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
               label: l.nwMoversToggleTooltip,
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: () =>
-                    setState(() => _moversExpanded = !_moversExpanded),
+                onTap: () => setState(() => _moversExpanded = !_moversExpanded),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -569,9 +595,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                       ),
                       const SizedBox(width: 4),
                       Icon(
-                        _moversExpanded
-                            ? Icons.expand_less
-                            : Icons.expand_more,
+                        _moversExpanded ? Icons.expand_less : Icons.expand_more,
                         color: context.textMuted,
                         size: 16,
                       ),
@@ -610,8 +634,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
-              color: color, size: 11),
+          Icon(
+            up ? Icons.arrow_upward : Icons.arrow_downward,
+            color: color,
+            size: 11,
+          ),
           const SizedBox(width: 3),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 120),
@@ -646,8 +673,10 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// from `context.chartSeries` so they shift to AA-readable shades on
   /// a white card in light mode while keeping the neon palette in dark.
   List<MapEntry<String, Color>> _topInstitutions(
-      BuildContext context, List<dynamic> data,
-      {int max = 5}) {
+    BuildContext context,
+    List<dynamic> data, {
+    int max = 5,
+  }) {
     final maxByInst = <String, double>{};
     for (final raw in data) {
       final map = raw as Map<String, dynamic>;
@@ -673,8 +702,10 @@ class _NetWorthCardState extends State<NetWorthCard> {
       spacing: 12,
       runSpacing: 8,
       children: [
-        _legendItem(AppLocalizations.of(context).pfTotalNetWorth,
-            context.positive),
+        _legendItem(
+          AppLocalizations.of(context).pfTotalNetWorth,
+          context.positive,
+        ),
         ...institutions.map((e) => _legendItem(e.key, e.value)),
       ],
     );
@@ -706,8 +737,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
   }
 
-  Widget _buildChart(List<dynamic> filtered,
-      List<MapEntry<String, Color>> institutions, double chartWidth) {
+  Widget _buildChart(
+    List<dynamic> filtered,
+    List<MapEntry<String, Color>> institutions,
+    double chartWidth,
+  ) {
     if (history.isEmpty) {
       // Mock historical data if empty - show a flat line for onboarding
       final now = DateTime.now();
@@ -750,8 +784,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
     return out;
   }
 
-  Widget _renderLineChart(List<dynamic> data,
-      List<MapEntry<String, Color>> institutions, double chartWidth) {
+  Widget _renderLineChart(
+    List<dynamic> data,
+    List<MapEntry<String, Color>> institutions,
+    double chartWidth,
+  ) {
     if (data.isEmpty) return const SizedBox.shrink();
 
     // Bottom-axis label format follows the FILTERED data's real span, not the
@@ -764,12 +801,15 @@ class _NetWorthCardState extends State<NetWorthCard> {
         : null;
 
     List<DateTime> ticksFor(double width) => [
-          for (final i in _bottomLabelIndices(
-              data.length, _bottomLabelStep(data.length, width), width))
-            if (DateTime.tryParse(data[i]['date']?.toString() ?? '')
-                case final DateTime d)
-              d,
-        ];
+      for (final i in _bottomLabelIndices(
+        data.length,
+        _bottomLabelStep(data.length, width),
+        width,
+      ))
+        if (DateTime.tryParse(data[i]['date']?.toString() ?? '')
+            case final DateTime d)
+          d,
+    ];
     double halfWidestLabel(List<DateTime> ticks, DateFormat f) => ticks.isEmpty
         ? 0.0
         : ticks.map((d) => axisTickTextWidth(f.format(d))).reduce(math.max) / 2;
@@ -788,11 +828,15 @@ class _NetWorthCardState extends State<NetWorthCard> {
     // measured in pass one.
     final firstPass = ticksFor(chartWidth);
     final bottomOverhang = halfWidestLabel(
-        firstPass, nonRepeatingDateFormat(firstPass, spanDays: spanDays));
+      firstPass,
+      nonRepeatingDateFormat(firstPass, spanDays: spanDays),
+    );
     final plotWidth = (chartWidth - bottomOverhang).clamp(1.0, chartWidth);
     final labelStep = _bottomLabelStep(data.length, plotWidth);
-    final bottomLabelFormat =
-        nonRepeatingDateFormat(ticksFor(plotWidth), spanDays: spanDays);
+    final bottomLabelFormat = nonRepeatingDateFormat(
+      ticksFor(plotWidth),
+      spanDays: spanDays,
+    );
 
     // For a true "where the total comes from" stacked-area visualisation we
     // build a series of cumulative lines from the top down. Filling each
@@ -804,8 +848,10 @@ class _NetWorthCardState extends State<NetWorthCard> {
     // is the total, level 1 is total minus inst[0]'s value, etc. The last
     // level is the residual ("Other") which we fill in grey.
     final levels = institutions.length;
-    final cumulativeSpots =
-        List<List<FlSpot>>.generate(levels + 1, (_) => <FlSpot>[]);
+    final cumulativeSpots = List<List<FlSpot>>.generate(
+      levels + 1,
+      (_) => <FlSpot>[],
+    );
 
     double minY = double.infinity;
     double maxY = -double.infinity;
@@ -910,16 +956,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
             return spotIndexes.map((idx) {
               return TouchedSpotIndicatorData(
                 FlLine(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.35),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.35),
                   strokeWidth: 1,
                 ),
                 FlDotData(
                   show: true,
-                  getDotPainter: (spot, percent, bar, i) =>
-                      FlDotCirclePainter(
+                  getDotPainter: (spot, percent, bar, i) => FlDotCirclePainter(
                     radius: 5,
                     color: barData.color ?? context.positive,
                     strokeWidth: 3,
@@ -940,8 +984,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
               // The wealth line is always the LAST bar in lineBarsData.
               // Only emit a single tooltip body there, listing every
               // institution's contribution for that date.
-              final wealthBarIndex =
-                  institutions.isEmpty ? 0 : institutions.length + 1;
+              final wealthBarIndex = institutions.isEmpty
+                  ? 0
+                  : institutions.length + 1;
               return touchedSpots.map((spot) {
                 if (spot.barIndex != wealthBarIndex) return null;
 
@@ -953,7 +998,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 final nw = point['net_worth'];
                 final ta = point['total_assets'];
                 final tl = point['total_liabilities'];
-                final byInst = (point['by_institution'] as Map?)
+                final byInst =
+                    (point['by_institution'] as Map?)
                         ?.cast<String, dynamic>() ??
                     {};
 
@@ -1014,23 +1060,27 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 }
 
                 if (institutions.isNotEmpty) {
-                  children.add(TextSpan(
-                    text: '───────────────\n',
-                    style: TextStyle(color: context.tooltipOnSurfaceMuted),
-                  ));
+                  children.add(
+                    TextSpan(
+                      text: '───────────────\n',
+                      style: TextStyle(color: context.tooltipOnSurfaceMuted),
+                    ),
+                  );
                   for (final inst in institutions) {
                     final raw = byInst[inst.key];
                     if (raw is! num) continue;
                     final value = raw.toDouble() * conversionFactor;
-                    children.add(TextSpan(
-                      text:
-                          '${inst.key}: ${currencyFormat.displayMoney(value)}\n',
-                      style: TextStyle(
-                        color: inst.value,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                    children.add(
+                      TextSpan(
+                        text:
+                            '${inst.key}: ${currencyFormat.displayMoney(value)}\n',
+                        style: TextStyle(
+                          color: inst.value,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ));
+                    );
                   }
                 }
 
@@ -1102,8 +1152,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 // edge — fl_chart can otherwise crowd or clip labels at the
                 // very top/bottom of the axis.
                 final edgeBuffer = yInterval * 0.5;
-                if (value <= minY + edgeBuffer ||
-                    value >= maxY - edgeBuffer) {
+                if (value <= minY + edgeBuffer || value >= maxY - edgeBuffer) {
                   return const SizedBox();
                 }
                 return Text(
@@ -1157,10 +1206,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
               barWidth: 1,
               isStrokeCapRound: true,
               dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                color: context.tint(0.05),
-              ),
+              belowBarData: BarAreaData(show: true, color: context.tint(0.05)),
             ),
           // Total net worth line drawn on top so it remains the focal value.
           LineChartBarData(
@@ -1221,7 +1267,9 @@ DateTime? _latestSnapshotDate(List<dynamic> history) {
 /// point within tolerance, or neither endpoint carries `by_institution` data —
 /// so the caller can hide the section.
 List<({String name, double delta})> topInstitutionMovers(
-    List<dynamic> history, DateTime baselineDate) {
+  List<dynamic> history,
+  DateTime baselineDate,
+) {
   final points = <({DateTime date, Map<String, dynamic> byInst})>[];
   for (final raw in history) {
     if (raw is! Map<String, dynamic>) continue;
@@ -1325,7 +1373,7 @@ class _DeltaChip extends StatelessWidget {
                 final pctStr = pct == null
                     ? ''
                     : ' (${isUp ? '+' : ''}'
-                        '${formatPercent(context, pct, digits: periodTag != null ? 1 : 2)})';
+                          '${formatPercent(context, pct, digits: periodTag != null ? 1 : 2)})';
                 final amt =
                     '${isUp ? '+' : '−'}${currencyFormat.displayMoney(amount.abs())}';
                 return periodTag != null

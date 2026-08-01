@@ -10,8 +10,10 @@ void main() {
     test('touch-width cards stay full-bleed', () {
       // Phone card inner width — stacked, edge to edge, as before.
       expect(actionButtonWidth(342), 342);
-      expect(actionButtonWidth(kActionButtonStackBelow - 1),
-          kActionButtonStackBelow - 1);
+      expect(
+        actionButtonWidth(kActionButtonStackBelow - 1),
+        kActionButtonStackBelow - 1,
+      );
     });
 
     test('pointer-width cards size to content', () {
@@ -39,9 +41,11 @@ void main() {
     test('a long es-MX label cannot reintroduce the stretch', () {
       // Whatever the card width, a content-sized button is capped.
       for (final available in <double>[520, 900, 1440, 2560]) {
-        expect(actionButtonConstraints(available).maxWidth,
-            kActionButtonMaxWidth,
-            reason: 'card inner width $available');
+        expect(
+          actionButtonConstraints(available).maxWidth,
+          kActionButtonMaxWidth,
+          reason: 'card inner width $available',
+        );
       }
     });
   });

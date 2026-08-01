@@ -103,11 +103,7 @@ class AssetsLiabilitiesBar extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            _LegendDot(
-              label: l.statAssets,
-              color: assetColor,
-              pct: assetPct,
-            ),
+            _LegendDot(label: l.statAssets, color: assetColor, pct: assetPct),
             const SizedBox(width: 16),
             _LegendDot(
               label: l.statLiabilities,
@@ -125,7 +121,11 @@ class _LegendDot extends StatelessWidget {
   final String label;
   final Color color;
   final double pct;
-  const _LegendDot({required this.label, required this.color, required this.pct});
+  const _LegendDot({
+    required this.label,
+    required this.color,
+    required this.pct,
+  });
 
   @override
   Widget build(BuildContext context) {

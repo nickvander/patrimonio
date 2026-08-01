@@ -9,20 +9,20 @@ import 'package:patrimonio/widgets/split_transaction_dialog.dart';
 // Navigator.pop, so no ApiService (and per MEMORY, no subclassing of it)
 // is needed here.
 Widget _host(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: child),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: child),
+);
 
 SplitTransactionDialog _dialog() => SplitTransactionDialog(
-      parentAmount: 100.0,
-      parentCurrency: 'USD',
-      parentLabel: 'Costco run',
-      parentCategory: 'Groceries',
-      usdMxnRate: 17.0,
-      targetCurrency: 'USD',
-      reportingFormat: NumberFormat.currency(name: 'USD', symbol: r'$'),
-    );
+  parentAmount: 100.0,
+  parentCurrency: 'USD',
+  parentLabel: 'Costco run',
+  parentCategory: 'Groceries',
+  usdMxnRate: 17.0,
+  targetCurrency: 'USD',
+  reportingFormat: NumberFormat.currency(name: 'USD', symbol: r'$'),
+);
 
 /// The EditableText backing a TextFormField — lets us read the live text
 /// and focus state of a specific field.
@@ -32,8 +32,9 @@ EditableText _editableOf(WidgetTester tester, Finder formField) =>
     );
 
 void main() {
-  testWidgets('amount field keeps focus and text across keystrokes',
-      (tester) async {
+  testWidgets('amount field keeps focus and text across keystrokes', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(_dialog()));
 
     // Create mode seeds two 50/50 rows; fields per row are
@@ -47,10 +48,12 @@ void main() {
     // keystroke's setState recreated the row subtree, dropping focus
     // (and the connection) so later keystrokes were lost.
     for (final text in ['1', '12', '123']) {
-      tester.testTextInput.updateEditingValue(TextEditingValue(
-        text: text,
-        selection: TextSelection.collapsed(offset: text.length),
-      ));
+      tester.testTextInput.updateEditingValue(
+        TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: text.length),
+        ),
+      );
       await tester.pump();
     }
 
@@ -59,8 +62,9 @@ void main() {
     expect(editable.focusNode.hasFocus, isTrue);
   });
 
-  testWidgets('ratio preset rewrites amounts but keeps typed descriptions',
-      (tester) async {
+  testWidgets('ratio preset rewrites amounts but keeps typed descriptions', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(_dialog()));
 
     final fields = find.byType(TextFormField);
@@ -80,8 +84,9 @@ void main() {
     expect(_editableOf(tester, fields.at(0)).controller.text, 'Veggies');
   });
 
-  testWidgets('presets grow and shrink the row set without errors',
-      (tester) async {
+  testWidgets('presets grow and shrink the row set without errors', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(_dialog()));
 
     // 2 rows -> 3 rows.

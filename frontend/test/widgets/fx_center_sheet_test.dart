@@ -10,34 +10,33 @@ import 'package:patrimonio/widgets/fx_center_sheet.dart';
 // network); the required `apiService` instance is real but never called.
 
 Map<String, dynamic> _latestRate({DateTime? recordedAt}) => {
-      'base': 'USD',
-      'target': 'MXN',
-      'rate': 17.5,
-      'recorded_at':
-          (recordedAt ?? DateTime.now().subtract(const Duration(hours: 2)))
-              .toUtc()
-              .toIso8601String(),
-      'source': 'api',
-    };
+  'base': 'USD',
+  'target': 'MXN',
+  'rate': 17.5,
+  'recorded_at':
+      (recordedAt ?? DateTime.now().subtract(const Duration(hours: 2)))
+          .toUtc()
+          .toIso8601String(),
+  'source': 'api',
+};
 
 List<Map<String, dynamic>> _history30() => [
-      for (var i = 0; i < 10; i++)
-        {
-          'rate': 17.0 + i * 0.05,
-          'timestamp': DateTime.now()
-              .subtract(Duration(days: 29 - i * 3))
-              .toUtc()
-              .toIso8601String(),
-        },
-    ];
+  for (var i = 0; i < 10; i++)
+    {
+      'rate': 17.0 + i * 0.05,
+      'timestamp': DateTime.now()
+          .subtract(Duration(days: 29 - i * 3))
+          .toUtc()
+          .toIso8601String(),
+    },
+];
 
-Widget _host(Widget sheet, {Locale locale = const Locale('en')}) =>
-    MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: sheet),
-    );
+Widget _host(Widget sheet, {Locale locale = const Locale('en')}) => MaterialApp(
+  locale: locale,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: sheet),
+);
 
 void main() {
   // The sheet scrolls inside a 90%-height cap; a tall surface keeps every
@@ -74,27 +73,28 @@ void main() {
   }
 
   group('FxCenterSheet', () {
-    testWidgets('shows rate, VISIBLE relative freshness, chart and sections (en)',
-        (tester) async {
-      useTallSurface(tester);
-      await tester.pumpWidget(_host(sheet()));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'shows rate, VISIBLE relative freshness, chart and sections (en)',
+      (tester) async {
+        useTallSurface(tester);
+        await tester.pumpWidget(_host(sheet()));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Exchange rate'), findsOneWidget);
-      expect(find.text('17.5000'), findsOneWidget);
-      // Relative last-updated time is rendered as plain visible text —
-      // spec point (b), not hover/tooltip-only.
-      expect(find.text('Updated 2h ago'), findsOneWidget);
-      expect(find.text('Converter'), findsOneWidget);
-      expect(find.text('Rate alert'), findsOneWidget);
-      expect(find.text('30 days'), findsOneWidget);
-      expect(find.text('90 days'), findsOneWidget);
-    });
+        expect(find.text('Exchange rate'), findsOneWidget);
+        expect(find.text('17.5000'), findsOneWidget);
+        // Relative last-updated time is rendered as plain visible text —
+        // spec point (b), not hover/tooltip-only.
+        expect(find.text('Updated 2h ago'), findsOneWidget);
+        expect(find.text('Converter'), findsOneWidget);
+        expect(find.text('Rate alert'), findsOneWidget);
+        expect(find.text('30 days'), findsOneWidget);
+        expect(find.text('90 days'), findsOneWidget);
+      },
+    );
 
     testWidgets('renders the es-MX strings', (tester) async {
       useTallSurface(tester);
-      await tester
-          .pumpWidget(_host(sheet(), locale: const Locale('es')));
+      await tester.pumpWidget(_host(sheet(), locale: const Locale('es')));
       await tester.pumpAndSettle();
 
       expect(find.text('Tipo de cambio'), findsOneWidget);
@@ -105,8 +105,9 @@ void main() {
       expect(find.text('90 días'), findsOneWidget);
     });
 
-    testWidgets('converter links both fields through the current rate',
-        (tester) async {
+    testWidgets('converter links both fields through the current rate', (
+      tester,
+    ) async {
       useTallSurface(tester);
       await tester.pumpWidget(_host(sheet()));
       await tester.pumpAndSettle();
@@ -125,8 +126,9 @@ void main() {
       expect(find.widgetWithText(TextField, '1.00'), findsOneWidget);
     });
 
-    testWidgets('range toggle refetches history with the selected window',
-        (tester) async {
+    testWidgets('range toggle refetches history with the selected window', (
+      tester,
+    ) async {
       useTallSurface(tester);
       final daysLog = <int>[];
       await tester.pumpWidget(_host(sheet(daysLog: daysLog)));
@@ -143,16 +145,15 @@ void main() {
       expect(daysLog, [30, 90]);
     });
 
-    testWidgets('refresh action pulls a fresh rate and notifies the caller',
-        (tester) async {
+    testWidgets('refresh action pulls a fresh rate and notifies the caller', (
+      tester,
+    ) async {
       useTallSurface(tester);
       final rateChanges = <Map<String, dynamic>>[];
-      final fresh = _latestRate(recordedAt: DateTime.now())
-        ..['rate'] = 18.0;
-      await tester.pumpWidget(_host(sheet(
-        refreshed: fresh,
-        onRateChanged: rateChanges.add,
-      )));
+      final fresh = _latestRate(recordedAt: DateTime.now())..['rate'] = 18.0;
+      await tester.pumpWidget(
+        _host(sheet(refreshed: fresh, onRateChanged: rateChanges.add)),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Refresh rate now'));
@@ -166,8 +167,9 @@ void main() {
       expect(find.widgetWithText(TextField, '18.00'), findsOneWidget);
     });
 
-    testWidgets('saves a valid alert threshold and shows the active line',
-        (tester) async {
+    testWidgets('saves a valid alert threshold and shows the active line', (
+      tester,
+    ) async {
       useTallSurface(tester);
       final saved = <double>[];
       await tester.pumpWidget(_host(sheet(savedThresholds: saved)));
@@ -176,7 +178,9 @@ void main() {
       // The alert field is the one under the "Rate alert" section (labeled
       // "USD / MXN" with hint 0.00).
       await tester.enterText(
-          find.widgetWithText(TextField, 'USD / MXN'), '18.25');
+        find.widgetWithText(TextField, 'USD / MXN'),
+        '18.25',
+      );
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
 
@@ -189,15 +193,13 @@ void main() {
       );
     });
 
-    testWidgets('rejects a non-positive threshold client-side',
-        (tester) async {
+    testWidgets('rejects a non-positive threshold client-side', (tester) async {
       useTallSurface(tester);
       final saved = <double>[];
       await tester.pumpWidget(_host(sheet(savedThresholds: saved)));
       await tester.pumpAndSettle();
 
-      await tester.enterText(
-          find.widgetWithText(TextField, 'USD / MXN'), '0');
+      await tester.enterText(find.widgetWithText(TextField, 'USD / MXN'), '0');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
 
@@ -205,14 +207,14 @@ void main() {
       expect(find.text('Enter a threshold greater than zero'), findsOneWidget);
     });
 
-    testWidgets('existing alert loads into the field and can be removed',
-        (tester) async {
+    testWidgets('existing alert loads into the field and can be removed', (
+      tester,
+    ) async {
       useTallSurface(tester);
       final deletes = <bool>[];
-      await tester.pumpWidget(_host(sheet(
-        alert: {'threshold': 17.25},
-        deletes: deletes,
-      )));
+      await tester.pumpWidget(
+        _host(sheet(alert: {'threshold': 17.25}, deletes: deletes)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(TextField, '17.25'), findsOneWidget);

@@ -60,8 +60,9 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
             ? dismissed.map((e) => e.toString()).toSet()
             : {};
         _accounts = (overview['accounts'] as List<dynamic>?) ?? [];
-        _bulkAccountId ??=
-            _accounts.isNotEmpty ? _accounts.first['id']?.toString() : null;
+        _bulkAccountId ??= _accounts.isNotEmpty
+            ? _accounts.first['id']?.toString()
+            : null;
         _loading = false;
       });
     } catch (_) {
@@ -74,8 +75,7 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _undo(Map batch, AppLocalizations l) async {
@@ -87,8 +87,9 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
         content: Text(l.impUndoImportConfirm(count)),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l.actionCancel)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.actionCancel),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: context.negative),
             onPressed: () => Navigator.pop(ctx, true),
@@ -139,8 +140,9 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
         content: Text(l.impUndoImportConfirm(count)),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l.actionCancel)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.actionCancel),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: context.negative),
             onPressed: () => Navigator.pop(ctx, true),
@@ -180,36 +182,55 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text(l.impRecentImports,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  l.impRecentImports,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 if (_batches.isEmpty)
-                  Text(l.impNoRecentImports,
-                      style: TextStyle(color: context.textSubtle))
+                  Text(
+                    l.impNoRecentImports,
+                    style: TextStyle(color: context.textSubtle),
+                  )
                 else
                   ..._batches.map((b) => _batchCard(b as Map, l)),
                 if (_continuity.isNotEmpty) ...[
                   const SizedBox(height: 32),
-                  Text(es ? 'Cobertura de estados de cuenta' : 'Statement coverage',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    es
+                        ? 'Cobertura de estados de cuenta'
+                        : 'Statement coverage',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                      es
-                          ? 'Revisa si falta algún estado de cuenta (saltos en el saldo entre meses).'
-                          : 'Flags likely-missing statements — a balance jump between sequential months.',
-                      style: TextStyle(fontSize: 12, color: context.textSubtle)),
+                    es
+                        ? 'Revisa si falta algún estado de cuenta (saltos en el saldo entre meses).'
+                        : 'Flags likely-missing statements — a balance jump between sequential months.',
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
+                  ),
                   const SizedBox(height: 12),
                   ..._continuity.map((c) => _coverageCard(c as Map, es, l)),
                 ],
                 const SizedBox(height: 32),
-                Text(l.impBulkDelete,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  l.impBulkDelete,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(l.impBulkDeleteHint,
-                    style: TextStyle(fontSize: 12, color: context.textSubtle)),
+                Text(
+                  l.impBulkDeleteHint,
+                  style: TextStyle(fontSize: 12, color: context.textSubtle),
+                ),
                 const SizedBox(height: 12),
                 _bulkForm(l),
               ],
@@ -224,7 +245,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
     final previous = _dismissedGaps;
     setState(() => _dismissedGaps = {..._dismissedGaps, key});
     try {
-      await _api.putSetting('dismissed_continuity_gaps', _dismissedGaps.toList());
+      await _api.putSetting(
+        'dismissed_continuity_gaps',
+        _dismissedGaps.toList(),
+      );
     } catch (_) {
       // Roll back rather than leave the gap hidden locally: a dismissal that
       // didn't persist means the "you're missing February" warning silently
@@ -252,14 +276,14 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
     }
 
     String line(Map e) => l.impContinuityGap(
-          (e['from_file'] ?? '').toString(),
-          money(e['from_balance']),
-          (e['from_date'] ?? '').toString(),
-          (e['to_file'] ?? '').toString(),
-          money(e['to_balance']),
-          (e['to_date'] ?? '').toString(),
-          money(e['diff']),
-        );
+      (e['from_file'] ?? '').toString(),
+      money(e['from_balance']),
+      (e['from_date'] ?? '').toString(),
+      (e['to_file'] ?? '').toString(),
+      money(e['to_balance']),
+      (e['to_date'] ?? '').toString(),
+      money(e['diff']),
+    );
 
     final allGaps = ((c['warnings'] as List?) ?? const [])
         .whereType<Map>()
@@ -285,8 +309,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
@@ -294,7 +320,7 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
             Text(
               ok
                   ? '$count ${es ? "estados de cuenta · continuo" : "statements · continuous"}'
-                      '${dismissedHere > 0 ? ' · ${es ? "$dismissedHere ignorado(s)" : "$dismissedHere dismissed"}' : ''}'
+                        '${dismissedHere > 0 ? ' · ${es ? "$dismissedHere ignorado(s)" : "$dismissedHere dismissed"}' : ''}'
                   : '$count ${es ? "estados de cuenta" : "statements"} · ${gaps.length} ${es ? "posible(s) hueco(s)" : "possible gap(s)"}',
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
@@ -307,9 +333,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Text('• ${line(g)}',
-                            style:
-                                const TextStyle(fontSize: 12.5, height: 1.35)),
+                        child: Text(
+                          '• ${line(g)}',
+                          style: const TextStyle(fontSize: 12.5, height: 1.35),
+                        ),
                       ),
                       TextButton(
                         onPressed: () => _dismissGap(_gapKey(name, g)),
@@ -318,8 +345,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
                           minimumSize: const Size(0, 32),
                           foregroundColor: context.textSubtle,
                         ),
-                        child: Text(es ? 'Ignorar' : 'Dismiss',
-                            style: const TextStyle(fontSize: 12)),
+                        child: Text(
+                          es ? 'Ignorar' : 'Dismiss',
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
@@ -336,13 +365,14 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
     final fileLabel = files.isEmpty
         ? ''
         : (files.length <= 2
-            ? files.join(', ')
-            : '${files.take(2).join(', ')} +${files.length - 2}');
+              ? files.join(', ')
+              : '${files.take(2).join(', ')} +${files.length - 2}');
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         title: Text(
-            '${b['account_name']} · ${(b['txn_count'] as num?)?.toInt() ?? 0} ${l.impTransactionsLabel}'),
+          '${b['account_name']} · ${(b['txn_count'] as num?)?.toInt() ?? 0} ${l.impTransactionsLabel}',
+        ),
         subtitle: Text(
           '${b['from_date']} → ${b['to_date']}'
           '${fileLabel.isNotEmpty ? '\n$fileLabel' : ''}',
@@ -365,7 +395,9 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
         DropdownButtonFormField<String>(
           initialValue: _bulkAccountId,
           decoration: InputDecoration(
-              labelText: l.impAssignToAccount, border: const OutlineInputBorder()),
+            labelText: l.impAssignToAccount,
+            border: const OutlineInputBorder(),
+          ),
           items: _accounts.map((a) {
             final cur = (a['currency'] as String? ?? '').toUpperCase();
             // Name rendered mask-aware so a trailing "••1234" survives
@@ -416,9 +448,13 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
             child: Text(l.impPreview),
           )
         else ...[
-          Text(l.impWillDelete(_previewCount!),
-              style: TextStyle(
-                  fontWeight: FontWeight.w600, color: context.negative)),
+          Text(
+            l.impWillDelete(_previewCount!),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: context.negative,
+            ),
+          ),
           const SizedBox(height: 8),
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: context.negative),
@@ -431,7 +467,11 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
     );
   }
 
-  Widget _dateField(String label, DateTime? value, void Function(DateTime) set) {
+  Widget _dateField(
+    String label,
+    DateTime? value,
+    void Function(DateTime) set,
+  ) {
     return InkWell(
       onTap: () async {
         final picked = await showDatePicker(
@@ -448,8 +488,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
         }
       },
       child: InputDecorator(
-        decoration:
-            InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
         child: Text(value == null ? '—' : _fmtDate(value)),
       ),
     );

@@ -110,19 +110,17 @@ class MonthlyCashFlowCard extends StatelessWidget {
       income =
           ((current['income'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
       spending =
-          ((current['spending'] as num?)?.toDouble() ?? 0.0) *
-              conversionFactor;
+          ((current['spending'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
       invested =
           ((current['invested'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
       transferred =
           ((current['transferred'] as num?)?.toDouble() ?? 0.0) *
-              conversionFactor;
+          conversionFactor;
       if (prior != null) {
         final pi =
             ((prior['income'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
         final ps =
-            ((prior['spending'] as num?)?.toDouble() ?? 0.0) *
-                conversionFactor;
+            ((prior['spending'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
         priorNet = pi - ps;
         priorIncome = pi;
       }
@@ -131,13 +129,14 @@ class MonthlyCashFlowCard extends StatelessWidget {
 
     // Slice up to the last 3 months for the sparkline. If we don't have
     // three months of history we use whatever's available.
-    final sparkSource =
-        trends.length >= 3 ? trends.sublist(trends.length - 3) : trends;
+    final sparkSource = trends.length >= 3
+        ? trends.sublist(trends.length - 3)
+        : trends;
 
     // Header subtitle: the named period when aggregating, else the headlined
     // month. Keeps the figure unambiguous either way.
-    final monthLabel = periodLabel ??
-        _formatMonth(trends[currentIdx]['month'] as String?);
+    final monthLabel =
+        periodLabel ?? _formatMonth(trends[currentIdx]['month'] as String?);
 
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
@@ -193,10 +192,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       monthLabel,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.textSubtle,
-                      ),
+                      style: TextStyle(fontSize: 12, color: context.textSubtle),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -260,16 +256,26 @@ class MonthlyCashFlowCard extends StatelessWidget {
             // can see where e.g. a paycheck-as-transfer or a stock buy went.
             final contextParts = <String>[];
             if (invested.abs() >= 0.005) {
-              contextParts.add(invested >= 0
-                  ? l.cfInvestedContext(currencyFormat.displayMoney(invested.abs()))
-                  : l.cfWithdrawnContext(currencyFormat.displayMoney(invested.abs())));
+              contextParts.add(
+                invested >= 0
+                    ? l.cfInvestedContext(
+                        currencyFormat.displayMoney(invested.abs()),
+                      )
+                    : l.cfWithdrawnContext(
+                        currencyFormat.displayMoney(invested.abs()),
+                      ),
+              );
             }
             if (transferred.abs() >= 0.005) {
-              contextParts.add(transferred >= 0
-                  ? l.cfTransferredInContext(
-                      currencyFormat.displayMoney(transferred.abs()))
-                  : l.cfTransferredOutContext(
-                      currencyFormat.displayMoney(transferred.abs())));
+              contextParts.add(
+                transferred >= 0
+                    ? l.cfTransferredInContext(
+                        currencyFormat.displayMoney(transferred.abs()),
+                      )
+                    : l.cfTransferredOutContext(
+                        currencyFormat.displayMoney(transferred.abs()),
+                      ),
+              );
             }
             final Widget? contextLine = contextParts.isEmpty
                 ? null
@@ -286,8 +292,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
             // so a bi-currency user sees both readings without a second
             // stat tile. Only on the narrow layout, and only when a real
             // spot rate arrived (usdMxnRate 0.0 = legacy call sites → off).
-            final other =
-                targetCurrency.toUpperCase() == 'USD' ? 'MXN' : 'USD';
+            final other = targetCurrency.toUpperCase() == 'USD' ? 'MXN' : 'USD';
             final Widget? fxEquivalence = usdMxnRate > 0
                 ? ConstrainedBox(
                     constraints: const BoxConstraints(minHeight: 48),
@@ -318,10 +323,12 @@ class MonthlyCashFlowCard extends StatelessWidget {
 
             final spark = _NetSparkline(
               points: sparkSource
-                  .map((m) =>
-                      (((m['income'] as num?)?.toDouble() ?? 0.0) -
-                              ((m['spending'] as num?)?.toDouble() ?? 0.0)) *
-                          conversionFactor)
+                  .map(
+                    (m) =>
+                        (((m['income'] as num?)?.toDouble() ?? 0.0) -
+                            ((m['spending'] as num?)?.toDouble() ?? 0.0)) *
+                        conversionFactor,
+                  )
                   .toList(growable: false),
               labels: sparkSource
                   .map((m) => (m['month'] as String?) ?? '')
@@ -439,16 +446,18 @@ class _NetLine extends StatelessWidget {
     // [-1.0, 1.0] (i.e. −100%…100%) as meaningful and omit the chip otherwise —
     // both when income isn't positive and when the rate falls outside the band.
     final double? rawRate = income > 0 ? net / income : null;
-    final double? rate =
-        (rawRate != null && rawRate.abs() <= 1.0) ? rawRate : null;
+    final double? rate = (rawRate != null && rawRate.abs() <= 1.0)
+        ? rawRate
+        : null;
     // Prior month's rate, used for the vs-prior delta in percentage points.
     // Only available on single-month windows where priorIncome > 0 and the
     // prior rate is itself within the sane band (else the "pts" delta is noise).
     final double? priorRate =
-        (priorIncome != null && priorIncome! > 0 &&
-                (priorNet! / priorIncome!).abs() <= 1.0)
-            ? priorNet! / priorIncome!
-            : null;
+        (priorIncome != null &&
+            priorIncome! > 0 &&
+            (priorNet! / priorIncome!).abs() <= 1.0)
+        ? priorNet! / priorIncome!
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,7 +482,8 @@ class _NetLine extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   l.cfVsLastMonth(
-                      '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.displayMoney(delta.abs())}'),
+                    '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.displayMoney(delta.abs())}',
+                  ),
                   style: TextStyle(
                     fontSize: 11,
                     color: delta >= 0 ? context.positive : context.pinkAccent,
@@ -515,8 +525,7 @@ class _SavingsRateLine extends StatelessWidget {
 
     // Delta in percentage points vs the prior month. Omitted on aggregate
     // windows / when there's no comparable prior month (priorRate null).
-    final deltaPts =
-        priorRate == null ? null : (rate - priorRate!) * 100;
+    final deltaPts = priorRate == null ? null : (rate - priorRate!) * 100;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -635,10 +644,7 @@ class _NetSparkline extends StatelessWidget {
       return Center(
         child: Text(
           AppLocalizations.of(context).cfNotEnoughHistory,
-          style: TextStyle(
-            color: context.textFaint,
-            fontSize: 11,
-          ),
+          style: TextStyle(color: context.textFaint, fontSize: 11),
         ),
       );
     }

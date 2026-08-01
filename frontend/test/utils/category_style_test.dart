@@ -8,8 +8,7 @@ import 'package:patrimonio/utils/category_style.dart';
 // package:web. The registry is keyed on prettyCategory output, so the
 // fixtures below use real labels from utils/category.dart's en/es maps.
 void main() {
-  test('deterministic: repeated calls return the identical (icon, color)',
-      () {
+  test('deterministic: repeated calls return the identical (icon, color)', () {
     for (final label in ['Comida y bebida', 'Travel', 'Tanda con primos']) {
       for (final b in Brightness.values) {
         final a1 = categoryStyleFor(label, b);
@@ -93,8 +92,11 @@ void main() {
   test('uncategorized buckets are deliberately neutral', () {
     for (final label in ['Uncategorized', 'Sin categoría', null, '  ']) {
       final style = categoryStyleFor(label, Brightness.dark);
-      expect(style.color, BrandPalette.neutral(Brightness.dark),
-          reason: '"$label" means "no signal" and should read neutral');
+      expect(
+        style.color,
+        BrandPalette.neutral(Brightness.dark),
+        reason: '"$label" means "no signal" and should read neutral',
+      );
     }
   });
 }

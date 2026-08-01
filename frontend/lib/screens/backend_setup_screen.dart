@@ -25,12 +25,15 @@ class BackendSetupScreen extends StatefulWidget {
 }
 
 class _BackendSetupScreenState extends State<BackendSetupScreen> {
-  late final TextEditingController _controller =
-      TextEditingController(text: BackendConfig.baseUrl ?? 'https://');
-  late final TextEditingController _cfId =
-      TextEditingController(text: BackendConfig.cfAccessClientId ?? '');
-  late final TextEditingController _cfSecret =
-      TextEditingController(text: BackendConfig.cfAccessClientSecret ?? '');
+  late final TextEditingController _controller = TextEditingController(
+    text: BackendConfig.baseUrl ?? 'https://',
+  );
+  late final TextEditingController _cfId = TextEditingController(
+    text: BackendConfig.cfAccessClientId ?? '',
+  );
+  late final TextEditingController _cfSecret = TextEditingController(
+    text: BackendConfig.cfAccessClientSecret ?? '',
+  );
   // Start expanded when a token is already stored (editing an existing setup).
   late bool _advancedOpen = BackendConfig.hasCfAccessToken;
   bool _busy = false;
@@ -61,7 +64,7 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
         _error = _t(
           'Enter BOTH the Access client ID and secret, or leave both empty.',
           'Ingresa AMBOS: el ID de cliente de Access y el secreto, o deja '
-          'ambos vacíos.',
+              'ambos vacíos.',
         );
       });
       return;
@@ -80,26 +83,26 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
         _busy = false;
         _error = switch (result) {
           _Preflight.cfAccessBlocked => _t(
-              'That server is protected by Cloudflare Access. Open '
-              '"Advanced" below and enter a CF Access service token '
-              '(client ID + secret), or ask the server admin for one.',
-              'Ese servidor está protegido por Cloudflare Access. Abre '
-              '"Avanzado" abajo e ingresa un token de servicio de CF Access '
-              '(ID de cliente + secreto), o pídelo al administrador.',
-            ),
+            'That server is protected by Cloudflare Access. Open '
+                '"Advanced" below and enter a CF Access service token '
+                '(client ID + secret), or ask the server admin for one.',
+            'Ese servidor está protegido por Cloudflare Access. Abre '
+                '"Avanzado" abajo e ingresa un token de servicio de CF Access '
+                '(ID de cliente + secreto), o pídelo al administrador.',
+          ),
           _Preflight.notPatrimonio => _t(
-              'Reached that address, but it doesn\'t answer like a '
-              'Patrimonio backend. Check the URL.',
-              'Se alcanzó esa dirección, pero no responde como un servidor '
-              'de Patrimonio. Revisa la URL.',
-            ),
+            'Reached that address, but it doesn\'t answer like a '
+                'Patrimonio backend. Check the URL.',
+            'Se alcanzó esa dirección, pero no responde como un servidor '
+                'de Patrimonio. Revisa la URL.',
+          ),
           _ => _t(
-              "Couldn't reach that backend. Check the URL, that the server "
-              'is running, and that this device can reach it.',
-              'No se pudo conectar con ese servidor. Revisa la URL, que el '
-              'servidor esté en ejecución y que este dispositivo pueda '
-              'alcanzarlo.',
-            ),
+            "Couldn't reach that backend. Check the URL, that the server "
+                'is running, and that this device can reach it.',
+            'No se pudo conectar con ese servidor. Revisa la URL, que el '
+                'servidor esté en ejecución y que este dispositivo pueda '
+                'alcanzarlo.',
+          ),
         };
         if (result == _Preflight.cfAccessBlocked && !_advancedOpen) {
           _advancedOpen = true;
@@ -109,7 +112,11 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
     }
 
     // Persist + flip the gate. AuthGate mounts next and checks auth status.
-    await BackendConfig.save(origin, cfClientId: cfId, cfClientSecret: cfSecret);
+    await BackendConfig.save(
+      origin,
+      cfClientId: cfId,
+      cfClientSecret: cfSecret,
+    );
     // No setState after this — the widget is being replaced by RootGate.
   }
 
@@ -135,15 +142,17 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
         req.headers['CF-Access-Client-Id'] = cfId;
         req.headers['CF-Access-Client-Secret'] = cfSecret;
       }
-      final streamed =
-          await client.send(req).timeout(const Duration(seconds: 8));
+      final streamed = await client
+          .send(req)
+          .timeout(const Duration(seconds: 8));
       final res = await http.Response.fromStream(streamed);
       try {
         jsonDecode(res.body);
         return _Preflight.ok;
       } catch (_) {
-        final finalUrl =
-            (streamed.request?.url ?? req.url).toString().toLowerCase();
+        final finalUrl = (streamed.request?.url ?? req.url)
+            .toString()
+            .toLowerCase();
         final body = res.body.toLowerCase();
         if (finalUrl.contains('cloudflareaccess.com') ||
             body.contains('cloudflareaccess.com') ||
@@ -174,19 +183,22 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.account_balance_wallet_outlined,
-                      size: 56, color: theme.colorScheme.primary),
+                  Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 56,
+                    color: theme.colorScheme.primary,
+                  ),
                   const SizedBox(height: 20),
                   Text(
                     'Patrimonio',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _t('Connect to your backend',
-                        'Conéctate a tu servidor'),
+                    _t('Connect to your backend', 'Conéctate a tu servidor'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
@@ -212,9 +224,9 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
                   Text(
                     _t(
                       'Enter the address where your Patrimonio server is '
-                      'hosted. HTTPS is strongly recommended.',
+                          'hosted. HTTPS is strongly recommended.',
                       'Ingresa la dirección donde está alojado tu servidor '
-                      'Patrimonio. Se recomienda encarecidamente HTTPS.',
+                          'Patrimonio. Se recomienda encarecidamente HTTPS.',
                     ),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
@@ -233,8 +245,10 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
                     shape: const Border(),
                     collapsedShape: const Border(),
                     title: Text(
-                      _t('Advanced: Cloudflare Access',
-                          'Avanzado: Cloudflare Access'),
+                      _t(
+                        'Advanced: Cloudflare Access',
+                        'Avanzado: Cloudflare Access',
+                      ),
                       style: theme.textTheme.bodyMedium,
                     ),
                     childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -242,14 +256,14 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
                       Text(
                         _t(
                           'Only needed if the server is behind Cloudflare '
-                          'Access (Zero Trust). Paste a service token — the '
-                          'app sends it as CF-Access-Client-Id / '
-                          'CF-Access-Client-Secret on every request.',
+                              'Access (Zero Trust). Paste a service token — the '
+                              'app sends it as CF-Access-Client-Id / '
+                              'CF-Access-Client-Secret on every request.',
                           'Solo se necesita si el servidor está detrás de '
-                          'Cloudflare Access (Zero Trust). Pega un token de '
-                          'servicio: la app lo envía como '
-                          'CF-Access-Client-Id / CF-Access-Client-Secret en '
-                          'cada solicitud.',
+                              'Cloudflare Access (Zero Trust). Pega un token de '
+                              'servicio: la app lo envía como '
+                              'CF-Access-Client-Id / CF-Access-Client-Secret en '
+                              'cada solicitud.',
                         ),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
@@ -261,8 +275,10 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
                         enabled: !_busy,
                         autocorrect: false,
                         decoration: InputDecoration(
-                          labelText: _t('Access client ID',
-                              'ID de cliente de Access'),
+                          labelText: _t(
+                            'Access client ID',
+                            'ID de cliente de Access',
+                          ),
                           hintText: '….access',
                           border: const OutlineInputBorder(),
                           isDense: true,
@@ -275,8 +291,10 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
                         autocorrect: false,
                         obscureText: true,
                         decoration: InputDecoration(
-                          labelText: _t('Access client secret',
-                              'Secreto de cliente de Access'),
+                          labelText: _t(
+                            'Access client secret',
+                            'Secreto de cliente de Access',
+                          ),
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -293,9 +311,11 @@ class _BackendSetupScreenState extends State<BackendSetupScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.login),
-                    label: Text(_busy
-                        ? _t('Connecting…', 'Conectando…')
-                        : _t('Connect', 'Conectar')),
+                    label: Text(
+                      _busy
+                          ? _t('Connecting…', 'Conectando…')
+                          : _t('Connect', 'Conectar'),
+                    ),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),

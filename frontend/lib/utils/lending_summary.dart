@@ -168,17 +168,20 @@ class SolveTermResult {
     required int termMonths,
     required double totalInterest,
     required double totalRepayment,
-  }) =>
-      SolveTermResult._(
-        ok: true,
-        periods: periods,
-        termMonths: termMonths,
-        totalInterest: totalInterest,
-        totalRepayment: totalRepayment,
-      );
+  }) => SolveTermResult._(
+    ok: true,
+    periods: periods,
+    termMonths: termMonths,
+    totalInterest: totalInterest,
+    totalRepayment: totalRepayment,
+  );
 
   factory SolveTermResult.failure(String reason, {double? minimumPayment}) =>
-      SolveTermResult._(ok: false, reason: reason, minimumPayment: minimumPayment);
+      SolveTermResult._(
+        ok: false,
+        reason: reason,
+        minimumPayment: minimumPayment,
+      );
 }
 
 /// Solve for how many payments (and the equivalent term) it takes to
@@ -217,8 +220,9 @@ SolveTermResult solveTermFromPayment({
   final ppy = _periodsPerYear(paymentFrequency);
   if (ppy == null) {
     return SolveTermResult.failure(
-        'A lump-sum loan has a single payment — switch to monthly or weekly to '
-        'solve for a term.');
+      'A lump-sum loan has a single payment — switch to monthly or weekly to '
+      'solve for a term.',
+    );
   }
 
   final p = principal;
@@ -244,8 +248,9 @@ SolveTermResult solveTermFromPayment({
   // (its total depends on the term we're solving for).
   if (interestType != 'amortized') {
     return SolveTermResult.failure(
-        'Solving from a payment only applies to standard (amortized) and '
-        'no-interest loans.');
+      'Solving from a payment only applies to standard (amortized) and '
+      'no-interest loans.',
+    );
   }
 
   final r = annual / ppy; // periodic rate
@@ -318,28 +323,29 @@ LoanProjection? projectLoan({
   if (interestType == 'none' || rate <= 0) {
     if (!hasTerm) {
       // Open-ended: repay anytime, no fixed schedule.
-      return LoanProjection(
-          principal: p, totalInterest: 0, totalRepayment: p);
+      return LoanProjection(principal: p, totalInterest: 0, totalRepayment: p);
     }
     final ppy = _periodsPerYear(paymentFrequency);
     if (ppy == null) {
       // Lump sum: one payment of the principal at maturity.
       return LoanProjection(
-          principal: p,
-          totalInterest: 0,
-          totalRepayment: p,
-          perPayment: p,
-          periods: 1,
-          cadence: 'balloon');
-    }
-    final n = math.max(1, (termMonths / 12.0 * ppy).round());
-    return LoanProjection(
         principal: p,
         totalInterest: 0,
         totalRepayment: p,
-        perPayment: p / n,
-        periods: n,
-        cadence: paymentFrequency);
+        perPayment: p,
+        periods: 1,
+        cadence: 'balloon',
+      );
+    }
+    final n = math.max(1, (termMonths / 12.0 * ppy).round());
+    return LoanProjection(
+      principal: p,
+      totalInterest: 0,
+      totalRepayment: p,
+      perPayment: p / n,
+      periods: n,
+      cadence: paymentFrequency,
+    );
   }
 
   // Interest-bearing. Normalise to an annual fraction (mirror the backend:
@@ -356,22 +362,24 @@ LoanProjection? projectLoan({
       final total = p + interest;
       if (paymentFrequency == 'lump_sum') {
         return LoanProjection(
-            principal: p,
-            totalInterest: interest,
-            totalRepayment: total,
-            perPayment: total,
-            periods: 1,
-            cadence: 'balloon');
+          principal: p,
+          totalInterest: interest,
+          totalRepayment: total,
+          perPayment: total,
+          periods: 1,
+          cadence: 'balloon',
+        );
       }
       final ppy = _periodsPerYear(paymentFrequency) ?? 12;
       final n = math.max(1, (months / 12.0 * ppy).round());
       return LoanProjection(
-          principal: p,
-          totalInterest: interest,
-          totalRepayment: total,
-          perPayment: total / n,
-          periods: n,
-          cadence: paymentFrequency);
+        principal: p,
+        totalInterest: interest,
+        totalRepayment: total,
+        perPayment: total / n,
+        periods: n,
+        cadence: paymentFrequency,
+      );
 
     case 'interest_only':
       // Backend: interest accrues monthly on the full balance; principal is
@@ -381,16 +389,17 @@ LoanProjection? projectLoan({
       final n = math.max(1, months);
       final interest = p * perMonthRate * n;
       return LoanProjection(
-          principal: p,
-          totalInterest: interest,
-          totalRepayment: p + interest,
-          perPayment: p * perMonthRate,
-          periods: n,
-          cadence: 'monthly',
-          // The recurring payment is interest only; the principal comes
-          // back as a balloon on the final installment. Surfacing it keeps
-          // the preview honest (n × interest + principal == total to repay).
-          balloonPayment: p);
+        principal: p,
+        totalInterest: interest,
+        totalRepayment: p + interest,
+        perPayment: p * perMonthRate,
+        periods: n,
+        cadence: 'monthly',
+        // The recurring payment is interest only; the principal comes
+        // back as a balloon on the final installment. Surfacing it keeps
+        // the preview honest (n × interest + principal == total to repay).
+        balloonPayment: p,
+      );
 
     case 'compound':
       // Backend: single balloon = P(1+i)^n at maturity, compounded monthly
@@ -399,12 +408,13 @@ LoanProjection? projectLoan({
       final n = math.max(1, months);
       final grown = p * math.pow(1 + perMonthRate, n).toDouble();
       return LoanProjection(
-          principal: p,
-          totalInterest: grown - p,
-          totalRepayment: grown,
-          perPayment: grown,
-          periods: 1,
-          cadence: 'balloon');
+        principal: p,
+        totalInterest: grown - p,
+        totalRepayment: grown,
+        perPayment: grown,
+        periods: 1,
+        cadence: 'balloon',
+      );
 
     case 'amortized':
     default:
@@ -420,12 +430,13 @@ LoanProjection? projectLoan({
       }
       final total = payment * n;
       return LoanProjection(
-          principal: p,
-          totalInterest: total - p,
-          totalRepayment: total,
-          perPayment: payment,
-          periods: n,
-          cadence: paymentFrequency == 'lump_sum' ? 'balloon' : paymentFrequency);
+        principal: p,
+        totalInterest: total - p,
+        totalRepayment: total,
+        perPayment: payment,
+        periods: n,
+        cadence: paymentFrequency == 'lump_sum' ? 'balloon' : paymentFrequency,
+      );
   }
 }
 
@@ -440,7 +451,10 @@ LoanProjection? projectLoan({
 /// Returns 0 when either field is missing (older payloads / no schedule)
 /// or when the difference is a rounding sliver (< half a cent), so the
 /// footnote only appears when real interest is included.
-double interestIncludedInOutstanding(num? totalOwed, num? principalOutstanding) {
+double interestIncludedInOutstanding(
+  num? totalOwed,
+  num? principalOutstanding,
+) {
   if (totalOwed == null || principalOutstanding == null) return 0;
   final diff = totalOwed.toDouble() - principalOutstanding.toDouble();
   return diff < 0.005 ? 0 : diff;

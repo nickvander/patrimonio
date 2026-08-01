@@ -21,7 +21,9 @@ Future<void> _setGoal(WidgetTester tester, String amount, String year) async {
   await tester.tap(openButton.first);
   await tester.pumpAndSettle();
   final fields = find.descendant(
-      of: find.byType(AlertDialog), matching: find.byType(TextField));
+    of: find.byType(AlertDialog),
+    matching: find.byType(TextField),
+  );
   await tester.enterText(fields.at(0), amount);
   await tester.enterText(fields.at(1), year);
   await tester.tap(find.widgetWithText(FilledButton, 'Save'));
@@ -40,8 +42,11 @@ void main() {
     // Default years-to-retirement is 20.
     final verticals = _chartData(tester).extraLinesData.verticalLines;
     final retire = verticals.where((v) => v.x == 20.0);
-    expect(retire, hasLength(1),
-        reason: 'expected one vertical marker at x=20 (retirement)');
+    expect(
+      retire,
+      hasLength(1),
+      reason: 'expected one vertical marker at x=20 (retirement)',
+    );
     expect(retire.single.dashArray, isNotNull); // dashed, not solid
     expect(retire.single.label.show, isTrue);
     expect(retire.single.label.labelResolver(retire.single), 'Retirement');
@@ -70,10 +75,12 @@ void main() {
 
     // The dashed goal bar ([3,6]) and the dashed FIRE-target bar ([5,5])
     // exist and use clearly different colours.
-    final goalBar = data.lineBarsData
-        .singleWhere((b) => b.dashArray?.join(',') == '3,6');
-    final targetBar = data.lineBarsData
-        .singleWhere((b) => b.dashArray?.join(',') == '5,5');
+    final goalBar = data.lineBarsData.singleWhere(
+      (b) => b.dashArray?.join(',') == '3,6',
+    );
+    final targetBar = data.lineBarsData.singleWhere(
+      (b) => b.dashArray?.join(',') == '5,5',
+    );
     expect(goalBar.color, isNotNull);
     expect(goalBar.color, isNot(equals(targetBar.color)));
     // The horizontal goal amount line is at $800k across the horizon.
@@ -99,15 +106,19 @@ void main() {
     // The axis did NOT stretch to the goal.
     expect(data.maxY, maxYWithoutGoal);
     // No goal bar participates in the plot (it would sit above the range) …
-    expect(data.lineBarsData.where((b) => b.dashArray?.join(',') == '3,6'),
-        isEmpty);
+    expect(
+      data.lineBarsData.where((b) => b.dashArray?.join(',') == '3,6'),
+      isEmpty,
+    );
     // … instead a labelled dashed line clamps to the top edge …
     final horizontals = data.extraLinesData.horizontalLines;
     expect(horizontals, hasLength(1));
     expect(horizontals.single.y, maxYWithoutGoal);
     expect(horizontals.single.label.show, isTrue);
-    expect(horizontals.single.label.labelResolver(horizontals.single),
-        contains('Your goal'));
+    expect(
+      horizontals.single.label.labelResolver(horizontals.single),
+      contains('Your goal'),
+    );
     // … and the vertical goal-year marker still shows.
     expect(data.extraLinesData.verticalLines.map((v) => v.x), contains(5.0));
   });

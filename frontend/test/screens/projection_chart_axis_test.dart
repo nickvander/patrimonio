@@ -11,16 +11,18 @@ import 'projection_test_host.dart';
 
 /// Rendered bottom-axis labels (4-digit calendar years), left-to-right.
 List<Text> _yearLabelTexts(WidgetTester tester) {
-  final finder = find.byWidgetPredicate((w) =>
-      w is Text && w.data != null && RegExp(r'^\d{4}$').hasMatch(w.data!));
+  final finder = find.byWidgetPredicate(
+    (w) => w is Text && w.data != null && RegExp(r'^\d{4}$').hasMatch(w.data!),
+  );
   return [for (final e in finder.evaluate()) e.widget as Text];
 }
 
 List<Rect> _yearLabelRects(WidgetTester tester) {
-  final finder = find.byWidgetPredicate((w) =>
-      w is Text && w.data != null && RegExp(r'^\d{4}$').hasMatch(w.data!));
+  final finder = find.byWidgetPredicate(
+    (w) => w is Text && w.data != null && RegExp(r'^\d{4}$').hasMatch(w.data!),
+  );
   return [
-    for (final e in finder.evaluate()) tester.getRect(find.byWidget(e.widget))
+    for (final e in finder.evaluate()) tester.getRect(find.byWidget(e.widget)),
   ];
 }
 
@@ -60,8 +62,11 @@ void main() {
     // No horizontal overlap between adjacent labels.
     rects.sort((a, b) => a.left.compareTo(b.left));
     for (var i = 1; i < rects.length; i++) {
-      expect(rects[i].left, greaterThanOrEqualTo(rects[i - 1].right),
-          reason: 'labels $i and ${i - 1} overlap');
+      expect(
+        rects[i].left,
+        greaterThanOrEqualTo(rects[i - 1].right),
+        reason: 'labels $i and ${i - 1} overlap',
+      );
     }
 
     // U1: labels are calendar years anchored at the current year, and the
@@ -75,8 +80,9 @@ void main() {
     expect(find.textContaining('Yr '), findsNothing);
   });
 
-  testWidgets('wide 1200px, 30-year horizon: at least 5 calendar-year labels',
-      (tester) async {
+  testWidgets('wide 1200px, 30-year horizon: at least 5 calendar-year labels', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1200, 1600));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();
@@ -90,12 +96,14 @@ void main() {
 
     // U1: the first label is this calendar year and the steps are the
     // adaptive interval (multiples of a clean 5-year step here).
-    final labels = [for (final t in _yearLabelTexts(tester)) t.data!]
-      ..sort();
+    final labels = [for (final t in _yearLabelTexts(tester)) t.data!]..sort();
     expect(labels.first, '$nowYear');
     for (final label in labels) {
-      expect((int.parse(label) - nowYear) % 5, 0,
-          reason: 'label $label is not on a clean 5-year step');
+      expect(
+        (int.parse(label) - nowYear) % 5,
+        0,
+        reason: 'label $label is not on a clean 5-year step',
+      );
     }
   });
 }

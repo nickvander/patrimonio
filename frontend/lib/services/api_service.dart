@@ -81,11 +81,12 @@ class ImportFileStatus {
 /// Live import progress. [files] is the whole batch in submission order,
 /// each carrying its own status, so the screen can render a per-file
 /// checklist; [done]/[total] are the aggregate counts.
-typedef ImportProgressCallback = void Function({
-  required List<ImportFileStatus> files,
-  required int done,
-  required int total,
-});
+typedef ImportProgressCallback =
+    void Function({
+      required List<ImportFileStatus> files,
+      required int done,
+      required int total,
+    });
 
 class ApiService {
   String get _baseUrl => apiBaseUrl();
@@ -104,9 +105,7 @@ class ApiService {
   /// refuses. The exact value doesn't matter (the middleware only
   /// checks for non-empty), but we use "fetch" to match the convention
   /// jQuery and friends introduced years ago.
-  static const Map<String, String> _csrfHeader = {
-    'X-Requested-With': 'fetch',
-  };
+  static const Map<String, String> _csrfHeader = {'X-Requested-With': 'fetch'};
 
   Map<String, String> _withCsrf(Map<String, String>? extra) {
     if (extra == null || extra.isEmpty) return _csrfHeader;
@@ -157,21 +156,41 @@ class ApiService {
     return res;
   }
 
-  Future<http.Response> _post(Uri uri, {Object? body, Map<String, String>? headers}) async {
-    final res = await _client.post(uri, body: body, headers: _withCsrf(headers));
+  Future<http.Response> _post(
+    Uri uri, {
+    Object? body,
+    Map<String, String>? headers,
+  }) async {
+    final res = await _client.post(
+      uri,
+      body: body,
+      headers: _withCsrf(headers),
+    );
     _maybeUnauthorized(res);
     _invalidateAfterMutation(res);
     return res;
   }
 
-  Future<http.Response> _patch(Uri uri, {Object? body, Map<String, String>? headers}) async {
-    final res = await _client.patch(uri, body: body, headers: _withCsrf(headers));
+  Future<http.Response> _patch(
+    Uri uri, {
+    Object? body,
+    Map<String, String>? headers,
+  }) async {
+    final res = await _client.patch(
+      uri,
+      body: body,
+      headers: _withCsrf(headers),
+    );
     _maybeUnauthorized(res);
     _invalidateAfterMutation(res);
     return res;
   }
 
-  Future<http.Response> _put(Uri uri, {Object? body, Map<String, String>? headers}) async {
+  Future<http.Response> _put(
+    Uri uri, {
+    Object? body,
+    Map<String, String>? headers,
+  }) async {
     final res = await _client.put(uri, body: body, headers: _withCsrf(headers));
     _maybeUnauthorized(res);
     _invalidateAfterMutation(res);
@@ -222,8 +241,12 @@ class ApiService {
     if (res.statusCode == 200) {
       return json.decode(res.body) as Map<String, dynamic>;
     }
-    throw Exception(_t('Failed to load auth status (${res.statusCode})',
-        'No se pudo cargar el estado de autenticación (${res.statusCode})'));
+    throw Exception(
+      _t(
+        'Failed to load auth status (${res.statusCode})',
+        'No se pudo cargar el estado de autenticación (${res.statusCode})',
+      ),
+    );
   }
 
   Future<LoginOutcome> login(String username, String password) async {
@@ -239,8 +262,10 @@ class ApiService {
       }
       return LoginOutcome.complete(AuthUser.fromJson(body));
     }
-    throw _errorFromBody(res,
-        fallback: _t('Login failed', 'No se pudo iniciar sesión'));
+    throw _errorFromBody(
+      res,
+      fallback: _t('Login failed', 'No se pudo iniciar sesión'),
+    );
   }
 
   Future<AuthUser> verifyTotp(String code) async {
@@ -252,9 +277,13 @@ class ApiService {
     if (res.statusCode == 200) {
       return AuthUser.fromJson(json.decode(res.body) as Map<String, dynamic>);
     }
-    throw _errorFromBody(res,
-        fallback: _t('TOTP verification failed',
-            'No se pudo verificar el código TOTP'));
+    throw _errorFromBody(
+      res,
+      fallback: _t(
+        'TOTP verification failed',
+        'No se pudo verificar el código TOTP',
+      ),
+    );
   }
 
   Future<BootstrapOutcome> bootstrap({
@@ -280,13 +309,15 @@ class ApiService {
         codes,
       );
     }
-    throw _errorFromBody(res,
-        fallback: _t('Bootstrap failed', 'No se pudo crear la cuenta inicial'));
+    throw _errorFromBody(
+      res,
+      fallback: _t('Bootstrap failed', 'No se pudo crear la cuenta inicial'),
+    );
   }
 
   /// Redeem an invite token + create a new user account. Same shape
-   /// as bootstrap on success: the new user is signed in, recovery
-   /// codes are returned once.
+  /// as bootstrap on success: the new user is signed in, recovery
+  /// codes are returned once.
   Future<BootstrapOutcome> register({
     required String token,
     required String username,
@@ -312,8 +343,10 @@ class ApiService {
         codes,
       );
     }
-    throw _errorFromBody(res,
-        fallback: _t('Registration failed', 'No se pudo completar el registro'));
+    throw _errorFromBody(
+      res,
+      fallback: _t('Registration failed', 'No se pudo completar el registro'),
+    );
   }
 
   /// Mint a new invite token. Authenticated. Returns the plaintext
@@ -345,8 +378,10 @@ class ApiService {
         expiresAt: DateTime.parse(body['expires_at'] as String),
       );
     }
-    throw _errorFromBody(res,
-        fallback: _t('Failed to mint invite', 'No se pudo generar la invitación'));
+    throw _errorFromBody(
+      res,
+      fallback: _t('Failed to mint invite', 'No se pudo generar la invitación'),
+    );
   }
 
   Future<List<InviteSummary>> listInvites() async {
@@ -358,9 +393,13 @@ class ApiService {
           .map(InviteSummary.fromJson)
           .toList();
     }
-    throw _errorFromBody(res,
-        fallback: _t('Failed to list invites',
-            'No se pudieron cargar las invitaciones'));
+    throw _errorFromBody(
+      res,
+      fallback: _t(
+        'Failed to list invites',
+        'No se pudieron cargar las invitaciones',
+      ),
+    );
   }
 
   Future<void> revokeInvite(String id) async {
@@ -370,9 +409,13 @@ class ApiService {
     );
     _maybeUnauthorized(res);
     if (res.statusCode != 204) {
-      throw _errorFromBody(res,
-          fallback: _t('Failed to revoke invite',
-              'No se pudo revocar la invitación'));
+      throw _errorFromBody(
+        res,
+        fallback: _t(
+          'Failed to revoke invite',
+          'No se pudo revocar la invitación',
+        ),
+      );
     }
   }
 
@@ -391,9 +434,13 @@ class ApiService {
       }),
     );
     if (res.statusCode != 204) {
-      throw _errorFromBody(res,
-          fallback: _t('Password reset failed',
-              'No se pudo restablecer la contraseña'));
+      throw _errorFromBody(
+        res,
+        fallback: _t(
+          'Password reset failed',
+          'No se pudo restablecer la contraseña',
+        ),
+      );
     }
   }
 
@@ -407,9 +454,10 @@ class ApiService {
       return ((body['codes'] as List?) ?? const []).cast<String>();
     }
     _maybeUnauthorized(res);
-    throw _errorFromBody(res,
-        fallback: _t('Regenerate failed',
-            'No se pudieron regenerar los códigos'));
+    throw _errorFromBody(
+      res,
+      fallback: _t('Regenerate failed', 'No se pudieron regenerar los códigos'),
+    );
   }
 
   Future<int> recoveryCodesCount() async {
@@ -418,12 +466,14 @@ class ApiService {
       final body = json.decode(res.body) as Map<String, dynamic>;
       return (body['unused'] as num).toInt();
     }
-    throw _errorFromBody(res,
-        fallback: _t('Count failed',
-            'No se pudo obtener el conteo de códigos'));
+    throw _errorFromBody(
+      res,
+      fallback: _t('Count failed', 'No se pudo obtener el conteo de códigos'),
+    );
   }
 
-  Future<({String secretBase32, String provisioningUri})> beginTotpEnroll() async {
+  Future<({String secretBase32, String provisioningUri})>
+  beginTotpEnroll() async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/totp/enroll'),
       headers: _csrfHeader,
@@ -436,9 +486,13 @@ class ApiService {
       );
     }
     _maybeUnauthorized(res);
-    throw _errorFromBody(res,
-        fallback: _t('TOTP enroll failed',
-            'No se pudo iniciar el registro de TOTP'));
+    throw _errorFromBody(
+      res,
+      fallback: _t(
+        'TOTP enroll failed',
+        'No se pudo iniciar el registro de TOTP',
+      ),
+    );
   }
 
   Future<void> confirmTotpEnroll(String code) async {
@@ -449,9 +503,10 @@ class ApiService {
     );
     if (res.statusCode != 204) {
       _maybeUnauthorized(res);
-      throw _errorFromBody(res,
-          fallback: _t('TOTP confirm failed',
-              'No se pudo confirmar el TOTP'));
+      throw _errorFromBody(
+        res,
+        fallback: _t('TOTP confirm failed', 'No se pudo confirmar el TOTP'),
+      );
     }
   }
 
@@ -463,9 +518,10 @@ class ApiService {
     );
     if (res.statusCode != 204) {
       _maybeUnauthorized(res);
-      throw _errorFromBody(res,
-          fallback: _t('Disable TOTP failed',
-              'No se pudo desactivar el TOTP'));
+      throw _errorFromBody(
+        res,
+        fallback: _t('Disable TOTP failed', 'No se pudo desactivar el TOTP'),
+      );
     }
   }
 
@@ -479,20 +535,26 @@ class ApiService {
           .map((e) => ActiveSession.fromJson(e as Map<String, dynamic>))
           .toList();
     }
-    throw _errorFromBody(res,
-        fallback: _t('Failed to load sessions',
-            'No se pudieron cargar las sesiones'));
+    throw _errorFromBody(
+      res,
+      fallback: _t(
+        'Failed to load sessions',
+        'No se pudieron cargar las sesiones',
+      ),
+    );
   }
 
   Future<void> revokeSession(String sessionId) async {
-    final res = await _delete(
-      Uri.parse('$_baseUrl/auth/sessions/$sessionId'),
-    );
+    final res = await _delete(Uri.parse('$_baseUrl/auth/sessions/$sessionId'));
     if (res.statusCode != 204) {
       _maybeUnauthorized(res);
-      throw _errorFromBody(res,
-          fallback: _t('Failed to revoke session',
-              'No se pudo revocar la sesión'));
+      throw _errorFromBody(
+        res,
+        fallback: _t(
+          'Failed to revoke session',
+          'No se pudo revocar la sesión',
+        ),
+      );
     }
   }
 
@@ -504,9 +566,13 @@ class ApiService {
       final body = json.decode(res.body) as Map<String, dynamic>;
       return (body['revoked'] as num).toInt();
     }
-    throw _errorFromBody(res,
-        fallback: _t('Failed to revoke other sessions',
-            'No se pudieron revocar las demás sesiones'));
+    throw _errorFromBody(
+      res,
+      fallback: _t(
+        'Failed to revoke other sessions',
+        'No se pudieron revocar las demás sesiones',
+      ),
+    );
   }
 
   Future<void> logout() async {
@@ -515,12 +581,17 @@ class ApiService {
       headers: _csrfHeader,
     );
     if (res.statusCode != 204 && res.statusCode != 200) {
-      throw _errorFromBody(res,
-          fallback: _t('Logout failed', 'No se pudo cerrar sesión'));
+      throw _errorFromBody(
+        res,
+        fallback: _t('Logout failed', 'No se pudo cerrar sesión'),
+      );
     }
   }
 
-  Future<void> changePassword(String currentPassword, String newPassword) async {
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/change-password'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
@@ -531,9 +602,13 @@ class ApiService {
     );
     if (res.statusCode != 204) {
       _maybeUnauthorized(res);
-      throw _errorFromBody(res,
-          fallback: _t('Password change failed',
-              'No se pudo cambiar la contraseña'));
+      throw _errorFromBody(
+        res,
+        fallback: _t(
+          'Password change failed',
+          'No se pudo cambiar la contraseña',
+        ),
+      );
     }
   }
 
@@ -557,8 +632,12 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      throw Exception(_t('Failed to load dashboard overview',
-          'No se pudo cargar el resumen del panel'));
+      throw Exception(
+        _t(
+          'Failed to load dashboard overview',
+          'No se pudo cargar el resumen del panel',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -570,8 +649,12 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load net worth history',
-          'No se pudo cargar el historial de patrimonio neto'));
+      throw Exception(
+        _t(
+          'Failed to load net worth history',
+          'No se pudo cargar el historial de patrimonio neto',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -581,8 +664,12 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load allocation data',
-          'No se pudieron cargar los datos de distribución'));
+      throw Exception(
+        _t(
+          'Failed to load allocation data',
+          'No se pudieron cargar los datos de distribución',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -595,13 +682,18 @@ class ApiService {
     final query = months == null ? '' : '?months=$months';
     final cacheKey = months == null ? 'trends' : 'trends-$months';
     return _cachedGet(cacheKey, () async {
-      final response =
-          await _get(Uri.parse('$_baseUrl/dashboard/trends$query'));
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/trends$query'),
+      );
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load trend data',
-          'No se pudieron cargar los datos de tendencias'));
+      throw Exception(
+        _t(
+          'Failed to load trend data',
+          'No se pudieron cargar los datos de tendencias',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -614,13 +706,20 @@ class ApiService {
     bool forceRefresh = false,
   }) {
     return _cachedGet('spending-by-category-$months-$top', () async {
-      final response = await _get(Uri.parse(
-          '$_baseUrl/dashboard/spending-by-category?months=$months&top=$top'));
+      final response = await _get(
+        Uri.parse(
+          '$_baseUrl/dashboard/spending-by-category?months=$months&top=$top',
+        ),
+      );
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      throw Exception(_t('Failed to load spending by category',
-          'No se pudo cargar el gasto por categoría'));
+      throw Exception(
+        _t(
+          'Failed to load spending by category',
+          'No se pudo cargar el gasto por categoría',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -633,13 +732,18 @@ class ApiService {
     bool forceRefresh = false,
   }) {
     return _cachedGet('spending-insights-$lookback', () async {
-      final response = await _get(Uri.parse(
-          '$_baseUrl/dashboard/spending-insights?lookback=$lookback'));
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/spending-insights?lookback=$lookback'),
+      );
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      throw Exception(_t('Failed to load spending insights',
-          'No se pudieron cargar los análisis de gasto'));
+      throw Exception(
+        _t(
+          'Failed to load spending insights',
+          'No se pudieron cargar los análisis de gasto',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -648,13 +752,18 @@ class ApiService {
   /// performance chart. Empty list on error so the card simply hides.
   Future<List<dynamic>> getPortfolioValueHistory({bool forceRefresh = false}) {
     return _cachedGet('portfolio-value-history', () async {
-      final response =
-          await _get(Uri.parse('$_baseUrl/dashboard/portfolio-value-history'));
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/portfolio-value-history'),
+      );
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load portfolio value history',
-          'No se pudo cargar el historial de valor del portafolio'));
+      throw Exception(
+        _t(
+          'Failed to load portfolio value history',
+          'No se pudo cargar el historial de valor del portafolio',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -679,11 +788,14 @@ class ApiService {
   /// lots. [benchmark] is the index key (e.g. 'SP500', 'NDX'); omitted →
   /// defaults to the S&P 500 server-side.
   /// Returns {invested_usd, your_value_usd, benchmark_value_usd, lot_count}.
-  Future<Map<String, dynamic>?> getBenchmarkComparison({String? benchmark}) async {
+  Future<Map<String, dynamic>?> getBenchmarkComparison({
+    String? benchmark,
+  }) async {
     try {
       final q = benchmark != null ? '?benchmark=$benchmark' : '';
       final r = await _get(
-          Uri.parse('$_baseUrl/dashboard/benchmark-comparison$q'));
+        Uri.parse('$_baseUrl/dashboard/benchmark-comparison$q'),
+      );
       if (r.statusCode == 200) {
         final decoded = json.decode(r.body);
         return decoded is Map<String, dynamic> ? decoded : null;
@@ -718,8 +830,12 @@ class ApiService {
       if (r.statusCode == 200) {
         return json.decode(r.body) as Map<String, dynamic>;
       }
-      throw Exception(_t('Failed to load emergency fund',
-          'No se pudo cargar el fondo de emergencia'));
+      throw Exception(
+        _t(
+          'Failed to load emergency fund',
+          'No se pudo cargar el fondo de emergencia',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -727,8 +843,11 @@ class ApiService {
   /// the persisted statement `balance_after`. Empty for Plaid-only accounts.
   Future<List<dynamic>> getAccountBalanceHistory(String accountId) async {
     try {
-      final response = await _get(Uri.parse(
-          '$_baseUrl/dashboard/account-balance-history?account_id=$accountId'));
+      final response = await _get(
+        Uri.parse(
+          '$_baseUrl/dashboard/account-balance-history?account_id=$accountId',
+        ),
+      );
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
         return decoded is List ? decoded : const [];
@@ -747,13 +866,18 @@ class ApiService {
   }) {
     return _cachedGet('realized-gains-${year ?? 'all'}', () async {
       final q = year != null ? '?year=$year' : '';
-      final response =
-          await _get(Uri.parse('$_baseUrl/dashboard/realized-gains$q'));
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/realized-gains$q'),
+      );
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      throw Exception(_t('Failed to load realized gains',
-          'No se pudieron cargar las ganancias realizadas'));
+      throw Exception(
+        _t(
+          'Failed to load realized gains',
+          'No se pudieron cargar las ganancias realizadas',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -763,8 +887,9 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      throw Exception(_t('Failed to load holdings',
-          'No se pudieron cargar las posiciones'));
+      throw Exception(
+        _t('Failed to load holdings', 'No se pudieron cargar las posiciones'),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -776,8 +901,12 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load credit utilization',
-          'No se pudo cargar el uso de crédito'));
+      throw Exception(
+        _t(
+          'Failed to load credit utilization',
+          'No se pudo cargar el uso de crédito',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -787,17 +916,19 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load sync status',
-          'No se pudo cargar el estado de sincronización'));
+      throw Exception(
+        _t(
+          'Failed to load sync status',
+          'No se pudo cargar el estado de sincronización',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
   /// Summary of "what changed since your previous login" — used by the
   /// dismissible Overview banner. Returns null when the user has no
   /// previous login (first session ever), so the caller can skip rendering.
-  Future<Map<String, dynamic>?> getSinceLastLogin({
-    bool forceRefresh = false,
-  }) {
+  Future<Map<String, dynamic>?> getSinceLastLogin({bool forceRefresh = false}) {
     return _cachedGet('since-last-login', () async {
       final response = await _get(
         Uri.parse('$_baseUrl/dashboard/since-last-login'),
@@ -837,8 +968,12 @@ class ApiService {
       body: json.encode({'ids': ids, 'all': all}),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to update notifications',
-          'No se pudieron actualizar las notificaciones'));
+      throw Exception(
+        _t(
+          'Failed to update notifications',
+          'No se pudieron actualizar las notificaciones',
+        ),
+      );
     }
   }
 
@@ -852,8 +987,12 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load ignored subscriptions',
-          'No se pudieron cargar las suscripciones ignoradas'));
+      throw Exception(
+        _t(
+          'Failed to load ignored subscriptions',
+          'No se pudieron cargar las suscripciones ignoradas',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -866,8 +1005,12 @@ class ApiService {
       ),
     );
     if (response.statusCode != 204) {
-      throw Exception(_t('Failed to un-ignore subscription',
-          'No se pudo dejar de ignorar la suscripción'));
+      throw Exception(
+        _t(
+          'Failed to un-ignore subscription',
+          'No se pudo dejar de ignorar la suscripción',
+        ),
+      );
     }
   }
 
@@ -880,8 +1023,12 @@ class ApiService {
       body: json.encode({'merchant': merchant}),
     );
     if (response.statusCode != 204) {
-      throw Exception(_t('Failed to dismiss subscription',
-          'No se pudo descartar la suscripción'));
+      throw Exception(
+        _t(
+          'Failed to dismiss subscription',
+          'No se pudo descartar la suscripción',
+        ),
+      );
     }
   }
 
@@ -895,8 +1042,12 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load subscriptions',
-          'No se pudieron cargar las suscripciones'));
+      throw Exception(
+        _t(
+          'Failed to load subscriptions',
+          'No se pudieron cargar las suscripciones',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -911,22 +1062,28 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load FX transfers',
-          'No se pudieron cargar las transferencias de divisas'));
+      throw Exception(
+        _t(
+          'Failed to load FX transfers',
+          'No se pudieron cargar las transferencias de divisas',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
   /// Run a detection pass on the server. Returns
   /// `{checked, inserted}` so the UI can say "added N new links".
   Future<Map<String, dynamic>> detectFxTransfers() async {
-    final response = await _post(
-      Uri.parse('$_baseUrl/dashboard/fx-transfers'),
-    );
+    final response = await _post(Uri.parse('$_baseUrl/dashboard/fx-transfers'));
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     }
-    throw Exception(_t('FX detection failed',
-        'No se pudo detectar transferencias de divisas'));
+    throw Exception(
+      _t(
+        'FX detection failed',
+        'No se pudo detectar transferencias de divisas',
+      ),
+    );
   }
 
   Future<void> confirmFxTransfer(String id) async {
@@ -934,8 +1091,12 @@ class ApiService {
       Uri.parse('$_baseUrl/dashboard/fx-transfers/$id'),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Confirm failed (${response.statusCode})',
-          'No se pudo confirmar (${response.statusCode})'));
+      throw Exception(
+        _t(
+          'Confirm failed (${response.statusCode})',
+          'No se pudo confirmar (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -944,8 +1105,12 @@ class ApiService {
       Uri.parse('$_baseUrl/dashboard/fx-transfers/$id'),
     );
     if (response.statusCode != 204) {
-      throw Exception(_t('Unlink failed (${response.statusCode})',
-          'No se pudo desvincular (${response.statusCode})'));
+      throw Exception(
+        _t(
+          'Unlink failed (${response.statusCode})',
+          'No se pudo desvincular (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -960,8 +1125,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load dismissed FX pairs',
-        'No se pudieron cargar los pares de divisas descartados'));
+    throw Exception(
+      _t(
+        'Failed to load dismissed FX pairs',
+        'No se pudieron cargar los pares de divisas descartados',
+      ),
+    );
   }
 
   /// Restore a dismissed FX pair so the detector can re-propose it
@@ -971,8 +1140,12 @@ class ApiService {
       Uri.parse('$_baseUrl/dashboard/fx-transfers/dismissed/$dismissalId'),
     );
     if (response.statusCode != 204) {
-      throw Exception(_t('Restore failed (${response.statusCode})',
-          'No se pudo restaurar (${response.statusCode})'));
+      throw Exception(
+        _t(
+          'Restore failed (${response.statusCode})',
+          'No se pudo restaurar (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -985,17 +1158,23 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load closed accounts',
-        'No se pudieron cargar las cuentas cerradas'));
+    throw Exception(
+      _t(
+        'Failed to load closed accounts',
+        'No se pudieron cargar las cuentas cerradas',
+      ),
+    );
   }
 
   /// Restore an auto-archived account so it counts toward net worth again.
   Future<void> restoreAccount(String accountId) async {
-    final response =
-        await _post(Uri.parse('$_baseUrl/accounts/$accountId/restore'));
+    final response = await _post(
+      Uri.parse('$_baseUrl/accounts/$accountId/restore'),
+    );
     if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception(_t('Failed to restore account',
-          'No se pudo restaurar la cuenta'));
+      throw Exception(
+        _t('Failed to restore account', 'No se pudo restaurar la cuenta'),
+      );
     }
   }
 
@@ -1006,8 +1185,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load setup status',
-        'No se pudo cargar el estado de configuración'));
+    throw Exception(
+      _t(
+        'Failed to load setup status',
+        'No se pudo cargar el estado de configuración',
+      ),
+    );
   }
 
   Future<Map<String, dynamic>> getExchangeRate(
@@ -1022,8 +1205,9 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load exchange rate',
-        'No se pudo cargar el tipo de cambio'));
+    throw Exception(
+      _t('Failed to load exchange rate', 'No se pudo cargar el tipo de cambio'),
+    );
   }
 
   /// Record a user-entered FX override (source='manual'), which the backend
@@ -1036,17 +1220,17 @@ class ApiService {
     final response = await _post(
       Uri.parse('$_baseUrl/fx/manual'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'base': base,
-        'target': target,
-        'rate': rate,
-      }),
+      body: json.encode({'base': base, 'target': target, 'rate': rate}),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to save exchange rate',
-        'No se pudo guardar el tipo de cambio'));
+    throw Exception(
+      _t(
+        'Failed to save exchange rate',
+        'No se pudo guardar el tipo de cambio',
+      ),
+    );
   }
 
   /// Historical rate points for the FX center sparkline. [days] windows
@@ -1062,25 +1246,32 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw _errorFromBody(response,
-        fallback: _t('Failed to load rate history',
-            'No se pudo cargar el historial del tipo de cambio'));
+    throw _errorFromBody(
+      response,
+      fallback: _t(
+        'Failed to load rate history',
+        'No se pudo cargar el historial del tipo de cambio',
+      ),
+    );
   }
 
   /// The caller's FX alert threshold for the pair, or null when none is
   /// configured (server returns an explicit `{"alert": null}`).
   Future<Map<String, dynamic>?> getFxAlert(String base, String target) async {
-    final response =
-        await _get(Uri.parse('$_baseUrl/fx/alert/$base/$target'));
+    final response = await _get(Uri.parse('$_baseUrl/fx/alert/$base/$target'));
     if (response.statusCode == 200) {
       final body = json.decode(response.body);
       return (body is Map && body['alert'] is Map)
           ? Map<String, dynamic>.from(body['alert'] as Map)
           : null;
     }
-    throw _errorFromBody(response,
-        fallback: _t('Failed to load FX alert',
-            'No se pudo cargar la alerta de tipo de cambio'));
+    throw _errorFromBody(
+      response,
+      fallback: _t(
+        'Failed to load FX alert',
+        'No se pudo cargar la alerta de tipo de cambio',
+      ),
+    );
   }
 
   /// Upserts the caller's FX alert threshold ("notify me when the rate
@@ -1099,19 +1290,28 @@ class ApiService {
       final body = json.decode(response.body);
       return Map<String, dynamic>.from(body['alert'] as Map);
     }
-    throw _errorFromBody(response,
-        fallback: _t('Failed to save FX alert',
-            'No se pudo guardar la alerta de tipo de cambio'));
+    throw _errorFromBody(
+      response,
+      fallback: _t(
+        'Failed to save FX alert',
+        'No se pudo guardar la alerta de tipo de cambio',
+      ),
+    );
   }
 
   /// Removes the caller's FX alert for the pair. Idempotent server-side.
   Future<void> deleteFxAlert(String base, String target) async {
-    final response =
-        await _delete(Uri.parse('$_baseUrl/fx/alert/$base/$target'));
+    final response = await _delete(
+      Uri.parse('$_baseUrl/fx/alert/$base/$target'),
+    );
     if (response.statusCode != 200 && response.statusCode != 204) {
-      throw _errorFromBody(response,
-          fallback: _t('Failed to remove FX alert',
-              'No se pudo eliminar la alerta de tipo de cambio'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to remove FX alert',
+          'No se pudo eliminar la alerta de tipo de cambio',
+        ),
+      );
     }
   }
 
@@ -1126,25 +1326,34 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw _errorFromBody(response,
-          fallback: _t('Failed to load recurring rules',
-              'No se pudieron cargar las reglas recurrentes'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to load recurring rules',
+          'No se pudieron cargar las reglas recurrentes',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
   /// Expected occurrences from active rules. Default window (no args) is
   /// [today, end of the current month] — "what's still expected this
   /// period". Display-only: the backend never posts these.
-  Future<Map<String, dynamic>> getUpcomingRecurring(
-      {bool forceRefresh = false}) {
+  Future<Map<String, dynamic>> getUpcomingRecurring({
+    bool forceRefresh = false,
+  }) {
     return _cachedGet('recurring/upcoming', () async {
       final response = await _get(Uri.parse('$_baseUrl/recurring/upcoming'));
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      throw _errorFromBody(response,
-          fallback: _t('Failed to load expected transactions',
-              'No se pudieron cargar las transacciones previstas'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to load expected transactions',
+          'No se pudieron cargar las transacciones previstas',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
@@ -1167,7 +1376,8 @@ class ApiService {
       'amount': amount,
       'currency': currency,
       'cadence': cadence,
-      'next_due_date': '${nextDueDate.year.toString().padLeft(4, '0')}-'
+      'next_due_date':
+          '${nextDueDate.year.toString().padLeft(4, '0')}-'
           '${nextDueDate.month.toString().padLeft(2, '0')}-'
           '${nextDueDate.day.toString().padLeft(2, '0')}',
       if (category != null && category.isNotEmpty) 'category': category,
@@ -1179,9 +1389,13 @@ class ApiService {
       body: json.encode(body),
     );
     if (response.statusCode != 201) {
-      throw _errorFromBody(response,
-          fallback: _t('Failed to create recurring rule',
-              'No se pudo crear la regla recurrente'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to create recurring rule',
+          'No se pudo crear la regla recurrente',
+        ),
+      );
     }
     return json.decode(response.body) as Map<String, dynamic>;
   }
@@ -1195,9 +1409,13 @@ class ApiService {
       body: json.encode({'active': active}),
     );
     if (response.statusCode != 200) {
-      throw _errorFromBody(response,
-          fallback: _t('Failed to update recurring rule',
-              'No se pudo actualizar la regla recurrente'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to update recurring rule',
+          'No se pudo actualizar la regla recurrente',
+        ),
+      );
     }
   }
 
@@ -1205,9 +1423,13 @@ class ApiService {
   Future<void> deleteRecurringRule(String id) async {
     final response = await _delete(Uri.parse('$_baseUrl/recurring/$id'));
     if (response.statusCode != 204) {
-      throw _errorFromBody(response,
-          fallback: _t('Failed to delete recurring rule',
-              'No se pudo eliminar la regla recurrente'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to delete recurring rule',
+          'No se pudo eliminar la regla recurrente',
+        ),
+      );
     }
   }
 
@@ -1240,8 +1462,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load transactions',
-        'No se pudieron cargar los movimientos'));
+    throw Exception(
+      _t(
+        'Failed to load transactions',
+        'No se pudieron cargar los movimientos',
+      ),
+    );
   }
 
   /// One newest-first page of a single account's transactions. With no
@@ -1265,8 +1491,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load account transactions',
-        'No se pudieron cargar los movimientos de la cuenta'));
+    throw Exception(
+      _t(
+        'Failed to load account transactions',
+        'No se pudieron cargar los movimientos de la cuenta',
+      ),
+    );
   }
 
   /// Kick off a sync of all the caller's institutions. The backend now runs
@@ -1286,8 +1516,12 @@ class ApiService {
       body: '{}',
     );
     if (response.statusCode != 200 && response.statusCode != 202) {
-      throw Exception(_t('Failed to sync institutions',
-          'No se pudieron sincronizar las instituciones'));
+      throw Exception(
+        _t(
+          'Failed to sync institutions',
+          'No se pudieron sincronizar las instituciones',
+        ),
+      );
     }
   }
 
@@ -1304,15 +1538,22 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to retrieve reconnect token',
-        'No se pudo obtener el token de reconexión'));
+    throw Exception(
+      _t(
+        'Failed to retrieve reconnect token',
+        'No se pudo obtener el token de reconexión',
+      ),
+    );
   }
 
   /// Swap a Plaid public token (from a completed Link session) for a stored
   /// access token, creating the institution. Used by the OAuth-redirect resume
   /// path; the in-tab connect flow calls the same endpoint directly.
-  Future<void> exchangePublicToken(String publicToken, String institutionName,
-      {String institutionType = 'banking'}) async {
+  Future<void> exchangePublicToken(
+    String publicToken,
+    String institutionName, {
+    String institutionType = 'banking',
+  }) async {
     final response = await _post(
       Uri.parse('$_baseUrl/institutions/exchange-token'),
       body: json.encode({
@@ -1323,8 +1564,12 @@ class ApiService {
       headers: const {'Content-Type': 'application/json'},
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to exchange public token',
-          'No se pudo intercambiar el token público'));
+      throw Exception(
+        _t(
+          'Failed to exchange public token',
+          'No se pudo intercambiar el token público',
+        ),
+      );
     }
   }
 
@@ -1333,8 +1578,12 @@ class ApiService {
       Uri.parse('$_baseUrl/institutions/$institutionId'),
     );
     if (response.statusCode != 204) {
-      throw Exception(_t('Failed to delete institution',
-          'No se pudo eliminar la institución'));
+      throw Exception(
+        _t(
+          'Failed to delete institution',
+          'No se pudo eliminar la institución',
+        ),
+      );
     }
   }
 
@@ -1359,16 +1608,16 @@ class ApiService {
   }) async {
     final usable = files.where((f) => f.bytes != null).toList();
     if (usable.isEmpty) {
-      throw Exception(_t('No files to upload',
-          'No hay archivos para subir'));
+      throw Exception(_t('No files to upload', 'No hay archivos para subir'));
     }
 
     // Split into batches that each stay under the server's body limit,
     // so a big multi-year drop doesn't bounce off the 100 MB cap — the
     // user no longer has to split by hand. Null = one batch (callers
     // that don't care about the cap, e.g. a single small CSV).
-    final batches =
-        maxBatchBytes == null ? [usable] : _packIntoBatches(usable, maxBatchBytes);
+    final batches = maxBatchBytes == null
+        ? [usable]
+        : _packIntoBatches(usable, maxBatchBytes);
 
     // The full checklist, in submission order, seeded as 'waiting'.
     final order = usable.map((f) => f.name).toList();
@@ -1463,8 +1712,7 @@ class ApiService {
       // Nothing parsed. Summarise concisely from the checklist (the
       // backend's all-failed message is a long per-file dump) and point
       // at the likely cause.
-      final failed =
-          status.values.where((s) => s.status == 'failed').length;
+      final failed = status.values.where((s) => s.status == 'failed').length;
       if (failed > 0) {
         message = _t(
           'No transactions found. $failed of $fileCount file$plural '
@@ -1497,7 +1745,9 @@ class ApiService {
   /// in its own batch (the caller pre-screens for files over the hard
   /// server cap).
   List<List<PlatformFile>> _packIntoBatches(
-      List<PlatformFile> files, int maxBytes) {
+    List<PlatformFile> files,
+    int maxBytes,
+  ) {
     final batches = <List<PlatformFile>>[];
     var current = <PlatformFile>[];
     var currentBytes = 0;
@@ -1558,9 +1808,9 @@ class ApiService {
       // 600s (10 min) timeout. The backend parallelises PDF parsing
       // across the blocking pool, but each file is still CPU-bound for
       // several seconds (qpdf decrypt + lopdf extract + table recovery).
-      final streamedResponse = await _client.send(request).timeout(
-            const Duration(seconds: 600),
-          );
+      final streamedResponse = await _client
+          .send(request)
+          .timeout(const Duration(seconds: 600));
       _maybeUnauthorizedStreamed(streamedResponse);
 
       final response = await http.Response.fromStream(streamedResponse);
@@ -1602,36 +1852,46 @@ class ApiService {
       if (response.statusCode == 413 ||
           response.body.contains('failed to read stream') ||
           response.body.contains('body limit exceeded')) {
-        final totalMb = files
+        final totalMb =
+            files
                 .map((f) => (f.bytes?.length ?? 0))
                 .fold<int>(0, (a, b) => a + b) /
             (1024 * 1024);
-        throw Exception(_t(
-          'Upload too large (${totalMb.toStringAsFixed(1)} MB across '
-          '${files.length} file${files.length == 1 ? '' : 's'}). '
-          'Try splitting into smaller batches.',
-          'La carga es demasiado grande (${totalMb.toStringAsFixed(1)} MB en '
-          '${files.length} archivo${files.length == 1 ? '' : 's'}). '
-          'Intenta dividirla en lotes más pequeños.',
-        ));
+        throw Exception(
+          _t(
+            'Upload too large (${totalMb.toStringAsFixed(1)} MB across '
+                '${files.length} file${files.length == 1 ? '' : 's'}). '
+                'Try splitting into smaller batches.',
+            'La carga es demasiado grande (${totalMb.toStringAsFixed(1)} MB en '
+                '${files.length} archivo${files.length == 1 ? '' : 's'}). '
+                'Intenta dividirla en lotes más pequeños.',
+          ),
+        );
       }
-      throw Exception(_t(
+      throw Exception(
+        _t(
           'Server returned ${response.statusCode}: ${response.body}',
-          'El servidor respondió ${response.statusCode}: ${response.body}'));
+          'El servidor respondió ${response.statusCode}: ${response.body}',
+        ),
+      );
     } on TimeoutException catch (_) {
-      throw Exception(_t(
-        'Upload timed out after 10 minutes. '
-        'Try splitting the batch into smaller groups (e.g. 6 PDFs at a time) '
-        'or check that the API container is still running.',
-        'La carga agotó el tiempo de espera tras 10 minutos. '
-        'Intenta dividir el lote en grupos más pequeños (p. ej. 6 PDF a la vez) '
-        'o verifica que el contenedor de la API siga en ejecución.',
-      ));
+      throw Exception(
+        _t(
+          'Upload timed out after 10 minutes. '
+              'Try splitting the batch into smaller groups (e.g. 6 PDFs at a time) '
+              'or check that the API container is still running.',
+          'La carga agotó el tiempo de espera tras 10 minutos. '
+              'Intenta dividir el lote en grupos más pequeños (p. ej. 6 PDF a la vez) '
+              'o verifica que el contenedor de la API siga en ejecución.',
+        ),
+      );
     } on http.ClientException catch (e) {
-      throw Exception(_t(
-        'Network error during upload. Please check your connection and try again. ($e)',
-        'Error de red durante la carga. Revisa tu conexión e inténtalo de nuevo. ($e)',
-      ));
+      throw Exception(
+        _t(
+          'Network error during upload. Please check your connection and try again. ($e)',
+          'Error de red durante la carga. Revisa tu conexión e inténtalo de nuevo. ($e)',
+        ),
+      );
     } finally {
       uploadComplete = true;
       // ignore: unawaited_futures
@@ -1662,7 +1922,9 @@ class ApiService {
   /// checklist after the POST returns (the background poller may have
   /// stopped before observing the terminal state).
   Future<void> _fetchFinalProgress(
-      String jobId, void Function(List<ImportFileStatus>) onFiles) async {
+    String jobId,
+    void Function(List<ImportFileStatus>) onFiles,
+  ) async {
     try {
       final res = await _get(Uri.parse('$_baseUrl/imports/progress/$jobId'));
       if (res.statusCode == 200) {
@@ -1709,9 +1971,7 @@ class ApiService {
     while (!done()) {
       await Future.delayed(interval);
       try {
-        final res = await _get(
-          Uri.parse('$_baseUrl/imports/progress/$jobId'),
-        );
+        final res = await _get(Uri.parse('$_baseUrl/imports/progress/$jobId'));
         if (res.statusCode == 200) {
           final snap = json.decode(res.body) as Map<String, dynamic>;
           final d = (snap['done'] as num?)?.toInt() ?? 0;
@@ -1751,9 +2011,9 @@ class ApiService {
     }
 
     try {
-      final streamedResponse = await _client.send(request).timeout(
-        const Duration(seconds: 30),
-      );
+      final streamedResponse = await _client
+          .send(request)
+          .timeout(const Duration(seconds: 30));
       final response = await http.Response.fromStream(streamedResponse);
       _maybeUnauthorized(response);
 
@@ -1762,16 +2022,20 @@ class ApiService {
         clearDashboardCache();
         return json.decode(response.body) as Map<String, dynamic>;
       } else {
-        throw Exception(_t(
-          'Server returned ${response.statusCode}: ${response.body}',
-          'El servidor respondió ${response.statusCode}: ${response.body}',
-        ));
+        throw Exception(
+          _t(
+            'Server returned ${response.statusCode}: ${response.body}',
+            'El servidor respondió ${response.statusCode}: ${response.body}',
+          ),
+        );
       }
     } on http.ClientException catch (e) {
-      throw Exception(_t(
-        'Network error during upload. Please check your connection and try again. ($e)',
-        'Error de red durante la carga. Revisa tu conexión e inténtalo de nuevo. ($e)',
-      ));
+      throw Exception(
+        _t(
+          'Network error during upload. Please check your connection and try again. ($e)',
+          'Error de red durante la carga. Revisa tu conexión e inténtalo de nuevo. ($e)',
+        ),
+      );
     } catch (e) {
       throw Exception(_t('Upload failed: $e', 'La carga falló: $e'));
     }
@@ -1793,8 +2057,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     } else {
-      throw Exception(_t('Confirmation failed: ${response.body}',
-          'La confirmación falló: ${response.body}'));
+      throw Exception(
+        _t(
+          'Confirmation failed: ${response.body}',
+          'La confirmación falló: ${response.body}',
+        ),
+      );
     }
   }
 
@@ -1810,8 +2078,12 @@ class ApiService {
       body: json.encode({'holdings': holdings}),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Holdings import failed: ${response.body}',
-          'La importación de posiciones falló: ${response.body}'));
+      throw Exception(
+        _t(
+          'Holdings import failed: ${response.body}',
+          'La importación de posiciones falló: ${response.body}',
+        ),
+      );
     }
   }
 
@@ -1864,7 +2136,8 @@ class ApiService {
       return ((json.decode(res.body) as Map)['deleted'] as num?)?.toInt() ?? 0;
     }
     throw Exception(
-        _t('Failed to undo import', 'No se pudo deshacer la importación'));
+      _t('Failed to undo import', 'No se pudo deshacer la importación'),
+    );
   }
 
   /// Bulk-delete transactions in an account + inclusive date range. With
@@ -1944,16 +2217,18 @@ class ApiService {
       body: json.encode(body),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to update balance',
-          'No se pudo actualizar el saldo'));
+      throw Exception(
+        _t('Failed to update balance', 'No se pudo actualizar el saldo'),
+      );
     }
   }
 
   Future<void> deleteAccount(String accountId) async {
     final response = await _delete(Uri.parse('$_baseUrl/accounts/$accountId'));
     if (response.statusCode != 204) {
-      throw Exception(_t('Failed to delete account',
-          'No se pudo eliminar la cuenta'));
+      throw Exception(
+        _t('Failed to delete account', 'No se pudo eliminar la cuenta'),
+      );
     }
   }
 
@@ -1967,8 +2242,9 @@ class ApiService {
       body: json.encode({'nickname': nickname}),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to rename account',
-          'No se pudo renombrar la cuenta'));
+      throw Exception(
+        _t('Failed to rename account', 'No se pudo renombrar la cuenta'),
+      );
     }
   }
 
@@ -1994,8 +2270,12 @@ class ApiService {
       body: json.encode(body),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to update transaction',
-          'No se pudo actualizar el movimiento'));
+      throw Exception(
+        _t(
+          'Failed to update transaction',
+          'No se pudo actualizar el movimiento',
+        ),
+      );
     }
   }
 
@@ -2026,8 +2306,12 @@ class ApiService {
       body: json.encode(body),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to batch-update transactions',
-          'No se pudieron actualizar los movimientos en lote'));
+      throw Exception(
+        _t(
+          'Failed to batch-update transactions',
+          'No se pudieron actualizar los movimientos en lote',
+        ),
+      );
     }
     final decoded = json.decode(response.body) as Map<String, dynamic>;
     return (decoded['updated'] as num).toInt();
@@ -2049,8 +2333,12 @@ class ApiService {
       body: json.encode({'ids': ids}),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to batch-delete transactions',
-          'No se pudieron eliminar los movimientos en lote'));
+      throw Exception(
+        _t(
+          'Failed to batch-delete transactions',
+          'No se pudieron eliminar los movimientos en lote',
+        ),
+      );
     }
     final decoded = json.decode(response.body) as Map<String, dynamic>;
     return (decoded['deleted'] as num).toInt();
@@ -2060,7 +2348,8 @@ class ApiService {
   /// anchor click rather than fetching + blobbing in Dart — the backend
   /// returns Content-Disposition: attachment so the browser downloads
   /// directly without using extra memory.
-  String exportTransactionsCsvUrl() => '$_baseUrl/dashboard/transactions/export';
+  String exportTransactionsCsvUrl() =>
+      '$_baseUrl/dashboard/transactions/export';
 
   /// Insert a manually-entered transaction. Positive amount = expense /
   /// outflow, negative = income / inflow (same convention as Plaid).
@@ -2075,7 +2364,8 @@ class ApiService {
   }) async {
     final body = <String, dynamic>{
       'account_id': accountId,
-      'date': '${date.year.toString().padLeft(4, '0')}-'
+      'date':
+          '${date.year.toString().padLeft(4, '0')}-'
           '${date.month.toString().padLeft(2, '0')}-'
           '${date.day.toString().padLeft(2, '0')}',
       'description': description,
@@ -2090,12 +2380,20 @@ class ApiService {
       body: json.encode(body),
     );
     if (response.statusCode == 409) {
-      throw Exception(_t('Already added — same date / amount / description.',
-          'Ya se agregó — misma fecha / monto / descripción.'));
+      throw Exception(
+        _t(
+          'Already added — same date / amount / description.',
+          'Ya se agregó — misma fecha / monto / descripción.',
+        ),
+      );
     }
     if (response.statusCode != 201) {
-      throw Exception(_t('Failed to add transaction: ${response.body}',
-          'No se pudo agregar el movimiento: ${response.body}'));
+      throw Exception(
+        _t(
+          'Failed to add transaction: ${response.body}',
+          'No se pudo agregar el movimiento: ${response.body}',
+        ),
+      );
     }
   }
 
@@ -2116,7 +2414,8 @@ class ApiService {
   }) async {
     final body = <String, dynamic>{
       'account_id': accountId,
-      'date': '${date.year.toString().padLeft(4, '0')}-'
+      'date':
+          '${date.year.toString().padLeft(4, '0')}-'
           '${date.month.toString().padLeft(2, '0')}-'
           '${date.day.toString().padLeft(2, '0')}',
       'description': description,
@@ -2138,14 +2437,22 @@ class ApiService {
       // Either the edited values now collide with another manual entry
       // (dedup signature) or the row is part of a split — surface the
       // server's message, which distinguishes the two.
-      throw _errorFromBody(response,
-          fallback: _t('Conflicting manual transaction',
-              'Movimiento manual en conflicto'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Conflicting manual transaction',
+          'Movimiento manual en conflicto',
+        ),
+      );
     }
     if (response.statusCode != 200) {
-      throw _errorFromBody(response,
-          fallback: _t('Failed to update transaction',
-              'No se pudo actualizar el movimiento'));
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to update transaction',
+          'No se pudo actualizar el movimiento',
+        ),
+      );
     }
   }
 
@@ -2165,8 +2472,10 @@ class ApiService {
       // Surface the server's reason (422 with `error` field) so the
       // dialog can show "Split total doesn't match" etc. exactly as
       // the server saw it.
-      throw _errorFromBody(response,
-          fallback: _t('Split failed', 'No se pudo dividir el movimiento'));
+      throw _errorFromBody(
+        response,
+        fallback: _t('Split failed', 'No se pudo dividir el movimiento'),
+      );
     }
   }
 
@@ -2185,9 +2494,10 @@ class ApiService {
       body: json.encode({'splits': splits}),
     );
     if (response.statusCode != 200) {
-      throw _errorFromBody(response,
-          fallback: _t('Edit split failed',
-              'No se pudo editar la división'));
+      throw _errorFromBody(
+        response,
+        fallback: _t('Edit split failed', 'No se pudo editar la división'),
+      );
     }
   }
 
@@ -2198,9 +2508,10 @@ class ApiService {
       Uri.parse('$_baseUrl/accounts/transactions/$parentTxId/splits'),
     );
     if (response.statusCode != 200 && response.statusCode != 204) {
-      throw _errorFromBody(response,
-          fallback: _t('Unsplit failed',
-              'No se pudo deshacer la división'));
+      throw _errorFromBody(
+        response,
+        fallback: _t('Unsplit failed', 'No se pudo deshacer la división'),
+      );
     }
   }
 
@@ -2209,9 +2520,12 @@ class ApiService {
       Uri.parse('$_baseUrl/accounts/transactions/$txId'),
     );
     if (response.statusCode != 204 && response.statusCode != 200) {
-      throw Exception(_t(
+      throw Exception(
+        _t(
           'Failed to delete transaction (${response.statusCode})',
-          'No se pudo eliminar el movimiento (${response.statusCode})'));
+          'No se pudo eliminar el movimiento (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -2233,14 +2547,19 @@ class ApiService {
         'currency': currency,
         'initial_balance': initialBalance,
         if (clabe != null && clabe.isNotEmpty) 'clabe': clabe,
-        if (holderName != null && holderName.isNotEmpty) 'holder_name': holderName,
+        if (holderName != null && holderName.isNotEmpty)
+          'holder_name': holderName,
         if (institutionName != null && institutionName.isNotEmpty)
           'institution_name': institutionName,
       }),
     );
     if (response.statusCode != 201) {
-      throw Exception(_t('Failed to create account: ${response.body}',
-          'No se pudo crear la cuenta: ${response.body}'));
+      throw Exception(
+        _t(
+          'Failed to create account: ${response.body}',
+          'No se pudo crear la cuenta: ${response.body}',
+        ),
+      );
     }
   }
 
@@ -2271,8 +2590,12 @@ class ApiService {
       }),
     );
     if (res.statusCode != 201) {
-      throw Exception(_t('Failed to add holding: ${res.body}',
-          'No se pudo agregar la posición: ${res.body}'));
+      throw Exception(
+        _t(
+          'Failed to add holding: ${res.body}',
+          'No se pudo agregar la posición: ${res.body}',
+        ),
+      );
     }
     return json.decode(res.body) as Map<String, dynamic>;
   }
@@ -2282,7 +2605,9 @@ class ApiService {
       Uri.parse('$_baseUrl/accounts/$accountId/holdings/$holdingId'),
     );
     if (res.statusCode != 204 && res.statusCode != 200) {
-      throw Exception(_t('Failed to remove holding', 'No se pudo eliminar la posición'));
+      throw Exception(
+        _t('Failed to remove holding', 'No se pudo eliminar la posición'),
+      );
     }
   }
 
@@ -2311,8 +2636,9 @@ class ApiService {
   /// Per-holding dividend info (annual rate, yield, est. next ex-date,
   /// projected annual income). Best-effort — empty on failure.
   Future<List<dynamic>> getHoldingsDividends(String accountId) async {
-    final res =
-        await _get(Uri.parse('$_baseUrl/accounts/$accountId/holdings/dividends'));
+    final res = await _get(
+      Uri.parse('$_baseUrl/accounts/$accountId/holdings/dividends'),
+    );
     if (res.statusCode != 200) return const [];
     final body = json.decode(res.body);
     return body is List ? body : const [];
@@ -2324,8 +2650,9 @@ class ApiService {
   /// failure so the card can simply hide.
   Future<Map<String, dynamic>?> getPortfolioDividends() async {
     try {
-      final res =
-          await _get(Uri.parse('$_baseUrl/dashboard/holdings/dividends'));
+      final res = await _get(
+        Uri.parse('$_baseUrl/dashboard/holdings/dividends'),
+      );
       if (res.statusCode == 200) {
         final decoded = json.decode(res.body);
         return decoded is Map<String, dynamic> ? decoded : null;
@@ -2343,16 +2670,25 @@ class ApiService {
   /// to bypass its fresh-cache window and re-fetch live — for when the owner
   /// knows a dividend just changed. No client-side cache interaction: this
   /// call is uncached by design either way.
-  Future<Map<String, dynamic>> getDividendDetail(String symbol,
-      {bool refresh = false}) async {
-    final response = await _get(Uri.parse(
+  Future<Map<String, dynamic>> getDividendDetail(
+    String symbol, {
+    bool refresh = false,
+  }) async {
+    final response = await _get(
+      Uri.parse(
         '$_baseUrl/dashboard/dividends/${Uri.encodeComponent(symbol)}'
-        '${refresh ? '?refresh=true' : ''}'));
+        '${refresh ? '?refresh=true' : ''}',
+      ),
+    );
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     }
-    throw Exception(_t('Failed to load dividend detail',
-        'No se pudo cargar el detalle de dividendos'));
+    throw Exception(
+      _t(
+        'Failed to load dividend detail',
+        'No se pudo cargar el detalle de dividendos',
+      ),
+    );
   }
 
   /// Per-holding instrument detail for the click-through sheet (contract
@@ -2361,16 +2697,25 @@ class ApiService {
   /// series for the requested range (`1m|3m|1y|max`). Uncached — this is
   /// an always-fresh detail view, like the dividend detail. Throws a
   /// localized error on non-200 so the sheet owns its error + retry state.
-  Future<Map<String, dynamic>> getInstrumentDetail(String symbol,
-      {String range = '1y'}) async {
-    final response = await _get(Uri.parse(
+  Future<Map<String, dynamic>> getInstrumentDetail(
+    String symbol, {
+    String range = '1y',
+  }) async {
+    final response = await _get(
+      Uri.parse(
         '$_baseUrl/dashboard/instruments/${Uri.encodeComponent(symbol)}'
-        '?range=${Uri.encodeComponent(range)}'));
+        '?range=${Uri.encodeComponent(range)}',
+      ),
+    );
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     }
-    throw Exception(_t('Failed to load instrument detail',
-        'No se pudo cargar el detalle del instrumento'));
+    throw Exception(
+      _t(
+        'Failed to load instrument detail',
+        'No se pudo cargar el detalle del instrumento',
+      ),
+    );
   }
 
   /// Sets (or, with [assetClass] == null, clears) the user's per-symbol
@@ -2384,10 +2729,14 @@ class ApiService {
   /// `holdings`, `realized-gains-*`, and `allocation` included — so the next
   /// dashboard read is fresh even without `forceRefresh`.
   Future<Map<String, dynamic>> setAssetClassOverride(
-      String symbol, String? assetClass) async {
+    String symbol,
+    String? assetClass,
+  ) async {
     final res = await _put(
-      Uri.parse('$_baseUrl/dashboard/instruments/'
-          '${Uri.encodeComponent(symbol)}/asset-class'),
+      Uri.parse(
+        '$_baseUrl/dashboard/instruments/'
+        '${Uri.encodeComponent(symbol)}/asset-class',
+      ),
       headers: _withCsrf({'Content-Type': 'application/json'}),
       // json.encode keeps the explicit `"asset_class": null` clear-payload.
       body: json.encode({'asset_class': assetClass}),
@@ -2395,8 +2744,12 @@ class ApiService {
     if (res.statusCode == 200) {
       return json.decode(res.body) as Map<String, dynamic>;
     }
-    throw Exception(_t('Failed to update asset class',
-        'No se pudo actualizar la clase de activo'));
+    throw Exception(
+      _t(
+        'Failed to update asset class',
+        'No se pudo actualizar la clase de activo',
+      ),
+    );
   }
 
   /// Un-deletes a soft-deleted holding inside the undo window (contracts
@@ -2407,7 +2760,9 @@ class ApiService {
   /// error. Successful calls invalidate the dashboard cache via [_post]'s
   /// [_invalidateAfterMutation], same as [deleteHolding] via [_delete].
   Future<Map<String, dynamic>> restoreHolding(
-      String accountId, String holdingId) async {
+    String accountId,
+    String holdingId,
+  ) async {
     final res = await _post(
       Uri.parse('$_baseUrl/accounts/$accountId/holdings/$holdingId/restore'),
       headers: _withCsrf({}),
@@ -2416,11 +2771,13 @@ class ApiService {
       return json.decode(res.body) as Map<String, dynamic>;
     }
     if (res.statusCode == 404) {
-      throw HoldingRestoreGoneException(_t('Nothing to restore',
-          'No hay nada que restaurar'));
+      throw HoldingRestoreGoneException(
+        _t('Nothing to restore', 'No hay nada que restaurar'),
+      );
     }
-    throw Exception(_t('Failed to restore holding',
-        'No se pudo restaurar la posición'));
+    throw Exception(
+      _t('Failed to restore holding', 'No se pudo restaurar la posición'),
+    );
   }
 
   Future<Map<String, dynamic>> getWealthProjection({
@@ -2490,16 +2847,19 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load wealth projection',
-        'No se pudo cargar la proyección de patrimonio'));
+    throw Exception(
+      _t(
+        'Failed to load wealth projection',
+        'No se pudo cargar la proyección de patrimonio',
+      ),
+    );
   }
 
   /// Projection inputs derived from the user's tracked cash flow (USD).
   /// Returns null on any error so the screen falls back to static defaults.
   Future<Map<String, dynamic>?> getProjectionDefaults() async {
     try {
-      final response =
-          await _get(Uri.parse('$_baseUrl/projections/defaults'));
+      final response = await _get(Uri.parse('$_baseUrl/projections/defaults'));
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
         return decoded is Map<String, dynamic> ? decoded : null;
@@ -2529,8 +2889,12 @@ class ApiService {
       }),
     );
     if (response.statusCode != 201 && response.statusCode != 200) {
-      throw Exception(_t('Failed to link crypto: ${response.body}',
-          'No se pudo vincular el exchange de cripto: ${response.body}'));
+      throw Exception(
+        _t(
+          'Failed to link crypto: ${response.body}',
+          'No se pudo vincular el exchange de cripto: ${response.body}',
+        ),
+      );
     }
   }
 
@@ -2550,8 +2914,9 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load tax summary',
-        'No se pudo cargar el resumen fiscal'));
+    throw Exception(
+      _t('Failed to load tax summary', 'No se pudo cargar el resumen fiscal'),
+    );
   }
 
   Future<List<dynamic>> getTaxTransactions({int? year}) async {
@@ -2566,8 +2931,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load tax transactions',
-        'No se pudieron cargar los movimientos fiscales'));
+    throw Exception(
+      _t(
+        'Failed to load tax transactions',
+        'No se pudieron cargar los movimientos fiscales',
+      ),
+    );
   }
 
   /// Realized capital-gains disposals (Form 8949-style detail) behind the
@@ -2583,8 +2952,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load realized gains',
-        'No se pudieron cargar las ganancias realizadas'));
+    throw Exception(
+      _t(
+        'Failed to load realized gains',
+        'No se pudieron cargar las ganancias realizadas',
+      ),
+    );
   }
 
   /// Unrealized per-lot "what if I sell" view for taxable accounts (T11):
@@ -2612,8 +2985,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load unrealized positions',
-        'No se pudieron cargar las posiciones no realizadas'));
+    throw Exception(
+      _t(
+        'Failed to load unrealized positions',
+        'No se pudieron cargar las posiciones no realizadas',
+      ),
+    );
   }
 
   /// FBAR/FATCA threshold monitor for a year (T13): the peak aggregate USD
@@ -2630,8 +3007,9 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load FBAR status',
-        'No se pudo cargar el estado FBAR'));
+    throw Exception(
+      _t('Failed to load FBAR status', 'No se pudo cargar el estado FBAR'),
+    );
   }
 
   /// YTD retirement contributions vs annual limits (T15): per account-type
@@ -2649,8 +3027,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load retirement contributions',
-        'No se pudieron cargar las aportaciones de retiro'));
+    throw Exception(
+      _t(
+        'Failed to load retirement contributions',
+        'No se pudieron cargar las aportaciones de retiro',
+      ),
+    );
   }
 
   /// Sync a single institution. Cheaper than the global sync when only
@@ -2661,8 +3043,12 @@ class ApiService {
     );
     // 202 = accepted (detached sync started); 200 = older synchronous backend.
     if (response.statusCode != 200 && response.statusCode != 202) {
-      throw Exception(_t('Sync failed: ${response.statusCode}',
-          'La sincronización falló: ${response.statusCode}'));
+      throw Exception(
+        _t(
+          'Sync failed: ${response.statusCode}',
+          'La sincronización falló: ${response.statusCode}',
+        ),
+      );
     }
   }
 
@@ -2680,10 +3066,12 @@ class ApiService {
       Uri.parse('$_baseUrl/institutions/update-webhook'),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t(
-        'Update webhook failed (${response.statusCode}): ${response.body}',
-        'No se pudo actualizar el webhook (${response.statusCode}): ${response.body}',
-      ));
+      throw Exception(
+        _t(
+          'Update webhook failed (${response.statusCode}): ${response.body}',
+          'No se pudo actualizar el webhook (${response.statusCode}): ${response.body}',
+        ),
+      );
     }
     return json.decode(response.body);
   }
@@ -2701,8 +3089,12 @@ class ApiService {
     );
     // 202 = accepted (detached sync started); 200 = older synchronous backend.
     if (response.statusCode != 200 && response.statusCode != 202) {
-      throw Exception(_t('Batched sync failed: ${response.statusCode}',
-          'La sincronización en lote falló: ${response.statusCode}'));
+      throw Exception(
+        _t(
+          'Batched sync failed: ${response.statusCode}',
+          'La sincronización en lote falló: ${response.statusCode}',
+        ),
+      );
     }
   }
 
@@ -2713,8 +3105,12 @@ class ApiService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
-    throw Exception(_t('Failed to load setting $key',
-        'No se pudo cargar la configuración $key'));
+    throw Exception(
+      _t(
+        'Failed to load setting $key',
+        'No se pudo cargar la configuración $key',
+      ),
+    );
   }
 
   Future<void> putSetting(String key, dynamic value) async {
@@ -2724,9 +3120,12 @@ class ApiService {
       body: json.encode(value),
     );
     if (response.statusCode != 200) {
-      throw Exception(_t(
+      throw Exception(
+        _t(
           'Failed to save setting $key (${response.statusCode})',
-          'No se pudo guardar la configuración $key (${response.statusCode})'));
+          'No se pudo guardar la configuración $key (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -2737,8 +3136,9 @@ class ApiService {
     // matches /api/loans but NOT /api/loans/ (the latter 404s).
     final response = await _get(Uri.parse('$_baseUrl/loans'));
     if (response.statusCode == 200) return json.decode(response.body);
-    throw Exception(_t('Failed to load loans',
-        'No se pudieron cargar los préstamos'));
+    throw Exception(
+      _t('Failed to load loans', 'No se pudieron cargar los préstamos'),
+    );
   }
 
   Future<Map<String, dynamic>> getLoansSummary({bool forceRefresh = false}) {
@@ -2747,16 +3147,21 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      throw Exception(_t('Failed to load loans summary',
-          'No se pudo cargar el resumen de préstamos'));
+      throw Exception(
+        _t(
+          'Failed to load loans summary',
+          'No se pudo cargar el resumen de préstamos',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
   Future<List<dynamic>> getLoanPeople() async {
     final response = await _get(Uri.parse('$_baseUrl/loans/people'));
     if (response.statusCode == 200) return json.decode(response.body);
-    throw Exception(_t('Failed to load people',
-        'No se pudieron cargar las personas'));
+    throw Exception(
+      _t('Failed to load people', 'No se pudieron cargar las personas'),
+    );
   }
 
   Future<Map<String, dynamic>> createLoan({
@@ -2797,8 +3202,12 @@ class ApiService {
     if (response.statusCode == 201) {
       return json.decode(response.body) as Map<String, dynamic>;
     }
-    throw Exception(_t('Failed to create loan (${response.statusCode})',
-        'No se pudo crear el préstamo (${response.statusCode})'));
+    throw Exception(
+      _t(
+        'Failed to create loan (${response.statusCode})',
+        'No se pudo crear el préstamo (${response.statusCode})',
+      ),
+    );
   }
 
   /// Patch a loan. The status-only call sites pass `{'status': ...}`
@@ -2842,8 +3251,12 @@ class ApiService {
       throw LoanTermsLockedException(_loanErrorText(response));
     }
     if (response.statusCode != 200) {
-      throw Exception(_t('Failed to update loan (${response.statusCode})',
-          'No se pudo actualizar el préstamo (${response.statusCode})'));
+      throw Exception(
+        _t(
+          'Failed to update loan (${response.statusCode})',
+          'No se pudo actualizar el préstamo (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -2853,7 +3266,10 @@ class ApiService {
   String _loanErrorText(http.Response res) {
     final body = res.body.trim();
     if (body.isEmpty) {
-      return _t('This change isn\'t allowed.', 'Este cambio no está permitido.');
+      return _t(
+        'This change isn\'t allowed.',
+        'Este cambio no está permitido.',
+      );
     }
     try {
       final decoded = json.decode(body);
@@ -2869,16 +3285,24 @@ class ApiService {
   Future<void> deleteLoan(String id) async {
     final response = await _delete(Uri.parse('$_baseUrl/loans/$id'));
     if (response.statusCode != 204) {
-      throw Exception(_t('Failed to delete loan (${response.statusCode})',
-          'No se pudo eliminar el préstamo (${response.statusCode})'));
+      throw Exception(
+        _t(
+          'Failed to delete loan (${response.statusCode})',
+          'No se pudo eliminar el préstamo (${response.statusCode})',
+        ),
+      );
     }
   }
 
   Future<List<dynamic>> getLoanPayments(String loanId) async {
     final response = await _get(Uri.parse('$_baseUrl/loans/$loanId/payments'));
     if (response.statusCode == 200) return json.decode(response.body);
-    throw Exception(_t('Failed to load loan payments',
-        'No se pudieron cargar los pagos del préstamo'));
+    throw Exception(
+      _t(
+        'Failed to load loan payments',
+        'No se pudieron cargar los pagos del préstamo',
+      ),
+    );
   }
 
   /// Replace a loan's payment schedule with an explicit, irregular set of
@@ -2887,17 +3311,23 @@ class ApiService {
   /// the running balance; the sum of amounts should equal the principal for
   /// the balance to close to 0. Surfaces the server's message on non-2xx.
   Future<void> setCustomSchedule(
-      String loanId, List<Map<String, dynamic>> rows) async {
+    String loanId,
+    List<Map<String, dynamic>> rows,
+  ) async {
     final response = await _post(
       Uri.parse('$_baseUrl/loans/$loanId/schedule/custom'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'rows': rows}),
     );
     if (response.statusCode != 201 && response.statusCode != 200) {
-      throw Exception(response.body.isNotEmpty
-          ? response.body
-          : _t('Failed to save custom schedule (${response.statusCode})',
-              'No se pudo guardar el calendario personalizado (${response.statusCode})'));
+      throw Exception(
+        response.body.isNotEmpty
+            ? response.body
+            : _t(
+                'Failed to save custom schedule (${response.statusCode})',
+                'No se pudo guardar el calendario personalizado (${response.statusCode})',
+              ),
+      );
     }
   }
 
@@ -2912,9 +3342,12 @@ class ApiService {
       throw DisbursementConflictException(_loanErrorText(response));
     }
     if (response.statusCode != 200) {
-      throw Exception(_t(
+      throw Exception(
+        _t(
           'Failed to link disbursement (${response.statusCode})',
-          'No se pudo vincular el desembolso (${response.statusCode})'));
+          'No se pudo vincular el desembolso (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -2938,10 +3371,14 @@ class ApiService {
       body: json.encode(body),
     );
     if (response.statusCode != 201) {
-      throw Exception(response.body.isNotEmpty
-          ? response.body
-          : _t('Failed to record repayment (${response.statusCode})',
-              'No se pudo registrar el pago (${response.statusCode})'));
+      throw Exception(
+        response.body.isNotEmpty
+            ? response.body
+            : _t(
+                'Failed to record repayment (${response.statusCode})',
+                'No se pudo registrar el pago (${response.statusCode})',
+              ),
+      );
     }
   }
 
@@ -2962,10 +3399,14 @@ class ApiService {
       body: json.encode({'transaction_id': transactionId}),
     );
     if (response.statusCode != 200) {
-      throw Exception(response.body.isNotEmpty
-          ? response.body
-          : _t('Failed to link bank transaction (${response.statusCode})',
-              'No se pudo vincular la transacción bancaria (${response.statusCode})'));
+      throw Exception(
+        response.body.isNotEmpty
+            ? response.body
+            : _t(
+                'Failed to link bank transaction (${response.statusCode})',
+                'No se pudo vincular la transacción bancaria (${response.statusCode})',
+              ),
+      );
     }
   }
 
@@ -2979,10 +3420,14 @@ class ApiService {
     );
     if (response.statusCode != 201 && response.statusCode != 200) {
       // Surface the server's human message (409/422 carry useful text).
-      throw Exception(response.body.isNotEmpty
-          ? response.body
-          : _t('Failed to generate schedule (${response.statusCode})',
-              'No se pudo generar el calendario de pagos (${response.statusCode})'));
+      throw Exception(
+        response.body.isNotEmpty
+            ? response.body
+            : _t(
+                'Failed to generate schedule (${response.statusCode})',
+                'No se pudo generar el calendario de pagos (${response.statusCode})',
+              ),
+      );
     }
   }
 
@@ -2999,10 +3444,14 @@ class ApiService {
       body: json.encode({}),
     );
     if (response.statusCode != 200) {
-      throw Exception(response.body.isNotEmpty
-          ? response.body
-          : _t('Failed to pay off loan (${response.statusCode})',
-              'No se pudo liquidar el préstamo (${response.statusCode})'));
+      throw Exception(
+        response.body.isNotEmpty
+            ? response.body
+            : _t(
+                'Failed to pay off loan (${response.statusCode})',
+                'No se pudo liquidar el préstamo (${response.statusCode})',
+              ),
+      );
     }
   }
 
@@ -3010,13 +3459,16 @@ class ApiService {
   /// {year, total_interest, total_principal, by_loan[], by_month[]}.
   Future<Map<String, dynamic>> getInterestIncome({int? year}) async {
     final q = year != null ? '?year=$year' : '';
-    final response =
-        await _get(Uri.parse('$_baseUrl/loans/interest-income$q'));
+    final response = await _get(Uri.parse('$_baseUrl/loans/interest-income$q'));
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     }
-    throw Exception(_t('Failed to load interest income',
-        'No se pudieron cargar los ingresos por intereses'));
+    throw Exception(
+      _t(
+        'Failed to load interest income',
+        'No se pudieron cargar los ingresos por intereses',
+      ),
+    );
   }
 
   /// Direct download URL for the loan-interest CSV (opened in the
@@ -3027,8 +3479,7 @@ class ApiService {
   }
 
   /// Per-borrower per-year interest totals CSV (Schedule-B style).
-  String interestSummaryCsvUrl() =>
-      '$_baseUrl/loans/interest-income/summary';
+  String interestSummaryCsvUrl() => '$_baseUrl/loans/interest-income/summary';
 
   /// Printable promissory-note / agreement HTML for a loan (opened in
   /// a new tab; the user prints to PDF from the browser).
@@ -3055,19 +3506,28 @@ class ApiService {
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }
-      throw Exception(_t('Failed to load loan reminders',
-          'No se pudieron cargar los recordatorios de préstamos'));
+      throw Exception(
+        _t(
+          'Failed to load loan reminders',
+          'No se pudieron cargar los recordatorios de préstamos',
+        ),
+      );
     }, forceRefresh: forceRefresh);
   }
 
   /// Unlink (un-reconcile) a recorded repayment. The bank transaction
   /// itself is untouched; only the loan_payments row is removed.
   Future<void> deleteLoanPayment(String paymentId) async {
-    final response =
-        await _delete(Uri.parse('$_baseUrl/loans/payments/$paymentId'));
+    final response = await _delete(
+      Uri.parse('$_baseUrl/loans/payments/$paymentId'),
+    );
     if (response.statusCode != 204) {
-      throw Exception(_t('Failed to unlink payment (${response.statusCode})',
-          'No se pudo desvincular el pago (${response.statusCode})'));
+      throw Exception(
+        _t(
+          'Failed to unlink payment (${response.statusCode})',
+          'No se pudo desvincular el pago (${response.statusCode})',
+        ),
+      );
     }
   }
 
@@ -3075,11 +3535,13 @@ class ApiService {
   /// or 'repayment'. Each item: {transaction_id, date, amount, currency,
   /// description, confidence, name_matched}.
   Future<List<dynamic>> getLoanSuggestions(String loanId, String kind) async {
-    final response =
-        await _get(Uri.parse('$_baseUrl/loans/$loanId/suggestions/$kind'));
+    final response = await _get(
+      Uri.parse('$_baseUrl/loans/$loanId/suggestions/$kind'),
+    );
     if (response.statusCode == 200) return json.decode(response.body);
-    throw Exception(_t('Failed to load suggestions',
-        'No se pudieron cargar las sugerencias'));
+    throw Exception(
+      _t('Failed to load suggestions', 'No se pudieron cargar las sugerencias'),
+    );
   }
 
   /// Date as YYYY-MM-DD (the backend's NaiveDate format).

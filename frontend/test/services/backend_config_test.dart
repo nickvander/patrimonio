@@ -5,24 +5,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   group('BackendConfig.normalize', () {
     test('strips trailing slashes', () {
-      expect(BackendConfig.normalize('https://x.example.com/'),
-          'https://x.example.com');
-      expect(BackendConfig.normalize('https://x.example.com///'),
-          'https://x.example.com');
+      expect(
+        BackendConfig.normalize('https://x.example.com/'),
+        'https://x.example.com',
+      );
+      expect(
+        BackendConfig.normalize('https://x.example.com///'),
+        'https://x.example.com',
+      );
     });
 
     test('strips an accidentally pasted /api suffix', () {
-      expect(BackendConfig.normalize('https://x.example.com/api'),
-          'https://x.example.com');
-      expect(BackendConfig.normalize('https://x.example.com/api/'),
-          'https://x.example.com');
+      expect(
+        BackendConfig.normalize('https://x.example.com/api'),
+        'https://x.example.com',
+      );
+      expect(
+        BackendConfig.normalize('https://x.example.com/api/'),
+        'https://x.example.com',
+      );
     });
 
     test('keeps ports and non-/api paths', () {
-      expect(BackendConfig.normalize('https://x.example.com:8443'),
-          'https://x.example.com:8443');
-      expect(BackendConfig.normalize('https://x.example.com/patrimonio'),
-          'https://x.example.com/patrimonio');
+      expect(
+        BackendConfig.normalize('https://x.example.com:8443'),
+        'https://x.example.com:8443',
+      );
+      expect(
+        BackendConfig.normalize('https://x.example.com/patrimonio'),
+        'https://x.example.com/patrimonio',
+      );
     });
   });
 

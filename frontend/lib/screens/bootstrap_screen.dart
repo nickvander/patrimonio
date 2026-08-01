@@ -79,10 +79,9 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                   Text(
                     l.authWelcomeTitle,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -143,7 +142,9 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                   if (_error != null) ...[
                     Text(
                       _error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                     const SizedBox(height: 12),
                   ],

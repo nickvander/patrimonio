@@ -9,9 +9,9 @@ void main() {
   const rate = 17.0; // 1 USD = 17 MXN
 
   List<dynamic> mxnRows(int n) => List.generate(
-        n,
-        (_) => <String, dynamic>{'amount': -500.0, 'currency': 'MXN'},
-      );
+    n,
+    (_) => <String, dynamic>{'amount': -500.0, 'currency': 'MXN'},
+  );
 
   group('merchantLifetimeTotal', () {
     test('an MXN charge viewed in USD converts the seed too', () {
@@ -35,8 +35,11 @@ void main() {
           targetCurrency: 'USD',
           usdMxnRate: rate,
         );
-        expect(total, closeTo((500.0 * (n + 1)) / rate, 0.01),
-            reason: '$n siblings');
+        expect(
+          total,
+          closeTo((500.0 * (n + 1)) / rate, 0.01),
+          reason: '$n siblings',
+        );
       }
     });
 
@@ -77,17 +80,19 @@ void main() {
       expect(total, closeTo(20.0, 0.001), reason: 'magnitudes, not net');
     });
 
-    test('a row with no currency is assumed to be in the reporting currency',
-        () {
-      final total = merchantLifetimeTotal(
-        openConvertedAmount: -5.0,
-        siblings: [
-          {'amount': -5.0},
-        ],
-        targetCurrency: 'USD',
-        usdMxnRate: rate,
-      );
-      expect(total, closeTo(10.0, 0.001));
-    });
+    test(
+      'a row with no currency is assumed to be in the reporting currency',
+      () {
+        final total = merchantLifetimeTotal(
+          openConvertedAmount: -5.0,
+          siblings: [
+            {'amount': -5.0},
+          ],
+          targetCurrency: 'USD',
+          usdMxnRate: rate,
+        );
+        expect(total, closeTo(10.0, 0.001));
+      },
+    );
   });
 }

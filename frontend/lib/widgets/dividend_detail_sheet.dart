@@ -71,8 +71,10 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
     try {
       final data = widget.fetchOverride != null
           ? await widget.fetchOverride!(widget.symbol)
-          : await widget.apiService
-              .getDividendDetail(widget.symbol, refresh: refresh);
+          : await widget.apiService.getDividendDetail(
+              widget.symbol,
+              refresh: refresh,
+            );
       if (!mounted) return;
       setState(() {
         _data = data;
@@ -265,9 +267,11 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: context.textMuted)),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textMuted),
+            ),
             const SizedBox(height: 12),
             FilledButton(onPressed: _load, child: Text(l10n.pfDivRetry)),
           ],
@@ -330,8 +334,7 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
         (l10n.pfDivDetailMarketValue, _money(marketValueUsd)),
       if (ratePerShare != null)
         (l10n.pfDivDetailRatePerShare, _perShare(ratePerShare, currency)),
-      if (perPayment != null)
-        (l10n.pfDivDetailPerPayment, _money(perPayment)),
+      if (perPayment != null) (l10n.pfDivDetailPerPayment, _money(perPayment)),
       if (annualIncomeUsd != null)
         (l10n.pfDivDetailAnnualIncome, _money(annualIncomeUsd)),
       if (yieldPct != null)
@@ -339,24 +342,26 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
       if (yieldOnCostPct != null)
         (
           l10n.pfDivDetailYieldOnCost,
-          formatPercent(context, yieldOnCostPct, digits: 2)
+          formatPercent(context, yieldOnCostPct, digits: 2),
         ),
       (l10n.pfDivDetailLastExDate, lastExDate ?? '—'),
       (l10n.pfDivDetailNextExDate, nextExDate ?? '—'),
     ];
 
-    return LayoutBuilder(builder: (ctx, c) {
-      final perRow = c.maxWidth >= 520 ? 3 : 2;
-      final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (final (label, value) in tiles)
-            SizedBox(width: tileWidth, child: _statTile(label, value)),
-        ],
-      );
-    });
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final perRow = c.maxWidth >= 520 ? 3 : 2;
+        final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final (label, value) in tiles)
+              SizedBox(width: tileWidth, child: _statTile(label, value)),
+          ],
+        );
+      },
+    );
   }
 
   Widget _statTile(String label, String value) {
@@ -421,15 +426,21 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
               for (var i = 0; i < rows.length; i++) ...[
                 if (i > 0)
                   Divider(
-                      height: 1,
-                      color: context.hairline.withValues(alpha: 0.5)),
+                    height: 1,
+                    color: context.hairline.withValues(alpha: 0.5),
+                  ),
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   child: Row(
                     children: [
-                      Icon(Icons.event_outlined,
-                          size: 15, color: context.textSubtle),
+                      Icon(
+                        Icons.event_outlined,
+                        size: 15,
+                        color: context.textSubtle,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -500,11 +511,14 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
               for (var i = 0; i < visible.length; i++) ...[
                 if (i > 0)
                   Divider(
-                      height: 1,
-                      color: context.hairline.withValues(alpha: 0.5)),
+                    height: 1,
+                    color: context.hairline.withValues(alpha: 0.5),
+                  ),
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   child: Row(
                     children: [
                       Text(
@@ -520,8 +534,10 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
                       Expanded(
                         child: Text(
                           visible[i].account,
-                          style:
-                              TextStyle(fontSize: 12, color: context.textMuted),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.textMuted,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -551,9 +567,11 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
             child: TextButton(
               onPressed: () =>
                   setState(() => _showAllPayments = !_showAllPayments),
-              child: Text(_showAllPayments
-                  ? l10n.insDivShowFewerPayments
-                  : l10n.insDivShowAllPayments(rows.length)),
+              child: Text(
+                _showAllPayments
+                    ? l10n.insDivShowFewerPayments
+                    : l10n.insDivShowAllPayments(rows.length),
+              ),
             ),
           ),
       ],
@@ -587,8 +605,11 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Row(
               children: [
-                Icon(Icons.history_toggle_off,
-                    size: 16, color: context.textSubtle),
+                Icon(
+                  Icons.history_toggle_off,
+                  size: 16,
+                  color: context.textSubtle,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -611,11 +632,14 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
                 for (var i = 0; i < ordered.length; i++) ...[
                   if (i > 0)
                     Divider(
-                        height: 1,
-                        color: context.hairline.withValues(alpha: 0.5)),
+                      height: 1,
+                      color: context.hairline.withValues(alpha: 0.5),
+                    ),
                   Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -626,7 +650,7 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
                               fontWeight: FontWeight.w600,
                               color: context.textPrimary,
                               fontFeatures: const [
-                                FontFeature.tabularFigures()
+                                FontFeature.tabularFigures(),
                               ],
                             ),
                           ),
@@ -656,8 +680,9 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
   // ---------- accounts holding the symbol ----------
 
   Widget _buildAccounts(AppLocalizations l10n, List<dynamic> accounts) {
-    final rows =
-        accounts.whereType<Map>().map((m) => m.cast<String, dynamic>());
+    final rows = accounts.whereType<Map>().map(
+      (m) => m.cast<String, dynamic>(),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -670,11 +695,7 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: context.hairline),
           ),
-          child: Column(
-            children: [
-              for (final r in rows) _accountRow(l10n, r),
-            ],
-          ),
+          child: Column(children: [for (final r in rows) _accountRow(l10n, r)]),
         ),
       ],
     );

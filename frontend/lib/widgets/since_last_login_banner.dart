@@ -16,17 +16,21 @@ class SinceLastLoginBanner extends StatefulWidget {
   /// Raw payload from `GET /api/dashboard/since-last-login`. Null when
   /// the server says there's no anchor yet (first-ever login).
   final Map<String, dynamic>? summary;
+
   /// Reporting currency formatter — so the "+$1,234.56" amount matches
   /// the rest of the dashboard.
   final NumberFormat currencyFormat;
+
   /// Conversion factor for USD-stored deltas (1.0 for USD reporting,
   /// USD/MXN rate when reporting in MXN).
   final double conversionFactor;
+
   /// Tapping the "View transactions" CTA jumps to the Transactions
   /// tab. Receives the anchor (previous-login) date so the dashboard
   /// can seed a date filter to "since X" — the banner stops being a
   /// vague hop and becomes a real drill-in.
   final void Function(DateTime anchor)? onJumpToTransactions;
+
   /// Tapping the "Open management" CTA jumps to the Management tab (used
   /// to surface a sync_errors call-out next to the institution row).
   final VoidCallback? onJumpToManagement;
@@ -70,8 +74,9 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
       setState(() => _dismissed = false);
       return;
     }
-    setState(() =>
-        _dismissed = Preferences.getSinceLastLoginDismissedFor(anchor));
+    setState(
+      () => _dismissed = Preferences.getSinceLastLoginDismissedFor(anchor),
+    );
   }
 
   @override
@@ -82,16 +87,14 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
 
     final newTx = (s['new_transactions'] as num?)?.toInt() ?? 0;
     final largestMove = s['largest_move'] as Map?;
-    final syncErrors =
-        ((s['sync_errors'] as List?) ?? const []).cast<String>();
+    final syncErrors = ((s['sync_errors'] as List?) ?? const []).cast<String>();
     final anchorIso = s['previous_login_at']?.toString();
     final anchor = anchorIso != null ? DateTime.tryParse(anchorIso) : null;
 
     // Suppress the banner entirely when there's nothing to say — keeps
     // it out of the way on a "just checked in five minutes ago" reload.
-    final hasContent = newTx > 0 ||
-        (largestMove != null) ||
-        syncErrors.isNotEmpty;
+    final hasContent =
+        newTx > 0 || (largestMove != null) || syncErrors.isNotEmpty;
     if (!hasContent) return const SizedBox.shrink();
 
     // Compose a short headline.
@@ -102,7 +105,7 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
     if (largestMove != null) {
       final delta =
           ((largestMove['delta_usd'] as num?)?.toDouble() ?? 0.0) *
-              widget.conversionFactor;
+          widget.conversionFactor;
       final name = (largestMove['account_name'] ?? '').toString();
       final sign = delta >= 0 ? '+' : '−';
       pieces.add(
@@ -132,8 +135,7 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
       ),
       child: Row(
         children: [
-          Icon(Icons.auto_awesome,
-              size: 18, color: context.positive),
+          Icon(Icons.auto_awesome, size: 18, color: context.positive),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -151,17 +153,16 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: context.textSubtle,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: context.textSubtle, fontSize: 11),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          if (newTx > 0 && widget.onJumpToTransactions != null && anchor != null)
+          if (newTx > 0 &&
+              widget.onJumpToTransactions != null &&
+              anchor != null)
             TextButton(
               onPressed: () => widget.onJumpToTransactions!(anchor),
               child: Text(l.lwSinceViewAction),

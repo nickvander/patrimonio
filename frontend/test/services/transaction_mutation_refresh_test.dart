@@ -13,42 +13,44 @@ import 'package:patrimonio/services/transaction_mutation_refresh.dart';
 /// FX-transfer list when explicitly requested).
 void main() {
   group('fetchAfterTransactionMutation request set', () {
-    test('plain mutation fetches exactly transactions, overview and trends',
-        () async {
-      final called = <String>[];
+    test(
+      'plain mutation fetches exactly transactions, overview and trends',
+      () async {
+        final called = <String>[];
 
-      final data = await fetchAfterTransactionMutation(
-        getTransactions: (limit) async {
-          called.add('transactions');
-          return [
-            {'id': 't1'}
-          ];
-        },
-        getOverview: () async {
-          called.add('overview');
-          return {'net_worth': 100};
-        },
-        getTrends: () async {
-          called.add('trends');
-          return [
-            {'month': '2026-06', 'income': 1.0}
-          ];
-        },
-      );
+        final data = await fetchAfterTransactionMutation(
+          getTransactions: (limit) async {
+            called.add('transactions');
+            return [
+              {'id': 't1'},
+            ];
+          },
+          getOverview: () async {
+            called.add('overview');
+            return {'net_worth': 100};
+          },
+          getTrends: () async {
+            called.add('trends');
+            return [
+              {'month': '2026-06', 'income': 1.0},
+            ];
+          },
+        );
 
-      // Exactly these three reads — no holdings / crypto / FX-rate /
-      // stock-quote fetchers even exist on this path to be called.
-      expect(called, unorderedEquals(['transactions', 'overview', 'trends']));
-      expect(called, hasLength(3));
+        // Exactly these three reads — no holdings / crypto / FX-rate /
+        // stock-quote fetchers even exist on this path to be called.
+        expect(called, unorderedEquals(['transactions', 'overview', 'trends']));
+        expect(called, hasLength(3));
 
-      expect(data.transactions, hasLength(1));
-      expect(data.overview['net_worth'], 100);
-      expect(data.trends, isA<List<Map<String, dynamic>>>());
-      expect(data.trends.single['month'], '2026-06');
-      // FX transfers weren't requested: null so the caller keeps its
-      // current list untouched.
-      expect(data.fxTransfers, isNull);
-    });
+        expect(data.transactions, hasLength(1));
+        expect(data.overview['net_worth'], 100);
+        expect(data.trends, isA<List<Map<String, dynamic>>>());
+        expect(data.trends.single['month'], '2026-06');
+        // FX transfers weren't requested: null so the caller keeps its
+        // current list untouched.
+        expect(data.fxTransfers, isNull);
+      },
+    );
 
     test('FX-transfer mutations add the transfers read (4 total)', () async {
       final called = <String>[];
@@ -69,7 +71,7 @@ void main() {
         getFxTransfers: () async {
           called.add('fx-transfers');
           return [
-            {'id': 'fx1'}
+            {'id': 'fx1'},
           ];
         },
       );
@@ -92,17 +94,19 @@ void main() {
       expect(data.fxTransfers, isEmpty);
     });
 
-    test('a core read failing propagates (caller keeps current data)',
-        () async {
-      expect(
-        () => fetchAfterTransactionMutation(
-          getTransactions: (limit) async => throw Exception('boom'),
-          getOverview: () async => const {},
-          getTrends: () async => const [],
-        ),
-        throwsException,
-      );
-    });
+    test(
+      'a core read failing propagates (caller keeps current data)',
+      () async {
+        expect(
+          () => fetchAfterTransactionMutation(
+            getTransactions: (limit) async => throw Exception('boom'),
+            getOverview: () async => const {},
+            getTrends: () async => const [],
+          ),
+          throwsException,
+        );
+      },
+    );
 
     test('transactionsLimit is propagated verbatim to the fetcher '
         '(depth-preserving refetch)', () async {
@@ -143,20 +147,25 @@ void main() {
       expect(txRefetchLimit(loadedCount: 230, pageSize: 50), 230);
     });
 
-    test('caps at the backend clamp so the server never silently truncates',
-        () {
-      // The constant mirrors `q.limit.unwrap_or(50).clamp(1, 500)` in
-      // backend/src/api/dashboard.rs — if the backend cap changes, this
-      // constant (and these expectations) must move with it.
-      expect(kTxBackendMaxPageSize, 500);
-      expect(txRefetchLimit(loadedCount: 3000, pageSize: 50),
-          kTxBackendMaxPageSize);
-    });
+    test(
+      'caps at the backend clamp so the server never silently truncates',
+      () {
+        // The constant mirrors `q.limit.unwrap_or(50).clamp(1, 500)` in
+        // backend/src/api/dashboard.rs — if the backend cap changes, this
+        // constant (and these expectations) must move with it.
+        expect(kTxBackendMaxPageSize, 500);
+        expect(
+          txRefetchLimit(loadedCount: 3000, pageSize: 50),
+          kTxBackendMaxPageSize,
+        );
+      },
+    );
   });
 
   group('mergeRefetchedTransactions — loaded-depth preservation', () {
-    List<Map<String, dynamic>> rows(int from, int to) =>
-        [for (var i = from; i <= to; i++) {'id': 'tx-$i'}];
+    List<Map<String, dynamic>> rows(int from, int to) => [
+      for (var i = from; i <= to; i++) {'id': 'tx-$i'},
+    ];
 
     test('short refetch (server ran out of rows) is the complete truth — '
         'deleted rows disappear', () {

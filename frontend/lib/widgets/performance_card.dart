@@ -107,10 +107,12 @@ class _PerformanceCardState extends State<PerformanceCard> {
               () => widget.apiService.getPortfolioValueHistory())()
           .catchError((_) => <dynamic>[]);
 
-  Future<Map<String, dynamic>?> _fetchComparison() => (widget
-              .comparisonFetchOverride ??
-          () => widget.apiService.getBenchmarkComparison(benchmark: _benchmark))()
-      .catchError((_) => <String, dynamic>{});
+  Future<Map<String, dynamic>?> _fetchComparison() =>
+      (widget.comparisonFetchOverride ??
+              () => widget.apiService.getBenchmarkComparison(
+                benchmark: _benchmark,
+              ))()
+          .catchError((_) => <String, dynamic>{});
 
   Future<Map<String, dynamic>?> _fetchTwr() =>
       (widget.twrFetchOverride ??
@@ -119,10 +121,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
 
   Future<void> _load() async {
     // History + contribution comparison are quick; both best-effort.
-    final results = await Future.wait([
-      _fetchHistory(),
-      _fetchComparison(),
-    ]);
+    final results = await Future.wait([_fetchHistory(), _fetchComparison()]);
     if (!mounted) return;
     setState(() {
       _history = results[0] as List<dynamic>;
@@ -152,10 +151,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
       _benchmark = key;
       _twr = null;
     });
-    final results = await Future.wait([
-      _fetchComparison(),
-      _fetchTwr(),
-    ]);
+    final results = await Future.wait([_fetchComparison(), _fetchTwr()]);
     if (!mounted) return;
     setState(() {
       final c = results[0] ?? const {};
@@ -169,8 +165,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
   /// caption). Falls back to the S&P 500 label for an unknown key.
   String _benchmarkLabel(AppLocalizations l) {
     return _benchmarkOptions
-        .firstWhere((o) => o.key == _benchmark,
-            orElse: () => _benchmarkOptions.first)
+        .firstWhere(
+          (o) => o.key == _benchmark,
+          orElse: () => _benchmarkOptions.first,
+        )
         .shortLabel(l);
   }
 
@@ -298,15 +296,17 @@ class _PerformanceCardState extends State<PerformanceCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
-          onTap: () =>
-              setState(() => _benchmarkExpanded = !_benchmarkExpanded),
+          onTap: () => setState(() => _benchmarkExpanded = !_benchmarkExpanded),
           borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                Icon(Icons.insights_rounded,
-                    color: context.tealAccent, size: 18),
+                Icon(
+                  Icons.insights_rounded,
+                  color: context.tealAccent,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -344,7 +344,8 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // the parent (same source as the portfolio hero / holdings total).
     // Falling back to the last history point is a last resort only — after
     // a partial sync that trailing point can cover a subset of accounts.
-    final headlineValue = widget.totalValueUsd ??
+    final headlineValue =
+        widget.totalValueUsd ??
         (_history.isNotEmpty
             ? (_history.last['value_usd'] as num?)?.toDouble() ?? 0.0
             : (_twr?['total_value_usd'] as num?)?.toDouble() ?? 0.0);
@@ -408,8 +409,11 @@ class _PerformanceCardState extends State<PerformanceCard> {
       children: [
         // Same partial-sync guard as the TWR branch: prefer the parent's
         // current total over the (possibly incomplete) last series point.
-        _headline(context, widget.totalValueUsd ?? lastV,
-            l.lwPerfValueSubtitle),
+        _headline(
+          context,
+          widget.totalValueUsd ?? lastV,
+          l.lwPerfValueSubtitle,
+        ),
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(
@@ -431,8 +435,9 @@ class _PerformanceCardState extends State<PerformanceCard> {
                         context,
                         items: (ctx, touchedSpots) {
                           return touchedSpots.map((spot) {
-                            final date = valueX0
-                                .add(Duration(days: spot.x.round()));
+                            final date = valueX0.add(
+                              Duration(days: spot.x.round()),
+                            );
                             return LineTooltipItem(
                               '',
                               TextStyle(color: ctx.tooltipOnSurface),
@@ -451,13 +456,15 @@ class _PerformanceCardState extends State<PerformanceCard> {
                                 // so format directly — _money would double-
                                 // convert.
                                 TextSpan(
-                                  text: widget.currencyFormat.displayMoney(spot.y),
+                                  text: widget.currencyFormat.displayMoney(
+                                    spot.y,
+                                  ),
                                   style: TextStyle(
                                     color: ctx.tooltipOnSurface,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                     fontFeatures: const [
-                                      FontFeature.tabularFigures()
+                                      FontFeature.tabularFigures(),
                                     ],
                                   ),
                                 ),
@@ -515,7 +522,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 2),
-        Text(subtitle, style: TextStyle(color: context.textFaint, fontSize: 11)),
+        Text(
+          subtitle,
+          style: TextStyle(color: context.textFaint, fontSize: 11),
+        ),
       ],
     );
   }
@@ -603,7 +613,9 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // for the hovered day — an index into `spSpots` breaks once x is an offset.
     DateTime dayOf(dynamic p) {
       final d = DateTime.tryParse(p['date']?.toString() ?? '');
-      return d == null ? DateTime.utc(2000) : DateTime.utc(d.year, d.month, d.day);
+      return d == null
+          ? DateTime.utc(2000)
+          : DateTime.utc(d.year, d.month, d.day);
     }
 
     final twrX0 = dayOf(filtered.first);
@@ -612,8 +624,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
     final spByDay = <int, double>{};
     var twrMaxX = 0.0;
     for (var i = 0; i < filtered.length; i++) {
-      final xOff =
-          dayOf(filtered[i]).difference(twrX0).inDays.toDouble();
+      final xOff = dayOf(filtered[i]).difference(twrX0).inDays.toDouble();
       final t = (filtered[i]['twr'] as num?)?.toDouble() ?? baseT;
       final s = (filtered[i]['sp'] as num?)?.toDouble() ?? baseS;
       final sy = baseS != 0 ? (s / baseS - 1) * 100 : 0.0;
@@ -633,11 +644,12 @@ class _PerformanceCardState extends State<PerformanceCard> {
         Row(
           children: [
             Expanded(
-                child: _twrPill(context, l.lwPerfTwrYou, yourPct, yourColor)),
+              child: _twrPill(context, l.lwPerfTwrYou, yourPct, yourColor),
+            ),
             const SizedBox(width: 12),
             Expanded(
-                child:
-                    _twrPill(context, _benchmarkLabel(l), spPct, context.info)),
+              child: _twrPill(context, _benchmarkLabel(l), spPct, context.info),
+            ),
           ],
         ),
         const SizedBox(height: 14),
@@ -673,8 +685,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                         TextStyle(color: ctx.tooltipOnSurface),
                         children: [
                           TextSpan(
-                            text:
-                                '${DateFormat('MMM d, y').format(date)}\n',
+                            text: '${DateFormat('MMM d, y').format(date)}\n',
                             style: TextStyle(
                               color: ctx.tooltipOnSurfaceMuted,
                               fontSize: 11,
@@ -690,7 +701,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                               fontFeatures: const [
-                                FontFeature.tabularFigures()
+                                FontFeature.tabularFigures(),
                               ],
                             ),
                           ),
@@ -701,7 +712,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
                               fontFeatures: const [
-                                FontFeature.tabularFigures()
+                                FontFeature.tabularFigures(),
                               ],
                             ),
                           ),
@@ -766,8 +777,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
     );
   }
 
-  Widget _twrPill(
-      BuildContext context, String label, double pct, Color color) {
+  Widget _twrPill(BuildContext context, String label, double pct, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -778,7 +788,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: context.textSubtle, fontSize: 11)),
+          Text(
+            label,
+            style: TextStyle(color: context.textSubtle, fontSize: 11),
+          ),
           const SizedBox(height: 4),
           Text(
             '${pct >= 0 ? '+' : ''}${formatPercent(context, pct, digits: 1)}',
@@ -823,8 +836,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
     final benchPct = (benchVal / invested - 1) * 100;
     final deltaPts = youPct - benchPct;
     final ahead = deltaPts >= 0;
-    final maxVal =
-        (yourVal > benchVal ? yourVal : benchVal).clamp(1, double.infinity);
+    final maxVal = (yourVal > benchVal ? yourVal : benchVal).clamp(
+      1,
+      double.infinity,
+    );
     final benchLabel = _benchmarkLabel(l);
     String pct(double p) =>
         '${p >= 0 ? '+' : ''}${formatPercent(context, p, digits: 1)}';
@@ -835,8 +850,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
         if (showHeader) ...[
           Row(
             children: [
-              Icon(Icons.insights_rounded,
-                  color: context.tealAccent, size: 18),
+              Icon(Icons.insights_rounded, color: context.tealAccent, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -852,29 +866,51 @@ class _PerformanceCardState extends State<PerformanceCard> {
           ),
           const SizedBox(height: 4),
         ],
-        Text(l.bmSubtitle,
-            style: TextStyle(color: context.textFaint, fontSize: 11)),
+        Text(
+          l.bmSubtitle,
+          style: TextStyle(color: context.textFaint, fontSize: 11),
+        ),
         const SizedBox(height: 4),
         // Comprehension caveat: this money-weighted % covers recorded lots
         // only and is dominated by recent purchases, so it legitimately sits
         // far below the all-time TWR pill above — spell that out to prevent
         // the double-take.
-        Text(l.bmContribCaveat,
-            style: TextStyle(color: context.textFaint, fontSize: 11)),
+        Text(
+          l.bmContribCaveat,
+          style: TextStyle(color: context.textFaint, fontSize: 11),
+        ),
         const SizedBox(height: 18),
         Row(
           children: [
             Expanded(
-                child: _returnTile(context, l.bmContribYou, pct(youPct),
-                    _money(yourVal), context.positive)),
+              child: _returnTile(
+                context,
+                l.bmContribYou,
+                pct(youPct),
+                _money(yourVal),
+                context.positive,
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
-                child: _returnTile(context, benchLabel, pct(benchPct),
-                    _money(benchVal), context.info)),
+              child: _returnTile(
+                context,
+                benchLabel,
+                pct(benchPct),
+                _money(benchVal),
+                context.info,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
-        _bar(context, l.bmContribYou, yourVal, maxVal.toDouble(), context.positive),
+        _bar(
+          context,
+          l.bmContribYou,
+          yourVal,
+          maxVal.toDouble(),
+          context.positive,
+        ),
         const SizedBox(height: 8),
         _bar(context, benchLabel, benchVal, maxVal.toDouble(), context.info),
         const SizedBox(height: 14),
@@ -940,8 +976,11 @@ class _PerformanceCardState extends State<PerformanceCard> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded,
-                    size: 16, color: context.tealAccent),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: context.tealAccent,
+                ),
               ],
             ),
           ),
@@ -970,7 +1009,12 @@ class _PerformanceCardState extends State<PerformanceCard> {
   }
 
   Widget _returnTile(
-      BuildContext context, String label, String pct, String value, Color color) {
+    BuildContext context,
+    String label,
+    String pct,
+    String value,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -981,32 +1025,49 @@ class _PerformanceCardState extends State<PerformanceCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: context.textSubtle, fontSize: 11)),
+          Text(
+            label,
+            style: TextStyle(color: context.textSubtle, fontSize: 11),
+          ),
           const SizedBox(height: 4),
-          Text(pct,
-              style: TextStyle(
-                  color: color, fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(
+            pct,
+            style: TextStyle(
+              color: color,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(
-                color: context.textFaint,
-                fontSize: 11,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              )),
+          Text(
+            value,
+            style: TextStyle(
+              color: context.textFaint,
+              fontSize: 11,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _bar(BuildContext context, String label, double value, double max,
-      Color color) {
+  Widget _bar(
+    BuildContext context,
+    String label,
+    double value,
+    double max,
+    Color color,
+  ) {
     final frac = (value / max).clamp(0.0, 1.0);
     return Row(
       children: [
         SizedBox(
           width: 86,
-          child: Text(label,
-              style: TextStyle(color: context.textMuted, fontSize: 11)),
+          child: Text(
+            label,
+            style: TextStyle(color: context.textMuted, fontSize: 11),
+          ),
         ),
         Expanded(
           child: ClipRRect(

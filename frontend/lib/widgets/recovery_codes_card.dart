@@ -39,16 +39,11 @@ class RecoveryCodesCard extends StatelessWidget {
       return Card(
         color: context.warning.withValues(alpha: 0.12),
         shape: RoundedRectangleBorder(
-          side: BorderSide(
-            color: context.warning.withValues(alpha: 0.6),
-          ),
+          side: BorderSide(color: context.warning.withValues(alpha: 0.6)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: ListTile(
-          leading: Icon(
-            Icons.warning_amber_rounded,
-            color: context.warning,
-          ),
+          leading: Icon(Icons.warning_amber_rounded, color: context.warning),
           title: Text(
             (unusedCodes ?? 0) == 0
                 ? l.secNoCodesLeft

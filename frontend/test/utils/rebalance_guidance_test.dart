@@ -28,8 +28,7 @@ void main() {
       expect(g.truncated, isFalse);
     });
 
-    test(r'moves under the $500 floor are suppressed and flag truncation',
-        () {
+    test(r'moves under the $500 floor are suppressed and flag truncation', () {
       final g = computeRebalanceMoves(
         actualPct: {'equity': 60, 'bonds': 20, 'other': 20},
         targetPct: {'equity': 55, 'bonds': 22.6, 'other': 22.4},
@@ -129,8 +128,12 @@ void main() {
       });
       expect(p.unset, isFalse);
       expect(p.malformed, isFalse);
-      expect(p.targets,
-          {'equity': 65.0, 'bonds': 20.0, 'cash': 10.0, 'other': 5.0});
+      expect(p.targets, {
+        'equity': 65.0,
+        'bonds': 20.0,
+        'cash': 10.0,
+        'other': 5.0,
+      });
     });
 
     test('unknown keys are ignored, not fatal', () {
@@ -142,8 +145,7 @@ void main() {
       expect(p.targets, {'equity': 60.0, 'bonds': 40.0});
     });
 
-    test('bad sum → malformed with salvaged values for the editor prefill',
-        () {
+    test('bad sum → malformed with salvaged values for the editor prefill', () {
       final p = parseAllocationTargets({
         'v': 1,
         'targets': {'equity': 50},

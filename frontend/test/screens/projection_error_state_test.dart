@@ -24,7 +24,8 @@ void main() {
     });
 
     await tester.pumpWidget(
-        buildProjectionHost(projectionFetcher: fetcher, locale: locale));
+      buildProjectionHost(projectionFetcher: fetcher, locale: locale),
+    );
     await tester.pumpAndSettle();
 
     // Error text + retry button visible; no chart.
@@ -40,8 +41,9 @@ void main() {
     expect(find.text(message), findsNothing);
   }
 
-  testWidgets('en: failed load shows message + retry; retry recovers',
-      (tester) async {
+  testWidgets('en: failed load shows message + retry; retry recovers', (
+    tester,
+  ) async {
     await runCase(
       tester,
       locale: const Locale('en'),
@@ -50,8 +52,9 @@ void main() {
     );
   });
 
-  testWidgets('es: failed load shows message + retry; retry recovers',
-      (tester) async {
+  testWidgets('es: failed load shows message + retry; retry recovers', (
+    tester,
+  ) async {
     await runCase(
       tester,
       locale: const Locale('es'),

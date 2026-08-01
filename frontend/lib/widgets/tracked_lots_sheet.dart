@@ -103,7 +103,8 @@ class TrackedLotsBreakdown {
     ];
     // Prefer the server's total; fall back to summing the rows so the footer
     // stays honest if only the list is present.
-    final total = (comparison?['untracked_value_usd'] as num?)?.toDouble() ??
+    final total =
+        (comparison?['untracked_value_usd'] as num?)?.toDouble() ??
         untracked.fold<double>(0, (acc, u) => acc + u.valueUsd);
     return TrackedLotsBreakdown(
       symbols: symbols,
@@ -226,8 +227,7 @@ class TrackedLotsSheet extends StatelessWidget {
           ]),
           const SizedBox(height: 8),
           Text(
-            l.bmUntrackedTotal(
-                _money(context, breakdown.untrackedValueUsd)),
+            l.bmUntrackedTotal(_money(context, breakdown.untrackedValueUsd)),
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -258,7 +258,9 @@ class TrackedLotsSheet extends StatelessWidget {
           for (var i = 0; i < rows.length; i++) ...[
             if (i > 0)
               Divider(
-                  height: 1, color: context.hairline.withValues(alpha: 0.5)),
+                height: 1,
+                color: context.hairline.withValues(alpha: 0.5),
+              ),
             rows[i],
           ],
         ],
@@ -267,16 +269,16 @@ class TrackedLotsSheet extends StatelessWidget {
   }
 
   Widget _trackedRow(
-      BuildContext context, AppLocalizations l, TrackedLotSymbol s) {
+    BuildContext context,
+    AppLocalizations l,
+    TrackedLotSymbol s,
+  ) {
     // Locale-aware month-year ("Mar 2024" / "mar 2024") for the first buy.
     final locale = Localizations.localeOf(context).toString();
     final firstBuy = s.firstAcquired == null
         ? null
         : l.bmFirstBuy(DateFormat.yMMM(locale).format(s.firstAcquired!));
-    final subtitle = [
-      l.bmLots(s.lotCount),
-      ?firstBuy,
-    ].join(' · ');
+    final subtitle = [l.bmLots(s.lotCount), ?firstBuy].join(' · ');
 
     final pts = s.deltaPts;
     final ahead = (pts ?? 0) >= 0;
@@ -284,8 +286,12 @@ class TrackedLotsSheet extends StatelessWidget {
     // house localizer (same convention as the card's pts strings).
     final ptsText = pts == null
         ? null
-        : l.bmPtsVsIndex(localizeNumberString(
-            context, '${ahead ? '+' : ''}${pts.toStringAsFixed(1)}'));
+        : l.bmPtsVsIndex(
+            localizeNumberString(
+              context,
+              '${ahead ? '+' : ''}${pts.toStringAsFixed(1)}',
+            ),
+          );
 
     return MergeSemantics(
       child: Padding(
@@ -322,8 +328,10 @@ class TrackedLotsSheet extends StatelessWidget {
                 // gen-l10n orders these alphabetically → (invested, value),
                 // which happens to match the template order.
                 Text(
-                  l.bmInvestedToValue(_money(context, s.investedUsd),
-                      _money(context, s.yourValueUsd)),
+                  l.bmInvestedToValue(
+                    _money(context, s.investedUsd),
+                    _money(context, s.yourValueUsd),
+                  ),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

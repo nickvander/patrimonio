@@ -32,8 +32,10 @@ void main() {
       expect(proj.totalRepayment, closeTo(31500, 0.001));
       // n × interest + principal == total to repay (the invariant the old
       // preview violated by hiding the principal).
-      expect(proj.perPayment! * proj.periods! + proj.balloonPayment!,
-          closeTo(proj.totalRepayment, 0.001));
+      expect(
+        proj.perPayment! * proj.periods! + proj.balloonPayment!,
+        closeTo(proj.totalRepayment, 0.001),
+      );
     });
 
     test('a monthly rate is annualised ×12 (1%/mo == 12%/yr)', () {
@@ -159,8 +161,7 @@ void main() {
       // outstanding: 40 + (18 / 18) = 41 USD
       expect(sumLoansConverted(loans, 'outstanding', 'USD', 18.0), 41);
       // interest_earned: 5 + (36 / 18) = 7 USD
-      expect(
-          sumLoansConverted(loans, 'interest_earned', 'USD', 18.0), 7);
+      expect(sumLoansConverted(loans, 'interest_earned', 'USD', 18.0), 7);
     });
   });
 
@@ -247,25 +248,27 @@ void main() {
 
     test('missing inputs fail gracefully', () {
       expect(
-          solveTermFromPayment(
-            principal: null,
-            interestType: 'amortized',
-            ratePercent: 6,
-            ratePeriod: 'annual',
-            paymentFrequency: 'monthly',
-            targetPayment: 200,
-          ).ok,
-          false);
+        solveTermFromPayment(
+          principal: null,
+          interestType: 'amortized',
+          ratePercent: 6,
+          ratePeriod: 'annual',
+          paymentFrequency: 'monthly',
+          targetPayment: 200,
+        ).ok,
+        false,
+      );
       expect(
-          solveTermFromPayment(
-            principal: 10000,
-            interestType: 'amortized',
-            ratePercent: 6,
-            ratePeriod: 'annual',
-            paymentFrequency: 'monthly',
-            targetPayment: null,
-          ).ok,
-          false);
+        solveTermFromPayment(
+          principal: 10000,
+          interestType: 'amortized',
+          ratePercent: 6,
+          ratePeriod: 'annual',
+          paymentFrequency: 'monthly',
+          targetPayment: null,
+        ).ok,
+        false,
+      );
     });
 
     test('lump_sum has no recurring payment to solve from', () {
@@ -335,8 +338,10 @@ void main() {
 
     test('sub-half-cent rounding slivers are suppressed', () {
       expect(interestIncludedInOutstanding(14000.004, 14000), 0);
-      expect(interestIncludedInOutstanding(14000.01, 14000),
-          closeTo(0.01, 1e-9));
+      expect(
+        interestIncludedInOutstanding(14000.01, 14000),
+        closeTo(0.01, 1e-9),
+      );
     });
 
     test('settled loans (both zeroed server-side) → 0', () {

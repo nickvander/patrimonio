@@ -47,6 +47,7 @@ typedef ReadingStartCallback = void Function(int? fileCount);
 class GlobalFileDropListener {
   final DroppedFilesCallback onFiles;
   final DragStateCallback onDragState;
+
   /// Optional — fired the moment a drop is detected so the host can
   /// render a loading state during the byte-read phase. Skipped when
   /// the host doesn't care (e.g. a no-op preview screen).
@@ -215,19 +216,18 @@ class GlobalFileDropListener {
     final rejected = <String>[];
     for (final file in files) {
       final lower = file.name.toLowerCase();
-      final matches =
-          allowedExtensions.any((ext) => lower.endsWith('.${ext.toLowerCase()}'));
+      final matches = allowedExtensions.any(
+        (ext) => lower.endsWith('.${ext.toLowerCase()}'),
+      );
       if (!matches) {
         rejected.add(file.name);
         continue;
       }
       try {
         final bytes = await _readFileBytes(file);
-        accepted.add(PlatformFile(
-          name: file.name,
-          size: file.size,
-          bytes: bytes,
-        ));
+        accepted.add(
+          PlatformFile(name: file.name, size: file.size, bytes: bytes),
+        );
       } catch (e) {
         debugPrint('Failed to read dropped file ${file.name}: $e');
       }

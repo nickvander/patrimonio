@@ -18,22 +18,24 @@ void main() {
       expect(PasskeyService.instance.isAvailable, isFalse);
     });
 
-    test('ceremonies throw PasskeyException cleanly, list returns empty',
-        () async {
-      expect(
-        () => PasskeyService.instance.registerNewPasskey(),
-        throwsA(isA<PasskeyException>()),
-      );
-      expect(
-        () => PasskeyService.instance.signInWithPasskey(username: 'nick'),
-        throwsA(isA<PasskeyException>()),
-      );
-      expect(
-        () => PasskeyService.instance.reauthWithPasskey(),
-        throwsA(isA<PasskeyException>()),
-      );
-      expect(await PasskeyService.instance.list(), isEmpty);
-    });
+    test(
+      'ceremonies throw PasskeyException cleanly, list returns empty',
+      () async {
+        expect(
+          () => PasskeyService.instance.registerNewPasskey(),
+          throwsA(isA<PasskeyException>()),
+        );
+        expect(
+          () => PasskeyService.instance.signInWithPasskey(username: 'nick'),
+          throwsA(isA<PasskeyException>()),
+        );
+        expect(
+          () => PasskeyService.instance.reauthWithPasskey(),
+          throwsA(isA<PasskeyException>()),
+        );
+        expect(await PasskeyService.instance.list(), isEmpty);
+      },
+    );
   });
 
   group('extractTransports', () {
@@ -105,8 +107,7 @@ void main() {
       expect(e.message, contains('No matching passkey'));
     });
 
-    test('DOM InvalidStateError while registering → already-exists message',
-        () {
+    test('DOM InvalidStateError while registering → already-exists message', () {
       final e = mapNativeCredentialError(
         pe(
           'androidx.credentials.TYPE_CREATE_PUBLIC_KEY_CREDENTIAL_DOM_EXCEPTION/'

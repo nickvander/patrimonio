@@ -5,7 +5,8 @@ import 'package:patrimonio/utils/projection_seed.dart';
 // — identical inputs ⇒ identical seed ⇒ identical uncertainty fan.
 
 void main() {
-  const params = 'start_balance=500000.0&monthly_contribution=1000.0'
+  const params =
+      'start_balance=500000.0&monthly_contribution=1000.0'
       '&annual_return_rate=0.07&years=30';
 
   test('same inputs produce the same seed', () {

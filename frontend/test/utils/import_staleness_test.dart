@@ -6,18 +6,16 @@ Map<String, dynamic> _acc({
   String integration = 'manual',
   String? lastDataAt,
   String? institutionId,
-}) =>
-    {
-      'institution_name': institution,
-      'integration_type': integration,
-      'last_data_at': ?lastDataAt,
-      'institution_id': ?institutionId,
-    };
+}) => {
+  'institution_name': institution,
+  'integration_type': integration,
+  'last_data_at': ?lastDataAt,
+  'institution_id': ?institutionId,
+};
 
-String _daysAgo(int days, {DateTime? now}) =>
-    (now ?? DateTime.now().toUtc())
-        .subtract(Duration(days: days))
-        .toIso8601String();
+String _daysAgo(int days, {DateTime? now}) => (now ?? DateTime.now().toUtc())
+    .subtract(Duration(days: days))
+    .toIso8601String();
 
 void main() {
   final now = DateTime.utc(2026, 7, 23, 12);
@@ -51,25 +49,40 @@ void main() {
       expect(accountDataAgeDays(_acc(integration: 'plaid')), isNull);
       expect(accountDataAgeDays(_acc()), isNull);
       expect(
-          accountDataAgeDays(_acc(lastDataAt: 'not-a-date'), now: now), isNull);
+        accountDataAgeDays(_acc(lastDataAt: 'not-a-date'), now: now),
+        isNull,
+      );
       expect(accountDataAgeDays('not-a-map'), isNull);
     });
 
     test('a slightly future server timestamp reads 0, never negative', () {
-      final acc =
-          _acc(lastDataAt: now.add(const Duration(hours: 2)).toIso8601String());
+      final acc = _acc(
+        lastDataAt: now.add(const Duration(hours: 2)).toIso8601String(),
+      );
       expect(accountDataAgeDays(acc, now: now), 0);
     });
   });
 
   group('staleImportInstitutions', () {
-    test('flags a manual institution past the threshold, most-stale first',
-        () {
-      final stale = staleImportInstitutions([
-        _acc(institution: 'Banamex', lastDataAt: _daysAgo(40, now: now)),
-        _acc(institution: 'CetesDirecto', lastDataAt: _daysAgo(90, now: now)),
-        _acc(institution: 'Nu México', lastDataAt: _daysAgo(3, now: now)),
-      ], thresholdDays: 30, now: now);
+    test('flags a manual institution past the threshold, most-stale first', () {
+      final stale = staleImportInstitutions(
+        [
+          _acc(
+            institution: 'Banamex',
+            lastDataAt: _daysAgo(40, now: now),
+          ),
+          _acc(
+            institution: 'CetesDirecto',
+            lastDataAt: _daysAgo(90, now: now),
+          ),
+          _acc(
+            institution: 'Nu México',
+            lastDataAt: _daysAgo(3, now: now),
+          ),
+        ],
+        thresholdDays: 30,
+        now: now,
+      );
       expect(stale.map((s) => s.name), ['CetesDirecto', 'Banamex']);
       expect(stale.first.daysStale, 90);
     });
@@ -77,32 +90,53 @@ void main() {
     test('the freshest account clears the whole institution', () {
       // Mirrors the backend's MAX(last_data_at): one recent import means
       // the institution is current even if a sibling account is dormant.
-      final stale = staleImportInstitutions([
-        _acc(institution: 'Banamex', lastDataAt: _daysAgo(200, now: now)),
-        _acc(institution: 'Banamex', lastDataAt: _daysAgo(5, now: now)),
-      ], thresholdDays: 30, now: now);
+      final stale = staleImportInstitutions(
+        [
+          _acc(
+            institution: 'Banamex',
+            lastDataAt: _daysAgo(200, now: now),
+          ),
+          _acc(
+            institution: 'Banamex',
+            lastDataAt: _daysAgo(5, now: now),
+          ),
+        ],
+        thresholdDays: 30,
+        now: now,
+      );
       expect(stale, isEmpty);
     });
 
-    test('synced accounts and accounts without last_data_at never contribute',
-        () {
-      final stale = staleImportInstitutions([
-        _acc(
-            institution: 'Chase',
-            integration: 'plaid',
-            lastDataAt: _daysAgo(400, now: now)),
-        _acc(institution: 'Banamex'), // manual but no timestamp
-      ], thresholdDays: 30, now: now);
-      expect(stale, isEmpty);
-    });
+    test(
+      'synced accounts and accounts without last_data_at never contribute',
+      () {
+        final stale = staleImportInstitutions(
+          [
+            _acc(
+              institution: 'Chase',
+              integration: 'plaid',
+              lastDataAt: _daysAgo(400, now: now),
+            ),
+            _acc(institution: 'Banamex'), // manual but no timestamp
+          ],
+          thresholdDays: 30,
+          now: now,
+        );
+        expect(stale, isEmpty);
+      },
+    );
 
     test('threshold boundary: exactly N days old is stale, N-1 is not', () {
       final at30 = staleImportInstitutions(
-          [_acc(lastDataAt: _daysAgo(30, now: now))],
-          thresholdDays: 30, now: now);
+        [_acc(lastDataAt: _daysAgo(30, now: now))],
+        thresholdDays: 30,
+        now: now,
+      );
       final at29 = staleImportInstitutions(
-          [_acc(lastDataAt: _daysAgo(29, now: now))],
-          thresholdDays: 30, now: now);
+        [_acc(lastDataAt: _daysAgo(29, now: now))],
+        thresholdDays: 30,
+        now: now,
+      );
       expect(at30, hasLength(1));
       expect(at29, isEmpty);
     });
@@ -110,8 +144,10 @@ void main() {
     test('carries the institution id and freshest last_data_at', () {
       final last = _daysAgo(40, now: now);
       final stale = staleImportInstitutions(
-          [_acc(institutionId: 'inst-1', lastDataAt: last)],
-          thresholdDays: 30, now: now);
+        [_acc(institutionId: 'inst-1', lastDataAt: last)],
+        thresholdDays: 30,
+        now: now,
+      );
       expect(stale.single.institutionId, 'inst-1');
       expect(stale.single.lastDataAt, DateTime.parse(last));
     });
@@ -121,13 +157,15 @@ void main() {
     final last = _daysAgo(45, now: now);
     final accounts = [
       _acc(
-          institution: 'CetesDirecto',
-          institutionId: 'inst-cetes',
-          lastDataAt: last),
+        institution: 'CetesDirecto',
+        institutionId: 'inst-cetes',
+        lastDataAt: last,
+      ),
       _acc(
-          institution: 'Banamex',
-          institutionId: 'inst-banamex',
-          lastDataAt: _daysAgo(60, now: now)),
+        institution: 'Banamex',
+        institutionId: 'inst-banamex',
+        lastDataAt: _daysAgo(60, now: now),
+      ),
     ];
 
     test('an active snooze hides only its institution', () {
@@ -142,8 +180,11 @@ void main() {
         },
         now: now,
       );
-      expect(stale.map((s) => s.name), ['Banamex'],
-          reason: 'snoozed CetesDirecto hidden, un-snoozed Banamex shown');
+      expect(
+        stale.map((s) => s.name),
+        ['Banamex'],
+        reason: 'snoozed CetesDirecto hidden, un-snoozed Banamex shown',
+      );
     });
 
     test('an expired snooze re-shows a still-stale institution', () {
@@ -213,8 +254,7 @@ void main() {
       expect(staleMutedFrom({'a': true}), isEmpty);
     });
 
-    test('ImportStaleSnooze JSON round-trips through the settings shape',
-        () {
+    test('ImportStaleSnooze JSON round-trips through the settings shape', () {
       final snooze = ImportStaleSnooze(
         until: DateTime.utc(2026, 8, 1),
         dataAsOf: DateTime.utc(2026, 6, 8, 12, 30),

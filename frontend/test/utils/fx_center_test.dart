@@ -32,22 +32,28 @@ void main() {
       // field must not be wiped mid-keystroke.
       expect(linkedFxAmount(input: '.', rate: 17.5, baseToTarget: true), null);
       expect(
-          linkedFxAmount(input: '1.2.3', rate: 17.5, baseToTarget: true), null);
+        linkedFxAmount(input: '1.2.3', rate: 17.5, baseToTarget: true),
+        null,
+      );
     });
 
     test('unusable rate returns null (never divides by zero)', () {
       expect(linkedFxAmount(input: '5', rate: 0, baseToTarget: false), null);
       expect(linkedFxAmount(input: '5', rate: -1, baseToTarget: true), null);
       expect(
-        linkedFxAmount(
-            input: '5', rate: double.nan, baseToTarget: true),
+        linkedFxAmount(input: '5', rate: double.nan, baseToTarget: true),
         null,
       );
     });
 
     test('respects the decimals parameter', () {
       expect(
-        linkedFxAmount(input: '1', rate: 17.5678, baseToTarget: true, decimals: 4),
+        linkedFxAmount(
+          input: '1',
+          rate: 17.5678,
+          baseToTarget: true,
+          decimals: 4,
+        ),
         '17.5678',
       );
     });
@@ -69,8 +75,9 @@ void main() {
       expect(fxHistoryPoint('nope'), null);
       expect(fxHistoryPoint({'rate': 17.5}), null); // no timestamp
       expect(
-          fxHistoryPoint({'rate': 0, 'timestamp': '2026-07-20T12:00:00Z'}),
-          null); // zero-rate sentinel must not chart
+        fxHistoryPoint({'rate': 0, 'timestamp': '2026-07-20T12:00:00Z'}),
+        null,
+      ); // zero-rate sentinel must not chart
       expect(fxHistoryPoint({'rate': 17.5, 'timestamp': 'garbage'}), null);
     });
   });
@@ -83,7 +90,10 @@ void main() {
     });
 
     test('falls back to legacy *_currency names, then USD/MXN', () {
-      final legacy = fxPairOf({'base_currency': 'EUR', 'target_currency': 'MXN'});
+      final legacy = fxPairOf({
+        'base_currency': 'EUR',
+        'target_currency': 'MXN',
+      });
       expect(legacy.base, 'EUR');
       expect(legacy.target, 'MXN');
       final empty = fxPairOf(const {});

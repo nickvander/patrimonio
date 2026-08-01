@@ -173,10 +173,10 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
 
   /// C3 prefix each dimension's bands emit as filter values.
   static String _dimPrefix(int dim) => switch (dim) {
-        0 => 'asset:',
-        1 => 'account_type:',
-        _ => 'institution:',
-      };
+    0 => 'asset:',
+    1 => 'account_type:',
+    _ => 'institution:',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -202,10 +202,13 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         topHolding = item;
       }
     }
-    final classTotal =
-        classData.fold<double>(0, (sum, item) => sum + item.value);
-    final topShare =
-        (topHolding != null && classTotal > 0) ? topHolding.value / classTotal : 0.0;
+    final classTotal = classData.fold<double>(
+      0,
+      (sum, item) => sum + item.value,
+    );
+    final topShare = (topHolding != null && classTotal > 0)
+        ? topHolding.value / classTotal
+        : 0.0;
     final showConcentration = topShare >= 0.20;
 
     final bands = _bandsFor(dim, l);
@@ -253,8 +256,11 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
                         child: Text(
-                          l.lwAllocTotal(widget.currencyFormat
-                              .displayMoney(activeTotal * widget.conversionFactor)),
+                          l.lwAllocTotal(
+                            widget.currencyFormat.displayMoney(
+                              activeTotal * widget.conversionFactor,
+                            ),
+                          ),
                           style: TextStyle(
                             fontSize: 14,
                             color: context.textSubtle,
@@ -281,7 +287,12 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
             _filterStatusRow(bands, l),
             if (showConcentration && topHolding != null) ...[
               const SizedBox(height: 16),
-              _concentrationBanner(context, l, topHolding.subCategory, topShare),
+              _concentrationBanner(
+                context,
+                l,
+                topHolding.subCategory,
+                topShare,
+              ),
             ],
             const SizedBox(height: 24),
             ...bands.map((b) => _bandWidget(b, activeTotal, l)),
@@ -367,19 +378,23 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       final rawValue = dim == 1
           ? (raw['account_type'] ?? '').toString()
           : (raw['name'] ?? '').toString();
-      final label =
-          dim == 1 ? _prettyLabel(rawValue, l) : (rawValue.isEmpty ? l.pfOther : rawValue);
+      final label = dim == 1
+          ? _prettyLabel(rawValue, l)
+          : (rawValue.isEmpty ? l.pfOther : rawValue);
       final filterValue = rawValue.isEmpty
           ? ''
           : (dim == 1 ? 'account_type:$rawValue' : 'institution:$rawValue');
-      final accounts =
-          ((raw['count'] ?? raw['account_count']) as num?)?.toInt();
-      bands.add(_Band(
+      final accounts = ((raw['count'] ?? raw['account_count']) as num?)
+          ?.toInt();
+      bands.add(
+        _Band(
           label: label,
           value: value,
           color: Colors.transparent,
           filterValue: filterValue,
-          accountsCount: accounts));
+          accountsCount: accounts,
+        ),
+      );
     }
     bands.sort((a, b) => b.value.compareTo(a.value));
     // Assign palette colors after sorting so the biggest bands lead.
@@ -395,7 +410,12 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     ];
   }
 
-  Widget _dimensionToggle(int dim, bool hasType, bool hasInst, AppLocalizations l) {
+  Widget _dimensionToggle(
+    int dim,
+    bool hasType,
+    bool hasInst,
+    AppLocalizations l,
+  ) {
     Widget chip(String label, int idx) {
       final active = dim == idx;
       // A4 (round 3, a11y): the plain InkWell+Text pill announces as a
@@ -403,53 +423,56 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       // excluded so it isn't read twice.
       return MergeSemantics(
         child: Semantics(
-        button: true,
-        selected: active,
-        label: l.axGroupBy(label),
-        child: InkWell(
-        onTap: () {
-          // Switching dimension must not leave an invisible
-          // cross-dimension filter applied — if the active filter
-          // wasn't emitted by the new dimension (prefix mismatch, or a
-          // legacy bare value), toggle-clear it via the same callback
-          // the bands use.
-          final activeFilter = widget.activeCategory;
-          if (idx != dim &&
-              activeFilter != null &&
-              activeFilter.isNotEmpty &&
-              !activeFilter.startsWith(_dimPrefix(idx)) &&
-              widget.onCategorySelected != null) {
-            widget.onCategorySelected!(activeFilter);
-          }
-          setState(() => _dim = idx);
-        },
-        borderRadius: BorderRadius.circular(20),
-        child: ExcludeSemantics(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: active
-                  ? context.tealAccent.withValues(alpha: 0.15)
-                  : context.tileSurface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: active
-                    ? context.tealAccent.withValues(alpha: 0.5)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                color: active ? context.tealAccent : context.textMuted,
+          button: true,
+          selected: active,
+          label: l.axGroupBy(label),
+          child: InkWell(
+            onTap: () {
+              // Switching dimension must not leave an invisible
+              // cross-dimension filter applied — if the active filter
+              // wasn't emitted by the new dimension (prefix mismatch, or a
+              // legacy bare value), toggle-clear it via the same callback
+              // the bands use.
+              final activeFilter = widget.activeCategory;
+              if (idx != dim &&
+                  activeFilter != null &&
+                  activeFilter.isNotEmpty &&
+                  !activeFilter.startsWith(_dimPrefix(idx)) &&
+                  widget.onCategorySelected != null) {
+                widget.onCategorySelected!(activeFilter);
+              }
+              setState(() => _dim = idx);
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: ExcludeSemantics(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: active
+                      ? context.tealAccent.withValues(alpha: 0.15)
+                      : context.tileSurface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: active
+                        ? context.tealAccent.withValues(alpha: 0.5)
+                        : Colors.transparent,
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                    color: active ? context.tealAccent : context.textMuted,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-        ),
         ),
       );
     }
@@ -484,8 +507,11 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         children: [
           // A4 (round 3, a11y): decorative glyph — explicitly excluded.
           ExcludeSemantics(
-            child: Icon(Icons.touch_app_outlined,
-                size: 14, color: context.textFaint),
+            child: Icon(
+              Icons.touch_app_outlined,
+              size: 14,
+              color: context.textFaint,
+            ),
           ),
           const SizedBox(width: 6),
           Flexible(
@@ -532,8 +558,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                 if (widget.onCategorySelected != null) ...[
                   const SizedBox(width: 8),
                   InkWell(
-                    onTap: () =>
-                        widget.onCategorySelected!(band.filterValue),
+                    onTap: () => widget.onCategorySelected!(band.filterValue),
                     borderRadius: BorderRadius.circular(10),
                     child: Tooltip(
                       message: l.allocClearFilter,
@@ -555,20 +580,24 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
 
   Widget _bandWidget(_Band b, double total, AppLocalizations l) {
     final pct = total > 0 ? b.value / total : 0.0;
-    final isActive = b.filterValue.isNotEmpty && widget.activeCategory == b.filterValue;
-    final canTap = b.filterValue.isNotEmpty && widget.onCategorySelected != null;
+    final isActive =
+        b.filterValue.isNotEmpty && widget.activeCategory == b.filterValue;
+    final canTap =
+        b.filterValue.isNotEmpty && widget.onCategorySelected != null;
 
     // C-G: the Unclassified band is visibly muted — greyed dot, washed bar
     // fill, AND muted title/percent text — so the whole band reads as inert
     // next to the tappable category bands (with only the dot/bar muted the
     // bold title + colored % still looked tappable at rest).
-    final dotColor =
-        b.isUnclassified ? b.color.withValues(alpha: 0.55) : b.color;
+    final dotColor = b.isUnclassified
+        ? b.color.withValues(alpha: 0.55)
+        : b.color;
     final barGradient = b.isUnclassified
         ? [b.color.withValues(alpha: 0.45), b.color.withValues(alpha: 0.30)]
         : [b.color, b.color.withValues(alpha: 0.7)];
-    final titleColor =
-        b.isUnclassified ? context.textMuted : context.textPrimary;
+    final titleColor = b.isUnclassified
+        ? context.textMuted
+        : context.textPrimary;
     final pctColor = b.isUnclassified ? context.textMuted : b.color;
 
     // The band "core" the tap target / semantics blob covers: header row +
@@ -576,111 +605,114 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     // expander live OUTSIDE this blob (appended below) so the band's
     // filter action can never swallow the expander.
     final inner = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration:
-                          BoxDecoration(color: dotColor, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: Text(
-                        b.label,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: titleColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (b.holdingsCount != null) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        l.lwAllocHoldingsCount(b.holdingsCount!),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: context.textFaint,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Row(
                 children: [
-                  Text(
-                    formatPercent(context, pct * 100, digits: 1),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: pctColor,
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
                     ),
                   ),
-                  Text(
-                    widget.currencyFormat
-                        .displayMoney(b.value * widget.conversionFactor),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: context.textFaint,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      b.label,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: titleColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (b.holdingsCount != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      l.lwAllocHoldingsCount(b.holdingsCount!),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.textFaint,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Stack(
-            children: [
-              Container(
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  formatPercent(context, pct * 100, digits: 1),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: pctColor,
+                  ),
+                ),
+                Text(
+                  widget.currencyFormat.displayMoney(
+                    b.value * widget.conversionFactor,
+                  ),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.textFaint,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Stack(
+          children: [
+            Container(
+              height: 12,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: context.hairline,
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            FractionallySizedBox(
+              widthFactor: pct.clamp(0.0, 1.0),
+              child: Container(
                 height: 12,
-                width: double.infinity,
                 decoration: BoxDecoration(
-                  color: context.hairline,
+                  gradient: LinearGradient(colors: barGradient),
                   borderRadius: BorderRadius.circular(6),
                 ),
               ),
-              FractionallySizedBox(
-                widthFactor: pct.clamp(0.0, 1.0),
-                child: Container(
-                  height: 12,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: barGradient),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (isActive) ...[
-            const SizedBox(height: 8),
-            Text(
-              l.lwAllocFilteringHint,
-              style: TextStyle(
-                fontSize: 10,
-                color: b.color,
-                fontStyle: FontStyle.italic,
-              ),
             ),
           ],
+        ),
+        if (isActive) ...[
+          const SizedBox(height: 8),
+          Text(
+            l.lwAllocFilteringHint,
+            style: TextStyle(
+              fontSize: 10,
+              color: b.color,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
         ],
-      );
+      ],
+    );
 
     // Holdings preview + its "Show N more" expander: a SIBLING of the
     // band's tap target / semantics node, never a descendant. Tapping the
@@ -692,15 +724,21 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     final preview = (b.items.isNotEmpty && b.rawCategory != null)
         ? Padding(
             padding: const EdgeInsets.only(top: 12, left: 8, right: 8),
-            child:
-                _holdingsPreview(b.rawCategory!, b.items, b.value, b.color, l),
+            child: _holdingsPreview(
+              b.rawCategory!,
+              b.items,
+              b.value,
+              b.color,
+              l,
+            ),
           )
         : null;
 
     Widget withPreviewAndMargin(Widget core) {
       return Padding(
         padding: EdgeInsets.only(
-            bottom: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0),
+          bottom: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0,
+        ),
         child: preview == null
             ? core
             : Column(
@@ -717,58 +755,71 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         '${formatPercent(context, pct * 100, digits: 1)} · ${widget.currencyFormat.displayMoney(b.value * widget.conversionFactor)}';
     final String baseLabel;
     if (b.holdingsCount != null) {
-      baseLabel =
-          l.allocBandSemanticsHoldings(b.label, valueLabel, b.holdingsCount!);
+      baseLabel = l.allocBandSemanticsHoldings(
+        b.label,
+        valueLabel,
+        b.holdingsCount!,
+      );
     } else if (b.accountsCount != null) {
-      baseLabel =
-          l.allocBandSemanticsAccounts(b.label, valueLabel, b.accountsCount!);
+      baseLabel = l.allocBandSemanticsAccounts(
+        b.label,
+        valueLabel,
+        b.accountsCount!,
+      );
     } else {
       baseLabel = l.allocBandSemanticsNoCount(b.label, valueLabel);
     }
-    final semanticLabel =
-        canTap ? '$baseLabel, ${l.allocBandFiltersTable}' : baseLabel;
+    final semanticLabel = canTap
+        ? '$baseLabel, ${l.allocBandFiltersTable}'
+        : baseLabel;
 
     if (!canTap) {
       // The Unclassified band is deliberately inert: no InkWell (so no
       // hover brightening and the cursor stays the plain arrow), just a
       // tooltip + semantics explaining why tapping wouldn't do anything.
       if (b.isUnclassified) {
-        return withPreviewAndMargin(Tooltip(
-          message: l.alloc2UnclassifiedTooltip,
-          waitDuration: const Duration(milliseconds: 400),
-          // The Semantics label below already carries the explanation —
-          // don't let Tooltip add a duplicate node.
-          excludeFromSemantics: true,
-          child: MouseRegion(
-            cursor: MouseCursor.defer,
-            child: Semantics(
-              label: '$baseLabel. ${l.alloc2UnclassifiedTooltip}',
-              child: inner,
+        return withPreviewAndMargin(
+          Tooltip(
+            message: l.alloc2UnclassifiedTooltip,
+            waitDuration: const Duration(milliseconds: 400),
+            // The Semantics label below already carries the explanation —
+            // don't let Tooltip add a duplicate node.
+            excludeFromSemantics: true,
+            child: MouseRegion(
+              cursor: MouseCursor.defer,
+              child: Semantics(
+                label: '$baseLabel. ${l.alloc2UnclassifiedTooltip}',
+                child: inner,
+              ),
             ),
           ),
-        ));
+        );
       }
-      return withPreviewAndMargin(Semantics(label: semanticLabel, child: inner));
+      return withPreviewAndMargin(
+        Semantics(label: semanticLabel, child: inner),
+      );
     }
-    return withPreviewAndMargin(Semantics(
-      button: true,
-      label: semanticLabel,
-      child: InkWell(
-        onTap: () => widget.onCategorySelected!(b.filterValue),
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          decoration: BoxDecoration(
-            color: isActive
-                ? b.color.withValues(alpha: 0.06)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+    return withPreviewAndMargin(
+      Semantics(
+        button: true,
+        label: semanticLabel,
+        child: InkWell(
+          onTap: () => widget.onCategorySelected!(b.filterValue),
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            decoration: BoxDecoration(
+              color: isActive
+                  ? b.color.withValues(alpha: 0.06)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: inner,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: inner,
         ),
       ),
-    ));
+    );
   }
 
   Widget _concentrationBanner(
@@ -782,31 +833,33 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     // glyph is decorative (the text carries the message).
     return MergeSemantics(
       child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          ExcludeSemantics(
-            child: Icon(Icons.warning_amber_rounded, color: color, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              l.lwAllocConcentration(
-                  holding, formatPercent(context, share * 100, digits: 0)),
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                fontSize: 12.5,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: Icon(Icons.warning_amber_rounded, color: color, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                l.lwAllocConcentration(
+                  holding,
+                  formatPercent(context, share * 100, digits: 0),
+                ),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -835,8 +888,9 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           MergeSemantics(
             child: Semantics(
               button: true,
-              label:
-                  expanded ? l.lwAllocShowFewer : l.lwAllocShowMore(remaining),
+              label: expanded
+                  ? l.lwAllocShowFewer
+                  : l.lwAllocShowMore(remaining),
               child: InkWell(
                 onTap: () => setState(() {
                   if (expanded) {
@@ -851,7 +905,9 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                     width: double.infinity,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          vertical: 6, horizontal: 12),
+                        vertical: 6,
+                        horizontal: 12,
+                      ),
                       child: Text(
                         expanded
                             ? l.lwAllocShowFewer
@@ -901,7 +957,9 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           ),
           const SizedBox(width: 8),
           Text(
-            widget.currencyFormat.displayMoney(item.value * widget.conversionFactor),
+            widget.currencyFormat.displayMoney(
+              item.value * widget.conversionFactor,
+            ),
             style: TextStyle(
               fontSize: 12,
               color: context.textPrimary,

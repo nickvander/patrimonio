@@ -41,8 +41,9 @@ class ImportStalenessBanner extends StatelessWidget {
     // gen-l10n orders placeholders alphabetically → (days, name), NOT the
     // template order ("{name} … {days}"). days must be passed first.
     final summary = l.impStaleBannerSummary(worst.daysStale, worst.name);
-    final more =
-        stale.length > 1 ? l.impStaleBannerMore(stale.length - 1) : null;
+    final more = stale.length > 1
+        ? l.impStaleBannerMore(stale.length - 1)
+        : null;
 
     final accent = context.info;
     final importButton = TextButton.icon(
@@ -60,8 +61,9 @@ class ImportStalenessBanner extends StatelessWidget {
             onPressed: () => onDismiss!(stale),
             icon: Icon(Icons.close, size: compact ? 18 : 20),
             tooltip: l.impStaleBannerDismiss,
-            visualDensity:
-                compact ? VisualDensity.compact : VisualDensity.standard,
+            visualDensity: compact
+                ? VisualDensity.compact
+                : VisualDensity.standard,
             color: context.textSubtle,
           );
 
@@ -72,81 +74,84 @@ class ImportStalenessBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: context.accentBorder(accent)),
       ),
-      child: LayoutBuilder(builder: (ctx, c) {
-        // Same breakpoint as SyncErrorBanner: below it the action drops to
-        // its own line so the summary never fights the button for width.
-        final isNarrow = c.maxWidth < 560;
-        final summaryText = Text(
-          summary,
-          style: TextStyle(color: accent, fontWeight: FontWeight.w700),
-          maxLines: isNarrow ? 2 : 1,
-          overflow: TextOverflow.ellipsis,
-        );
-        final moreText = more == null
-            ? null
-            : Text(
-                more,
-                style: TextStyle(color: context.textMuted, fontSize: 12),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              );
+      child: LayoutBuilder(
+        builder: (ctx, c) {
+          // Same breakpoint as SyncErrorBanner: below it the action drops to
+          // its own line so the summary never fights the button for width.
+          final isNarrow = c.maxWidth < 560;
+          final summaryText = Text(
+            summary,
+            style: TextStyle(color: accent, fontWeight: FontWeight.w700),
+            maxLines: isNarrow ? 2 : 1,
+            overflow: TextOverflow.ellipsis,
+          );
+          final moreText = more == null
+              ? null
+              : Text(
+                  more,
+                  style: TextStyle(color: context.textMuted, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                );
 
-        if (isNarrow) {
-          final dismiss = dismissButton(compact: false);
-          // Corner ×: the container's right/top padding shrinks so the
-          // full-size target hugs the corner without inflating the banner.
+          if (isNarrow) {
+            final dismiss = dismissButton(compact: false);
+            // Corner ×: the container's right/top padding shrinks so the
+            // full-size target hugs the corner without inflating the banner.
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                dismiss == null ? 12 : 6,
+                dismiss == null ? 16 : 4,
+                8,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(Icons.history_toggle_off, color: accent, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(child: summaryText),
+                      ?dismiss,
+                    ],
+                  ),
+                  if (moreText != null)
+                    Padding(
+                      // Align under the summary text (icon 18 + gap 8), not
+                      // the banner edge, so the block reads as one message.
+                      padding: const EdgeInsets.only(left: 26, top: 2),
+                      child: moreText,
+                    ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: EdgeInsets.only(right: dismiss == null ? 0 : 12),
+                      child: importButton,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          final dismiss = dismissButton(compact: true);
           return Padding(
-            padding: EdgeInsets.fromLTRB(16, dismiss == null ? 12 : 6,
-                dismiss == null ? 16 : 4, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(Icons.history_toggle_off, color: accent, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(child: summaryText),
-                    ?dismiss,
-                  ],
-                ),
-                if (moreText != null)
-                  Padding(
-                    // Align under the summary text (icon 18 + gap 8), not
-                    // the banner edge, so the block reads as one message.
-                    padding: const EdgeInsets.only(left: 26, top: 2),
-                    child: moreText,
-                  ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: EdgeInsets.only(right: dismiss == null ? 0 : 12),
-                    child: importButton,
-                  ),
-                ),
+                Icon(Icons.history_toggle_off, color: accent, size: 18),
+                const SizedBox(width: 8),
+                Flexible(child: summaryText),
+                const SizedBox(width: 8),
+                Expanded(child: moreText ?? const SizedBox.shrink()),
+                importButton,
+                if (dismiss != null) ...[const SizedBox(width: 4), dismiss],
               ],
             ),
           );
-        }
-        final dismiss = dismissButton(compact: true);
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Icon(Icons.history_toggle_off, color: accent, size: 18),
-              const SizedBox(width: 8),
-              Flexible(child: summaryText),
-              const SizedBox(width: 8),
-              Expanded(child: moreText ?? const SizedBox.shrink()),
-              importButton,
-              if (dismiss != null) ...[
-                const SizedBox(width: 4),
-                dismiss,
-              ],
-            ],
-          ),
-        );
-      }),
+        },
+      ),
     );
   }
 }

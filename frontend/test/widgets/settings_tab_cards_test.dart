@@ -9,30 +9,33 @@ import 'package:patrimonio/screens/dashboard_screen.dart'
 // Account & security) — the settings home that replaces the AppBar kebab.
 // Cards are pumped in isolation (tests never pump the full dashboard).
 
-Widget _host(Widget child, {Locale locale = const Locale('en'), ThemeData? theme}) =>
-    MaterialApp(
-      locale: locale,
-      theme: theme,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SingleChildScrollView(child: child)),
-    );
+Widget _host(
+  Widget child, {
+  Locale locale = const Locale('en'),
+  ThemeData? theme,
+}) => MaterialApp(
+  locale: locale,
+  theme: theme,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: SingleChildScrollView(child: child)),
+);
 
 SettingsAccountSecurityCard _accountCard({
   VoidCallback? onSignOut,
   VoidCallback? onHiddenItemsClosed,
   Future<void> Function()? onChangeServer,
-}) =>
-    SettingsAccountSecurityCard(
-      onHiddenItemsClosed: onHiddenItemsClosed ?? () {},
-      onSignOut: onSignOut ?? () {},
-      onChangeServer: onChangeServer ?? () async {},
-    );
+}) => SettingsAccountSecurityCard(
+  onHiddenItemsClosed: onHiddenItemsClosed ?? () {},
+  onSignOut: onSignOut ?? () {},
+  onChangeServer: onChangeServer ?? () async {},
+);
 
 void main() {
   group('SettingsPreferencesCard', () {
-    testWidgets('en: shows Language row with the active-locale autonym',
-        (tester) async {
+    testWidgets('en: shows Language row with the active-locale autonym', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(const SettingsPreferencesCard()));
       await tester.pumpAndSettle();
 
@@ -47,12 +50,12 @@ void main() {
       expect(find.text('Dark'), findsOneWidget);
     });
 
-    testWidgets('es: localized headers + Spanish autonym subtitle',
-        (tester) async {
-      await tester.pumpWidget(_host(
-        const SettingsPreferencesCard(),
-        locale: const Locale('es'),
-      ));
+    testWidgets('es: localized headers + Spanish autonym subtitle', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(const SettingsPreferencesCard(), locale: const Locale('es')),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Preferencias'), findsOneWidget);
@@ -112,11 +115,13 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(_host(
-        const SettingsPreferencesCard(),
-        locale: const Locale('es'),
-        theme: ThemeData(brightness: Brightness.dark),
-      ));
+      await tester.pumpWidget(
+        _host(
+          const SettingsPreferencesCard(),
+          locale: const Locale('es'),
+          theme: ThemeData(brightness: Brightness.dark),
+        ),
+      );
       await tester.pumpAndSettle();
       // Narrow layout stacks the picker under the label; an overflow would
       // fail the test via FlutterError.
@@ -179,13 +184,16 @@ void main() {
       expect(signedOut, isTrue);
     });
 
-    testWidgets('es: sign-out confirmation uses the Spanish strings',
-        (tester) async {
+    testWidgets('es: sign-out confirmation uses the Spanish strings', (
+      tester,
+    ) async {
       var signedOut = false;
-      await tester.pumpWidget(_host(
-        _accountCard(onSignOut: () => signedOut = true),
-        locale: const Locale('es'),
-      ));
+      await tester.pumpWidget(
+        _host(
+          _accountCard(onSignOut: () => signedOut = true),
+          locale: const Locale('es'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Cuenta y seguridad'), findsOneWidget);
@@ -200,12 +208,13 @@ void main() {
       expect(signedOut, isFalse);
     });
 
-    testWidgets('server row asks for confirmation before onChangeServer',
-        (tester) async {
+    testWidgets('server row asks for confirmation before onChangeServer', (
+      tester,
+    ) async {
       var changed = false;
-      await tester.pumpWidget(_host(
-        _accountCard(onChangeServer: () async => changed = true),
-      ));
+      await tester.pumpWidget(
+        _host(_accountCard(onChangeServer: () async => changed = true)),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Server'));
@@ -234,22 +243,20 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(_host(
-        const Column(
-          children: [
-            SettingsPreferencesCard(),
-            SizedBox(height: 24),
-          ],
+      await tester.pumpWidget(
+        _host(
+          const Column(
+            children: [SettingsPreferencesCard(), SizedBox(height: 24)],
+          ),
+          theme: ThemeData(brightness: Brightness.dark),
         ),
-        theme: ThemeData(brightness: Brightness.dark),
-      ));
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      await tester.pumpWidget(_host(
-        _accountCard(),
-        theme: ThemeData(brightness: Brightness.dark),
-      ));
+      await tester.pumpWidget(
+        _host(_accountCard(), theme: ThemeData(brightness: Brightness.dark)),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Sign out'), findsOneWidget);

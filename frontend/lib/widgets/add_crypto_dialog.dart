@@ -29,8 +29,9 @@ final Map<String, _ExchangeInfo> _exchangeInfo = {
   ),
   'coinbase': _ExchangeInfo(
     label: 'Coinbase',
-    apiDocsUrl:
-        Uri.parse('https://docs.cdp.coinbase.com/coinbase-app/docs/auth/api-key-authentication'),
+    apiDocsUrl: Uri.parse(
+      'https://docs.cdp.coinbase.com/coinbase-app/docs/auth/api-key-authentication',
+    ),
     exampleName: 'My Coinbase',
   ),
 };
@@ -62,7 +63,8 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
 
   // Falls back to Bitso's copy for an unknown exchange so the dialog never
   // renders blank labels; today only bitso/coinbase are wired.
-  _ExchangeInfo get _info => _exchangeInfo[widget.exchange] ?? _exchangeInfo['bitso']!;
+  _ExchangeInfo get _info =>
+      _exchangeInfo[widget.exchange] ?? _exchangeInfo['bitso']!;
 
   @override
   void initState() {
@@ -164,9 +166,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
     // Coinbase blue is brand-fixed (it's their logo colour); Bitso
     // uses our brightness-aware positive accent so the icon stays
     // AA-readable in both themes.
-    final accentColor = isCoinbase
-        ? context.info
-        : context.positive;
+    final accentColor = isCoinbase ? context.info : context.positive;
 
     return AlertDialog(
       title: Row(

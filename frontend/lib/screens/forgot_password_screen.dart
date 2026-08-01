@@ -82,7 +82,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary, size: 48),
+        Icon(
+          Icons.check_circle,
+          color: Theme.of(context).colorScheme.primary,
+          size: 48,
+        ),
         const SizedBox(height: 16),
         Text(
           l.authPasswordResetDoneTitle,
@@ -90,10 +94,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),
-        Text(
-          l.authPasswordResetDoneBody,
-          textAlign: TextAlign.center,
-        ),
+        Text(l.authPasswordResetDoneBody, textAlign: TextAlign.center),
         const SizedBox(height: 24),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -116,9 +117,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
-          Text(
-            l.authUseRecoveryCodeBody,
-          ),
+          Text(l.authUseRecoveryCodeBody),
           const SizedBox(height: 24),
           TextFormField(
             controller: _username,

@@ -9,17 +9,18 @@ import 'package:patrimonio/widgets/add_crypto_dialog.dart';
 // the network. Per MEMORY we do NOT subclass ApiService. These tests only
 // assert rendered copy + that the help link is tappable without throwing.
 Widget _host(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: child),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: child),
+);
 
 void main() {
-  testWidgets('Bitso dialog renders Bitso-named copy + tappable help link',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      AddCryptoDialog(exchange: 'bitso', onLinked: () {}),
-    ));
+  testWidgets('Bitso dialog renders Bitso-named copy + tappable help link', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(AddCryptoDialog(exchange: 'bitso', onLinked: () {})),
+    );
 
     expect(find.text('Link Bitso'), findsOneWidget);
     expect(find.textContaining('Bitso settings'), findsOneWidget);
@@ -33,11 +34,12 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('Coinbase dialog renders Coinbase-named copy, not Bitso',
-      (tester) async {
-    await tester.pumpWidget(_host(
-      AddCryptoDialog(exchange: 'coinbase', onLinked: () {}),
-    ));
+  testWidgets('Coinbase dialog renders Coinbase-named copy, not Bitso', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(AddCryptoDialog(exchange: 'coinbase', onLinked: () {})),
+    );
 
     expect(find.text('Link Coinbase'), findsOneWidget);
     expect(find.textContaining('Coinbase settings'), findsOneWidget);

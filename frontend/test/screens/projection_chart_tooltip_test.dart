@@ -42,22 +42,29 @@ void main() {
     final gesture = await _mouse(tester);
     await gesture.moveTo(tester.getCenter(find.byType(LineChart)));
     await tester.pump();
-    expect(_tooltipShowing(tester), isTrue,
-        reason: 'hovering inside the plot must surface a tooltip spot');
+    expect(
+      _tooltipShowing(tester),
+      isTrue,
+      reason: 'hovering inside the plot must surface a tooltip spot',
+    );
 
     // Leave the chart entirely (the screen header, far from the plot).
     await gesture.moveTo(const Offset(10, 10));
     await tester.pump();
-    expect(_tooltipShowing(tester), isFalse,
-        reason: 'pointer-exit must dismiss the tooltip, not leave it pinned');
+    expect(
+      _tooltipShowing(tester),
+      isFalse,
+      reason: 'pointer-exit must dismiss the tooltip, not leave it pinned',
+    );
     // And the pinned-tooltip regression specifically: it stays cleared on
     // later frames, not just the exit frame.
     await tester.pump(const Duration(milliseconds: 300));
     expect(_tooltipShowing(tester), isFalse);
   });
 
-  testWidgets('the tooltip comes back on the next hover after an exit',
-      (tester) async {
+  testWidgets('the tooltip comes back on the next hover after an exit', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1400, 1000));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();

@@ -67,8 +67,10 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data = await widget.apiService
-          .getSpendingByCategory(months: _effectiveMonths, top: 6);
+      final data = await widget.apiService.getSpendingByCategory(
+        months: _effectiveMonths,
+        top: 6,
+      );
       if (mounted) setState(() => _data = data);
     } catch (_) {
       // Leave _data as-is; the empty state renders below.
@@ -80,15 +82,15 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
   // Stable per-index palette. Index order follows the backend's
   // total-descending category order, so the biggest spender is always green.
   List<Color> _palette(BuildContext context) => [
-        context.positive,
-        context.tealAccent,
-        context.info,
-        context.purpleAccent,
-        context.pinkAccent,
-        context.yellowAccent,
-        context.warning,
-        context.textFaint, // OTHER rollup tail
-      ];
+    context.positive,
+    context.tealAccent,
+    context.info,
+    context.purpleAccent,
+    context.pinkAccent,
+    context.yellowAccent,
+    context.warning,
+    context.textFaint, // OTHER rollup tail
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -106,103 +108,118 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
         // Width-responsive off the card's OWN constraint (inner
         // LayoutBuilder, per the skill rule), not MediaQuery — the card can
         // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(builder: (context, c) {
-          // House ~420 phone breakpoint off the card interior: compact
-          // chrome — no leading icon, title compressed to a small uppercase
-          // overline (the portfolio_card idiom). Distinct from the <720
-          // MediaQuery `isPhone` above, which only drives padding/height.
-          final isPhoneCard = c.maxWidth < 420;
-          return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: LayoutBuilder(
+          builder: (context, c) {
+            // House ~420 phone breakpoint off the card interior: compact
+            // chrome — no leading icon, title compressed to a small uppercase
+            // overline (the portfolio_card idiom). Distinct from the <720
+            // MediaQuery `isPhone` above, which only drives padding/height.
+            final isPhoneCard = c.maxWidth < 420;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!isPhoneCard) ...[
-                  Icon(Icons.bar_chart_rounded,
-                      color: context.tealAccent, size: 18),
-                  const SizedBox(width: 8),
+                Row(
+                  children: [
+                    if (!isPhoneCard) ...[
+                      Icon(
+                        Icons.bar_chart_rounded,
+                        color: context.tealAccent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Text(
+                        isPhoneCard
+                            ? l.spendByCatTitle.toUpperCase()
+                            : l.spendByCatTitle,
+                        style: isPhoneCard
+                            ? TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                                color: context.textSubtle,
+                              )
+                            : TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: context.textPrimary,
+                              ),
+                        // maxLines only on the phone overline; wider layouts
+                        // keep the original wrap behaviour pixel-identical.
+                        maxLines: isPhoneCard ? 1 : null,
+                        overflow: isPhoneCard ? TextOverflow.ellipsis : null,
+                      ),
+                    ),
+                    // Hidden when the window is driven by the Cash Flow period
+                    // selector (item #11) — the two selectors would otherwise
+                    // disagree on screen.
+                    if (widget.months == null) _rangeSelector(),
+                  ],
+                ),
+                // Header→content gap tightens with the phone overline header.
+                SizedBox(height: isPhoneCard ? 12 : 16),
+                if (_loading)
+                  const SizedBox(
+                    height: 220,
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (months.isEmpty || cats.isEmpty)
+                  SizedBox(
+                    height: 180,
+                    child: Center(
+                      child: Text(
+                        l.spendByCatEmpty,
+                        style: TextStyle(color: context.textMuted),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                else ...[
+                  LayoutBuilder(
+                    builder: (context, outer) {
+                      // Bar width and month-label density derive from the inner
+                      // width (house rule: ~1 label per 46px phone / 62px wide,
+                      // always keep the last) — hardcoded 22px bars + a label on
+                      // every month overlapped on narrow phones with 6-12 months.
+                      final narrow = outer.maxWidth < 420;
+                      final count = months.isEmpty ? 1 : months.length;
+                      final minLabels = count < 2 ? count : 2;
+                      final maxLabels =
+                          (outer.maxWidth / (narrow ? 46.0 : 62.0))
+                              .floor()
+                              .clamp(minLabels, count);
+                      final labelStep = (count / maxLabels).ceil().clamp(
+                        1,
+                        count,
+                      );
+                      final barWidth = narrow ? 14.0 : 22.0;
+                      return SizedBox(
+                        height: isPhone ? 200.0 : 240.0,
+                        child: _buildChart(
+                          months,
+                          cats,
+                          barWidth: barWidth,
+                          labelStep: labelStep,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // The figures next to each category are an average PER MONTH,
+                  // not the window total — the bare window sum (e.g. 6× a $3k
+                  // rent) reads as wildly inflated otherwise.
+                  Text(
+                    l.spendByCatAvgPerMonth,
+                    style: TextStyle(color: context.textMuted, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildLegend(cats),
                 ],
-                Expanded(
-                  child: Text(
-                    isPhoneCard
-                        ? l.spendByCatTitle.toUpperCase()
-                        : l.spendByCatTitle,
-                    style: isPhoneCard
-                        ? TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                            color: context.textSubtle,
-                          )
-                        : TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: context.textPrimary,
-                          ),
-                    // maxLines only on the phone overline; wider layouts
-                    // keep the original wrap behaviour pixel-identical.
-                    maxLines: isPhoneCard ? 1 : null,
-                    overflow: isPhoneCard ? TextOverflow.ellipsis : null,
-                  ),
-                ),
-                // Hidden when the window is driven by the Cash Flow period
-                // selector (item #11) — the two selectors would otherwise
-                // disagree on screen.
-                if (widget.months == null) _rangeSelector(),
               ],
-            ),
-            // Header→content gap tightens with the phone overline header.
-            SizedBox(height: isPhoneCard ? 12 : 16),
-            if (_loading)
-              const SizedBox(
-                height: 220,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (months.isEmpty || cats.isEmpty)
-              SizedBox(
-                height: 180,
-                child: Center(
-                  child: Text(
-                    l.spendByCatEmpty,
-                    style: TextStyle(color: context.textMuted),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              )
-            else ...[
-              LayoutBuilder(builder: (context, outer) {
-                // Bar width and month-label density derive from the inner
-                // width (house rule: ~1 label per 46px phone / 62px wide,
-                // always keep the last) — hardcoded 22px bars + a label on
-                // every month overlapped on narrow phones with 6-12 months.
-                final narrow = outer.maxWidth < 420;
-                final count = months.isEmpty ? 1 : months.length;
-                final minLabels = count < 2 ? count : 2;
-                final maxLabels = (outer.maxWidth / (narrow ? 46.0 : 62.0))
-                    .floor()
-                    .clamp(minLabels, count);
-                final labelStep = (count / maxLabels).ceil().clamp(1, count);
-                final barWidth = narrow ? 14.0 : 22.0;
-                return SizedBox(
-                  height: isPhone ? 200.0 : 240.0,
-                  child: _buildChart(months, cats,
-                      barWidth: barWidth, labelStep: labelStep),
-                );
-              }),
-              const SizedBox(height: 16),
-              // The figures next to each category are an average PER MONTH,
-              // not the window total — the bare window sum (e.g. 6× a $3k
-              // rent) reads as wildly inflated otherwise.
-              Text(
-                l.spendByCatAvgPerMonth,
-                style: TextStyle(color: context.textMuted, fontSize: 11),
-              ),
-              const SizedBox(height: 8),
-              _buildLegend(cats),
-            ],
-          ],
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
   }
@@ -234,8 +251,12 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
     );
   }
 
-  Widget _buildChart(List<dynamic> months, List<dynamic> cats,
-      {required double barWidth, required int labelStep}) {
+  Widget _buildChart(
+    List<dynamic> months,
+    List<dynamic> cats, {
+    required double barWidth,
+    required int labelStep,
+  }) {
     final palette = _palette(context);
 
     // category -> month -> amount (USD).
@@ -258,11 +279,13 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
       for (var i = 0; i < cats.length; i++) {
         final amt = (lookup[i]?[monthKey] ?? 0.0) * widget.conversionFactor;
         if (amt <= 0) continue;
-        stack.add(BarChartRodStackItem(
-          running,
-          running + amt,
-          palette[i % palette.length],
-        ));
+        stack.add(
+          BarChartRodStackItem(
+            running,
+            running + amt,
+            palette[i % palette.length],
+          ),
+        );
         running += amt;
       }
       if (running > maxTotal) maxTotal = running;
@@ -273,7 +296,9 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
             BarChartRodData(
               toY: running,
               width: barWidth,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(4),
+              ),
               rodStackItems: stack,
             ),
           ],
@@ -297,10 +322,12 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -374,16 +401,19 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
                 final amt =
                     (lookup[i]?[monthKey] ?? 0.0) * widget.conversionFactor;
                 if (amt <= 0) continue;
-                final name =
-                    prettyCategory(primary: cats[i]['category']?.toString());
-                children.add(TextSpan(
-                  text: '\n$name  ${widget.currencyFormat.displayMoney(amt)}',
-                  style: TextStyle(
-                    color: palette[i % palette.length],
-                    fontWeight: FontWeight.normal,
-                    fontSize: 12,
+                final name = prettyCategory(
+                  primary: cats[i]['category']?.toString(),
+                );
+                children.add(
+                  TextSpan(
+                    text: '\n$name  ${widget.currencyFormat.displayMoney(amt)}',
+                    style: TextStyle(
+                      color: palette[i % palette.length],
+                      fontWeight: FontWeight.normal,
+                      fontSize: 12,
+                    ),
                   ),
-                ));
+                );
               }
               return BarTooltipItem(
                 header,
@@ -431,17 +461,18 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
         Container(
           width: 10,
           height: 10,
-          decoration:
-              BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
         ),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(color: context.textMuted, fontSize: 12),
-        ),
+        Text(label, style: TextStyle(color: context.textMuted, fontSize: 12)),
         const SizedBox(width: 6),
         Text(
-          widget.currencyFormat.displayMoney(totalUsd * widget.conversionFactor),
+          widget.currencyFormat.displayMoney(
+            totalUsd * widget.conversionFactor,
+          ),
           style: TextStyle(
             color: context.textPrimary,
             fontSize: 12,

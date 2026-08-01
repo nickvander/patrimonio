@@ -82,42 +82,44 @@ class OverviewSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (ctx, c) {
-      final isNarrow = c.maxWidth < 900;
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: List.generate(
-                5,
-                (_) => SizedBox(
-                  width: isNarrow ? c.maxWidth : (c.maxWidth - 4 * 12) / 5,
-                  child: const SkeletonBox(height: 88),
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final isNarrow = c.maxWidth < 900;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: List.generate(
+                  5,
+                  (_) => SizedBox(
+                    width: isNarrow ? c.maxWidth : (c.maxWidth - 4 * 12) / 5,
+                    child: const SkeletonBox(height: 88),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            const SkeletonBox(height: 140),
-            const SizedBox(height: 24),
-            if (isNarrow) ...const [
-              SkeletonBox(height: 260),
-              SizedBox(height: 24),
-              SkeletonBox(height: 440),
-            ] else
-              const Row(
-                children: [
-                  Expanded(flex: 1, child: SkeletonBox(height: 600)),
-                  SizedBox(width: 24),
-                  Expanded(flex: 3, child: SkeletonBox(height: 600)),
-                ],
-              ),
-          ],
-        ),
-      );
-    });
+              const SizedBox(height: 24),
+              const SkeletonBox(height: 140),
+              const SizedBox(height: 24),
+              if (isNarrow) ...const [
+                SkeletonBox(height: 260),
+                SizedBox(height: 24),
+                SkeletonBox(height: 440),
+              ] else
+                const Row(
+                  children: [
+                    Expanded(flex: 1, child: SkeletonBox(height: 600)),
+                    SizedBox(width: 24),
+                    Expanded(flex: 3, child: SkeletonBox(height: 600)),
+                  ],
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

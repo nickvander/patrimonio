@@ -10,7 +10,13 @@ void main() {
     });
 
     group('cash variants', () {
-      for (final t in ['Checking', 'savings', 'Cash management', 'CD', 'Cash']) {
+      for (final t in [
+        'Checking',
+        'savings',
+        'Cash management',
+        'CD',
+        'Cash',
+      ]) {
         test('"$t" → cash', () {
           expect(categorizeAccount(t), AccountCategory.cash);
         });
@@ -68,7 +74,7 @@ void main() {
         'real estate',
         'Vehicle',
         'vehicle',
-        'Auto',     // bare token, not "auto loan"
+        'Auto', // bare token, not "auto loan"
         'Car',
         'Private Equity',
         'private equity',

@@ -26,28 +26,30 @@ class IoRealtimeSocket implements RealtimeSocket {
     // dart:io's WebSocket attaches neither, so without this the upgrade is
     // rejected as unauthenticated (or bounced to the CF login page).
     final extra = wsHandshakeHeaders();
-    WebSocket.connect(url, headers: extra.isEmpty ? null : extra).then((ws) {
-      _socket = ws;
-      _open = true;
-      onOpen();
-      _sub = ws.listen(
-        (data) {
-          if (data is String) onMessage(data);
-        },
-        onError: (_) => onError(),
-        onDone: () {
+    WebSocket.connect(url, headers: extra.isEmpty ? null : extra)
+        .then((ws) {
+          _socket = ws;
+          _open = true;
+          onOpen();
+          _sub = ws.listen(
+            (data) {
+              if (data is String) onMessage(data);
+            },
+            onError: (_) => onError(),
+            onDone: () {
+              _open = false;
+              onClose();
+            },
+            cancelOnError: true,
+          );
+        })
+        .catchError((Object _) {
+          // Connection failed outright — surface as an error + a close so the
+          // service schedules a reconnect.
           _open = false;
+          onError();
           onClose();
-        },
-        cancelOnError: true,
-      );
-    }).catchError((Object _) {
-      // Connection failed outright — surface as an error + a close so the
-      // service schedules a reconnect.
-      _open = false;
-      onError();
-      onClose();
-    });
+        });
   }
 
   @override
@@ -56,7 +58,9 @@ class IoRealtimeSocket implements RealtimeSocket {
     _sub?.cancel();
     try {
       _socket?.close();
-    } catch (_) {/* already closed */}
+    } catch (_) {
+      /* already closed */
+    }
     _socket = null;
   }
 }

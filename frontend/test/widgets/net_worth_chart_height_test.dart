@@ -16,39 +16,42 @@ import 'package:patrimonio/widgets/net_worth_card.dart';
 // phone-sized surface and pin the rendered LineChart height.
 
 Map<String, dynamic> _point(
-        String date, double netWorth, Map<String, double> byInst) =>
-    {
-      'date': date,
-      'net_worth': netWorth,
-      'total_assets': netWorth + 500,
-      'total_liabilities': 500.0,
-      'by_institution': byInst,
-    };
+  String date,
+  double netWorth,
+  Map<String, double> byInst,
+) => {
+  'date': date,
+  'net_worth': netWorth,
+  'total_assets': netWorth + 500,
+  'total_liabilities': 500.0,
+  'by_institution': byInst,
+};
 
 /// Sixty daily snapshots across five institutions — enough history for the
 /// MoM chip, the movers row, and a two-row detailed legend, i.e. the tallest
 /// compact header the dashboard produces.
 List<dynamic> _history() => [
-      for (var i = 0; i < 60; i++)
-        _point(
-          DateFormat('yyyy-MM-dd')
-              .format(DateTime.utc(2026, 5, 1).add(Duration(days: i))),
-          1500000.0 + i * 1000,
-          {
-            'Morgan Stanley - StockPlan Connect': 600000.0 + i * 400,
-            'Vanguard': 400000.0 + i * 300,
-            'Fidelity NetBenefits': 300000.0 + i * 200,
-            'CetesDirecto': 100000.0 + i * 50,
-            'Chase': 100000.0 + i * 50,
-          },
-        ),
-    ];
+  for (var i = 0; i < 60; i++)
+    _point(
+      DateFormat(
+        'yyyy-MM-dd',
+      ).format(DateTime.utc(2026, 5, 1).add(Duration(days: i))),
+      1500000.0 + i * 1000,
+      {
+        'Morgan Stanley - StockPlan Connect': 600000.0 + i * 400,
+        'Vanguard': 400000.0 + i * 300,
+        'Fidelity NetBenefits': 300000.0 + i * 200,
+        'CetesDirecto': 100000.0 + i * 50,
+        'Chase': 100000.0 + i * 50,
+      },
+    ),
+];
 
 Widget _host(Widget child) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SingleChildScrollView(child: child)),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: SingleChildScrollView(child: child)),
+);
 
 NetWorthCard _card({bool showSummary = true, Widget? rangeSelector}) =>
     NetWorthCard(
@@ -75,8 +78,9 @@ void _usePhoneSurface(WidgetTester tester, {Size size = const Size(380, 800)}) {
 
 void main() {
   group('NetWorthCard chart height', () {
-    testWidgets('simple mode: plot keeps its full height on a narrow phone',
-        (tester) async {
+    testWidgets('simple mode: plot keeps its full height on a narrow phone', (
+      tester,
+    ) async {
       _usePhoneSurface(tester);
       await tester.pumpWidget(_host(_card()));
       await tester.pumpAndSettle();
@@ -89,21 +93,22 @@ void main() {
     });
 
     testWidgets(
-        'detailed mode: wrapped legend grows the card, never eats the plot',
-        (tester) async {
-      _usePhoneSurface(tester);
-      await tester.pumpWidget(_host(_card()));
-      await tester.pumpAndSettle();
+      'detailed mode: wrapped legend grows the card, never eats the plot',
+      (tester) async {
+        _usePhoneSurface(tester);
+        await tester.pumpWidget(_host(_card()));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Detailed'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Detailed'));
+        await tester.pumpAndSettle();
 
-      // Legend rendered (total + top institutions) → tallest header case.
-      expect(find.text('Vanguard'), findsOneWidget);
-      final chartSize = tester.getSize(find.byType(LineChart));
-      expect(chartSize.height, greaterThanOrEqualTo(220.0));
-      expect(tester.takeException(), isNull);
-    });
+        // Legend rendered (total + top institutions) → tallest header case.
+        expect(find.text('Vanguard'), findsOneWidget);
+        final chartSize = tester.getSize(find.byType(LineChart));
+        expect(chartSize.height, greaterThanOrEqualTo(220.0));
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('wide layout: chart height clamps at 280', (tester) async {
       _usePhoneSurface(tester, size: const Size(1440, 900));
@@ -118,29 +123,39 @@ void main() {
 
   group('NetWorthCard compact header (showSummary: false)', () {
     testWidgets(
-        'phone branch: overline title replaces the summary hero and the '
-        'injected range selector renders below the chart', (tester) async {
-      _usePhoneSurface(tester);
-      const selectorKey = Key('in-card-range-selector');
-      await tester.pumpWidget(_host(_card(
-        showSummary: false,
-        rangeSelector: const SizedBox(key: selectorKey, height: 44),
-      )));
-      await tester.pumpAndSettle();
+      'phone branch: overline title replaces the summary hero and the '
+      'injected range selector renders below the chart',
+      (tester) async {
+        _usePhoneSurface(tester);
+        const selectorKey = Key('in-card-range-selector');
+        await tester.pumpWidget(
+          _host(
+            _card(
+              showSummary: false,
+              rangeSelector: const SizedBox(key: selectorKey, height: 44),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // Overline title (the fad9351 idiom) instead of the duplicate hero.
-      expect(find.text('NET WORTH HISTORY'), findsOneWidget);
-      // displayMoney drops cents at this magnitude → "$1,550,514".
-      expect(find.text(r'$1,550,514'), findsNothing,
-          reason: 'summary hero number must be suppressed — the dashboard '
-              'hero block directly above already shows it');
+        // Overline title (the fad9351 idiom) instead of the duplicate hero.
+        expect(find.text('NET WORTH HISTORY'), findsOneWidget);
+        // displayMoney drops cents at this magnitude → "$1,550,514".
+        expect(
+          find.text(r'$1,550,514'),
+          findsNothing,
+          reason:
+              'summary hero number must be suppressed — the dashboard '
+              'hero block directly above already shows it',
+        );
 
-      // Range selector sits inside the card, below the plot.
-      final selectorTop = tester.getTopLeft(find.byKey(selectorKey)).dy;
-      final chartBottom = tester.getBottomLeft(find.byType(LineChart)).dy;
-      expect(selectorTop, greaterThanOrEqualTo(chartBottom));
-      expect(tester.takeException(), isNull);
-    });
+        // Range selector sits inside the card, below the plot.
+        final selectorTop = tester.getTopLeft(find.byKey(selectorKey)).dy;
+        final chartBottom = tester.getBottomLeft(find.byType(LineChart)).dy;
+        expect(selectorTop, greaterThanOrEqualTo(chartBottom));
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('default (wide) keeps the full summary hero', (tester) async {
       _usePhoneSurface(tester, size: const Size(1440, 900));

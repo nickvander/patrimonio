@@ -67,10 +67,10 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
     final (Color accent, String statusLabel) = !hasSpend
         ? (context.info, '')
         : runway >= 6
-            ? (context.positive, l.efStatusHealthy)
-            : runway >= 3
-                ? (context.info, l.efStatusOnTrack)
-                : (context.warning, l.efStatusBuilding);
+        ? (context.positive, l.efStatusHealthy)
+        : runway >= 3
+        ? (context.info, l.efStatusOnTrack)
+        : (context.warning, l.efStatusBuilding);
 
     return Card(
       elevation: 4,
@@ -148,17 +148,16 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
   }
 
   Widget _statusPill(String label, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.w700),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+    ),
+  );
 
   // 0→6 month gauge with a hairline tick at the 3-month mark.
   Widget _gauge(double runway, Color accent) {
@@ -199,12 +198,18 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(l.efScale0,
-                style: TextStyle(color: context.textFaint, fontSize: 10)),
-            Text(l.efScale3,
-                style: TextStyle(color: context.textFaint, fontSize: 10)),
-            Text(l.efScale6,
-                style: TextStyle(color: context.textFaint, fontSize: 10)),
+            Text(
+              l.efScale0,
+              style: TextStyle(color: context.textFaint, fontSize: 10),
+            ),
+            Text(
+              l.efScale3,
+              style: TextStyle(color: context.textFaint, fontSize: 10),
+            ),
+            Text(
+              l.efScale6,
+              style: TextStyle(color: context.textFaint, fontSize: 10),
+            ),
           ],
         ),
       ],

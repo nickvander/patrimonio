@@ -22,8 +22,13 @@ void main() {
               width: width,
               child: AllocationHeatmap(
                 data: [
-                  AllocationData('stocks', 'VTI', 1234567.89, Colors.teal,
-                      assetClassKey: 'equity'),
+                  AllocationData(
+                    'stocks',
+                    'VTI',
+                    1234567.89,
+                    Colors.teal,
+                    assetClassKey: 'equity',
+                  ),
                 ],
                 conversionFactor: 1.0,
                 currencyFormat: usd,
@@ -35,8 +40,9 @@ void main() {
     );
   }
 
-  testWidgets('narrow header shrinks the total instead of ellipsizing it',
-      (tester) async {
+  testWidgets('narrow header shrinks the total instead of ellipsizing it', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(320, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -51,12 +57,17 @@ void main() {
 
     // …its Text widget no longer carries the ellipsis overflow…
     final text = tester.widget<Text>(totalFinder);
-    expect(text.overflow, isNot(TextOverflow.ellipsis),
-        reason: 'money must never ellipsize mid-digits');
+    expect(
+      text.overflow,
+      isNot(TextOverflow.ellipsis),
+      reason: 'money must never ellipsize mid-digits',
+    );
 
     // …because a FittedBox (scaleDown, like the net-worth hero) wraps it.
     final fitted = find.ancestor(
-        of: totalFinder, matching: find.byType(FittedBox));
+      of: totalFinder,
+      matching: find.byType(FittedBox),
+    );
     expect(fitted, findsOneWidget);
     expect(tester.widget<FittedBox>(fitted).fit, BoxFit.scaleDown);
 

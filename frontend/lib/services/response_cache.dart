@@ -30,8 +30,8 @@ class ResponseCache {
   ResponseCache({
     Duration ttl = const Duration(seconds: 25),
     DateTime Function() clock = _wallClock,
-  })  : _ttl = ttl,
-        _now = clock;
+  }) : _ttl = ttl,
+       _now = clock;
 
   final Duration _ttl;
   final DateTime Function() _now;
@@ -152,22 +152,24 @@ class ResponseCache {
     // future from it (e.g. an orphan `whenComplete`) would leak an
     // unhandled error when `fetch` throws and no one awaits that branch.
     late final Future<T> future;
-    future = fetch().then((value) {
-      // Only populate if no clear() happened while we were in flight —
-      // otherwise we'd resurrect data the mutation just invalidated.
-      if (_generation == startGeneration) {
-        set(key, value);
-      }
-      return value;
-    }).whenComplete(() {
-      // Drop the in-flight marker once settled (success or error) so the
-      // next read re-fetches rather than awaiting a dead future. Guarded so
-      // a fetch that was superseded by a newer one for the same key doesn't
-      // evict the newer marker.
-      if (identical(_inFlight[key], future)) {
-        _inFlight.remove(key);
-      }
-    });
+    future = fetch()
+        .then((value) {
+          // Only populate if no clear() happened while we were in flight —
+          // otherwise we'd resurrect data the mutation just invalidated.
+          if (_generation == startGeneration) {
+            set(key, value);
+          }
+          return value;
+        })
+        .whenComplete(() {
+          // Drop the in-flight marker once settled (success or error) so the
+          // next read re-fetches rather than awaiting a dead future. Guarded so
+          // a fetch that was superseded by a newer one for the same key doesn't
+          // evict the newer marker.
+          if (identical(_inFlight[key], future)) {
+            _inFlight.remove(key);
+          }
+        });
     _inFlight[key] = future;
     return future;
   }
@@ -182,10 +184,7 @@ class ResponseCache {
     // background refresh never surfaces as an unhandled exception. We
     // ignore() rather than catchError(() => T) because T is non-nullable
     // and we have no value to substitute — the existing stale entry stays.
-    unawaited(_fetchDeduped<T>(key, fetch).then<void>(
-      (_) {},
-      onError: (_) {},
-    ));
+    unawaited(_fetchDeduped<T>(key, fetch).then<void>((_) {}, onError: (_) {}));
   }
 }
 

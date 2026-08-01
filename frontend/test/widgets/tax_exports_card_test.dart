@@ -16,27 +16,27 @@ Widget _host(
   int initialYear = 2026,
   List<int> years = const [2026, 2025],
   String filingStatus = 'Single',
-}) =>
-    MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: TaxExportsCard(
-            baseUrl: '/api',
-            years: years,
-            initialYear: initialYear,
-            filingStatus: filingStatus,
-            openUrl: opened.add,
-          ),
-        ),
+}) => MaterialApp(
+  locale: locale,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: SingleChildScrollView(
+      child: TaxExportsCard(
+        baseUrl: '/api',
+        years: years,
+        initialYear: initialYear,
+        filingStatus: filingStatus,
+        openUrl: opened.add,
       ),
-    );
+    ),
+  ),
+);
 
 void main() {
-  testWidgets('en: renders all four export rows and the year selector',
-      (tester) async {
+  testWidgets('en: renders all four export rows and the year selector', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(<String>[]));
     await tester.pumpAndSettle();
 
@@ -59,8 +59,9 @@ void main() {
     expect(find.text('CSV resumen anual MX'), findsOneWidget);
   });
 
-  testWidgets('tapping each row opens the matching backend export URL',
-      (tester) async {
+  testWidgets('tapping each row opens the matching backend export URL', (
+    tester,
+  ) async {
     final opened = <String>[];
     await tester.pumpWidget(_host(opened, filingStatus: 'Head of Household'));
     await tester.pumpAndSettle();
@@ -102,14 +103,17 @@ void main() {
     expect(opened, ['/api/tax/export/8949?year=2025']);
   });
 
-  testWidgets('a year missing from the options list is injected, not asserted',
-      (tester) async {
-    // Regression guard: the screen can select a year (e.g. the current one)
-    // that the derived options list doesn't contain yet — the dropdown must
-    // not assert.
-    await tester
-        .pumpWidget(_host(<String>[], initialYear: 2027, years: const [2025]));
-    await tester.pumpAndSettle();
-    expect(find.text('2027'), findsOneWidget);
-  });
+  testWidgets(
+    'a year missing from the options list is injected, not asserted',
+    (tester) async {
+      // Regression guard: the screen can select a year (e.g. the current one)
+      // that the derived options list doesn't contain yet — the dropdown must
+      // not assert.
+      await tester.pumpWidget(
+        _host(<String>[], initialYear: 2027, years: const [2025]),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2027'), findsOneWidget);
+    },
+  );
 }

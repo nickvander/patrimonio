@@ -23,13 +23,19 @@ class _FakeApiService extends ApiService {
   Future<List<dynamic>> getLoanPeople() async => const [];
 
   @override
-  Future<Map<String, dynamic>> getLoansSummary(
-          {bool forceRefresh = false}) async =>
-      const {'active_count': 0, 'total_lent': 0, 'total_outstanding': 0};
+  Future<Map<String, dynamic>> getLoansSummary({
+    bool forceRefresh = false,
+  }) async => const {
+    'active_count': 0,
+    'total_lent': 0,
+    'total_outstanding': 0,
+  };
 
   @override
-  Future<Map<String, dynamic>> getInterestIncome({int? year}) async =>
-      const {'total_interest': 0, 'total_principal': 0};
+  Future<Map<String, dynamic>> getInterestIncome({int? year}) async => const {
+    'total_interest': 0,
+    'total_principal': 0,
+  };
 
   @override
   Future<Map<String, dynamic>> createLoan({
@@ -52,15 +58,20 @@ class _FakeApiService extends ApiService {
 
   @override
   Future<void> setCustomSchedule(
-      String loanId, List<Map<String, dynamic>> rows) async {
+    String loanId,
+    List<Map<String, dynamic>> rows,
+  ) async {
     setScheduleCalls++;
   }
 }
 
 /// Opens the add-loan dialog and switches it to the flat-interest style
 /// (default sub-mode: "Set amount").
-Future<void> _openFlatDialog(WidgetTester tester, _FakeApiService api,
-    {Locale? locale}) async {
+Future<void> _openFlatDialog(
+  WidgetTester tester,
+  _FakeApiService api, {
+  Locale? locale,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       locale: locale,
@@ -75,7 +86,9 @@ Future<void> _openFlatDialog(WidgetTester tester, _FakeApiService api,
   // The tab's "Add loan" button (the only FilledButton before the dialog).
   await tester.tap(find.byType(FilledButton).first);
   await tester.pumpAndSettle();
-  final flatLabel = locale?.languageCode == 'es' ? 'Interés fijo' : 'Flat interest';
+  final flatLabel = locale?.languageCode == 'es'
+      ? 'Interés fijo'
+      : 'Flat interest';
   await tester.ensureVisible(find.text(flatLabel));
   await tester.tap(find.text(flatLabel));
   await tester.pumpAndSettle();
@@ -94,33 +107,39 @@ Future<void> _fill(WidgetTester tester, String label, String value) async {
 
 void main() {
   testWidgets(
-      'flat loan: empty payment amount shows an inline error, names the '
-      'field in the toast, and does not submit', (tester) async {
-    final api = _FakeApiService();
-    await _openFlatDialog(tester, api);
+    'flat loan: empty payment amount shows an inline error, names the '
+    'field in the toast, and does not submit',
+    (tester) async {
+      final api = _FakeApiService();
+      await _openFlatDialog(tester, api);
 
-    await _fill(tester, 'Borrower name', 'Jose Ramirez');
-    await _fill(tester, 'Amount lent', '10000');
-    await _fill(tester, 'Agreed interest (total)', '2000');
-    // "Payment amount" left empty — the below-the-fold field the generic
-    // toast used to hide.
+      await _fill(tester, 'Borrower name', 'Jose Ramirez');
+      await _fill(tester, 'Amount lent', '10000');
+      await _fill(tester, 'Agreed interest (total)', '2000');
+      // "Payment amount" left empty — the below-the-fold field the generic
+      // toast used to hide.
 
-    await tester.tap(_saveButton(), warnIfMissed: false);
-    await tester.pumpAndSettle();
+      await tester.tap(_saveButton(), warnIfMissed: false);
+      await tester.pumpAndSettle();
 
-    // Inline error on the payment field.
-    expect(find.text('Enter a payment amount greater than 0'), findsOneWidget);
-    // Fallback toast names the offending field.
-    expect(find.text('Fix “Payment amount” to continue'), findsOneWidget);
-    // Nothing was submitted.
-    expect(api.createLoanCalls, 0);
-    expect(api.setScheduleCalls, 0);
-    // The dialog is still open (save button still present).
-    expect(_saveButton(), findsOneWidget);
-  });
+      // Inline error on the payment field.
+      expect(
+        find.text('Enter a payment amount greater than 0'),
+        findsOneWidget,
+      );
+      // Fallback toast names the offending field.
+      expect(find.text('Fix “Payment amount” to continue'), findsOneWidget);
+      // Nothing was submitted.
+      expect(api.createLoanCalls, 0);
+      expect(api.setScheduleCalls, 0);
+      // The dialog is still open (save button still present).
+      expect(_saveButton(), findsOneWidget);
+    },
+  );
 
-  testWidgets('flat loan: payment too small to ever repay is flagged inline',
-      (tester) async {
+  testWidgets('flat loan: payment too small to ever repay is flagged inline', (
+    tester,
+  ) async {
     final api = _FakeApiService();
     await _openFlatDialog(tester, api);
 
@@ -133,13 +152,16 @@ void main() {
     await tester.tap(_saveButton(), warnIfMissed: false);
     await tester.pumpAndSettle();
 
-    expect(find.text('Too small — this payment would never pay off the loan'),
-        findsOneWidget);
+    expect(
+      find.text('Too small — this payment would never pay off the loan'),
+      findsOneWidget,
+    );
     expect(api.createLoanCalls, 0);
   });
 
-  testWidgets('flat loan: fixing the payment clears the error and submits',
-      (tester) async {
+  testWidgets('flat loan: fixing the payment clears the error and submits', (
+    tester,
+  ) async {
     final api = _FakeApiService();
     await _openFlatDialog(tester, api);
 
@@ -165,21 +187,24 @@ void main() {
   });
 
   testWidgets(
-      'es-MX: inline payment error and field-naming toast are localized',
-      (tester) async {
-    final api = _FakeApiService();
-    await _openFlatDialog(tester, api, locale: const Locale('es'));
+    'es-MX: inline payment error and field-naming toast are localized',
+    (tester) async {
+      final api = _FakeApiService();
+      await _openFlatDialog(tester, api, locale: const Locale('es'));
 
-    await _fill(tester, 'Nombre del prestatario', 'Jose Ramirez');
-    await _fill(tester, 'Monto prestado', '10000');
-    await _fill(tester, 'Interés acordado (total)', '2000');
+      await _fill(tester, 'Nombre del prestatario', 'Jose Ramirez');
+      await _fill(tester, 'Monto prestado', '10000');
+      await _fill(tester, 'Interés acordado (total)', '2000');
 
-    await tester.tap(_saveButton(), warnIfMissed: false);
-    await tester.pumpAndSettle();
+      await tester.tap(_saveButton(), warnIfMissed: false);
+      await tester.pumpAndSettle();
 
-    expect(find.text('Ingresa un monto de pago mayor que 0'), findsOneWidget);
-    expect(
-        find.text('Corrige “Monto del pago” para continuar'), findsOneWidget);
-    expect(api.createLoanCalls, 0);
-  });
+      expect(find.text('Ingresa un monto de pago mayor que 0'), findsOneWidget);
+      expect(
+        find.text('Corrige “Monto del pago” para continuar'),
+        findsOneWidget,
+      );
+      expect(api.createLoanCalls, 0);
+    },
+  );
 }

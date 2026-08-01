@@ -74,47 +74,66 @@ class _DividendCalendarState extends State<DividendCalendar> {
     // One global scale: every bar is linear in USD magnitude against the
     // biggest month, so bars compare across both columns on wide layouts.
     // USD values keep the scale invariant under the display conversion factor.
-    final maxTotalUsd =
-        months.fold<double>(0, (max, m) => m.totalUsd > max ? m.totalUsd : max);
+    final maxTotalUsd = months.fold<double>(
+      0,
+      (max, m) => m.totalUsd > max ? m.totalUsd : max,
+    );
 
-    return LayoutBuilder(builder: (context, constraints) {
-      // House rule: responsiveness off the INNER constraint, not the screen.
-      final isWide = constraints.maxWidth >= 720;
-      final rows = isWide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _rowColumn(context, l10n, months.take(6).toList(),
-                      currentKey, maxTotalUsd),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: _rowColumn(context, l10n, months.skip(6).toList(),
-                      currentKey, maxTotalUsd),
-                ),
-              ],
-            )
-          : _rowColumn(context, l10n, months, currentKey, maxTotalUsd);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // House rule: responsiveness off the INNER constraint, not the screen.
+        final isWide = constraints.maxWidth >= 720;
+        final rows = isWide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _rowColumn(
+                      context,
+                      l10n,
+                      months.take(6).toList(),
+                      currentKey,
+                      maxTotalUsd,
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    child: _rowColumn(
+                      context,
+                      l10n,
+                      months.skip(6).toList(),
+                      currentKey,
+                      maxTotalUsd,
+                    ),
+                  ),
+                ],
+              )
+            : _rowColumn(context, l10n, months, currentKey, maxTotalUsd);
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          rows,
-          const SizedBox(height: 10),
-          // Mandatory honesty caption: these are projections from current
-          // rate + cadence, not declared dividends.
-          Text(
-            l10n.calEstimateCaption,
-            style: TextStyle(fontSize: 11, color: context.textMuted),
-          ),
-        ],
-      );
-    });
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            rows,
+            const SizedBox(height: 10),
+            // Mandatory honesty caption: these are projections from current
+            // rate + cadence, not declared dividends.
+            Text(
+              l10n.calEstimateCaption,
+              style: TextStyle(fontSize: 11, color: context.textMuted),
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  Widget _rowColumn(BuildContext context, AppLocalizations l10n,
-      List<_CalMonth> months, String currentKey, double maxTotalUsd) {
+  Widget _rowColumn(
+    BuildContext context,
+    AppLocalizations l10n,
+    List<_CalMonth> months,
+    String currentKey,
+    double maxTotalUsd,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -128,8 +147,13 @@ class _DividendCalendarState extends State<DividendCalendar> {
 
   // ---------- one month: collapsed bar row + inline payer breakdown ----------
 
-  Widget _monthRow(BuildContext context, AppLocalizations l10n,
-      _CalMonth month, String currentKey, double maxTotalUsd) {
+  Widget _monthRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    _CalMonth month,
+    String currentKey,
+    double maxTotalUsd,
+  ) {
     final isCurrent = month.key == currentKey;
     final isExpanded = _expandedKey == month.key;
     final label = month.label();
@@ -139,14 +163,17 @@ class _DividendCalendarState extends State<DividendCalendar> {
     final widthFactor = maxTotalUsd <= 0
         ? 0.0
         : (month.totalUsd / maxTotalUsd)
-            .clamp(hasIncome ? 0.02 : 0.0, 1.0)
-            .toDouble();
+              .clamp(hasIncome ? 0.02 : 0.0, 1.0)
+              .toDouble();
 
     // One merged, labelled node per collapsed row — "July 2026, $310
     // expected, KO, ABBV" (round-3 a11y conventions, labels unchanged).
     final semLabel = hasIncome
-        ? l10n.calMonthSem(label, _money(month.totalUsd),
-            month.entries.map((e) => e.symbol).join(', '))
+        ? l10n.calMonthSem(
+            label,
+            _money(month.totalUsd),
+            month.entries.map((e) => e.symbol).join(', '),
+          )
         : l10n.calMonthSemEmpty(label);
 
     final collapsedRow = MergeSemantics(
@@ -209,8 +236,9 @@ class _DividendCalendarState extends State<DividendCalendar> {
                         widthFactor: widthFactor,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: context.tealAccent
-                                .withValues(alpha: isCurrent ? 0.95 : 0.45),
+                            color: context.tealAccent.withValues(
+                              alpha: isCurrent ? 0.95 : 0.45,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -225,8 +253,9 @@ class _DividendCalendarState extends State<DividendCalendar> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color:
-                          hasIncome ? context.textPrimary : context.textFaint,
+                      color: hasIncome
+                          ? context.textPrimary
+                          : context.textFaint,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -341,11 +370,13 @@ class _CalMonth {
   factory _CalMonth.parse(Map<String, dynamic> m) {
     final entries = ((m['entries'] as List?) ?? const [])
         .whereType<Map>()
-        .map((e) => _CalEntry(
-              (e['symbol'] ?? '').toString(),
-              (e['est_date'] ?? '').toString(),
-              (e['amount_usd'] as num?)?.toDouble() ?? 0.0,
-            ))
+        .map(
+          (e) => _CalEntry(
+            (e['symbol'] ?? '').toString(),
+            (e['est_date'] ?? '').toString(),
+            (e['amount_usd'] as num?)?.toDouble() ?? 0.0,
+          ),
+        )
         .where((e) => e.symbol.isNotEmpty)
         .toList();
     return _CalMonth(

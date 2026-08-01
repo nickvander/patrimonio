@@ -83,11 +83,15 @@ class ClabeInfoCard extends StatelessWidget {
               IconButton(
                 tooltip: l.dlgCopyClabe,
                 visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.copy_outlined,
-                    size: 18, color: context.tealAccent),
+                icon: Icon(
+                  Icons.copy_outlined,
+                  size: 18,
+                  color: context.tealAccent,
+                ),
                 onPressed: () {
                   Clipboard.setData(
-                      ClipboardData(text: clabe.replaceAll(RegExp(r'\D'), '')));
+                    ClipboardData(text: clabe.replaceAll(RegExp(r'\D'), '')),
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(l.dlgClabeCopied),

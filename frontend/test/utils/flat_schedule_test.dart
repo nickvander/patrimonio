@@ -12,9 +12,18 @@ void main() {
         frequency: 'monthly',
       );
       expect(rows.length, 4);
-      expect(rows.map((r) => r['amount']).toList(), [4000.0, 4000.0, 4000.0, 4000.0]);
-      expect(rows.map((r) => r['due_date']).toList(),
-          ['2026-08-10', '2026-09-10', '2026-10-10', '2026-11-10']);
+      expect(rows.map((r) => r['amount']).toList(), [
+        4000.0,
+        4000.0,
+        4000.0,
+        4000.0,
+      ]);
+      expect(rows.map((r) => r['due_date']).toList(), [
+        '2026-08-10',
+        '2026-09-10',
+        '2026-10-10',
+        '2026-11-10',
+      ]);
       // Σpayments − principal == the agreed interest.
       final total = rows.fold<double>(0, (a, r) => a + (r['amount'] as double));
       expect(total - 14000, 2000);
@@ -29,7 +38,12 @@ void main() {
         frequency: 'monthly',
       );
       // 16000 / 4500 -> 4500, 4500, 4500, 2500
-      expect(rows.map((r) => r['amount']).toList(), [4500.0, 4500.0, 4500.0, 2500.0]);
+      expect(rows.map((r) => r['amount']).toList(), [
+        4500.0,
+        4500.0,
+        4500.0,
+        2500.0,
+      ]);
       final total = rows.fold<double>(0, (a, r) => a + (r['amount'] as double));
       expect(total, 16000.0);
     });
@@ -42,7 +56,10 @@ void main() {
         origination: DateTime(2026, 1, 1),
         frequency: 'weekly',
       );
-      expect(rows.map((r) => r['due_date']).toList(), ['2026-01-08', '2026-01-15']);
+      expect(rows.map((r) => r['due_date']).toList(), [
+        '2026-01-08',
+        '2026-01-15',
+      ]);
     });
 
     test('month-end anchor clamps to shorter months', () {
@@ -54,8 +71,11 @@ void main() {
         frequency: 'monthly',
       );
       // Jan 31 -> Feb (28), Mar (31), Apr (30)
-      expect(rows.map((r) => r['due_date']).toList(),
-          ['2026-02-28', '2026-03-31', '2026-04-30']);
+      expect(rows.map((r) => r['due_date']).toList(), [
+        '2026-02-28',
+        '2026-03-31',
+        '2026-04-30',
+      ]);
     });
 
     test('zero interest amortizes principal only', () {
@@ -86,20 +106,22 @@ void main() {
     test('non-positive inputs return empty', () {
       expect(
         buildFlatSchedule(
-            principal: 0,
-            interest: 0,
-            payment: 100,
-            origination: DateTime(2026, 1, 1),
-            frequency: 'monthly'),
+          principal: 0,
+          interest: 0,
+          payment: 100,
+          origination: DateTime(2026, 1, 1),
+          frequency: 'monthly',
+        ),
         isEmpty,
       );
       expect(
         buildFlatSchedule(
-            principal: 1000,
-            interest: 0,
-            payment: 0,
-            origination: DateTime(2026, 1, 1),
-            frequency: 'monthly'),
+          principal: 1000,
+          interest: 0,
+          payment: 0,
+          origination: DateTime(2026, 1, 1),
+          frequency: 'monthly',
+        ),
         isEmpty,
       );
     });

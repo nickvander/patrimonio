@@ -7,20 +7,22 @@ import 'package:patrimonio/widgets/net_worth_card.dart';
 
 void main() {
   group('computeNetWorthYBounds', () {
-    test('simple mode: a short window fits to the data (floor NOT slammed to 0)',
-        () {
-      // 1-month-style: net worth ~2.30M moving within a ~20k band.
-      final (minY, maxY) = computeNetWorthYBounds(
-        dataMin: 2290000,
-        dataMax: 2310000,
-        baseValue: 2300000,
-        stacked: false,
-      );
-      // The floor sits just below the data, NOT at 0 — that's the whole fix.
-      expect(minY, greaterThan(2000000));
-      expect(minY, lessThan(2290000));
-      expect(maxY, greaterThan(2310000));
-    });
+    test(
+      'simple mode: a short window fits to the data (floor NOT slammed to 0)',
+      () {
+        // 1-month-style: net worth ~2.30M moving within a ~20k band.
+        final (minY, maxY) = computeNetWorthYBounds(
+          dataMin: 2290000,
+          dataMax: 2310000,
+          baseValue: 2300000,
+          stacked: false,
+        );
+        // The floor sits just below the data, NOT at 0 — that's the whole fix.
+        expect(minY, greaterThan(2000000));
+        expect(minY, lessThan(2290000));
+        expect(maxY, greaterThan(2310000));
+      },
+    );
 
     test('simple mode: a wide all-positive range clamps the floor to 0', () {
       // 5-year-style: $1.4k early (single account) up to $2.3M now. The 15%

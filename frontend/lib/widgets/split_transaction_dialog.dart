@@ -21,10 +21,13 @@ class _SplitDraft {
   final TextEditingController amountController;
   String category;
 
-  _SplitDraft({String description = '', String amountText = '', this.category = ''})
-      : id = _nextId++,
-        descriptionController = TextEditingController(text: description),
-        amountController = TextEditingController(text: amountText);
+  _SplitDraft({
+    String description = '',
+    String amountText = '',
+    this.category = '',
+  }) : id = _nextId++,
+       descriptionController = TextEditingController(text: description),
+       amountController = TextEditingController(text: amountText);
 
   String get description => descriptionController.text;
   String get amountText => amountController.text;
@@ -54,22 +57,27 @@ class SplitTransactionDialog extends StatefulWidget {
   /// amount > 0 = income / inflow.
   final double parentAmount;
   final String parentCurrency;
+
   /// Hint shown above the editor: the parent's display label.
   final String parentLabel;
+
   /// Defaulted into every new split row (and pre-filled on the first
   /// two seeded rows) — usually the parent's category.
   final String parentCategory;
+
   /// USD/MXN rate so the helper line at the bottom can show the
   /// reporting-currency equivalent of the running total when reporting
   /// currency differs from the parent's.
   final double usdMxnRate;
   final String targetCurrency;
   final NumberFormat reportingFormat;
+
   /// Pre-populated splits — supplied when re-opening for an edit.
   /// Each entry: `{'description': String, 'amount': double,
   /// 'category': String?}`. When null/empty, the dialog seeds
   /// the default 50/50 pair.
   final List<Map<String, dynamic>>? initialDrafts;
+
   /// Categories the user already has in the transactions list,
   /// used to populate a per-row dropdown so the user doesn't have
   /// to retype "Groceries" exactly. When empty the dropdown is
@@ -91,8 +99,7 @@ class SplitTransactionDialog extends StatefulWidget {
   });
 
   @override
-  State<SplitTransactionDialog> createState() =>
-      _SplitTransactionDialogState();
+  State<SplitTransactionDialog> createState() => _SplitTransactionDialogState();
 }
 
 class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
@@ -105,14 +112,16 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
   void initState() {
     super.initState();
     if (_isEditing) {
-      _drafts.addAll(widget.initialDrafts!.map((raw) {
-        final amt = (raw['amount'] as num?)?.toDouble() ?? 0.0;
-        return _SplitDraft(
-          description: (raw['description'] ?? '').toString(),
-          amountText: amt.toStringAsFixed(2),
-          category: (raw['category'] ?? widget.parentCategory).toString(),
-        );
-      }));
+      _drafts.addAll(
+        widget.initialDrafts!.map((raw) {
+          final amt = (raw['amount'] as num?)?.toDouble() ?? 0.0;
+          return _SplitDraft(
+            description: (raw['description'] ?? '').toString(),
+            amountText: amt.toStringAsFixed(2),
+            category: (raw['category'] ?? widget.parentCategory).toString(),
+          );
+        }),
+      );
       // Defensive: a corrupt initialDrafts shouldn't leave us with
       // <2 rows (would block save forever).
       while (_drafts.length < 2) {
@@ -176,8 +185,8 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
         double.parse((widget.parentAmount * ratios[i]).toStringAsFixed(2)),
       );
     }
-    final remainder = widget.parentAmount -
-        allocated.fold<double>(0.0, (a, b) => a + b);
+    final remainder =
+        widget.parentAmount - allocated.fold<double>(0.0, (a, b) => a + b);
     allocated.add(double.parse(remainder.toStringAsFixed(2)));
 
     setState(() {
@@ -210,10 +219,12 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     // pastes a known amount + just needs the rest as one bucket.
     final gap = (widget.parentAmount - _sum()).toStringAsFixed(2);
     setState(() {
-      _drafts.add(_SplitDraft(
-        amountText: gap == '-0.00' ? '0.00' : gap,
-        category: widget.parentCategory,
-      ));
+      _drafts.add(
+        _SplitDraft(
+          amountText: gap == '-0.00' ? '0.00' : gap,
+          category: widget.parentCategory,
+        ),
+      );
     });
   }
 
@@ -231,7 +242,8 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     final l = AppLocalizations.of(context);
     final draft = _drafts[rowIdx];
     final current = draft.category.trim();
-    final isInList = current.isEmpty ||
+    final isInList =
+        current.isEmpty ||
         current == widget.parentCategory ||
         widget.availableCategories.contains(current);
     final items = <DropdownMenuItem<String>>[
@@ -327,7 +339,10 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
               const PopupMenuItem(value: '50/50', child: Text('50 / 50')),
               const PopupMenuItem(value: '60/40', child: Text('60 / 40')),
               const PopupMenuItem(value: '70/30', child: Text('70 / 30')),
-              const PopupMenuItem(value: '40/30/30', child: Text('40 / 30 / 30')),
+              const PopupMenuItem(
+                value: '40/30/30',
+                child: Text('40 / 30 / 30'),
+              ),
               const PopupMenuDivider(),
               PopupMenuItem(value: 'even', child: Text(l.txSplitEven)),
             ],
@@ -353,7 +368,9 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
             Text(
               l.txSplitTotal(
                 native.format(widget.parentAmount.abs()),
-                widget.parentAmount < 0 ? l.txSplitExpenseTag : l.txSplitIncomeTag,
+                widget.parentAmount < 0
+                    ? l.txSplitExpenseTag
+                    : l.txSplitIncomeTag,
               ),
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
@@ -380,7 +397,8 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                                 Expanded(
                                   flex: 3,
                                   child: TextFormField(
-                                    controller: _drafts[i].descriptionController,
+                                    controller:
+                                        _drafts[i].descriptionController,
                                     decoration: InputDecoration(
                                       isDense: true,
                                       labelText: l.txSplitDescription,
@@ -402,8 +420,11 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                                       suffixText: widget.parentCurrency,
                                       border: const OutlineInputBorder(),
                                     ),
-                                    keyboardType: const TextInputType.numberWithOptions(
-                                        decimal: true, signed: true),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                          signed: true,
+                                        ),
                                     // Text lives in the controller; the
                                     // setState refreshes the sum banner
                                     // and _canSave.
@@ -412,8 +433,13 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                                 ),
                                 IconButton(
                                   tooltip: l.txSplitRemoveRow,
-                                  icon: const Icon(Icons.remove_circle_outline, size: 18),
-                                  onPressed: _drafts.length <= 2 ? null : () => _removeRow(i),
+                                  icon: const Icon(
+                                    Icons.remove_circle_outline,
+                                    size: 18,
+                                  ),
+                                  onPressed: _drafts.length <= 2
+                                      ? null
+                                      : () => _removeRow(i),
                                 ),
                               ],
                             ),
@@ -424,7 +450,10 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                             // time, matching the previous behaviour.
                             if (widget.availableCategories.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(top: 4, right: 48),
+                                padding: const EdgeInsets.only(
+                                  top: 4,
+                                  right: 48,
+                                ),
                                 child: _categoryDropdown(i),
                               ),
                           ],
@@ -447,15 +476,21 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
             DecoratedBox(
               decoration: BoxDecoration(
                 color: context.accentSoft(
-                    _sumMatches ? context.positive : context.negative),
+                  _sumMatches ? context.positive : context.negative,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     Icon(
-                      _sumMatches ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+                      _sumMatches
+                          ? Icons.check_circle_outline
+                          : Icons.warning_amber_rounded,
                       size: 16,
                       color: _sumMatches ? context.positive : context.negative,
                     ),
@@ -467,7 +502,9 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                             : l.txSplitOffBy(native.format(diff.abs())),
                         style: TextStyle(
                           fontSize: 12,
-                          color: _sumMatches ? context.positive : context.negative,
+                          color: _sumMatches
+                              ? context.positive
+                              : context.negative,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -489,11 +526,14 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
               const SizedBox(height: 4),
               Text(
                 l.txSplitApproxIn(
-                  widget.reportingFormat.format(convertCurrency(sum,
-                          from: widget.parentCurrency,
-                          to: widget.targetCurrency,
-                          usdMxnRate: widget.usdMxnRate)
-                      .abs()),
+                  widget.reportingFormat.format(
+                    convertCurrency(
+                      sum,
+                      from: widget.parentCurrency,
+                      to: widget.targetCurrency,
+                      usdMxnRate: widget.usdMxnRate,
+                    ).abs(),
+                  ),
                   widget.targetCurrency,
                 ),
                 style: TextStyle(fontSize: 11, color: context.textSubtle),
@@ -511,12 +551,14 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
           onPressed: _canSave
               ? () {
                   final out = _drafts
-                      .map((d) => {
-                            'description': d.description.trim(),
-                            'amount': double.tryParse(d.amountText) ?? 0.0,
-                            if (d.category.trim().isNotEmpty)
-                              'category': d.category.trim(),
-                          })
+                      .map(
+                        (d) => {
+                          'description': d.description.trim(),
+                          'amount': double.tryParse(d.amountText) ?? 0.0,
+                          if (d.category.trim().isNotEmpty)
+                            'category': d.category.trim(),
+                        },
+                      )
                       .toList();
                   Navigator.pop(context, out);
                 }
@@ -537,40 +579,42 @@ Future<int?> _promptEvenSplitCount(BuildContext context) async {
   return showDialog<int>(
     context: context,
     builder: (ctx) {
-      return StatefulBuilder(builder: (ctx, setLocal) {
-        return AlertDialog(
-          title: Text(l.txSplitEvenlyTitle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.txSplitEvenlyBody(n),
-                style: const TextStyle(fontSize: 13),
+      return StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return AlertDialog(
+            title: Text(l.txSplitEvenlyTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.txSplitEvenlyBody(n),
+                  style: const TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Slider(
+                  value: n.toDouble(),
+                  min: 2,
+                  max: 10,
+                  divisions: 8,
+                  label: '$n',
+                  onChanged: (v) => setLocal(() => n = v.round()),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: Text(l.actionCancel),
               ),
-              const SizedBox(height: 8),
-              Slider(
-                value: n.toDouble(),
-                min: 2,
-                max: 10,
-                divisions: 8,
-                label: '$n',
-                onChanged: (v) => setLocal(() => n = v.round()),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, n),
+                child: Text(l.actionApply),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: Text(l.actionCancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, n),
-              child: Text(l.actionApply),
-            ),
-          ],
-        );
-      });
+          );
+        },
+      );
     },
   );
 }

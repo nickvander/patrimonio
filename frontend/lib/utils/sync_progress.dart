@@ -23,10 +23,13 @@ const Set<String> kSyncableInstitutionTypes = {
 int syncableInstitutionCount(List<dynamic>? syncData) {
   if (syncData == null) return 0;
   return syncData
-      .where((i) =>
-          i is Map &&
-          kSyncableInstitutionTypes
-              .contains((i['integration_type'] ?? '').toString()))
+      .where(
+        (i) =>
+            i is Map &&
+            kSyncableInstitutionTypes.contains(
+              (i['integration_type'] ?? '').toString(),
+            ),
+      )
       .length;
 }
 
@@ -46,8 +49,9 @@ int syncingCount(List<dynamic>? syncData) {
   if (syncData == null) return 0;
   return syncData.where((i) {
     if (i is! Map) return false;
-    if (!kSyncableInstitutionTypes
-        .contains((i['integration_type'] ?? '').toString())) {
+    if (!kSyncableInstitutionTypes.contains(
+      (i['integration_type'] ?? '').toString(),
+    )) {
       return false;
     }
     return (i['sync_status'] ?? '').toString() == 'syncing';

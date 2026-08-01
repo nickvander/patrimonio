@@ -17,8 +17,11 @@ import 'package:patrimonio/l10n/app_localizations.dart';
 // single-month, whole-number payload: clamp(2, 1) (ArgumentError) and passing
 // an int `toY` to fl_chart (int is not a subtype of double).
 void main() {
-  final currencyFormat =
-      NumberFormat.currency(locale: 'en_US', symbol: r'$', decimalDigits: 2);
+  final currencyFormat = NumberFormat.currency(
+    locale: 'en_US',
+    symbol: r'$',
+    decimalDigits: 2,
+  );
 
   // Whole-number (int) amounts — exercises the JSON-int coercion path.
   final trends = <Map<String, dynamic>>[
@@ -26,48 +29,56 @@ void main() {
   ];
 
   Future<void> pump(WidgetTester tester, Locale locale) async {
-    await tester.pumpWidget(MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(
-            width: 1000,
-            height: 600,
-            child: CashFlowTrendsChart(
-              trends: trends,
-              conversionFactor: 1.0,
-              currencyFormat: currencyFormat,
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 1000,
+              height: 600,
+              child: CashFlowTrendsChart(
+                trends: trends,
+                conversionFactor: 1.0,
+                currencyFormat: currencyFormat,
+              ),
             ),
           ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
   }
 
-  testWidgets('English summary keeps income amount next to "income"',
-      (tester) async {
+  testWidgets('English summary keeps income amount next to "income"', (
+    tester,
+  ) async {
     final handle = tester.ensureSemantics();
     await pump(tester, const Locale('en'));
     // The correct-order substring exists in the summary semantics node...
     expect(
-        find.bySemanticsLabel(RegExp(r'income \$1,000\.00, spending \$800\.00')),
-        findsOneWidget);
+      find.bySemanticsLabel(RegExp(r'income \$1,000\.00, spending \$800\.00')),
+      findsOneWidget,
+    );
     // ...and the transposed form (month label in the income slot) does not.
     expect(find.bySemanticsLabel(RegExp(r'income March 2026')), findsNothing);
     handle.dispose();
   });
 
-  testWidgets('Spanish (es-MX) summary keeps income amount next to "ingresos"',
-      (tester) async {
-    final handle = tester.ensureSemantics();
-    await pump(tester, const Locale('es'));
-    expect(
+  testWidgets(
+    'Spanish (es-MX) summary keeps income amount next to "ingresos"',
+    (tester) async {
+      final handle = tester.ensureSemantics();
+      await pump(tester, const Locale('es'));
+      expect(
         find.bySemanticsLabel(
-            RegExp(r'ingresos \$1,000\.00, gastos \$800\.00')),
-        findsOneWidget);
-    handle.dispose();
-  });
+          RegExp(r'ingresos \$1,000\.00, gastos \$800\.00'),
+        ),
+        findsOneWidget,
+      );
+      handle.dispose();
+    },
+  );
 }

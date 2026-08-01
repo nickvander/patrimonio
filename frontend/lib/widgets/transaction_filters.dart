@@ -12,7 +12,16 @@ enum TxStatus { all, pending, settled }
 
 /// Standard windows surfaced as one-tap chips in the filter dialog. The
 /// `custom` value lets the user pick an arbitrary `start`/`end` pair.
-enum TxDateRange { all, today, sevenDays, thirtyDays, ninetyDays, ytd, oneYear, custom }
+enum TxDateRange {
+  all,
+  today,
+  sevenDays,
+  thirtyDays,
+  ninetyDays,
+  ytd,
+  oneYear,
+  custom,
+}
 
 extension TxDateRangeLabel on TxDateRange {
   String labelFor(BuildContext context) {
@@ -41,13 +50,7 @@ extension TxDateRangeLabel on TxDateRange {
 /// Row ordering for the transactions list. `dateNewest` is the default
 /// and the only mode that keeps the date-group headers (month landmarks
 /// + day headings); every other mode renders a flat, header-less list.
-enum TxSort {
-  dateNewest,
-  dateOldest,
-  amountHigh,
-  amountLow,
-  merchant,
-}
+enum TxSort { dateNewest, dateOldest, amountHigh, amountLow, merchant }
 
 /// User-facing label for a [TxSort] mode — shared by the wide toolbar's
 /// sort menu, the filter panel's "Sort by" section, and the active-sort
@@ -166,8 +169,7 @@ class TxFilters {
       flow: flow ?? this.flow,
       status: status ?? this.status,
       dateRange: dateRange ?? this.dateRange,
-      customStart:
-          clearCustomDates ? null : (customStart ?? this.customStart),
+      customStart: clearCustomDates ? null : (customStart ?? this.customStart),
       customEnd: clearCustomDates ? null : (customEnd ?? this.customEnd),
       minAmount: clearAmounts ? null : (minAmount ?? this.minAmount),
       maxAmount: clearAmounts ? null : (maxAmount ?? this.maxAmount),
@@ -241,24 +243,30 @@ double? parseFilterAmount(String raw) {
 /// the user taps Apply; pops null on Cancel/dismiss.
 class TxFiltersDialog extends StatefulWidget {
   final TxFilters initial;
+
   /// Sort mode the "Sort by" section starts on.
   final TxSort initialSort;
+
   /// True when hosted inside `showModalBottomSheet` (narrow layouts):
   /// renders the sheet shell (header + scrollable body + pinned action
   /// row) instead of the AlertDialog shell.
   final bool asSheet;
+
   /// All transactions in the parent list — used to derive the distinct
   /// set of account names and category labels the user can filter by.
   final List<dynamic> transactions;
+
   /// Accounts list from the dashboard; used so we have nice names even
   /// when no transactions hit a particular account yet.
   final List<dynamic> accounts;
+
   /// Whole-history load kicked off by the opener (the tab's memoized
   /// cascade). Non-null only when more pages existed at open time: the
   /// dialog shows a lightweight loading row until it completes, then
   /// refreshes its option lists via [liveTransactions]. Null = everything
   /// is already loaded, no affordance shown.
   final Future<void>? historyLoad;
+
   /// Live re-read of the opener's current transaction list — [transactions]
   /// is a snapshot from open time and won't include pages the cascade
   /// appends while the dialog is up. Falls back to [transactions] when null.
@@ -331,23 +339,20 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       lo = hi;
       hi = tmp;
     }
-    Navigator.pop<(TxFilters, TxSort)>(
-      context,
-      (
-        TxFilters(
-          accountIds: _draft.accountIds,
-          categories: _draft.categories,
-          flow: _draft.flow,
-          status: _draft.status,
-          dateRange: _draft.dateRange,
-          customStart: _draft.customStart,
-          customEnd: _draft.customEnd,
-          minAmount: lo,
-          maxAmount: hi,
-        ),
-        _draftSort,
+    Navigator.pop<(TxFilters, TxSort)>(context, (
+      TxFilters(
+        accountIds: _draft.accountIds,
+        categories: _draft.categories,
+        flow: _draft.flow,
+        status: _draft.status,
+        dateRange: _draft.dateRange,
+        customStart: _draft.customStart,
+        customEnd: _draft.customEnd,
+        minAmount: lo,
+        maxAmount: hi,
       ),
-    );
+      _draftSort,
+    ));
   }
 
   // Current transaction list: re-read from the opener when it exposes a
@@ -372,8 +377,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       for (final t in _txSource) {
         final id = t['account_id']?.toString();
         if (id == null) continue;
-        map.putIfAbsent(
-            id, () => (t['account_name'] ?? 'Unknown').toString());
+        map.putIfAbsent(id, () => (t['account_name'] ?? 'Unknown').toString());
       }
     }
     final entries = map.entries.toList()
@@ -434,7 +438,8 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DefaultTextStyle(
-            style: Theme.of(context).textTheme.titleLarge ??
+            style:
+                Theme.of(context).textTheme.titleLarge ??
                 const TextStyle(fontSize: 22),
             child: _titleRow(l),
           ),
@@ -480,15 +485,12 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
   }
 
   List<Widget> _actionButtons(AppLocalizations l) => [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l.actionCancel),
-        ),
-        FilledButton(
-          onPressed: _apply,
-          child: Text(l.actionApply),
-        ),
-      ];
+    TextButton(
+      onPressed: () => Navigator.pop(context),
+      child: Text(l.actionCancel),
+    ),
+    FilledButton(onPressed: _apply, child: Text(l.actionApply)),
+  ];
 
   /// Filter + sort sections shared by both shells (the shells provide
   /// the scrolling).
@@ -496,247 +498,249 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
     final accountOptions = _accountOptions();
     final categoryOptions = _categoryOptions();
     return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _sectionLabel(l.txDateRange),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: TxDateRange.values.map((r) {
-                  final selected = _draft.dateRange == r;
-                  return FilterChip(
-                    label: Text(r.labelFor(context)),
-                    selected: selected,
-                    onSelected: (_) async {
-                      if (r == TxDateRange.custom) {
-                        final picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime.now(),
-                          initialDateRange: (_draft.customStart != null &&
-                                  _draft.customEnd != null)
-                              ? DateTimeRange(
-                                  start: _draft.customStart!,
-                                  end: _draft.customEnd!,
-                                )
-                              : null,
-                        );
-                        if (picked != null) {
-                          setState(() => _draft = _draft.copyWith(
-                                dateRange: TxDateRange.custom,
-                                customStart: picked.start,
-                                customEnd: picked.end,
-                              ));
-                        }
-                      } else {
-                        setState(() => _draft = _draft.copyWith(
-                              dateRange: r,
-                              clearCustomDates: r == TxDateRange.all,
-                            ));
-                      }
-                    },
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _sectionLabel(l.txDateRange),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: TxDateRange.values.map((r) {
+            final selected = _draft.dateRange == r;
+            return FilterChip(
+              label: Text(r.labelFor(context)),
+              selected: selected,
+              onSelected: (_) async {
+                if (r == TxDateRange.custom) {
+                  final picked = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime.now(),
+                    initialDateRange:
+                        (_draft.customStart != null && _draft.customEnd != null)
+                        ? DateTimeRange(
+                            start: _draft.customStart!,
+                            end: _draft.customEnd!,
+                          )
+                        : null,
                   );
-                }).toList(),
+                  if (picked != null) {
+                    setState(
+                      () => _draft = _draft.copyWith(
+                        dateRange: TxDateRange.custom,
+                        customStart: picked.start,
+                        customEnd: picked.end,
+                      ),
+                    );
+                  }
+                } else {
+                  setState(
+                    () => _draft = _draft.copyWith(
+                      dateRange: r,
+                      clearCustomDates: r == TxDateRange.all,
+                    ),
+                  );
+                }
+              },
+            );
+          }).toList(),
+        ),
+        if (_draft.dateRange == TxDateRange.custom &&
+            _draft.customStart != null &&
+            _draft.customEnd != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            '${DateFormat('MMM d, y').format(_draft.customStart!)} – '
+            '${DateFormat('MMM d, y').format(_draft.customEnd!)}',
+            style: TextStyle(color: context.textMuted, fontSize: 12),
+          ),
+        ],
+        const SizedBox(height: 18),
+        _sectionLabel(l.txFlow),
+        const SizedBox(height: 6),
+        SegmentedButton<TxFlow>(
+          segments: [
+            ButtonSegment(value: TxFlow.all, label: Text(l.txFlowAll)),
+            ButtonSegment(value: TxFlow.expense, label: Text(l.txFlowExpense)),
+            ButtonSegment(value: TxFlow.income, label: Text(l.txFlowIncome)),
+          ],
+          selected: {_draft.flow},
+          onSelectionChanged: (s) =>
+              setState(() => _draft = _draft.copyWith(flow: s.first)),
+        ),
+        const SizedBox(height: 16),
+        _sectionLabel(l.txStatus),
+        const SizedBox(height: 6),
+        SegmentedButton<TxStatus>(
+          segments: [
+            ButtonSegment(value: TxStatus.all, label: Text(l.txStatusAll)),
+            ButtonSegment(
+              value: TxStatus.settled,
+              label: Text(l.txStatusSettled),
+            ),
+            ButtonSegment(
+              value: TxStatus.pending,
+              label: Text(l.txStatusPending),
+            ),
+          ],
+          selected: {_draft.status},
+          onSelectionChanged: (s) =>
+              setState(() => _draft = _draft.copyWith(status: s.first)),
+        ),
+        const SizedBox(height: 18),
+        _sectionLabel(l.txAmount),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _minAmountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.,$]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: l.txAmountMin,
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                ),
+                // setState so the Reset button's visibility tracks
+                // the amount fields, not just the chip draft.
+                onChanged: (_) => setState(() {}),
               ),
-              if (_draft.dateRange == TxDateRange.custom &&
-                  _draft.customStart != null &&
-                  _draft.customEnd != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '${DateFormat('MMM d, y').format(_draft.customStart!)} – '
-                  '${DateFormat('MMM d, y').format(_draft.customEnd!)}',
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Text('–'),
+            ),
+            Expanded(
+              child: TextField(
+                controller: _maxAmountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.,$]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: l.txAmountMax,
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          l.txAmountFilterHelp,
+          style: TextStyle(color: context.textSubtle, fontSize: 11),
+        ),
+        if (accountOptions.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          _sectionLabel(l.txAccounts),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: accountOptions.map((e) {
+              final selected = _draft.accountIds.contains(e.key);
+              return FilterChip(
+                label: Text(e.value),
+                selected: selected,
+                onSelected: (v) {
+                  final next = {..._draft.accountIds};
+                  if (v) {
+                    next.add(e.key);
+                  } else {
+                    next.remove(e.key);
+                  }
+                  setState(() => _draft = _draft.copyWith(accountIds: next));
+                },
+              );
+            }).toList(),
+          ),
+        ],
+        if (categoryOptions.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          _sectionLabel(l.txCategories),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: categoryOptions.map((c) {
+              final selected = _draft.categories.contains(c);
+              return FilterChip(
+                label: Text(c),
+                selected: selected,
+                onSelected: (v) {
+                  final next = {..._draft.categories};
+                  if (v) {
+                    next.add(c);
+                  } else {
+                    next.remove(c);
+                  }
+                  setState(() => _draft = _draft.copyWith(categories: next));
+                },
+              );
+            }).toList(),
+          ),
+        ],
+        if (_loadingHistory) ...[
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l.txFilterLoadingHistory,
                   style: TextStyle(color: context.textMuted, fontSize: 12),
-                ),
-              ],
-              const SizedBox(height: 18),
-              _sectionLabel(l.txFlow),
-              const SizedBox(height: 6),
-              SegmentedButton<TxFlow>(
-                segments: [
-                  ButtonSegment(value: TxFlow.all, label: Text(l.txFlowAll)),
-                  ButtonSegment(
-                      value: TxFlow.expense, label: Text(l.txFlowExpense)),
-                  ButtonSegment(
-                      value: TxFlow.income, label: Text(l.txFlowIncome)),
-                ],
-                selected: {_draft.flow},
-                onSelectionChanged: (s) =>
-                    setState(() => _draft = _draft.copyWith(flow: s.first)),
-              ),
-              const SizedBox(height: 16),
-              _sectionLabel(l.txStatus),
-              const SizedBox(height: 6),
-              SegmentedButton<TxStatus>(
-                segments: [
-                  ButtonSegment(value: TxStatus.all, label: Text(l.txStatusAll)),
-                  ButtonSegment(
-                      value: TxStatus.settled, label: Text(l.txStatusSettled)),
-                  ButtonSegment(
-                      value: TxStatus.pending, label: Text(l.txStatusPending)),
-                ],
-                selected: {_draft.status},
-                onSelectionChanged: (s) =>
-                    setState(() => _draft = _draft.copyWith(status: s.first)),
-              ),
-              const SizedBox(height: 18),
-              _sectionLabel(l.txAmount),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _minAmountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'[\d.,$]')),
-                      ],
-                      decoration: InputDecoration(
-                        labelText: l.txAmountMin,
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                      ),
-                      // setState so the Reset button's visibility tracks
-                      // the amount fields, not just the chip draft.
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('–'),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _maxAmountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'[\d.,$]')),
-                      ],
-                      decoration: InputDecoration(
-                        labelText: l.txAmountMax,
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                l.txAmountFilterHelp,
-                style: TextStyle(color: context.textSubtle, fontSize: 11),
-              ),
-              if (accountOptions.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                _sectionLabel(l.txAccounts),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: accountOptions.map((e) {
-                    final selected = _draft.accountIds.contains(e.key);
-                    return FilterChip(
-                      label: Text(e.value),
-                      selected: selected,
-                      onSelected: (v) {
-                        final next = {..._draft.accountIds};
-                        if (v) {
-                          next.add(e.key);
-                        } else {
-                          next.remove(e.key);
-                        }
-                        setState(() =>
-                            _draft = _draft.copyWith(accountIds: next));
-                      },
-                    );
-                  }).toList(),
-                ),
-              ],
-              if (categoryOptions.isNotEmpty) ...[
-                const SizedBox(height: 18),
-                _sectionLabel(l.txCategories),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: categoryOptions.map((c) {
-                    final selected = _draft.categories.contains(c);
-                    return FilterChip(
-                      label: Text(c),
-                      selected: selected,
-                      onSelected: (v) {
-                        final next = {..._draft.categories};
-                        if (v) {
-                          next.add(c);
-                        } else {
-                          next.remove(c);
-                        }
-                        setState(() =>
-                            _draft = _draft.copyWith(categories: next));
-                      },
-                    );
-                  }).toList(),
-                ),
-              ],
-              if (_loadingHistory) ...[
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        l.txFilterLoadingHistory,
-                        style:
-                            TextStyle(color: context.textMuted, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 18),
-              _sectionLabel(l.txSortBy),
-              const SizedBox(height: 2),
-              RadioGroup<TxSort>(
-                groupValue: _draftSort,
-                onChanged: (v) => setState(
-                    () => _draftSort = v ?? TxSort.dateNewest),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final mode in TxSort.values)
-                      RadioListTile<TxSort>(
-                        value: mode,
-                        // dense keeps each option at the 48dp minimum
-                        // touch target instead of the 56dp default.
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(txSortLabel(l, mode)),
-                      ),
-                  ],
                 ),
               ),
             ],
-          );
+          ),
+        ],
+        const SizedBox(height: 18),
+        _sectionLabel(l.txSortBy),
+        const SizedBox(height: 2),
+        RadioGroup<TxSort>(
+          groupValue: _draftSort,
+          onChanged: (v) => setState(() => _draftSort = v ?? TxSort.dateNewest),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final mode in TxSort.values)
+                RadioListTile<TxSort>(
+                  value: mode,
+                  // dense keeps each option at the 48dp minimum
+                  // touch target instead of the 56dp default.
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(txSortLabel(l, mode)),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _sectionLabel(String text) => Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: context.textSubtle,
-          letterSpacing: 0.8,
-        ),
-      );
+    text.toUpperCase(),
+    style: TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: context.textSubtle,
+      letterSpacing: 0.8,
+    ),
+  );
 }

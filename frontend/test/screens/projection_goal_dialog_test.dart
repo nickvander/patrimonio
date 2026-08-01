@@ -21,9 +21,14 @@ void main() {
   }
 
   Future<void> enterGoal(
-      WidgetTester tester, String amount, String year) async {
+    WidgetTester tester,
+    String amount,
+    String year,
+  ) async {
     final fields = find.descendant(
-        of: find.byType(AlertDialog), matching: find.byType(TextField));
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
     expect(fields, findsNWidgets(2));
     await tester.enterText(fields.at(0), amount);
     await tester.enterText(fields.at(1), year);
@@ -31,8 +36,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a past year blocks the save with an inline error',
-      (tester) async {
+  testWidgets('a past year blocks the save with an inline error', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();
@@ -49,8 +55,9 @@ void main() {
     expect(find.textContaining('Hit '), findsNothing);
   });
 
-  testWidgets('an absurd amount blocks the save with an inline error',
-      (tester) async {
+  testWidgets('an absurd amount blocks the save with an inline error', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();
@@ -73,13 +80,16 @@ void main() {
     );
   });
 
-  testWidgets('valid input saves the goal and closes the dialog',
-      (tester) async {
+  testWidgets('valid input saves the goal and closes the dialog', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
 
     await openGoalDialog(tester);
@@ -90,18 +100,21 @@ void main() {
       find.textContaining('Hit \$1,000,000 by ${nowYear + 4}'),
       findsOneWidget,
     );
-    expect(writes['net_worth_goal'],
-        {'amount_usd': 1000000.0, 'year': nowYear + 4});
+    expect(writes['net_worth_goal'], {
+      'amount_usd': 1000000.0,
+      'year': nowYear + 4,
+    });
     // No failure snackbar.
     expect(find.text("Couldn't save your goal"), findsNothing);
   });
 
-  testWidgets('a failing setting write surfaces the snackbar',
-      (tester) async {
+  testWidgets('a failing setting write surfaces the snackbar', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      settingWriter: (key, value) async => throw Exception('offline'),
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingWriter: (key, value) async => throw Exception('offline'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await openGoalDialog(tester);

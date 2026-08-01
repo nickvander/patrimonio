@@ -112,16 +112,21 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   // account-type VALUES (which are data sent to the API) stay fixed.
   static const _typeGroups = <(String, List<String>)>[
     ('cashBanking', ['Checking', 'Savings', 'CD']),
-    ('investments',
-        ['Brokerage', 'Stock plan', 'Investment', 'Bonds', 'IRA', '401k', 'HSA']),
+    (
+      'investments',
+      ['Brokerage', 'Stock plan', 'Investment', 'Bonds', 'IRA', '401k', 'HSA'],
+    ),
     ('crypto', ['Crypto']),
-    ('realAssets', [
-      'Real Estate',
-      'Vehicle',
-      'Private Equity',
-      'Collectibles',
-      'Other Asset',
-    ]),
+    (
+      'realAssets',
+      [
+        'Real Estate',
+        'Vehicle',
+        'Private Equity',
+        'Collectibles',
+        'Other Asset',
+      ],
+    ),
     ('liabilities', ['Credit Card', 'Loan', 'Mortgage', 'Other Liability']),
   ];
 
@@ -243,13 +248,15 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                         ),
                       ),
                     ),
-                    ...types.map((t) => DropdownMenuItem(
-                          value: t,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 12),
-                            child: Text(_typeLabel(l, t)),
-                          ),
-                        )),
+                    ...types.map(
+                      (t) => DropdownMenuItem(
+                        value: t,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Text(_typeLabel(l, t)),
+                        ),
+                      ),
+                    ),
                   ],
                 ],
                 onChanged: (v) {
@@ -305,8 +312,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(labelText: l.dlgAccountClabe),
                   validator: (v) {
-                    final digits =
-                        (v ?? '').replaceAll(RegExp(r'\D'), '');
+                    final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
                     // Optional, but if present must be a full 18-digit CLABE.
                     if (digits.isEmpty || digits.length == 18) return null;
                     return l.dlgAccountClabeInvalid;
@@ -365,7 +371,14 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       if (!mounted) return;
       final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.dlgAccountCreateError(e.toString().replaceFirst('Exception: ', ''))), backgroundColor: context.negative),
+        SnackBar(
+          content: Text(
+            l.dlgAccountCreateError(
+              e.toString().replaceFirst('Exception: ', ''),
+            ),
+          ),
+          backgroundColor: context.negative,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

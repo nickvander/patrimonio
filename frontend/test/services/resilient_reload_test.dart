@@ -31,26 +31,32 @@ void main() {
       expect(errors, hasLength(1), reason: 'caller must be able to retry');
     });
 
-    test('one failing read does not abort the others in a Future.wait',
-        () async {
-      // The exact shape of _loadAllData's fan-out: the failing read is the
-      // reason the whole refresh used to be discarded.
-      var degraded = false;
-      final results = await Future.wait([
-        keepPreviousOnError(Future.value(<dynamic>['fresh txs']),
-            previous: <dynamic>['old txs'], silent: true),
-        keepPreviousOnError(
-          Future<List<dynamic>>.error(Exception('503')),
-          previous: <dynamic>['old holdings'],
-          silent: true,
-          onError: (_) => degraded = true,
-        ),
-      ]);
-      expect(results[0], <dynamic>['fresh txs'],
-          reason: 'the healthy read still updates the screen');
-      expect(results[1], <dynamic>['old holdings']);
-      expect(degraded, isTrue);
-    });
+    test(
+      'one failing read does not abort the others in a Future.wait',
+      () async {
+        // The exact shape of _loadAllData's fan-out: the failing read is the
+        // reason the whole refresh used to be discarded.
+        var degraded = false;
+        final results = await Future.wait([
+          keepPreviousOnError(
+            Future.value(<dynamic>['fresh txs']),
+            previous: <dynamic>['old txs'],
+            silent: true,
+          ),
+          keepPreviousOnError(
+            Future<List<dynamic>>.error(Exception('503')),
+            previous: <dynamic>['old holdings'],
+            silent: true,
+            onError: (_) => degraded = true,
+          ),
+        ]);
+        expect(results[0], <dynamic>[
+          'fresh txs',
+        ], reason: 'the healthy read still updates the screen');
+        expect(results[1], <dynamic>['old holdings']);
+        expect(degraded, isTrue);
+      },
+    );
 
     test('rethrows on an explicit (non-silent) load', () async {
       // The user is waiting on this one — it must reach the error screen.

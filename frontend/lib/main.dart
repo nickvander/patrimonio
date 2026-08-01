@@ -13,8 +13,9 @@ import 'utils/app_locale.dart';
 /// Notifies the app when the user flips the theme. Held at module scope so
 /// the AppBar toggle can call `themeModeNotifier.value = ...` from
 /// anywhere without threading a callback through every screen.
-final ValueNotifier<ThemeMode> themeModeNotifier =
-    ValueNotifier(_loadInitialThemeMode());
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+  _loadInitialThemeMode(),
+);
 
 // localeNotifier now lives in utils/app_locale.dart (web-free) so pure-Dart
 // code can read the active locale; main() seeds it below.
@@ -130,9 +131,7 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
         color: BrandPalette.cardSurface(b),
         elevation: 4,
         shadowColor: Colors.black26,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       // AppBar foreground is set explicitly so icon buttons in the
       // actions slot are guaranteed-visible. Without `foregroundColor`,
@@ -188,9 +187,7 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
         // separation; elevation 1 / black12 was too timid.
         elevation: 2,
         shadowColor: Colors.black26,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       // Match the dark theme's explicit icon-theme treatment so the
       // Security and Sign-out actions stay readable in both modes —
@@ -208,8 +205,9 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
         actionsIconTheme: IconThemeData(color: Color(0xFF1C2421)),
       ),
       dataTableTheme: DataTableThemeData(
-        headingRowColor:
-            WidgetStateProperty.all(BrandPalette.elevatedSurface(b)),
+        headingRowColor: WidgetStateProperty.all(
+          BrandPalette.elevatedSurface(b),
+        ),
         dataRowColor: WidgetStateProperty.all(Colors.transparent),
       ),
     );

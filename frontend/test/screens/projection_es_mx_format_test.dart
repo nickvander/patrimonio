@@ -19,8 +19,9 @@ void main() {
     await syncIntlLocale(null);
   });
 
-  testWidgets('en: Fisher helper uses period decimals; money is \$-shaped',
-      (tester) async {
+  testWidgets('en: Fisher helper uses period decimals; money is \$-shaped', (
+    tester,
+  ) async {
     await syncIntlLocale(const Locale('en'));
     setTestSize(tester, const Size(1300, 1800));
     await tester.pumpWidget(buildProjectionHost(locale: const Locale('en')));
@@ -37,10 +38,12 @@ void main() {
     expect(find.textContaining('8.5'), findsWidgets);
 
     // Y-axis ticks are compact *currency* (was a bare "1.5M").
-    final tick = find.byWidgetPredicate((w) =>
-        w is Text &&
-        w.data != null &&
-        RegExp(r'^\$[\d.,]+[KM]$').hasMatch(normSpace(w.data!)));
+    final tick = find.byWidgetPredicate(
+      (w) =>
+          w is Text &&
+          w.data != null &&
+          RegExp(r'^\$[\d.,]+[KM]$').hasMatch(normSpace(w.data!)),
+    );
     expect(tick, findsWidgets);
   });
 
@@ -65,18 +68,21 @@ void main() {
     // Money is Mexico-style: the FI number reads $1,000,000 — never the
     // Spain-style 1.000.000 $.
     expect(find.text(r'$1,000,000'), findsWidgets);
-    final spainStyle = find.byWidgetPredicate((w) =>
-        w is Text && w.data != null && w.data!.contains('1.000.000'));
+    final spainStyle = find.byWidgetPredicate(
+      (w) => w is Text && w.data != null && w.data!.contains('1.000.000'),
+    );
     expect(spainStyle, findsNothing);
 
     // Y-axis ticks carry the currency in es too — under es the host's
     // injected format resolves to MXN, and the house compactMoney renders
     // the "MXN " prefix (never intl's bare local "$", which read as USD)
     // with es_MX compact magnitudes ("MXN 1.5 M").
-    final tick = find.byWidgetPredicate((w) =>
-        w is Text &&
-        w.data != null &&
-        RegExp(r'^MXN [\d.,]+\s?[kKM]$').hasMatch(normSpace(w.data!)));
+    final tick = find.byWidgetPredicate(
+      (w) =>
+          w is Text &&
+          w.data != null &&
+          RegExp(r'^MXN [\d.,]+\s?[kKM]$').hasMatch(normSpace(w.data!)),
+    );
     expect(tick, findsWidgets);
 
     // The milestone tile title is the unified "Número FI" (was "Número IF").

@@ -41,7 +41,9 @@ void main() {
     // ensureVisible pins the anchor text itself to y=0; back off enough to
     // reveal the full tile chrome around it (its card padding plus the
     // neighboring tile's slightly-higher title).
-    position.jumpTo((position.pixels - 60).clamp(0.0, position.maxScrollExtent));
+    position.jumpTo(
+      (position.pixels - 60).clamp(0.0, position.maxScrollExtent),
+    );
     await tester.pumpAndSettle();
 
     // All four tile titles visible in the viewport ('FI number' also
@@ -56,8 +58,16 @@ void main() {
       final f = find.text(title).first;
       expect(f, findsOneWidget, reason: 'missing tile title: $title');
       final rect = tester.getRect(f);
-      expect(rect.top, greaterThanOrEqualTo(0), reason: '$title above viewport');
-      expect(rect.bottom, lessThanOrEqualTo(844), reason: '$title below viewport');
+      expect(
+        rect.top,
+        greaterThanOrEqualTo(0),
+        reason: '$title above viewport',
+      );
+      expect(
+        rect.bottom,
+        lessThanOrEqualTo(844),
+        reason: '$title below viewport',
+      );
     }
 
     // No blank void: at max scroll extent the page still ends with real
@@ -114,10 +124,12 @@ void main() {
     // value must render on a single line (a wrapped "$1,000,\n000" was the
     // 720-800px-band defect).
     final tile = find
-        .ancestor(of: find.text('Target net worth'), matching: find.byType(Card))
+        .ancestor(
+          of: find.text('Target net worth'),
+          matching: find.byType(Card),
+        )
         .first;
-    final value =
-        find.descendant(of: tile, matching: find.text(r'$1,000,000'));
+    final value = find.descendant(of: tile, matching: find.text(r'$1,000,000'));
     expect(value, findsOneWidget);
     final paragraph = tester.renderObject<RenderParagraph>(value);
     // A single line of the 20px tile-value style is ~23px; two lines ~46.
@@ -126,18 +138,25 @@ void main() {
     // Stacked 2×2: the Success-rate and FI-number tiles share a row (same
     // vertical band), and the Years-to-FI tile sits on the next row.
     final successTop = tester
-        .getTopLeft(find
-            .ancestor(
-                of: find.text('Success rate'), matching: find.byType(Card))
-            .first)
+        .getTopLeft(
+          find
+              .ancestor(
+                of: find.text('Success rate'),
+                matching: find.byType(Card),
+              )
+              .first,
+        )
         .dy;
     final fiTop = tester.getTopLeft(tile).dy;
     final yearsTop = tester
-        .getTopLeft(find
-            .ancestor(
+        .getTopLeft(
+          find
+              .ancestor(
                 of: find.text('Years to FI').last,
-                matching: find.byType(Card))
-            .first)
+                matching: find.byType(Card),
+              )
+              .first,
+        )
         .dy;
     expect((successTop - fiTop).abs(), lessThan(1.0));
     expect(yearsTop, greaterThan(successTop + 100));
@@ -147,7 +166,9 @@ void main() {
 
   // F9: the desktop controls column shows an always-visible scrollbar so the
   // fold is discoverable.
-  testWidgets('desktop controls column has a visible scrollbar', (tester) async {
+  testWidgets('desktop controls column has a visible scrollbar', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1440, 700));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();
@@ -156,7 +177,9 @@ void main() {
         .ancestor(of: find.text('Monthly savings'), matching: find.byType(Card))
         .first;
     final scrollbar = find.descendant(
-        of: controlsCard, matching: find.byType(Scrollbar));
+      of: controlsCard,
+      matching: find.byType(Scrollbar),
+    );
     expect(scrollbar, findsOneWidget);
     expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
   });

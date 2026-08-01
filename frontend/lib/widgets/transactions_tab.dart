@@ -156,43 +156,57 @@ class TransactionsTab extends StatefulWidget {
   final NumberFormat currencyFormat;
   final String targetCurrency;
   final double usdMxnRate;
-  final Function(String id,
-      {String? userCategory,
-      String? userNotes,
-      String? userDescription,
-      String? accountId})? onUpdate;
+  final Function(
+    String id, {
+    String? userCategory,
+    String? userNotes,
+    String? userDescription,
+    String? accountId,
+  })?
+  onUpdate;
+
   /// Bulk variant: updates many transactions in ONE request (the batch
   /// endpoint) and refreshes the dashboard ONCE. The old path looped the
   /// per-id [onUpdate], each of which triggered a full dashboard reload —
   /// selecting N rows fired N writes × a full refetch each. Falls back to
   /// the per-id loop when null. Returns the number actually updated.
-  final Future<int> Function(List<String> ids,
-      {String? userCategory,
-      String? accountId,
-      String? userDescription})? onBulkUpdate;
+  final Future<int> Function(
+    List<String> ids, {
+    String? userCategory,
+    String? accountId,
+    String? userDescription,
+  })?
+  onBulkUpdate;
+
   /// Bulk delete: deletes every id then refreshes the dashboard once.
   /// Wired by the dashboard; null disables the bulk-delete action.
   final Future<void> Function(List<String> ids)? onBulkDelete;
   final Future<void> Function(String id)? onDelete;
+
   /// Opens the Add-account dialog directly (used by the no-data empty
   /// state's "Add an account" button) so a fresh user isn't bounced to
   /// Settings to hunt for it. Wired by the dashboard.
   final VoidCallback? onAddAccount;
+
   /// ApiService for the "Add transaction" button + CSV export URL.
   /// Optional so consumers that don't need those actions can omit it.
   final ApiService? apiService;
+
   /// Account preselected in the Add-transaction dialog. Account-scoped
   /// hosts (the per-account panel) pass their account id so the dialog
   /// opens on the account the user is already looking at.
   final String? addTransactionAccountId;
+
   /// Force the "this export covers ALL transactions" confirmation on CSV
   /// export even when no search/filter is active. The backend export has
   /// no account parameter, so an account-scoped host shows a list that is
   /// implicitly filtered — exporting silently would be dishonest there.
   final bool csvExportConfirmAlways;
+
   /// Invoked after a manual transaction has been added so the parent
   /// can refresh its transaction list.
   final VoidCallback? onTransactionAdded;
+
   /// Optional pagination hook. When provided, a "Load more" button shows
   /// under the list and fires the callback. The parent is expected to
   /// append the next page to [transactions] and rebuild. [limit] overrides
@@ -200,17 +214,21 @@ class TransactionsTab extends StatefulWidget {
   /// backend's per-request cap so it finishes in a handful of round-trips;
   /// the "Load more" button omits it and gets the ordinary page.
   final Future<void> Function({int? limit})? onLoadMore;
+
   /// Whether the parent thinks there are more transactions available.
   /// When false the "Load more" button is hidden.
   final bool hasMore;
+
   /// Cmd-K deep-link seed. When this changes the tab's search query is
   /// pre-populated so the row the user picked from the palette is
   /// surfaced immediately.
   final String? searchOverride;
+
   /// Cmd-K row-highlight target. When non-null the matching tx renders
   /// with a transient accent fill so the exact row the user picked is
   /// obvious even when other rows share the same description.
   final String? highlightedTxId;
+
   /// Date window from a chart-bar tap (cash-flow chart). When non-null
   /// the filter dialog opens pre-seeded to a custom range and the chip
   /// strip shows the picked window. The widget self-applies on the
@@ -218,34 +236,47 @@ class TransactionsTab extends StatefulWidget {
   /// subsequent dashboard rebuilds with the same seed so manual edits
   /// stick.
   final ({DateTime start, DateTime end})? dateSeed;
+
   /// Fires after the widget has consumed [dateSeed] so the dashboard
   /// can clear its own copy and stop re-applying it on rebuilds.
   final VoidCallback? onDateSeedConsumed;
+
   /// Detected cross-currency cash transfers — indexed by source/dest
   /// transaction id in the detail modal to show "Linked to <leg>".
   /// Defaults to empty so older call sites compile without changes.
   final List<dynamic> fxTransfers;
+
   /// User-triggered scan for FX transfer pairs. Fires from the detail
   /// modal's "Scan for transfers" action. Null = hide that action.
   final Future<void> Function()? onDetectFxTransfers;
+
   /// Mark an auto-detected link as user-confirmed.
   final Future<void> Function(String id)? onConfirmFxTransfer;
+
   /// Remove a link entirely. The two underlying transactions stay put.
   final Future<void> Function(String id)? onUnlinkFxTransfer;
+
   /// Split a parent into children. `splits` is a list of maps
   /// `{description, amount, [category]}`. Server validates the sum
   /// matches the parent and rejects with a useful error otherwise.
-  final Future<void> Function(String parentId, List<Map<String, dynamic>> splits)?
-      onSplitTransaction;
+  final Future<void> Function(
+    String parentId,
+    List<Map<String, dynamic>> splits,
+  )?
+  onSplitTransaction;
+
   /// Un-split: delete every child of the given parent. Used from the
   /// detail modal of a split-child (which knows its `parent_id`).
   final Future<void> Function(String parentId)? onUnsplitTransaction;
+
   /// Atomically replace the children of a split parent (used by the
   /// Edit split flow). Same payload shape as `onSplitTransaction`.
   final Future<void> Function(
     String parentId,
     List<Map<String, dynamic>> splits,
-  )? onReplaceSplits;
+  )?
+  onReplaceSplits;
+
   /// Single-account host mode (the per-account panel). Every row in
   /// that panel belongs to the same account, so the meta line drops
   /// the redundant account name and the row instead shows a running
@@ -254,21 +285,25 @@ class TransactionsTab extends StatefulWidget {
   /// [runningBalanceAnchor] — see [runningBalancesFor]). The dashboard
   /// (multi-account) leaves this false: account name stays, no balance.
   final bool singleAccountContext;
+
   /// The account's current balance in its NATIVE currency — the same
   /// figure the panel header shows. Anchors the estimated running
   /// balances for rows without a persisted `balance_after`. Null
   /// disables estimation (persisted values still render).
   final double? runningBalanceAnchor;
+
   /// "Create loan from this transaction" — shown in the detail panel for
   /// an outflow. The dashboard implements this by opening the prefilled
   /// Add-loan dialog (principal = |amount|, currency, date, borrower from
   /// the tx, disbursement linked to this tx). Null hides the action.
   final void Function(dynamic tx)? onCreateLoanFromTx;
+
   /// "Make recurring" — shown in the detail panel's overflow menu. The
   /// dashboard opens the Add-recurring-rule dialog pre-filled from the
   /// tx (account, description, amount, currency, category). Null hides
   /// the action.
   final void Function(dynamic tx)? onMakeRecurring;
+
   /// The host renders its own Add-transaction affordance (the dashboard's
   /// compact-layout FAB, wired to [TransactionsTabState.openAddDialog] via
   /// a GlobalKey). When true the toolbar hides its inline '+' and the
@@ -505,8 +540,7 @@ class TransactionsTabState extends State<TransactionsTab> {
     if (id == null || id.isEmpty) return;
     setState(() {
       _inlineEditingTxId = id;
-      _inlineEditController.text =
-          (tx['user_description'] ?? '').toString();
+      _inlineEditController.text = (tx['user_description'] ?? '').toString();
     });
     // requestFocus after the rebuild so the new TextField is mounted.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -546,9 +580,9 @@ class TransactionsTabState extends State<TransactionsTab> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.txRenameFailed(e.toString()))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.txRenameFailed(e.toString()))));
     }
   }
 
@@ -677,7 +711,8 @@ class TransactionsTabState extends State<TransactionsTab> {
     }
   }
 
-  double _absAmount(dynamic tx) => ((tx['amount'] as num?)?.toDouble() ?? 0).abs();
+  double _absAmount(dynamic tx) =>
+      ((tx['amount'] as num?)?.toDouble() ?? 0).abs();
 
   /// Lowercased label used to order the Merchant (A–Z) sort — the same
   /// display label the row shows, so the alphabetisation matches what
@@ -708,8 +743,10 @@ class TransactionsTabState extends State<TransactionsTab> {
     // up to its first await, so a body that bails out immediately would
     // otherwise null the field BEFORE this assignment and leave a stale
     // completed future memoized forever.
-    final run = _runHistoryCascade(onLoadMore, ignoreFilters)
-        .whenComplete(() => _historyCascade = null);
+    final run = _runHistoryCascade(
+      onLoadMore,
+      ignoreFilters,
+    ).whenComplete(() => _historyCascade = null);
     _historyCascade = run;
     return run;
   }
@@ -768,19 +805,20 @@ class TransactionsTabState extends State<TransactionsTab> {
     // This kicks the same memoized cascade the filters themselves use, so
     // reopening the dialog when history is already fully loaded (hasMore
     // false) costs nothing and shows no loading affordance.
-    final Future<void>? historyLoad =
-        widget.hasMore ? _loadAllForFilter(ignoreFilters: true) : null;
+    final Future<void>? historyLoad = widget.hasMore
+        ? _loadAllForFilter(ignoreFilters: true)
+        : null;
     Widget panel({required bool asSheet}) => TxFiltersDialog(
-          initial: _filters,
-          initialSort: _sortMode,
-          asSheet: asSheet,
-          transactions: widget.transactions,
-          accounts: widget.accounts,
-          historyLoad: historyLoad,
-          // Live getter: when the cascade completes the panel re-reads the
-          // (by then fully loaded) list so its options refresh in place.
-          liveTransactions: () => widget.transactions,
-        );
+      initial: _filters,
+      initialSort: _sortMode,
+      asSheet: asSheet,
+      transactions: widget.transactions,
+      accounts: widget.accounts,
+      historyLoad: historyLoad,
+      // Live getter: when the cascade completes the panel re-reads the
+      // (by then fully loaded) list so its options refresh in place.
+      liveTransactions: () => widget.transactions,
+    );
     // Narrow hosts get a modal bottom sheet (thumb-reachable, standard
     // mobile idiom); wide keeps the AlertDialog. Both pop the same
     // (filters, sort) record from the shared panel body.
@@ -825,17 +863,24 @@ class TransactionsTabState extends State<TransactionsTab> {
     final l = AppLocalizations.of(context);
     final chips = <Widget>[];
     if (_filters.flow != TxFlow.all) {
-      chips.add(_filterChip(
-        _filters.flow == TxFlow.expense ? l.txFlowExpense : l.txFlowIncome,
-        () => setState(() => _filters = _filters.copyWith(flow: TxFlow.all)),
-      ));
+      chips.add(
+        _filterChip(
+          _filters.flow == TxFlow.expense ? l.txFlowExpense : l.txFlowIncome,
+          () => setState(() => _filters = _filters.copyWith(flow: TxFlow.all)),
+        ),
+      );
     }
     if (_filters.status != TxStatus.all) {
-      chips.add(_filterChip(
-        _filters.status == TxStatus.pending ? l.txStatusPending : l.txStatusSettled,
-        () => setState(
-            () => _filters = _filters.copyWith(status: TxStatus.all)),
-      ));
+      chips.add(
+        _filterChip(
+          _filters.status == TxStatus.pending
+              ? l.txStatusPending
+              : l.txStatusSettled,
+          () => setState(
+            () => _filters = _filters.copyWith(status: TxStatus.all),
+          ),
+        ),
+      );
     }
     if (_filters.accountIds.isNotEmpty) {
       final byId = <String, String>{};
@@ -850,19 +895,24 @@ class TransactionsTabState extends State<TransactionsTab> {
       final label = names.length == 1
           ? names.first
           : '${names.first} +${names.length - 1}';
-      chips.add(_filterChip(
-        label,
-        () => setState(() => _filters = _filters.copyWith(accountIds: {})),
-      ));
+      chips.add(
+        _filterChip(
+          label,
+          () => setState(() => _filters = _filters.copyWith(accountIds: {})),
+        ),
+      );
     }
     if (_filters.categories.isNotEmpty) {
       final cats = _filters.categories.toList();
-      final label =
-          cats.length == 1 ? cats.first : '${cats.first} +${cats.length - 1}';
-      chips.add(_filterChip(
-        label,
-        () => setState(() => _filters = _filters.copyWith(categories: {})),
-      ));
+      final label = cats.length == 1
+          ? cats.first
+          : '${cats.first} +${cats.length - 1}';
+      chips.add(
+        _filterChip(
+          label,
+          () => setState(() => _filters = _filters.copyWith(categories: {})),
+        ),
+      );
     }
     if (_filters.dateRange != TxDateRange.all) {
       // For the custom range, show the actual start–end dates so the chip
@@ -876,13 +926,17 @@ class TransactionsTabState extends State<TransactionsTab> {
       } else {
         label = _filters.dateRange.labelFor(context);
       }
-      chips.add(_filterChip(
-        label,
-        () => setState(() => _filters = _filters.copyWith(
+      chips.add(
+        _filterChip(
+          label,
+          () => setState(
+            () => _filters = _filters.copyWith(
               dateRange: TxDateRange.all,
               clearCustomDates: true,
-            )),
-      ));
+            ),
+          ),
+        ),
+      );
     }
     if (_filters.minAmount != null || _filters.maxAmount != null) {
       // "450–1,000"-style window, "≥ 450" / "≤ 450" when one end is
@@ -898,31 +952,38 @@ class TransactionsTabState extends State<TransactionsTab> {
       } else {
         label = '≤ ${formatFilterAmount(hi!)}';
       }
-      chips.add(_filterChip(
-        label,
-        () => setState(() => _filters = _filters.copyWith(clearAmounts: true)),
-      ));
+      chips.add(
+        _filterChip(
+          label,
+          () =>
+              setState(() => _filters = _filters.copyWith(clearAmounts: true)),
+        ),
+      );
     }
     // Sort isn't a filter, but a non-default order changes what the list
     // shows just as visibly (headers disappear, rows re-order) — surface
     // it in the same strip so it's one tap to see and one tap to undo.
     if (_sortMode != TxSort.dateNewest) {
-      chips.add(_filterChip(
-        txSortLabel(l, _sortMode),
-        () => setState(() => _sortMode = TxSort.dateNewest),
-      ));
+      chips.add(
+        _filterChip(
+          txSortLabel(l, _sortMode),
+          () => setState(() => _sortMode = TxSort.dateNewest),
+        ),
+      );
     }
-    chips.add(TextButton(
-      onPressed: () => setState(() {
-        _filters = TxFilters.empty;
-        _sortMode = TxSort.dateNewest;
-      }),
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        minimumSize: const Size(0, 28),
+    chips.add(
+      TextButton(
+        onPressed: () => setState(() {
+          _filters = TxFilters.empty;
+          _sortMode = TxSort.dateNewest;
+        }),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(0, 28),
+        ),
+        child: Text(l.txClearAll),
       ),
-      child: Text(l.txClearAll),
-    ));
+    );
     // On a phone the horizontal scroll buried the right-most chips and
     // "Clear all" off-screen with no cue, so narrow widths wrap onto
     // multiple lines keeping every chip (and the clear) reachable. Wide
@@ -940,10 +1001,7 @@ class TransactionsTabState extends State<TransactionsTab> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  for (final c in chips) ...[
-                    c,
-                    const SizedBox(width: 6),
-                  ],
+                  for (final c in chips) ...[c, const SizedBox(width: 6)],
                 ],
               ),
             ),
@@ -1020,8 +1078,11 @@ class TransactionsTabState extends State<TransactionsTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined,
-                size: 64, color: context.textFaint),
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 64,
+              color: context.textFaint,
+            ),
             const SizedBox(height: 16),
             Text(
               l.txEmptyTitle,
@@ -1072,113 +1133,120 @@ class TransactionsTabState extends State<TransactionsTab> {
       autofocus: false,
       onKeyEvent: _onTabKey,
       child: Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: LayoutBuilder(builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 560;
-          // Bounded-host mode: when the parent hands us a finite height
-          // (e.g. the account panel's Expanded slot, side panel or
-          // bottom sheet), the rows region must fill the remaining
-          // space and scroll internally — an eager Column would
-          // overflow the slot and clip rows below the fold, and the
-          // window-height SizedBox would ignore the panel's actual
-          // size. The dashboard hosts us inside a page-level
-          // SingleChildScrollView (unbounded height), which keeps the
-          // existing page-scroll behavior there.
-          final boundedHost = constraints.maxHeight.isFinite;
-          return Padding(
-            // Tighter gutters on phone so the row's title/amount columns
-            // aren't starved: a constant 24px pad on a ~390px screen left
-            // the description column only ~140px and forced premature
-            // ellipsis on even short merchant names. Desktop keeps 24.
-            padding: EdgeInsets.all(isNarrow ? 12.0 : 24.0),
-            child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildToolbar(isNarrow),
-              // Persistent search on narrow: a full-width row of its own
-              // right under the toolbar (wide keeps the inline 280px
-              // field in the toolbar). Always visible — no toggle to
-              // discover, and closing nothing means the query survives.
-              if (isNarrow) ...[
-                const SizedBox(height: 8),
-                SizedBox(height: 40, child: _searchField()),
-              ],
-              _activeFilterChips(isNarrow),
-              const SizedBox(height: 8),
-              Text(
-                l.txShowingCount(filtered.length, widget.transactions.length),
-                style: TextStyle(color: context.textSubtle, fontSize: 12),
-              ),
-              // With any filter/search active, summarise the FULL filtered
-              // (cascade-loaded) set — net + outflow + inflow in the
-              // reporting currency — so the user doesn't have to do CSV math.
-              if ((_searchQuery.isNotEmpty || _filters.isActive) &&
-                  filtered.isNotEmpty)
-                _buildFilteredSummary(filtered),
-              const SizedBox(height: 8),
-              if (_selectionMode) _buildBulkActionBar(filtered),
-              // Flat list of rows with inline date-group headers
-              // (Today / Yesterday / weekday name / "Month d").
-              //
-              // Performance: for >50 rows, swap the eager `Column` for
-              // a bounded `ListView.builder` that virtualises out-of-
-              // view rows. The bounded SizedBox is the trade — the
-              // tx list scrolls inside the card rather than as part
-              // of the page — but it's the only way Flutter avoids
-              // building every row up front. Short lists keep the
-              // page-scroll feel.
-              //
-              // In a bounded host the list instead takes whatever
-              // height remains in the slot (Expanded) and always
-              // virtualises, so every row — even on a ≤50-row account
-              // — is reachable by scrolling inside the panel.
-              //
-              // Zero matches with a non-empty source list can only mean
-              // the active search/filters excluded everything (the
-              // unfiltered getter returns the source list as-is), so
-              // instead of dead space + "Showing 0 of N" we render a
-              // centered no-match state with a one-tap way out. Both
-              // hosts get it: the bounded path centers it in the
-              // Expanded slot, the eager/virtualised path inline.
-              if (filtered.isEmpty)
-                boundedHost
-                    ? Expanded(child: _noMatchesState())
-                    : _noMatchesState()
-              else if (boundedHost)
-                Expanded(child: _buildVirtualisedList(filtered, isNarrow))
-              else
-                _buildRowsRegion(filtered, isNarrow, constraints),
-              if (widget.onLoadMore != null && widget.hasMore)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Center(
-                    child: (_loadingMore || _autoLoading)
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : OutlinedButton.icon(
-                            onPressed: () async {
-                              setState(() => _loadingMore = true);
-                              try {
-                                await widget.onLoadMore!.call();
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _loadingMore = false);
-                                }
-                              }
-                            },
-                            icon: const Icon(Icons.expand_more, size: 18),
-                            label: Text(l.txLoadMore),
-                          ),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 560;
+            // Bounded-host mode: when the parent hands us a finite height
+            // (e.g. the account panel's Expanded slot, side panel or
+            // bottom sheet), the rows region must fill the remaining
+            // space and scroll internally — an eager Column would
+            // overflow the slot and clip rows below the fold, and the
+            // window-height SizedBox would ignore the panel's actual
+            // size. The dashboard hosts us inside a page-level
+            // SingleChildScrollView (unbounded height), which keeps the
+            // existing page-scroll behavior there.
+            final boundedHost = constraints.maxHeight.isFinite;
+            return Padding(
+              // Tighter gutters on phone so the row's title/amount columns
+              // aren't starved: a constant 24px pad on a ~390px screen left
+              // the description column only ~140px and forced premature
+              // ellipsis on even short merchant names. Desktop keeps 24.
+              padding: EdgeInsets.all(isNarrow ? 12.0 : 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildToolbar(isNarrow),
+                  // Persistent search on narrow: a full-width row of its own
+                  // right under the toolbar (wide keeps the inline 280px
+                  // field in the toolbar). Always visible — no toggle to
+                  // discover, and closing nothing means the query survives.
+                  if (isNarrow) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(height: 40, child: _searchField()),
+                  ],
+                  _activeFilterChips(isNarrow),
+                  const SizedBox(height: 8),
+                  Text(
+                    l.txShowingCount(
+                      filtered.length,
+                      widget.transactions.length,
+                    ),
+                    style: TextStyle(color: context.textSubtle, fontSize: 12),
                   ),
-                ),
-            ],
-          ),
-          );
-        }),
+                  // With any filter/search active, summarise the FULL filtered
+                  // (cascade-loaded) set — net + outflow + inflow in the
+                  // reporting currency — so the user doesn't have to do CSV math.
+                  if ((_searchQuery.isNotEmpty || _filters.isActive) &&
+                      filtered.isNotEmpty)
+                    _buildFilteredSummary(filtered),
+                  const SizedBox(height: 8),
+                  if (_selectionMode) _buildBulkActionBar(filtered),
+                  // Flat list of rows with inline date-group headers
+                  // (Today / Yesterday / weekday name / "Month d").
+                  //
+                  // Performance: for >50 rows, swap the eager `Column` for
+                  // a bounded `ListView.builder` that virtualises out-of-
+                  // view rows. The bounded SizedBox is the trade — the
+                  // tx list scrolls inside the card rather than as part
+                  // of the page — but it's the only way Flutter avoids
+                  // building every row up front. Short lists keep the
+                  // page-scroll feel.
+                  //
+                  // In a bounded host the list instead takes whatever
+                  // height remains in the slot (Expanded) and always
+                  // virtualises, so every row — even on a ≤50-row account
+                  // — is reachable by scrolling inside the panel.
+                  //
+                  // Zero matches with a non-empty source list can only mean
+                  // the active search/filters excluded everything (the
+                  // unfiltered getter returns the source list as-is), so
+                  // instead of dead space + "Showing 0 of N" we render a
+                  // centered no-match state with a one-tap way out. Both
+                  // hosts get it: the bounded path centers it in the
+                  // Expanded slot, the eager/virtualised path inline.
+                  if (filtered.isEmpty)
+                    boundedHost
+                        ? Expanded(child: _noMatchesState())
+                        : _noMatchesState()
+                  else if (boundedHost)
+                    Expanded(child: _buildVirtualisedList(filtered, isNarrow))
+                  else
+                    _buildRowsRegion(filtered, isNarrow, constraints),
+                  if (widget.onLoadMore != null && widget.hasMore)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: (_loadingMore || _autoLoading)
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : OutlinedButton.icon(
+                                onPressed: () async {
+                                  setState(() => _loadingMore = true);
+                                  try {
+                                    await widget.onLoadMore!.call();
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() => _loadingMore = false);
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.expand_more, size: 18),
+                                label: Text(l.txLoadMore),
+                              ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -1193,117 +1261,126 @@ class TransactionsTabState extends State<TransactionsTab> {
       for (final t in filtered)
         if (t['id'] != null) t['id'].toString(),
     ];
-    final allSelected = filteredIds.isNotEmpty &&
-        filteredIds.every(_selectedIds.contains);
+    final allSelected =
+        filteredIds.isNotEmpty && filteredIds.every(_selectedIds.contains);
     final selectedCount = _selectedIds.length;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: context.positive.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: context.accentBorder(context.positive)),
       ),
-      child: LayoutBuilder(builder: (ctx, c) {
-        final isNarrow = c.maxWidth < 560;
+      child: LayoutBuilder(
+        builder: (ctx, c) {
+          final isNarrow = c.maxWidth < 560;
 
-        final selectToggle = TextButton.icon(
-          onPressed:
-              _selectAllLoading ? null : () => _toggleSelectAll(allSelected),
-          icon: _selectAllLoading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  allSelected
-                      ? Icons.indeterminate_check_box_outlined
-                      : Icons.select_all,
-                  size: 18,
+          final selectToggle = TextButton.icon(
+            onPressed: _selectAllLoading
+                ? null
+                : () => _toggleSelectAll(allSelected),
+            icon: _selectAllLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    allSelected
+                        ? Icons.indeterminate_check_box_outlined
+                        : Icons.select_all,
+                    size: 18,
+                  ),
+            label: Text(allSelected ? l.txDeselectAll : l.txSelectAll),
+          );
+
+          final categorize = FilledButton.tonalIcon(
+            onPressed: selectedCount == 0 ? null : () => _bulkCategorize(),
+            icon: const Icon(Icons.label_outline, size: 18),
+            label: Text(l.txSetCategory),
+          );
+
+          final moveAccount = FilledButton.tonalIcon(
+            onPressed: selectedCount == 0 ? null : () => _bulkMoveAccount(),
+            icon: const Icon(Icons.compare_arrows, size: 18),
+            label: Text(l.txMoveAccount),
+          );
+
+          final rename = FilledButton.tonalIcon(
+            onPressed: selectedCount == 0 ? null : () => _bulkRename(),
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: Text(l.txRename),
+          );
+
+          final delete = FilledButton.tonalIcon(
+            onPressed: (selectedCount == 0 || widget.onBulkDelete == null)
+                ? null
+                : () => _bulkDelete(),
+            icon: Icon(Icons.delete_outline, size: 18, color: context.negative),
+            label: Text(
+              l.actionDelete,
+              style: TextStyle(color: context.negative),
+            ),
+          );
+
+          final clear = TextButton(
+            onPressed: () => setState(() {
+              _selectionMode = false;
+              _selectedIds.clear();
+            }),
+            child: Text(l.txClear),
+          );
+
+          final summary = Text(
+            l.txSelectedCount(selectedCount),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: context.positive,
+            ),
+          );
+
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                summary,
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    selectToggle,
+                    categorize,
+                    moveAccount,
+                    rename,
+                    delete,
+                    clear,
+                  ],
                 ),
-          label: Text(allSelected ? l.txDeselectAll : l.txSelectAll),
-        );
-
-        final categorize = FilledButton.tonalIcon(
-          onPressed:
-              selectedCount == 0 ? null : () => _bulkCategorize(),
-          icon: const Icon(Icons.label_outline, size: 18),
-          label: Text(l.txSetCategory),
-        );
-
-        final moveAccount = FilledButton.tonalIcon(
-          onPressed:
-              selectedCount == 0 ? null : () => _bulkMoveAccount(),
-          icon: const Icon(Icons.compare_arrows, size: 18),
-          label: Text(l.txMoveAccount),
-        );
-
-        final rename = FilledButton.tonalIcon(
-          onPressed: selectedCount == 0 ? null : () => _bulkRename(),
-          icon: const Icon(Icons.edit_outlined, size: 18),
-          label: Text(l.txRename),
-        );
-
-        final delete = FilledButton.tonalIcon(
-          onPressed: (selectedCount == 0 || widget.onBulkDelete == null)
-              ? null
-              : () => _bulkDelete(),
-          icon: Icon(Icons.delete_outline, size: 18, color: context.negative),
-          label: Text(l.actionDelete, style: TextStyle(color: context.negative)),
-        );
-
-        final clear = TextButton(
-          onPressed: () => setState(() {
-            _selectionMode = false;
-            _selectedIds.clear();
-          }),
-          child: Text(l.txClear),
-        );
-
-        final summary = Text(
-          l.txSelectedCount(selectedCount),
-          style: TextStyle(
-              fontWeight: FontWeight.w700, color: context.positive),
-        );
-
-        if (isNarrow) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+              ],
+            );
+          }
+          return Row(
             children: [
               summary,
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                selectToggle,
-                categorize,
-                moveAccount,
-                rename,
-                delete,
-                clear,
-              ]),
+              const SizedBox(width: 16),
+              selectToggle,
+              const Spacer(),
+              categorize,
+              const SizedBox(width: 8),
+              moveAccount,
+              const SizedBox(width: 8),
+              rename,
+              const SizedBox(width: 8),
+              delete,
+              const SizedBox(width: 8),
+              clear,
             ],
           );
-        }
-        return Row(
-          children: [
-            summary,
-            const SizedBox(width: 16),
-            selectToggle,
-            const Spacer(),
-            categorize,
-            const SizedBox(width: 8),
-            moveAccount,
-            const SizedBox(width: 8),
-            rename,
-            const SizedBox(width: 8),
-            delete,
-            const SizedBox(width: 8),
-            clear,
-          ],
-        );
-      }),
+        },
+      ),
     );
   }
 
@@ -1335,9 +1412,9 @@ class TransactionsTabState extends State<TransactionsTab> {
 
   /// String ids of the rows in [rows] (skipping any without an id).
   List<String> _idsOf(List<dynamic> rows) => [
-        for (final t in rows)
-          if (t['id'] != null) t['id'].toString(),
-      ];
+    for (final t in rows)
+      if (t['id'] != null) t['id'].toString(),
+  ];
 
   Future<void> _bulkCategorize() async {
     final l = AppLocalizations.of(context);
@@ -1354,8 +1431,7 @@ class TransactionsTabState extends State<TransactionsTab> {
           optionsBuilder: (value) {
             final q = value.text.trim().toLowerCase();
             if (q.isEmpty) return suggestions;
-            return suggestions
-                .where((s) => s.toLowerCase().contains(q));
+            return suggestions.where((s) => s.toLowerCase().contains(q));
           },
           onSelected: (s) => typed = s,
           fieldViewBuilder: (ctx, controller, focusNode, onSubmit) {
@@ -1371,11 +1447,13 @@ class TransactionsTabState extends State<TransactionsTab> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(l.actionCancel)),
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(l.actionCancel),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(dialogCtx, typed.trim()),
-              child: Text(l.actionApply)),
+            onPressed: () => Navigator.pop(dialogCtx, typed.trim()),
+            child: Text(l.actionApply),
+          ),
         ],
       ),
     );
@@ -1402,12 +1480,13 @@ class TransactionsTabState extends State<TransactionsTab> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(l.actionCancel)),
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(l.actionCancel),
+          ),
           FilledButton(
-              onPressed: () =>
-                  Navigator.pop(dialogCtx, controller.text.trim()),
-              child: Text(l.actionApply)),
+            onPressed: () => Navigator.pop(dialogCtx, controller.text.trim()),
+            child: Text(l.actionApply),
+          ),
         ],
       ),
     );
@@ -1431,8 +1510,9 @@ class TransactionsTabState extends State<TransactionsTab> {
         content: Text(l.txBulkDeleteBody),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              child: Text(l.actionCancel)),
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(l.actionCancel),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: context.negative),
             onPressed: () => Navigator.pop(dialogCtx, true),
@@ -1468,14 +1548,9 @@ class TransactionsTabState extends State<TransactionsTab> {
     final onDelete = widget.onDelete;
     if (onDelete == null || id == null) return;
     final idStr = id.toString();
-    _initiateDeferredDelete(
-      [idStr],
-      l.txDeletedOne,
-      () async {
-        await onDelete(id);
-      },
-      l.txDeleteOneFailed,
-    );
+    _initiateDeferredDelete([idStr], l.txDeletedOne, () async {
+      await onDelete(id);
+    }, l.txDeleteOneFailed);
   }
 
   /// Hold-callback for the in-flight deferred delete: deletes the
@@ -1588,8 +1663,7 @@ class TransactionsTabState extends State<TransactionsTab> {
           children: [
             for (final a in widget.accounts)
               SimpleDialogOption(
-                onPressed: () =>
-                    Navigator.pop(context, a['id']?.toString()),
+                onPressed: () => Navigator.pop(context, a['id']?.toString()),
                 child: Text(
                   ((a['nickname'] ?? '').toString().isNotEmpty
                       ? a['nickname'].toString()
@@ -1649,14 +1723,14 @@ class TransactionsTabState extends State<TransactionsTab> {
     try {
       await onSplit(tx['id'].toString(), result);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.txSplitIntoN(result.length))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.txSplitIntoN(result.length))));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.txSplitFailed(e.toString()))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.txSplitFailed(e.toString()))));
     }
   }
 
@@ -1687,14 +1761,15 @@ class TransactionsTabState extends State<TransactionsTab> {
     final l = AppLocalizations.of(context);
 
     final siblings = widget.transactions
-        .where((row) =>
-            row is Map &&
-            (row['parent_id'] ?? '').toString() == parentId)
+        .where(
+          (row) =>
+              row is Map && (row['parent_id'] ?? '').toString() == parentId,
+        )
         .toList();
     if (siblings.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.txSplitChildrenNotFound)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.txSplitChildrenNotFound)));
       return;
     }
     final parentAmount = siblings.fold<double>(0.0, (sum, row) {
@@ -1704,8 +1779,8 @@ class TransactionsTabState extends State<TransactionsTab> {
     final initialDrafts = siblings.map<Map<String, dynamic>>((row) {
       final m = row as Map;
       return {
-        'description': (m['user_description']?.toString().trim().isNotEmpty ??
-                false)
+        'description':
+            (m['user_description']?.toString().trim().isNotEmpty ?? false)
             ? m['user_description']
             : (m['description'] ?? ''),
         'amount': (m['amount'] as num?)?.toDouble() ?? 0.0,
@@ -1744,9 +1819,9 @@ class TransactionsTabState extends State<TransactionsTab> {
         await onSplit(parentId, result);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.txSplitUpdatedN(result.length))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.txSplitUpdatedN(result.length))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1854,73 +1929,76 @@ class TransactionsTabState extends State<TransactionsTab> {
     final result = await showDialog<({String text, bool applyToAll})?>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setLocal) {
-          return AlertDialog(
-            title: Text(l.txRenameTransaction),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l.txRenameDisplayLabelHelp,
-                  style: TextStyle(fontSize: 12, color: context.textSubtle),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: l.txDisplayLabel,
-                    hintText: l.txDisplayLabelHint,
-                    border: const OutlineInputBorder(),
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: Text(l.txRenameTransaction),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.txRenameDisplayLabelHelp,
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
                   ),
-                ),
-                if (similarIds.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    value: applyToAll,
-                    onChanged: (v) =>
-                        setLocal(() => applyToAll = v ?? false),
-                    title: Text(
-                      l.txAlsoApplyToN(similarIds.length),
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    subtitle: Text(
-                      l.txAlsoApplySubtitle,
-                      style: TextStyle(
-                          fontSize: 11, color: context.textSubtle),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: l.txDisplayLabel,
+                      hintText: l.txDisplayLabelHint,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
+                  if (similarIds.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: applyToAll,
+                      onChanged: (v) => setLocal(() => applyToAll = v ?? false),
+                      title: Text(
+                        l.txAlsoApplyToN(similarIds.length),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      subtitle: Text(
+                        l.txAlsoApplySubtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textSubtle,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(null),
-                child: Text(l.actionCancel),
               ),
-              // Clear button only when something is set on the row already
-              // — avoids a dead button on transactions that never had an
-              // override applied.
-              if ((tx['user_description'] ?? '').toString().isNotEmpty)
+              actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(ctx)
-                      .pop((text: '', applyToAll: applyToAll)),
-                  child: Text(l.txClearOverride),
+                  onPressed: () => Navigator.of(ctx).pop(null),
+                  child: Text(l.actionCancel),
                 ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop((
-                  text: controller.text.trim(),
-                  applyToAll: applyToAll,
-                )),
-                child: Text(l.actionSave),
-              ),
-            ],
-          );
-        });
+                // Clear button only when something is set on the row already
+                // — avoids a dead button on transactions that never had an
+                // override applied.
+                if ((tx['user_description'] ?? '').toString().isNotEmpty)
+                  TextButton(
+                    onPressed: () => Navigator.of(
+                      ctx,
+                    ).pop((text: '', applyToAll: applyToAll)),
+                    child: Text(l.txClearOverride),
+                  ),
+                FilledButton(
+                  onPressed: () => Navigator.of(
+                    ctx,
+                  ).pop((text: controller.text.trim(), applyToAll: applyToAll)),
+                  child: Text(l.actionSave),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
     // dispose: local controller, else the dialog leaks it. controller.text was
@@ -1948,13 +2026,11 @@ class TransactionsTabState extends State<TransactionsTab> {
       SnackBar(
         content: Text(
           ids.length == 1
-              ? (failed == 0
-                  ? l.txRenamed
-                  : l.txRenameFailedShort)
+              ? (failed == 0 ? l.txRenamed : l.txRenameFailedShort)
               : (failed == 0
-                  ? l.txRenamedN(ids.length)
-                  // gen-l10n orders these alphabetically → (failed, ok); pass failed first.
-                  : l.txRenamedNFailed(failed, ids.length - failed)),
+                    ? l.txRenamedN(ids.length)
+                    // gen-l10n orders these alphabetically → (failed, ok); pass failed first.
+                    : l.txRenamedNFailed(failed, ids.length - failed)),
         ),
       ),
     );
@@ -1963,15 +2039,16 @@ class TransactionsTabState extends State<TransactionsTab> {
   // Prefers the batch endpoint (one request + one refresh for the whole
   // selection); falls back to looping the per-id onUpdate only if no bulk
   // handler is wired.
-  Future<void> _applyBulkUpdate(
-      {String? userCategory, String? accountId, String? userDescription}) async {
+  Future<void> _applyBulkUpdate({
+    String? userCategory,
+    String? accountId,
+    String? userDescription,
+  }) async {
     final ids = _selectedIds.toList();
     if (ids.isEmpty) return;
     final l = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(content: Text(l.txUpdatingN(ids.length))),
-    );
+    messenger.showSnackBar(SnackBar(content: Text(l.txUpdatingN(ids.length))));
 
     int updated = 0;
     int failed = 0;
@@ -1979,10 +2056,12 @@ class TransactionsTabState extends State<TransactionsTab> {
     if (onBulk != null) {
       // One batched request → one dashboard refresh.
       try {
-        updated = await onBulk(ids,
-            userCategory: userCategory,
-            accountId: accountId,
-            userDescription: userDescription);
+        updated = await onBulk(
+          ids,
+          userCategory: userCategory,
+          accountId: accountId,
+          userDescription: userDescription,
+        );
         failed = ids.length - updated;
       } catch (_) {
         failed = ids.length;
@@ -1992,10 +2071,12 @@ class TransactionsTabState extends State<TransactionsTab> {
       if (onUpdate == null) return;
       for (final id in ids) {
         try {
-          await onUpdate(id,
-              userCategory: userCategory,
-              accountId: accountId,
-              userDescription: userDescription);
+          await onUpdate(
+            id,
+            userCategory: userCategory,
+            accountId: accountId,
+            userDescription: userDescription,
+          );
           updated++;
         } catch (_) {
           failed++;
@@ -2071,7 +2152,9 @@ class TransactionsTabState extends State<TransactionsTab> {
             // Slightly smaller on narrow; with only three inline actions
             // the title fits a phone sheet without ellipsizing.
             style: TextStyle(
-                fontSize: isNarrow ? 22 : 24, fontWeight: FontWeight.bold),
+              fontSize: isNarrow ? 22 : 24,
+              fontWeight: FontWeight.bold,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -2088,7 +2171,8 @@ class TransactionsTabState extends State<TransactionsTab> {
               IconButton(
                 onPressed: () => _openFilters(isNarrow: true),
                 icon: Badge.count(
-                  count: _filters.badgeCount +
+                  count:
+                      _filters.badgeCount +
                       (_sortMode != TxSort.dateNewest ? 1 : 0),
                   isLabelVisible:
                       _filters.isActive || _sortMode != TxSort.dateNewest,
@@ -2126,8 +2210,9 @@ class TransactionsTabState extends State<TransactionsTab> {
                   size: 22,
                   color: _selectionMode ? context.positive : null,
                 ),
-                tooltip:
-                    _selectionMode ? l.txExitSelectionMode : l.txSelectMultiple,
+                tooltip: _selectionMode
+                    ? l.txExitSelectionMode
+                    : l.txSelectMultiple,
               ),
             // Hidden when the host provides its own FAB (compact dashboard)
             // so there's never a duplicate creation affordance.
@@ -2146,7 +2231,8 @@ class TransactionsTabState extends State<TransactionsTab> {
                 // is now generated client-side from the filtered rows, so
                 // the affordance says it covers the current view; only the
                 // unfiltered case hits the full server export.
-                tooltip: (widget.csvExportConfirmAlways ||
+                tooltip:
+                    (widget.csvExportConfirmAlways ||
                         _searchQuery.isNotEmpty ||
                         _filters.isActive)
                     ? l.txExportCsvFiltered
@@ -2189,9 +2275,11 @@ class TransactionsTabState extends State<TransactionsTab> {
                         ),
                         const SizedBox(width: 12),
                         Flexible(
-                          child: Text(_selectionMode
-                              ? l.txExitSelectionMode
-                              : l.txSelectMultiple),
+                          child: Text(
+                            _selectionMode
+                                ? l.txExitSelectionMode
+                                : l.txSelectMultiple,
+                          ),
                         ),
                       ],
                     ),
@@ -2278,7 +2366,8 @@ class TransactionsTabState extends State<TransactionsTab> {
     // answer. In that case build the CSV CLIENT-SIDE from the filtered
     // rows so the export matches exactly what the user is looking at; no
     // "covers everything" confirmation, because it no longer does.
-    final scoped = widget.csvExportConfirmAlways ||
+    final scoped =
+        widget.csvExportConfirmAlways ||
         _searchQuery.isNotEmpty ||
         _filters.isActive;
     if (scoped) {
@@ -2312,9 +2401,9 @@ class TransactionsTabState extends State<TransactionsTab> {
     }
     final rows = _filteredTransactions;
     if (rows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.txExportNoRows)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.txExportNoRows)));
       return;
     }
     final csv = _buildCsv(rows);
@@ -2331,8 +2420,10 @@ class TransactionsTabState extends State<TransactionsTab> {
   /// amount, currency, pending. Each field is RFC-4180 quoted.
   String _buildCsv(List<dynamic> rows) {
     final buf = StringBuffer();
-    buf.writeln('date,account,description,merchant,category,'
-        'amount,currency,pending');
+    buf.writeln(
+      'date,account,description,merchant,category,'
+      'amount,currency,pending',
+    );
     for (final tx in rows) {
       final cells = <String>[
         (tx['date'] ?? '').toString(),
@@ -2352,7 +2443,9 @@ class TransactionsTabState extends State<TransactionsTab> {
   /// RFC-4180 cell: wrap in double quotes when the value contains a
   /// comma, quote, or newline, doubling any embedded quotes.
   String _csvCell(String v) {
-    if (v.contains(',') || v.contains('"') || v.contains('\n') ||
+    if (v.contains(',') ||
+        v.contains('"') ||
+        v.contains('\n') ||
         v.contains('\r')) {
       return '"${v.replaceAll('"', '""')}"';
     }
@@ -2379,8 +2472,7 @@ class TransactionsTabState extends State<TransactionsTab> {
       decoration: InputDecoration(
         hintText: l.searchTransactionsHint,
         hintStyle: TextStyle(color: context.textFaint, fontSize: 13),
-        prefixIcon:
-            Icon(Icons.search, size: 18, color: context.textFaint),
+        prefixIcon: Icon(Icons.search, size: 18, color: context.textFaint),
         // Inline clear affordance — appears only when there's text so the
         // user doesn't have to backspace the whole query. Flushes the
         // pending debounce synchronously so no stray re-filter fires
@@ -2403,8 +2495,7 @@ class TransactionsTabState extends State<TransactionsTab> {
         ),
         filled: true,
         fillColor: context.tint(0.05),
-        contentPadding:
-            const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -2440,8 +2531,9 @@ class TransactionsTabState extends State<TransactionsTab> {
       return Padding(
         // Clearance so a host-provided FAB (compact dashboard) never sits
         // on top of the last row. Mirrors _buildVirtualisedList's padding.
-        padding:
-            EdgeInsets.only(bottom: widget.hostProvidesAddFab ? 88.0 : 0.0),
+        padding: EdgeInsets.only(
+          bottom: widget.hostProvidesAddFab ? 88.0 : 0.0,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: _buildGroupedRows(txs, isNarrow),
@@ -2475,7 +2567,8 @@ class TransactionsTabState extends State<TransactionsTab> {
     // the persistent bar paints on top of the rows' amount column, so let
     // those fall back to the transient auto-hiding thumb.
     final platform = Theme.of(context).platform;
-    final isTouch = platform == TargetPlatform.android ||
+    final isTouch =
+        platform == TargetPlatform.android ||
         platform == TargetPlatform.iOS ||
         platform == TargetPlatform.fuchsia;
     return Scrollbar(
@@ -2488,8 +2581,9 @@ class TransactionsTabState extends State<TransactionsTab> {
         //
         // Bottom clearance so a host-provided FAB (compact dashboard)
         // never occludes the last row when scrolled to the end.
-        padding:
-            EdgeInsets.only(bottom: widget.hostProvidesAddFab ? 88.0 : 0.0),
+        padding: EdgeInsets.only(
+          bottom: widget.hostProvidesAddFab ? 88.0 : 0.0,
+        ),
         itemCount: items.length,
         itemBuilder: (context, i) => _planItemWidget(items[i], isNarrow, txs),
       ),
@@ -2592,7 +2686,8 @@ class TransactionsTabState extends State<TransactionsTab> {
         // A day header straight under its month landmark hugs it
         // (isFirst spacing) instead of opening a second air gap.
         out.add(
-            _TxListItem.header(date: date, isFirst: out.isEmpty || afterMonth));
+          _TxListItem.header(date: date, isFirst: out.isEmpty || afterMonth),
+        );
         lastGroup = key;
       } else {
         out.add(const _TxListItem.divider());
@@ -2695,10 +2790,7 @@ class TransactionsTabState extends State<TransactionsTab> {
               children: [
                 TextSpan(
                   text: '${l.txFilteredNet} ',
-                  style: TextStyle(
-                    color: context.textSubtle,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
                 TextSpan(
                   text: signedNet,
@@ -2845,14 +2937,11 @@ class TransactionsTabState extends State<TransactionsTab> {
     }
     final signedNet =
         '${net < 0 ? '−' : '+'}${widget.currencyFormat.format(net.abs())}';
-    final netLabel =
-        isPartial ? l.txMonthNetPartial(signedNet) : l.txMonthNet(signedNet);
+    final netLabel = isPartial
+        ? l.txMonthNetPartial(signedNet)
+        : l.txMonthNet(signedNet);
     return Padding(
-      padding: EdgeInsets.only(
-        top: isFirst ? 4 : 28,
-        left: 4,
-        right: 4,
-      ),
+      padding: EdgeInsets.only(top: isFirst ? 4 : 28, left: 4, right: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2905,8 +2994,7 @@ class TransactionsTabState extends State<TransactionsTab> {
     final metaSize = isNarrow ? 12.0 : 11.0;
     final amountSize = isNarrow ? 15.0 : 14.0;
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
-    final sourceCurrency =
-        (tx['currency'] ?? widget.targetCurrency).toString();
+    final sourceCurrency = (tx['currency'] ?? widget.targetCurrency).toString();
     final converted = convertCurrency(
       sourceAmount,
       from: sourceCurrency,
@@ -2921,11 +3009,13 @@ class TransactionsTabState extends State<TransactionsTab> {
     // keyed on it, so a Spanish import category ("Supermercado") and the
     // Plaid enum ("FOOD_AND_DRINK") both land on a real style instead of
     // the old grey-receipt fallback.
-    final catStyle = context.categoryStyle(prettyCategory(
-      userCategory: tx['user_category']?.toString(),
-      detailed: tx['category_detailed']?.toString(),
-      primary: tx['category']?.toString(),
-    ));
+    final catStyle = context.categoryStyle(
+      prettyCategory(
+        userCategory: tx['user_category']?.toString(),
+        detailed: tx['category_detailed']?.toString(),
+        primary: tx['category']?.toString(),
+      ),
+    );
     final color = catStyle.color;
 
     final needsConversion =
@@ -2947,8 +3037,9 @@ class TransactionsTabState extends State<TransactionsTab> {
     final isFxTransfer = fxConfirmed != null;
     // Pill accent mirrors the detail block's semantics: teal = user-
     // confirmed link, amber = auto-detected (pending confirmation).
-    final fxAccent =
-        (fxConfirmed ?? false) ? context.tealAccent : context.warning;
+    final fxAccent = (fxConfirmed ?? false)
+        ? context.tealAccent
+        : context.warning;
 
     return MouseRegion(
       // Tracks the currently-hovered row id so the R keyboard
@@ -2962,342 +3053,347 @@ class TransactionsTabState extends State<TransactionsTab> {
         if (_hoveredTxId == id) _hoveredTxId = null;
       },
       child: InkWell(
-      onTap: () {
-        if (_selectionMode && id != null) {
-          setState(() {
-            if (isSelected) {
-              _selectedIds.remove(id);
-            } else {
+        onTap: () {
+          if (_selectionMode && id != null) {
+            setState(() {
+              if (isSelected) {
+                _selectedIds.remove(id);
+              } else {
+                _selectedIds.add(id);
+              }
+            });
+          } else {
+            _showTransactionDetails(tx);
+          }
+        },
+        onLongPress: () {
+          if (id != null) {
+            setState(() {
+              _selectionMode = true;
               _selectedIds.add(id);
-            }
-          });
-        } else {
-          _showTransactionDetails(tx);
-        }
-      },
-      onLongPress: () {
-        if (id != null) {
-          setState(() {
-            _selectionMode = true;
-            _selectedIds.add(id);
-          });
-        }
-      },
-      // Right-click on web (Flutter maps secondary tap to right-click)
-      // opens the quick rename dialog directly — skips the detail
-      // modal hop. The dialog itself is the existing
-      // `_renameTransaction` which is already a lightweight 1-field
-      // form, so this is purely about cutting clicks for power users
-      // cleaning up "Miscellaneous Debit"-style clusters.
-      onSecondaryTap: widget.onUpdate == null
-          ? null
-          : () {
-              if (id == null || _selectionMode) return;
-              // Compute the "similar rows" set the same way the
-              // detail modal does so the bulk-apply checkbox appears
-              // when this row is part of a cluster.
-              final similarIds = _similarTransactionIds(tx);
-              _renameTransaction(tx, similarIds: similarIds);
-            },
-      hoverColor: context.tint(0.03),
-      child: AnimatedContainer(
-        // Three overlapping signals share this background:
-        // selection mode (green, instant flip), Cmd-K row highlight
-        // (blue pulse — fades in and out via this AnimatedContainer
-        // with an easeInOut curve so the entrance and exit feel
-        // symmetric rather than the default linear ColorTween), and
-        // the default unhighlighted state (transparent).
-        //
-        // Using Colors.transparent rather than `null` as the off state
-        // guarantees AnimatedContainer interpolates instead of snapping
-        // — a null → Color flip would be discontinuous to the lerp.
-        duration: const Duration(milliseconds: 550),
-        curve: Curves.easeInOut,
-        color: isSelected
-            ? context.positive.withValues(alpha: 0.1)
-            : (id != null && id == widget.highlightedTxId)
-                ? context.info.withValues(alpha: 0.2)
-                : Colors.transparent,
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (_selectionMode) ...[
-              SizedBox(
-                width: 32,
-                child: Checkbox(
-                  value: isSelected,
-                  onChanged: id == null
-                      ? null
-                      : (v) => setState(() {
+            });
+          }
+        },
+        // Right-click on web (Flutter maps secondary tap to right-click)
+        // opens the quick rename dialog directly — skips the detail
+        // modal hop. The dialog itself is the existing
+        // `_renameTransaction` which is already a lightweight 1-field
+        // form, so this is purely about cutting clicks for power users
+        // cleaning up "Miscellaneous Debit"-style clusters.
+        onSecondaryTap: widget.onUpdate == null
+            ? null
+            : () {
+                if (id == null || _selectionMode) return;
+                // Compute the "similar rows" set the same way the
+                // detail modal does so the bulk-apply checkbox appears
+                // when this row is part of a cluster.
+                final similarIds = _similarTransactionIds(tx);
+                _renameTransaction(tx, similarIds: similarIds);
+              },
+        hoverColor: context.tint(0.03),
+        child: AnimatedContainer(
+          // Three overlapping signals share this background:
+          // selection mode (green, instant flip), Cmd-K row highlight
+          // (blue pulse — fades in and out via this AnimatedContainer
+          // with an easeInOut curve so the entrance and exit feel
+          // symmetric rather than the default linear ColorTween), and
+          // the default unhighlighted state (transparent).
+          //
+          // Using Colors.transparent rather than `null` as the off state
+          // guarantees AnimatedContainer interpolates instead of snapping
+          // — a null → Color flip would be discontinuous to the lerp.
+          duration: const Duration(milliseconds: 550),
+          curve: Curves.easeInOut,
+          color: isSelected
+              ? context.positive.withValues(alpha: 0.1)
+              : (id != null && id == widget.highlightedTxId)
+              ? context.info.withValues(alpha: 0.2)
+              : Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (_selectionMode) ...[
+                SizedBox(
+                  width: 32,
+                  child: Checkbox(
+                    value: isSelected,
+                    onChanged: id == null
+                        ? null
+                        : (v) => setState(() {
                             if (v == true) {
                               _selectedIds.add(id);
                             } else {
                               _selectedIds.remove(id);
                             }
                           }),
+                  ),
                 ),
+                const SizedBox(width: 4),
+              ],
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(catStyle.icon, color: color, size: 16),
               ),
-              const SizedBox(width: 4),
-            ],
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                catStyle.icon,
-                color: color,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        // When this row is the inline-edit target, swap
-                        // the Text for a TextField bound to the
-                        // controller. Enter saves via _commitInlineEdit,
-                        // Esc cancels via the Focus key handler. Tapping
-                        // outside (TapRegion) also cancels — clicking
-                        // anywhere else in the list is a clearer "I
-                        // changed my mind" signal than implicit blur.
-                        child: _inlineEditingTxId == (tx['id']?.toString())
-                            ? Focus(
-                                onKeyEvent: (node, ev) {
-                                  if (ev is KeyDownEvent &&
-                                      ev.logicalKey ==
-                                          LogicalKeyboardKey.escape) {
-                                    _cancelInlineEdit();
-                                    return KeyEventResult.handled;
-                                  }
-                                  return KeyEventResult.ignored;
-                                },
-                                child: TapRegion(
-                                  onTapOutside: (_) => _cancelInlineEdit(),
-                                  child: TextField(
-                                    controller: _inlineEditController,
-                                    focusNode: _inlineEditFocus,
-                                    autofocus: true,
-                                    onSubmitted: (_) => _commitInlineEdit(tx),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          // When this row is the inline-edit target, swap
+                          // the Text for a TextField bound to the
+                          // controller. Enter saves via _commitInlineEdit,
+                          // Esc cancels via the Focus key handler. Tapping
+                          // outside (TapRegion) also cancels — clicking
+                          // anywhere else in the list is a clearer "I
+                          // changed my mind" signal than implicit blur.
+                          child: _inlineEditingTxId == (tx['id']?.toString())
+                              ? Focus(
+                                  onKeyEvent: (node, ev) {
+                                    if (ev is KeyDownEvent &&
+                                        ev.logicalKey ==
+                                            LogicalKeyboardKey.escape) {
+                                      _cancelInlineEdit();
+                                      return KeyEventResult.handled;
+                                    }
+                                    return KeyEventResult.ignored;
+                                  },
+                                  child: TapRegion(
+                                    onTapOutside: (_) => _cancelInlineEdit(),
+                                    child: TextField(
+                                      controller: _inlineEditController,
+                                      focusNode: _inlineEditFocus,
+                                      autofocus: true,
+                                      onSubmitted: (_) => _commitInlineEdit(tx),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: titleSize,
+                                        height: 1.2,
+                                      ),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 4,
+                                            ),
+                                        border: const OutlineInputBorder(),
+                                        hintText: l.txInlineEditHint,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : GestureDetector(
+                                  // Double-click on the label drops into
+                                  // inline-edit mode. Single-tap still
+                                  // bubbles to the row's onTap (detail
+                                  // modal) because GestureDetector only
+                                  // intercepts the double-tap gesture.
+                                  onDoubleTap: widget.onUpdate == null
+                                      ? null
+                                      : () => _startInlineEdit(tx),
+                                  child: Text(
+                                    displayLabel(tx),
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: titleSize,
                                       height: 1.2,
                                     ),
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      border: const OutlineInputBorder(),
-                                      hintText: l.txInlineEditHint,
-                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                              )
-                            : GestureDetector(
-                                // Double-click on the label drops into
-                                // inline-edit mode. Single-tap still
-                                // bubbles to the row's onTap (detail
-                                // modal) because GestureDetector only
-                                // intercepts the double-tap gesture.
-                                onDoubleTap: widget.onUpdate == null
-                                    ? null
-                                    : () => _startInlineEdit(tx),
-                                child: Text(
-                                  displayLabel(tx),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: titleSize,
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                        ),
+                        // "Split" pill on rows that are a child of a split.
+                        // Cheap visual cue so the user can tell the $50
+                        // grocery line is actually a leg of a larger ATM
+                        // withdrawal, not a standalone $50 charge. The
+                        // parent itself is filtered out of the list at
+                        // the SQL layer (NOT EXISTS subquery).
+                        if ((tx['parent_id'] ?? '').toString().isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: context.accentSoft(context.tealAccent),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              l.txSplitPill,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: context.tealAccent,
+                                letterSpacing: 0.5,
                               ),
-                      ),
-                      // "Split" pill on rows that are a child of a split.
-                      // Cheap visual cue so the user can tell the $50
-                      // grocery line is actually a leg of a larger ATM
-                      // withdrawal, not a standalone $50 charge. The
-                      // parent itself is filtered out of the list at
-                      // the SQL layer (NOT EXISTS subquery).
-                      if ((tx['parent_id'] ?? '').toString().isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: context.accentSoft(context.tealAccent),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            l.txSplitPill,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              color: context.tealAccent,
-                              letterSpacing: 0.5,
                             ),
                           ),
-                        ),
-                      ],
-                      // "Transfer" pill on rows that are one leg of a
-                      // detected FX-transfer pair — the linkage was only
-                      // visible inside the detail panel, so the receiving
-                      // leg read as income in the list.
-                      if (isFxTransfer) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: context.accentSoft(fxAccent),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            l.txTransferPill,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              color: fxAccent,
-                              letterSpacing: 0.5,
+                        ],
+                        // "Transfer" pill on rows that are one leg of a
+                        // detected FX-transfer pair — the linkage was only
+                        // visible inside the detail panel, so the receiving
+                        // leg read as income in the list.
+                        if (isFxTransfer) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: context.accentSoft(fxAccent),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              l.txTransferPill,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: fxAccent,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _metaLine(tx, notes),
-                    style: TextStyle(
-                      color: context.textSubtle,
-                      fontSize: metaSize,
-                      height: 1.3,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Right-aligned amount. Bold native currency on top, converted
-            // reporting-currency estimate below whenever the row's native
-            // currency differs from the reporting currency — on EVERY width.
-            // (Narrow used to hide the estimate for breathing room, but the
-            // month headers/nets are in the reporting currency, so in MXN
-            // mode a phone showed MXN headers over USD-only rows with no
-            // visible way to reconcile them.)
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: isNarrow ? 128 : 140),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Transfer legs swap the +/− sign for ⇄ and render in
-                  // neutral textPrimary: the money moved between the
-                  // user's own accounts, so neither the green income
-                  // treatment nor the expense one applies.
-                  //
-                  // FittedBox(scaleDown) so a large native figure (e.g. a
-                  // 7-digit MXN sum in the narrow 128px box) shrinks to fit
-                  // rather than ellipsizing to a meaningless "−$1,234…".
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      isFxTransfer
-                          ? '⇄ ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}'
-                          : '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
+                    const SizedBox(height: 2),
+                    Text(
+                      _metaLine(tx, notes),
                       style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: amountSize,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        color: (isFxTransfer || isExpense)
-                            ? context.textPrimary
-                            : context.positive,
+                        color: context.textSubtle,
+                        fontSize: metaSize,
+                        height: 1.3,
                       ),
                       maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  if (needsConversion)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Right-aligned amount. Bold native currency on top, converted
+              // reporting-currency estimate below whenever the row's native
+              // currency differs from the reporting currency — on EVERY width.
+              // (Narrow used to hide the estimate for breathing room, but the
+              // month headers/nets are in the reporting currency, so in MXN
+              // mode a phone showed MXN headers over USD-only rows with no
+              // visible way to reconcile them.)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: isNarrow ? 128 : 140),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Transfer legs swap the +/− sign for ⇄ and render in
+                    // neutral textPrimary: the money moved between the
+                    // user's own accounts, so neither the green income
+                    // treatment nor the expense one applies.
+                    //
+                    // FittedBox(scaleDown) so a large native figure (e.g. a
+                    // 7-digit MXN sum in the narrow 128px box) shrinks to fit
+                    // rather than ellipsizing to a meaningless "−$1,234…".
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
                       child: Text(
-                        '≈ ${widget.currencyFormat.format(converted.abs())}',
+                        isFxTransfer
+                            ? '⇄ ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}'
+                            : '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                         style: TextStyle(
-                          fontSize: 10,
-                          color: context.textFaint,
+                          fontWeight: FontWeight.w700,
+                          fontSize: amountSize,
                           fontFeatures: const [FontFeature.tabularFigures()],
+                          color: (isFxTransfer || isExpense)
+                              ? context.textPrimary
+                              : context.positive,
                         ),
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  // Running balance (single-account panel only), in the
-                  // account's NATIVE currency — same formatter as the
-                  // amount above it, never the converted estimate.
-                  // Statement-persisted balances render plain; client-
-                  // side estimates carry a '≈' and a tooltip that says
-                  // where the figure comes from.
-                  if (balanceAfter != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Tooltip(
-                        message: balanceAfter.estimated
-                            ? l.txBalanceAfterEstimatedTooltip
-                            : l.txBalanceAfterTooltip,
+                    if (needsConversion)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          l.txBalanceAfter(
-                            '${balanceAfter.estimated ? '≈ ' : ''}'
-                            '${formatCurrencyAmount(balanceAfter.value, sourceCurrency)}',
-                          ),
+                          '≈ ${widget.currencyFormat.format(converted.abs())}',
                           style: TextStyle(
                             fontSize: 10,
-                            color: context.textSubtle,
-                            fontFeatures: const [
-                              FontFeature.tabularFigures()
-                            ],
+                            color: context.textFaint,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  if (tx['pending'] == true)
-                    Container(
-                      margin: const EdgeInsets.only(top: 3),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: context.warning.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        l.txStatusPending,
-                        style: TextStyle(
-                          color: context.warning,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.3,
+                    // Running balance (single-account panel only), in the
+                    // account's NATIVE currency — same formatter as the
+                    // amount above it, never the converted estimate.
+                    // Statement-persisted balances render plain; client-
+                    // side estimates carry a '≈' and a tooltip that says
+                    // where the figure comes from.
+                    if (balanceAfter != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Tooltip(
+                          message: balanceAfter.estimated
+                              ? l.txBalanceAfterEstimatedTooltip
+                              : l.txBalanceAfterTooltip,
+                          child: Text(
+                            l.txBalanceAfter(
+                              '${balanceAfter.estimated ? '≈ ' : ''}'
+                              '${formatCurrencyAmount(balanceAfter.value, sourceCurrency)}',
+                            ),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: context.textSubtle,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                    if (tx['pending'] == true)
+                      Container(
+                        margin: const EdgeInsets.only(top: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          l.txStatusPending,
+                          style: TextStyle(
+                            color: context.warning,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -3311,8 +3407,7 @@ class TransactionsTabState extends State<TransactionsTab> {
     final account = (tx['account_name'] ?? '').toString();
     final inst = (tx['institution_name'] ?? '').toString();
     if (account.isEmpty) return inst;
-    if (inst.isEmpty ||
-        account.toLowerCase().contains(inst.toLowerCase())) {
+    if (inst.isEmpty || account.toLowerCase().contains(inst.toLowerCase())) {
       return account;
     }
     return '$inst · $account';
@@ -3375,65 +3470,74 @@ class TransactionsTabState extends State<TransactionsTab> {
           },
           child: Focus(
             autofocus: true,
-            child: Builder(builder: (ctx) {
-              // Read size/insets fresh (inside a Builder so it rebuilds on
-              // keyboard show/hide): the narrow bottom sheet must lift above
-              // the soft keyboard when the notes/category field is focused,
-              // instead of hiding the pinned Save button behind it.
-              final mq = MediaQuery.of(ctx);
-              final insets = mq.viewInsets.bottom;
-              final screen = mq.size;
-              final sheetMax = screen.height - insets - 24;
-              final sheetWanted = screen.height * 0.9;
-              return Align(
-                alignment:
-                    isNarrow ? Alignment.bottomCenter : Alignment.centerRight,
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: isNarrow ? insets : 0),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Container(
-                      width: isNarrow ? screen.width : 480,
-                      // Narrow: hug the content (the panel column is
-                      // mainAxisSize.min) and cap at ~90% / keyboard-safe
-                      // height so long content scrolls instead of growing.
-                      height: isNarrow ? null : screen.height,
-                      constraints: isNarrow
-                          ? BoxConstraints(
-                              maxHeight: sheetWanted < sheetMax
-                                  ? sheetWanted
-                                  : sheetMax)
-                          : null,
-                      // The surface color lives on a Material (not the
-                      // BoxDecoration) so the category-editor autocomplete's
-                      // ListTiles paint their background/ink on a Material
-                      // ancestor; newer Flutter asserts when a colored
-                      // DecoratedBox sits between a ListTile and its Material.
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        borderRadius: isNarrow
-                            ? const BorderRadius.vertical(
-                                top: Radius.circular(20))
-                            : const BorderRadius.horizontal(
-                                left: Radius.circular(20)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            blurRadius: 24,
-                            offset: const Offset(-4, 0),
+            child: Builder(
+              builder: (ctx) {
+                // Read size/insets fresh (inside a Builder so it rebuilds on
+                // keyboard show/hide): the narrow bottom sheet must lift above
+                // the soft keyboard when the notes/category field is focused,
+                // instead of hiding the pinned Save button behind it.
+                final mq = MediaQuery.of(ctx);
+                final insets = mq.viewInsets.bottom;
+                final screen = mq.size;
+                final sheetMax = screen.height - insets - 24;
+                final sheetWanted = screen.height * 0.9;
+                return Align(
+                  alignment: isNarrow
+                      ? Alignment.bottomCenter
+                      : Alignment.centerRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: isNarrow ? insets : 0),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        width: isNarrow ? screen.width : 480,
+                        // Narrow: hug the content (the panel column is
+                        // mainAxisSize.min) and cap at ~90% / keyboard-safe
+                        // height so long content scrolls instead of growing.
+                        height: isNarrow ? null : screen.height,
+                        constraints: isNarrow
+                            ? BoxConstraints(
+                                maxHeight: sheetWanted < sheetMax
+                                    ? sheetWanted
+                                    : sheetMax,
+                              )
+                            : null,
+                        // The surface color lives on a Material (not the
+                        // BoxDecoration) so the category-editor autocomplete's
+                        // ListTiles paint their background/ink on a Material
+                        // ancestor; newer Flutter asserts when a colored
+                        // DecoratedBox sits between a ListTile and its Material.
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          borderRadius: isNarrow
+                              ? const BorderRadius.vertical(
+                                  top: Radius.circular(20),
+                                )
+                              : const BorderRadius.horizontal(
+                                  left: Radius.circular(20),
+                                ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 24,
+                              offset: const Offset(-4, 0),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Theme.of(ctx).colorScheme.surface,
+                          child: _TransactionDetailPanel(
+                            state: this,
+                            tx: tx,
+                            isNarrow: isNarrow,
                           ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Theme.of(ctx).colorScheme.surface,
-                        child: _TransactionDetailPanel(
-                            state: this, tx: tx, isNarrow: isNarrow),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            }),
+                );
+              },
+            ),
           ),
         );
       },
@@ -3474,11 +3578,8 @@ class TransactionsTabState extends State<TransactionsTab> {
     for (final raw in matches) {
       final m = raw as Map<String, dynamic>;
       final isSource = m['source_tx_id']?.toString() == txId;
-      final otherLabel = (isSource
-              ? m['dest_label']
-              : m['source_label'])
-          ?.toString() ??
-          '—';
+      final otherLabel =
+          (isSource ? m['dest_label'] : m['source_label'])?.toString() ?? '—';
       final otherDate =
           (isSource ? m['dest_date'] : m['source_date'])?.toString() ?? '';
       final implied = (m['implied_fx_rate'] as num?)?.toDouble() ?? 0.0;
@@ -3492,93 +3593,95 @@ class TransactionsTabState extends State<TransactionsTab> {
 
       final accent = confirmed ? context.tealAccent : context.warning;
 
-      widgets.add(Container(
-        margin: const EdgeInsets.only(top: 6),
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: BoxDecoration(
-          color: context.accentSoft(accent),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: context.accentBorder(accent)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.swap_horiz, size: 14, color: accent),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    isSource
-                        ? '→ $otherLabel${otherDate.isEmpty ? '' : ' · $otherDate'}'
-                        : '← $otherLabel${otherDate.isEmpty ? '' : ' · $otherDate'}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: context.textPrimary,
-                      fontSize: 13,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  confirmed
-                      ? l.txConfirmed
-                      : (keyword.isEmpty
-                          ? l.txAutoConfidence(confidence)
-                          : l.txAutoConfidenceKeyword(confidence, keyword)),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: accent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              // gen-l10n orders these alphabetically → (dstAmount, dstCurrency, rate, srcAmount, srcCurrency).
-              l.txTransferImpliedRate(
-                _formatNative(dstAmt, dstCcy),
-                dstCcy,
-                implied.toStringAsFixed(2),
-                _formatNative(srcAmt, srcCcy),
-                srcCcy,
-              ),
-              style: TextStyle(
-                fontSize: 12,
-                color: context.textMuted,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (!confirmed && widget.onConfirmFxTransfer != null)
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      await widget.onConfirmFxTransfer!(m['id'].toString());
-                    },
-                    child: Text(l.txConfirm),
-                  ),
-                if (widget.onUnlinkFxTransfer != null)
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      await widget.onUnlinkFxTransfer!(m['id'].toString());
-                    },
+      widgets.add(
+        Container(
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          decoration: BoxDecoration(
+            color: context.accentSoft(accent),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: context.accentBorder(accent)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.swap_horiz, size: 14, color: accent),
+                  const SizedBox(width: 6),
+                  Expanded(
                     child: Text(
-                      l.txUnlink,
-                      style: TextStyle(color: context.negative),
+                      isSource
+                          ? '→ $otherLabel${otherDate.isEmpty ? '' : ' · $otherDate'}'
+                          : '← $otherLabel${otherDate.isEmpty ? '' : ' · $otherDate'}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-              ],
-            ),
-          ],
+                  Text(
+                    confirmed
+                        ? l.txConfirmed
+                        : (keyword.isEmpty
+                              ? l.txAutoConfidence(confidence)
+                              : l.txAutoConfidenceKeyword(confidence, keyword)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                // gen-l10n orders these alphabetically → (dstAmount, dstCurrency, rate, srcAmount, srcCurrency).
+                l.txTransferImpliedRate(
+                  _formatNative(dstAmt, dstCcy),
+                  dstCcy,
+                  implied.toStringAsFixed(2),
+                  _formatNative(srcAmt, srcCcy),
+                  srcCcy,
+                ),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.textMuted,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (!confirmed && widget.onConfirmFxTransfer != null)
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        await widget.onConfirmFxTransfer!(m['id'].toString());
+                      },
+                      child: Text(l.txConfirm),
+                    ),
+                  if (widget.onUnlinkFxTransfer != null)
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        await widget.onUnlinkFxTransfer!(m['id'].toString());
+                      },
+                      child: Text(
+                        l.txUnlink,
+                        style: TextStyle(color: context.negative),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
-      ));
+      );
     }
     return widgets;
   }
@@ -3659,10 +3762,9 @@ class TransactionsTabState extends State<TransactionsTab> {
 
   Widget _similarRow(dynamic other) {
     final otherDate = DateTime.parse(other['date'] as String);
-    final otherSourceAmount =
-        ((other['amount'] as num?)?.toDouble() ?? 0.0);
-    final otherSourceCurrency =
-        (other['currency'] ?? widget.targetCurrency).toString();
+    final otherSourceAmount = ((other['amount'] as num?)?.toDouble() ?? 0.0);
+    final otherSourceCurrency = (other['currency'] ?? widget.targetCurrency)
+        .toString();
     // Storage sign convention (backend sync.rs:659): negative = outflow.
     final otherIsExpense = otherSourceAmount < 0;
 
@@ -3715,8 +3817,11 @@ class _TransactionDetailPanel extends StatefulWidget {
   // narrow, top-right X on wide.
   final bool isNarrow;
 
-  const _TransactionDetailPanel(
-      {required this.state, required this.tx, required this.isNarrow});
+  const _TransactionDetailPanel({
+    required this.state,
+    required this.tx,
+    required this.isNarrow,
+  });
 
   @override
   State<_TransactionDetailPanel> createState() =>
@@ -3746,8 +3851,8 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     // auto-category into a user override of the raw enum string.
     final hasAnyCategory =
         (tx['user_category'] ?? '').toString().trim().isNotEmpty ||
-            (tx['category'] ?? '').toString().trim().isNotEmpty ||
-            (tx['category_detailed'] ?? '').toString().trim().isNotEmpty;
+        (tx['category'] ?? '').toString().trim().isNotEmpty ||
+        (tx['category_detailed'] ?? '').toString().trim().isNotEmpty;
     _initialCategoryLabel = hasAnyCategory
         ? prettyCategory(
             userCategory: tx['user_category']?.toString(),
@@ -3782,8 +3887,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
   /// from the equal-weight `_metaChip` cloud: the label is de-emphasised
   /// and the value carries the weight, so the group scans as a small
   /// table instead of a pill soup.
-  Widget _detailRow(IconData icon, String label, String value,
-      {Color? valueColor, bool maskAware = false}) {
+  Widget _detailRow(
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+    bool maskAware = false,
+  }) {
     final valueStyle = TextStyle(
       fontSize: 13,
       fontWeight: FontWeight.w600,
@@ -3835,16 +3945,16 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
 
     final date = DateTime.parse(tx['date'] as String);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
-    final sourceCurrency =
-        (tx['currency'] ?? s.widget.targetCurrency).toString();
+    final sourceCurrency = (tx['currency'] ?? s.widget.targetCurrency)
+        .toString();
     final convertedAmount = convertCurrency(
       sourceAmount,
       from: sourceCurrency,
       to: s.widget.targetCurrency,
       usdMxnRate: s.widget.usdMxnRate,
     );
-    final needsConversion = s.widget.usdMxnRate > 0 &&
-        sourceCurrency != s.widget.targetCurrency;
+    final needsConversion =
+        s.widget.usdMxnRate > 0 && sourceCurrency != s.widget.targetCurrency;
     // Storage sign convention (backend sync.rs:659): negative = outflow,
     // positive = inflow.
     final isExpense = sourceAmount < 0;
@@ -3865,11 +3975,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     final logoUrl = counterpartyLogo(tx);
     // Hero icon style — same registry the list rows use, keyed on the
     // prettified label (always non-empty).
-    final catStyle = context.categoryStyle(prettyCategory(
-      userCategory: tx['user_category']?.toString(),
-      detailed: tx['category_detailed']?.toString(),
-      primary: tx['category']?.toString(),
-    ));
+    final catStyle = context.categoryStyle(
+      prettyCategory(
+        userCategory: tx['user_category']?.toString(),
+        detailed: tx['category_detailed']?.toString(),
+        primary: tx['category']?.toString(),
+      ),
+    );
     final color = catStyle.color;
     final channel = (tx['payment_channel'] ?? '').toString();
 
@@ -3896,7 +4008,8 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     // different label — otherwise the Category field above already shows
     // the identical prettified string and the row is pure duplication.
     final userCat = (tx['user_category'] ?? '').toString().trim();
-    final autoCategoryLabel = (originalCategory.isNotEmpty ||
+    final autoCategoryLabel =
+        (originalCategory.isNotEmpty ||
             (tx['category_detailed'] ?? '').toString().isNotEmpty)
         ? prettyCategory(
             detailed: tx['category_detailed']?.toString(),
@@ -3909,7 +4022,8 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     final canMove = s.widget.accounts.isNotEmpty && s.widget.onUpdate != null;
     final isChild = (tx['parent_id'] ?? '').toString().isNotEmpty;
     final canSplit = !isChild && s.widget.onSplitTransaction != null;
-    final canEditSplit = isChild &&
+    final canEditSplit =
+        isChild &&
         s.widget.onSplitTransaction != null &&
         s.widget.onUnsplitTransaction != null;
     final canUnsplit = isChild && s.widget.onUnsplitTransaction != null;
@@ -3923,11 +4037,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     // imported facts belong to the bank (the server enforces the same
     // rule with a 403). Split children are excluded — their amounts are
     // bound to the parent; that path is the split editor.
-    final canEditManual = source == 'manual' &&
+    final canEditManual =
+        source == 'manual' &&
         !isChild &&
         s.widget.apiService != null &&
         s.widget.accounts.isNotEmpty;
-    final hasOverflow = canEditManual ||
+    final hasOverflow =
+        canEditManual ||
         canMove ||
         canSplit ||
         canEditSplit ||
@@ -3941,17 +4057,23 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
       // omitted here to avoid showing it twice.
       final rows = <Widget>[
         if ((tx['account_name'] ?? '').toString().isNotEmpty)
-          _detailRow(Icons.account_balance, l.txAccount,
-              s._accountLabel(tx),
-              maskAware: true),
+          _detailRow(
+            Icons.account_balance,
+            l.txAccount,
+            s._accountLabel(tx),
+            maskAware: true,
+          ),
         if (autoCategoryLabel != null &&
             userCat.isNotEmpty &&
             autoCategoryLabel != userCat)
-          _detailRow(
-              Icons.label_outline, l.txAutoCategory, autoCategoryLabel),
+          _detailRow(Icons.label_outline, l.txAutoCategory, autoCategoryLabel),
         if (pending)
-          _detailRow(Icons.hourglass_empty, l.txStatus, l.txStatusPending,
-              valueColor: context.warning),
+          _detailRow(
+            Icons.hourglass_empty,
+            l.txStatus,
+            l.txStatusPending,
+            valueColor: context.warning,
+          ),
       ];
       if (rows.isEmpty) return const SizedBox.shrink();
       return Container(
@@ -3992,8 +4114,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
               s._openEditManualDialog(tx);
               break;
             case 'split':
-              s._openSplitDialog(tx, sourceCurrency, sourceAmount,
-                  titleDescription, originalCategory);
+              s._openSplitDialog(
+                tx,
+                sourceCurrency,
+                sourceAmount,
+                titleDescription,
+                originalCategory,
+              );
               break;
             case 'editSplit':
               s._openEditSplitDialog(
@@ -4047,14 +4174,18 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           if (canMove)
             PopupMenuItem(
               value: 'move',
-              child: _menuRow(Icons.drive_file_move_outlined,
-                  l.txMoveToDifferentAccount),
+              child: _menuRow(
+                Icons.drive_file_move_outlined,
+                l.txMoveToDifferentAccount,
+              ),
             ),
           if (canCreateLoan)
             PopupMenuItem(
               value: 'createLoan',
               child: _menuRow(
-                  Icons.monetization_on_outlined, l.txCreateLoanFromTx),
+                Icons.monetization_on_outlined,
+                l.txCreateLoanFromTx,
+              ),
             ),
           if (canMakeRecurring)
             PopupMenuItem(
@@ -4064,8 +4195,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           if (canDelete)
             PopupMenuItem(
               value: 'delete',
-              child: _menuRow(Icons.delete_outline, l.actionDelete,
-                  color: context.negative),
+              child: _menuRow(
+                Icons.delete_outline,
+                l.actionDelete,
+                color: context.negative,
+              ),
             ),
         ],
       );
@@ -4130,8 +4264,10 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                   icon: const Icon(Icons.close, size: 22),
                   onPressed: _close,
                   tooltip: l.actionClose,
-                  constraints:
-                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
                 ),
                 const Spacer(),
                 if (hasOverflow) overflowButton(),
@@ -4212,7 +4348,9 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(
-                        horizontal: 18, vertical: isNarrow ? 10 : 16),
+                      horizontal: 18,
+                      vertical: isNarrow ? 10 : 16,
+                    ),
                     decoration: BoxDecoration(
                       color: context.tint(0.04),
                       borderRadius: BorderRadius.circular(14),
@@ -4243,7 +4381,7 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                                 fontSize: 11,
                                 color: context.textSubtle,
                                 fontFeatures: const [
-                                  FontFeature.tabularFigures()
+                                  FontFeature.tabularFigures(),
                                 ],
                               ),
                             ),
@@ -4260,8 +4398,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                         if (needsConversion) ...[
                           const SizedBox(height: 4),
                           Text(
-                            l.txApproxEstimated(s.widget.currencyFormat
-                                .format(convertedAmount.abs())),
+                            l.txApproxEstimated(
+                              s.widget.currencyFormat.format(
+                                convertedAmount.abs(),
+                              ),
+                            ),
                             style: TextStyle(
                               fontSize: 12,
                               color: context.textSubtle,
@@ -4280,23 +4421,24 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                     optionsBuilder: (TextEditingValue value) {
                       final q = value.text.trim().toLowerCase();
                       if (q.isEmpty) return _categorySuggestions;
-                      return _categorySuggestions
-                          .where((c) => c.toLowerCase().contains(q));
+                      return _categorySuggestions.where(
+                        (c) => c.toLowerCase().contains(q),
+                      );
                     },
                     fieldViewBuilder:
                         (ctx, controller, focusNode, onFieldSubmitted) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: InputDecoration(
-                          labelText: l.txCategory,
-                          hintText: l.txCategoryHint,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onSubmitted: (_) => onFieldSubmitted(),
-                      );
-                    },
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            decoration: InputDecoration(
+                              labelText: l.txCategory,
+                              hintText: l.txCategoryHint,
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onSubmitted: (_) => onFieldSubmitted(),
+                          );
+                        },
                     optionsViewBuilder: (ctx, onSelected, options) {
                       final opts = options.toList();
                       return Align(
@@ -4305,7 +4447,9 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                           elevation: 4,
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(
-                                maxHeight: 200, maxWidth: 420),
+                              maxHeight: 200,
+                              maxWidth: 420,
+                            ),
                             child: ListView.builder(
                               padding: EdgeInsets.zero,
                               shrinkWrap: true,
@@ -4316,7 +4460,9 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                                   onTap: () => onSelected(option),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 12),
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
                                     child: Text(option),
                                   ),
                                 );
@@ -4347,14 +4493,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                   // -- More details disclosure -------------------------
                   const SizedBox(height: 12),
                   Theme(
-                    data: Theme.of(context)
-                        .copyWith(dividerColor: Colors.transparent),
+                    data: Theme.of(
+                      context,
+                    ).copyWith(dividerColor: Colors.transparent),
                     child: ExpansionTile(
                       tilePadding: EdgeInsets.zero,
-                      childrenPadding:
-                          const EdgeInsets.only(bottom: 8),
-                      expandedCrossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      childrenPadding: const EdgeInsets.only(bottom: 8),
+                      expandedCrossAxisAlignment: CrossAxisAlignment.start,
                       title: Text(
                         l.txMoreDetails,
                         style: TextStyle(
@@ -4368,9 +4513,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                         if (rawDescription != titleDescription) ...[
                           // Manual rows hold the user's own words, not
                           // bank data — neutral copy, not "raw bank text".
-                          s._sectionLabel(source == 'manual'
-                              ? l.txOriginalText
-                              : l.txRawBankText),
+                          s._sectionLabel(
+                            source == 'manual'
+                                ? l.txOriginalText
+                                : l.txRawBankText,
+                          ),
                           const SizedBox(height: 4),
                           SelectableText(
                             rawDescription,
@@ -4391,14 +4538,12 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                             // the cloud — a cloud on a manual row would
                             // re-assert the "synced" claim the label
                             // just corrected.
-                            s._metaChip(
-                                switch (source) {
-                                  'manual' => Icons.edit_outlined,
-                                  'csv' => Icons.upload_file_outlined,
-                                  'plaid' => Icons.cloud_download,
-                                  _ => Icons.help_outline,
-                                },
-                                s._sourceLabel(context, source)),
+                            s._metaChip(switch (source) {
+                              'manual' => Icons.edit_outlined,
+                              'csv' => Icons.upload_file_outlined,
+                              'plaid' => Icons.cloud_download,
+                              _ => Icons.help_outline,
+                            }, s._sourceLabel(context, source)),
                             if (hasChannel)
                               s._metaChip(
                                 s._channelIcon(channel),
@@ -4414,14 +4559,14 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Text(
                               l.txMerchantTotal(
-                                  s.widget.currencyFormat
-                                      .format(merchantTotal),
-                                  merchantCount),
+                                s.widget.currencyFormat.format(merchantTotal),
+                                merchantCount,
+                              ),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: context.textMuted,
                                 fontFeatures: const [
-                                  FontFeature.tabularFigures()
+                                  FontFeature.tabularFigures(),
                                 ],
                               ),
                             ),
@@ -4450,8 +4595,8 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           ListenableBuilder(
             listenable: Listenable.merge([_catController, _notesController]),
             builder: (context, _) {
-              final dirty = diffEditedField(
-                          _catController.text, _initialCategoryLabel) !=
+              final dirty =
+                  diffEditedField(_catController.text, _initialCategoryLabel) !=
                       null ||
                   diffEditedField(_notesController.text, _initialNotes) != null;
               if (!dirty) {
@@ -4477,9 +4622,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                           // the user actually edited is sent (null = "leave
                           // alone").
                           final newCategory = diffEditedField(
-                              _catController.text, _initialCategoryLabel);
+                            _catController.text,
+                            _initialCategoryLabel,
+                          );
                           final newNotes = diffEditedField(
-                              _notesController.text, _initialNotes);
+                            _notesController.text,
+                            _initialNotes,
+                          );
                           _close();
                           if (newCategory == null && newNotes == null) {
                             return;
@@ -4523,14 +4672,14 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     try {
       await onUnsplit((tx['parent_id'] ?? '').toString());
       if (!_state.mounted) return;
-      ScaffoldMessenger.of(_state.context).showSnackBar(
-        SnackBar(content: Text(l.txSplitRemoved)),
-      );
+      ScaffoldMessenger.of(
+        _state.context,
+      ).showSnackBar(SnackBar(content: Text(l.txSplitRemoved)));
     } catch (e) {
       if (!_state.mounted) return;
-      ScaffoldMessenger.of(_state.context).showSnackBar(
-        SnackBar(content: Text(l.txUnsplitFailed(e.toString()))),
-      );
+      ScaffoldMessenger.of(
+        _state.context,
+      ).showSnackBar(SnackBar(content: Text(l.txUnsplitFailed(e.toString()))));
     }
   }
 
@@ -4595,10 +4744,12 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                   Navigator.pop(sheetCtx);
                   _close();
                   try {
-                    await Future.value(s.widget.onUpdate?.call(
-                      tx['id'],
-                      accountId: newAccountId,
-                    ));
+                    await Future.value(
+                      s.widget.onUpdate?.call(
+                        tx['id'],
+                        accountId: newAccountId,
+                      ),
+                    );
                   } catch (e) {
                     if (!s.mounted) return;
                     ScaffoldMessenger.of(s.context).showSnackBar(
@@ -4628,11 +4779,11 @@ class _TxListItem {
   final dynamic tx;
   const _TxListItem._(this.kind, {this.date, this.isFirst = false, this.tx});
   const _TxListItem.header({required DateTime date, required bool isFirst})
-      : this._(0, date: date, isFirst: isFirst);
+    : this._(0, date: date, isFirst: isFirst);
   const _TxListItem.row({required dynamic tx}) : this._(1, tx: tx);
   const _TxListItem.divider() : this._(2);
   const _TxListItem.monthHeader({required DateTime date, required bool isFirst})
-      : this._(3, date: date, isFirst: isFirst);
+    : this._(3, date: date, isFirst: isFirst);
 }
 
 /// Small inline picker: shows a dropdown of accounts and reassigns the
@@ -4689,7 +4840,9 @@ class _AccountMoverState extends State<_AccountMover> {
         ),
         const SizedBox(width: 8),
         ElevatedButton(
-          onPressed: _selectedId == null ? null : () => widget.onMove(_selectedId!),
+          onPressed: _selectedId == null
+              ? null
+              : () => widget.onMove(_selectedId!),
           child: Text(l.txMove),
         ),
       ],

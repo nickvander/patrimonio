@@ -65,8 +65,8 @@ double? actionButtonWidth(double available) =>
 /// without any button stretching to fill.
 BoxConstraints actionButtonConstraints(double available) =>
     available < kActionButtonStackBelow
-        ? BoxConstraints.tightFor(width: available)
-        : const BoxConstraints(
-            minWidth: kActionButtonMinWidth,
-            maxWidth: kActionButtonMaxWidth,
-          );
+    ? BoxConstraints.tightFor(width: available)
+    : const BoxConstraints(
+        minWidth: kActionButtonMinWidth,
+        maxWidth: kActionButtonMaxWidth,
+      );

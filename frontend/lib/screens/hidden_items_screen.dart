@@ -62,8 +62,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
         _ignoredSubs = results[0];
         _dismissedFxPairs = results[1];
         _archivedAccounts = results[2];
-        _sinceLastLoginAnchor =
-            Preferences.getSinceLastLoginDismissalAnchor();
+        _sinceLastLoginAnchor = Preferences.getSinceLastLoginDismissalAnchor();
       });
     } catch (e) {
       if (mounted) {
@@ -100,9 +99,9 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
     Preferences.clearSinceLastLoginDismissal();
     setState(() => _sinceLastLoginAnchor = null);
     final l = AppLocalizations.of(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(l.hiddenBannerWillReappear)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l.hiddenBannerWillReappear)));
   }
 
   Future<void> _restoreFxPair(String id, String summary) async {
@@ -115,11 +114,9 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
             .toList();
       });
       final l = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l.hiddenFxPairRestored(summary)),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.hiddenFxPairRestored(summary))));
     } catch (e) {
       if (!mounted) return;
       final l = AppLocalizations.of(context);
@@ -139,9 +136,9 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
             .toList();
       });
       final l = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.accountRestored(label))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.accountRestored(label))));
     } catch (e) {
       if (!mounted) return;
       final l = AppLocalizations.of(context);
@@ -179,9 +176,9 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
             .where((row) => (row as Map)['id'].toString() != id)
             .toList();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.accountDeleted(label))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.accountDeleted(label))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -211,142 +208,125 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final hasDismissedSinceLastLogin =
-        (_sinceLastLoginAnchor ?? '').isNotEmpty;
+    final hasDismissedSinceLastLogin = (_sinceLastLoginAnchor ?? '').isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(title: Text(l.hiddenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : ListView(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 16),
-                  children: [
-                    Text(
-                      l.hiddenIntro,
-                      style: TextStyle(
-                        color: context.textSubtle,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _sectionHeader(
-                      icon: Icons.autorenew_rounded,
-                      title: l.hiddenRecurringCharges,
-                      count: _ignoredSubs.length,
-                    ),
-                    if (_ignoredSubs.isEmpty)
-                      _emptyTile(
-                        l.hiddenNoSubscriptions,
-                      )
-                    else
-                      Card(
-                        child: Column(
-                          children: [
-                            for (var i = 0; i < _ignoredSubs.length; i++) ...[
-                              if (i > 0)
-                                Divider(height: 1, color: context.hairline),
-                              _ignoredSubTile(
-                                _ignoredSubs[i] as Map<String, dynamic>,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    const SizedBox(height: 24),
-                    _sectionHeader(
-                      icon: Icons.notifications_off_outlined,
-                      title: l.hiddenBanners,
-                      count: hasDismissedSinceLastLogin ? 1 : 0,
-                    ),
-                    if (!hasDismissedSinceLastLogin)
-                      _emptyTile(
-                        l.hiddenNoBanners,
-                      )
-                    else
-                      Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.history_outlined),
-                          title: Text(l.hiddenSinceLastLogin),
-                          subtitle: Text(
-                            l.hiddenHiddenForVisit(
-                                _formatAnchor(_sinceLastLoginAnchor!)),
-                            style: TextStyle(
-                              color: context.textSubtle,
-                              fontSize: 12,
-                            ),
+          ? Center(child: Text(_error!))
+          : ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              children: [
+                Text(
+                  l.hiddenIntro,
+                  style: TextStyle(color: context.textSubtle, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                _sectionHeader(
+                  icon: Icons.autorenew_rounded,
+                  title: l.hiddenRecurringCharges,
+                  count: _ignoredSubs.length,
+                ),
+                if (_ignoredSubs.isEmpty)
+                  _emptyTile(l.hiddenNoSubscriptions)
+                else
+                  Card(
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < _ignoredSubs.length; i++) ...[
+                          if (i > 0)
+                            Divider(height: 1, color: context.hairline),
+                          _ignoredSubTile(
+                            _ignoredSubs[i] as Map<String, dynamic>,
                           ),
-                          trailing: TextButton.icon(
-                            onPressed: _restoreSinceLastLoginBanner,
-                            icon: const Icon(Icons.refresh, size: 16),
-                            label: Text(l.hiddenShowAgain),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 24),
-                    _sectionHeader(
-                      icon: Icons.swap_horiz_outlined,
-                      title: l.hiddenFxTransferPairs,
-                      count: _dismissedFxPairs.length,
+                        ],
+                      ],
                     ),
-                    if (_dismissedFxPairs.isEmpty)
-                      _emptyTile(
-                        l.hiddenNoFxPairs,
-                      )
-                    else
-                      Card(
-                        child: Column(
-                          children: [
-                            for (var i = 0; i < _dismissedFxPairs.length; i++) ...[
-                              if (i > 0)
-                                Divider(height: 1, color: context.hairline),
-                              _dismissedFxTile(
-                                _dismissedFxPairs[i] as Map<String, dynamic>,
-                              ),
-                            ],
-                          ],
+                  ),
+                const SizedBox(height: 24),
+                _sectionHeader(
+                  icon: Icons.notifications_off_outlined,
+                  title: l.hiddenBanners,
+                  count: hasDismissedSinceLastLogin ? 1 : 0,
+                ),
+                if (!hasDismissedSinceLastLogin)
+                  _emptyTile(l.hiddenNoBanners)
+                else
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.history_outlined),
+                      title: Text(l.hiddenSinceLastLogin),
+                      subtitle: Text(
+                        l.hiddenHiddenForVisit(
+                          _formatAnchor(_sinceLastLoginAnchor!),
                         ),
-                      ),
-                    const SizedBox(height: 24),
-                    _sectionHeader(
-                      icon: Icons.account_balance_outlined,
-                      title: l.hiddenClosedAccounts,
-                      count: _archivedAccounts.length,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 8),
-                      child: Text(
-                        l.hiddenClosedAccountsIntro,
                         style: TextStyle(
                           color: context.textSubtle,
                           fontSize: 12,
                         ),
                       ),
-                    ),
-                    if (_archivedAccounts.isEmpty)
-                      _emptyTile(
-                        l.hiddenNoClosedAccounts,
-                      )
-                    else
-                      Card(
-                        child: Column(
-                          children: [
-                            for (var i = 0;
-                                i < _archivedAccounts.length;
-                                i++) ...[
-                              if (i > 0)
-                                Divider(height: 1, color: context.hairline),
-                              _archivedAccountTile(
-                                _archivedAccounts[i] as Map<String, dynamic>,
-                              ),
-                            ],
-                          ],
-                        ),
+                      trailing: TextButton.icon(
+                        onPressed: _restoreSinceLastLoginBanner,
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: Text(l.hiddenShowAgain),
                       ),
-                  ],
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                _sectionHeader(
+                  icon: Icons.swap_horiz_outlined,
+                  title: l.hiddenFxTransferPairs,
+                  count: _dismissedFxPairs.length,
                 ),
+                if (_dismissedFxPairs.isEmpty)
+                  _emptyTile(l.hiddenNoFxPairs)
+                else
+                  Card(
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < _dismissedFxPairs.length; i++) ...[
+                          if (i > 0)
+                            Divider(height: 1, color: context.hairline),
+                          _dismissedFxTile(
+                            _dismissedFxPairs[i] as Map<String, dynamic>,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                _sectionHeader(
+                  icon: Icons.account_balance_outlined,
+                  title: l.hiddenClosedAccounts,
+                  count: _archivedAccounts.length,
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 8),
+                  child: Text(
+                    l.hiddenClosedAccountsIntro,
+                    style: TextStyle(color: context.textSubtle, fontSize: 12),
+                  ),
+                ),
+                if (_archivedAccounts.isEmpty)
+                  _emptyTile(l.hiddenNoClosedAccounts)
+                else
+                  Card(
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < _archivedAccounts.length; i++) ...[
+                          if (i > 0)
+                            Divider(height: 1, color: context.hairline),
+                          _archivedAccountTile(
+                            _archivedAccounts[i] as Map<String, dynamic>,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 
@@ -507,9 +487,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
     if (s.isEmpty) return s;
     return s
         .split(' ')
-        .map((w) => w.isEmpty
-            ? w
-            : '${w[0].toUpperCase()}${w.substring(1)}')
+        .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
         .join(' ');
   }
 }

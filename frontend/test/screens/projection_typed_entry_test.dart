@@ -60,7 +60,9 @@ Future<void> _tapValueLabel(WidgetTester tester, String value) async {
 
 Future<void> _typeAndSave(WidgetTester tester, String value) async {
   final field = find.descendant(
-      of: find.byType(AlertDialog), matching: find.byType(TextField));
+    of: find.byType(AlertDialog),
+    matching: find.byType(TextField),
+  );
   await tester.enterText(field, value);
   await tester.tap(find.widgetWithText(FilledButton, 'Save'));
   await tester.pumpAndSettle();
@@ -72,10 +74,12 @@ void main() {
     setTestSize(tester, const Size(1300, 1800));
     final fetches = <int>[];
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: _countingFetcher(fetches),
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: _countingFetcher(fetches),
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(fetches.length, 1); // initial load
 
@@ -84,8 +88,10 @@ void main() {
 
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text(r'$12,500'), findsOneWidget);
-    expect(_sliderFor(tester, 'Monthly savings').max,
-        greaterThanOrEqualTo(12500.0));
+    expect(
+      _sliderFor(tester, 'Monthly savings').max,
+      greaterThanOrEqualTo(12500.0),
+    );
 
     // F14 path: one debounced persist + refetch.
     await tester.pump(const Duration(milliseconds: 350));
@@ -101,7 +107,8 @@ void main() {
     setTestSize(tester, const Size(1300, 1800));
     final fetches = <int>[];
     await tester.pumpWidget(
-        buildProjectionHost(projectionFetcher: _countingFetcher(fetches)));
+      buildProjectionHost(projectionFetcher: _countingFetcher(fetches)),
+    );
     await tester.pumpAndSettle();
 
     await _tapValueLabel(tester, r'$1,000');
@@ -127,9 +134,11 @@ void main() {
       'rejects a value below the floor', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Below the floor first: inline error, no commit.
@@ -160,10 +169,12 @@ void main() {
     setTestSize(tester, const Size(1300, 1800));
     final fetches = <int>[];
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: _countingFetcher(fetches),
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: _countingFetcher(fetches),
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(fetches.length, 1); // initial load
 
@@ -187,7 +198,8 @@ void main() {
     setTestSize(tester, const Size(1300, 1800));
     final fetches = <int>[];
     await tester.pumpWidget(
-        buildProjectionHost(projectionFetcher: _countingFetcher(fetches)));
+      buildProjectionHost(projectionFetcher: _countingFetcher(fetches)),
+    );
     await tester.pumpAndSettle();
 
     await _tapValueLabel(tester, '7.0%');
@@ -206,13 +218,14 @@ void main() {
   testWidgets('the percent range error localizes (es): 99 into Expected '
       'return shows "Ingresa una tasa entre 0% y 15%"', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester
-        .pumpWidget(buildProjectionHost(locale: const Locale('es')));
+    await tester.pumpWidget(buildProjectionHost(locale: const Locale('es')));
     await tester.pumpAndSettle();
 
     await _tapValueLabel(tester, '7.0%');
     final field = find.descendant(
-        of: find.byType(AlertDialog), matching: find.byType(TextField));
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
     await tester.enterText(field, '99');
     await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
     await tester.pumpAndSettle();
@@ -227,9 +240,11 @@ void main() {
       'the whole-number error, and persists the commit', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
 
     await _tapValueLabel(tester, '20'); // default years to retirement
@@ -266,9 +281,11 @@ void main() {
       'new horizon (slider invariant preserved)', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      settingWriter: (key, value) async => writes[key] = value,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingWriter: (key, value) async => writes[key] = value,
+      ),
+    );
     await tester.pumpAndSettle();
 
     await _tapValueLabel(tester, '30'); // default projection years
@@ -287,16 +304,20 @@ void main() {
   testWidgets('a hydrated blob with monthly_contribution 12500 restores '
       '12500 — not clamped to the old 10000 slider max', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      settingReader: (key) async => key == 'projection_assumptions'
-          ? {'monthly_contribution': 12500.0}
-          : null,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        settingReader: (key) async => key == 'projection_assumptions'
+            ? {'monthly_contribution': 12500.0}
+            : null,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text(r'$12,500'), findsOneWidget);
     expect(find.text(r'$10,000'), findsNothing);
-    expect(_sliderFor(tester, 'Monthly savings').max,
-        greaterThanOrEqualTo(12500.0));
+    expect(
+      _sliderFor(tester, 'Monthly savings').max,
+      greaterThanOrEqualTo(12500.0),
+    );
   });
 }

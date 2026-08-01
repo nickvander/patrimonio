@@ -94,10 +94,7 @@ NetWorthDelta? computeNetWorthDelta(List<dynamic> history) {
     return best;
   }
 
-  for (final (days, label) in const [
-    (30, '30d'),
-    (7, '7d'),
-  ]) {
+  for (final (days, label) in const [(30, '30d'), (7, '7d')]) {
     final ref = pick(days, 5);
     if (ref != null && ref.value != 0) {
       final amount = latest.value - ref.value;
@@ -107,7 +104,10 @@ NetWorthDelta? computeNetWorthDelta(List<dynamic> history) {
         // real — debt-payoff/early-onboarding users deserve to see it. Show
         // the amount, suppress only the %.
         return NetWorthDelta(
-            amount: amount, percentage: null, windowLabel: label);
+          amount: amount,
+          percentage: null,
+          windowLabel: label,
+        );
       }
       final pct = _plausiblePct(amount, ref.value, latest.value);
       // Implausible baseline (onboarding — net worth >3x'd as accounts were
@@ -126,7 +126,8 @@ NetWorthDelta? computeNetWorthDelta(List<dynamic> history) {
 /// missing snapshot doesn't kill the figure. Either may be null when there
 /// isn't a comparable point that far back.
 ({NetWorthDelta? mom, NetWorthDelta? yoy}) computeMomYoyDeltas(
-    List<dynamic> history) {
+  List<dynamic> history,
+) {
   final points = _parsePoints(history);
   if (points.length < 2) return (mom: null, yoy: null);
   final latest = points.last;
@@ -146,7 +147,11 @@ NetWorthDelta? computeNetWorthDelta(List<dynamic> history) {
     final amount = latest.value - best.value;
     if (best.value < 0) {
       // Negative baseline: show the dollar delta, suppress the meaningless %.
-      return NetWorthDelta(amount: amount, percentage: null, windowLabel: label);
+      return NetWorthDelta(
+        amount: amount,
+        percentage: null,
+        windowLabel: label,
+      );
     }
     final pct = _plausiblePct(amount, best.value, latest.value);
     // Onboarding-inflated baseline → hide the chip entirely (no "+$1.5M MoM").

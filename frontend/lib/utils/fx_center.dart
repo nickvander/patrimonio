@@ -47,8 +47,8 @@ String? linkedFxAmount({
 /// current (`base`/`target`) and legacy (`*_currency`) field names —
 /// same parse the dashboard pill uses.
 ({String base, String target}) fxPairOf(Map<String, dynamic> latestRate) {
-  final base =
-      (latestRate['base'] ?? latestRate['base_currency'] ?? 'USD').toString();
+  final base = (latestRate['base'] ?? latestRate['base_currency'] ?? 'USD')
+      .toString();
   final target =
       (latestRate['target'] ?? latestRate['target_currency'] ?? 'MXN')
           .toString();

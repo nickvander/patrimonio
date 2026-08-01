@@ -75,11 +75,12 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
           widget.accounts.any((a) => a['id']?.toString() == txAccount)) {
         _accountId = txAccount;
       }
-      _descController.text = (tx['user_description'] ??
-              tx['merchant_name'] ??
-              tx['description'] ??
-              '')
-          .toString();
+      _descController.text =
+          (tx['user_description'] ??
+                  tx['merchant_name'] ??
+                  tx['description'] ??
+                  '')
+              .toString();
       final cat = (tx['user_category'] ?? tx['category'] ?? '').toString();
       if (cat.isNotEmpty) _categoryController.text = cat;
       final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
@@ -149,9 +150,9 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
       final l = AppLocalizations.of(context);
       Navigator.pop(context);
       widget.onCreated();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.recRuleCreated)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.recRuleCreated)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -198,7 +199,9 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                     return DropdownMenuItem(
                       value: id,
                       child: maskAwareNameText(
-                          nick.isNotEmpty ? nick : name, const TextStyle()),
+                        nick.isNotEmpty ? nick : name,
+                        const TextStyle(),
+                      ),
                     );
                   }).toList(),
                   onChanged: (v) => setState(() => _accountId = v),
@@ -224,11 +227,13 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _amountController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(
-                        RegExp(r'^[0-9]*\.?[0-9]{0,2}')),
+                      RegExp(r'^[0-9]*\.?[0-9]{0,2}'),
+                    ),
                   ],
                   decoration: InputDecoration(
                     labelText: l.dlgTxAmount,
@@ -282,7 +287,9 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                         items: [
                           for (final c in kRecurringCadences)
                             DropdownMenuItem(
-                                value: c, child: Text(cadenceLabel(l, c))),
+                              value: c,
+                              child: Text(cadenceLabel(l, c)),
+                            ),
                         ],
                         onChanged: (v) {
                           if (v == null) return;
@@ -297,10 +304,12 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                           final picked = await showDatePicker(
                             context: context,
                             initialDate: _nextDue,
-                            firstDate: DateTime.now()
-                                .subtract(const Duration(days: 366)),
-                            lastDate: DateTime.now()
-                                .add(const Duration(days: 365 * 3)),
+                            firstDate: DateTime.now().subtract(
+                              const Duration(days: 366),
+                            ),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 365 * 3),
+                            ),
                           );
                           if (picked != null) {
                             setState(() => _nextDue = picked);

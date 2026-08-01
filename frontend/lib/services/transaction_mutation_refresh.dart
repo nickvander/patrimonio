@@ -109,7 +109,9 @@ Future<TransactionMutationRefreshData> fetchAfterTransactionMutation({
   // rather than `catchError`: the fetcher's runtime future may be a narrower
   // subtype (e.g. `Future<Never>` from a closure that always throws), and
   // `catchError` requires its handler value to match that runtime type.
-  Future<List<dynamic>> bestEffort(Future<List<dynamic>> Function() fetch) async {
+  Future<List<dynamic>> bestEffort(
+    Future<List<dynamic>> Function() fetch,
+  ) async {
     try {
       return await fetch();
     } catch (_) {

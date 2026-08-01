@@ -21,32 +21,34 @@ const double _hostWidth = 360;
 /// here would force even a `MainAxisSize.min` Row to span the parent and the
 /// test would prove nothing.
 Widget _host(Widget child, {Locale? locale}) => MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: _hostWidth),
-            child: child,
-          ),
-        ),
+  locale: locale,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _hostWidth),
+        child: child,
       ),
-    );
+    ),
+  ),
+);
 
 DateRangeSelector _selector({required bool fill}) => DateRangeSelector(
-      fill: fill,
-      selectedRange: DateRange.oneMonth,
-      onRangeChanged: (_) {},
-    );
+  fill: fill,
+  selectedRange: DateRange.oneMonth,
+  onRangeChanged: (_) {},
+);
 
 /// Width of every segment's tappable box, in layout order.
 List<double> _segmentWidths(WidgetTester tester) => tester
-    .widgetList<InkWell>(find.descendant(
-      of: find.byType(DateRangeSelector),
-      matching: find.byType(InkWell),
-    ))
+    .widgetList<InkWell>(
+      find.descendant(
+        of: find.byType(DateRangeSelector),
+        matching: find.byType(InkWell),
+      ),
+    )
     .map((w) => tester.getSize(find.byWidget(w)).width)
     .toList();
 
@@ -73,8 +75,9 @@ void main() {
       );
     });
 
-    testWidgets('the selected pill fills its cell when filling',
-        (tester) async {
+    testWidgets('the selected pill fills its cell when filling', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(_selector(fill: true)));
 
       // The 1M pill (selected) is as wide as its segment minus the segment's
@@ -82,16 +85,19 @@ void main() {
       // chip floating inside one.
       final cell = _segmentWidths(tester).first;
       final pill = tester
-          .getSize(find.ancestor(
-            of: find.text('1M'),
-            matching: find.byType(AnimatedContainer),
-          ))
+          .getSize(
+            find.ancestor(
+              of: find.text('1M'),
+              matching: find.byType(AnimatedContainer),
+            ),
+          )
           .width;
       expect(pill, moreOrLessEquals(cell, epsilon: 0.5));
     });
 
-    testWidgets('content-sized is unchanged: segments size to their labels',
-        (tester) async {
+    testWidgets('content-sized is unchanged: segments size to their labels', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(_selector(fill: false)));
 
       final widths = _segmentWidths(tester);
@@ -110,8 +116,9 @@ void main() {
       );
     });
 
-    testWidgets('es-MX labels fit a filled phone-width selector',
-        (tester) async {
+    testWidgets('es-MX labels fit a filled phone-width selector', (
+      tester,
+    ) async {
       // "Todo" is the longest label in either locale; at a fifth of a phone
       // card it must render whole, not ellipsised.
       await tester.pumpWidget(
@@ -120,12 +127,18 @@ void main() {
 
       expect(find.text('Todo'), findsOneWidget);
       final label = tester.widget<Text>(find.text('Todo'));
-      expect(label.overflow, TextOverflow.ellipsis,
-          reason: 'guarded against a future longer translation');
+      expect(
+        label.overflow,
+        TextOverflow.ellipsis,
+        reason: 'guarded against a future longer translation',
+      );
       final painted = tester.getSize(find.text('Todo')).width;
       final cell = _segmentWidths(tester).first;
-      expect(painted, lessThan(cell),
-          reason: 'the longest label still fits its cell: $painted vs $cell');
+      expect(
+        painted,
+        lessThan(cell),
+        reason: 'the longest label still fits its cell: $painted vs $cell',
+      );
     });
   });
 }

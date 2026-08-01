@@ -182,12 +182,16 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: context.textMuted)),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textMuted),
+            ),
             const SizedBox(height: 12),
             FilledButton(
-                onPressed: _load, child: Text(l10n.lendingInterestIncomeRetry)),
+              onPressed: _load,
+              child: Text(l10n.lendingInterestIncomeRetry),
+            ),
           ],
         ),
       );
@@ -195,8 +199,7 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
 
     final byMonth = (_data['by_month'] as List?) ?? const [];
     final byLoan = (_data['by_loan'] as List?) ?? const [];
-    final totalsByCurrency =
-        (_data['totals_by_currency'] as List?) ?? const [];
+    final totalsByCurrency = (_data['totals_by_currency'] as List?) ?? const [];
     final belowMarket = (_data['below_market_loans'] as List?) ?? const [];
 
     final empty = byMonth.isEmpty && byLoan.isEmpty;
@@ -240,8 +243,7 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
 
   // ---------- per-currency totals (never summed across currencies) ----------
 
-  Widget _buildCurrencyTotals(
-      AppLocalizations l10n, List<dynamic> totals) {
+  Widget _buildCurrencyTotals(AppLocalizations l10n, List<dynamic> totals) {
     if (totals.isEmpty) return const SizedBox.shrink();
     // One card per currency, laid side-by-side; MXN and USD stay distinct.
     final cards = totals.whereType<Map>().map((raw) {
@@ -250,8 +252,7 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
       final interest = (t['total_interest'] as num?)?.toDouble() ?? 0;
       final principal = (t['total_principal'] as num?)?.toDouble() ?? 0;
       final payments = (t['payments_count'] as num?)?.toInt() ?? 0;
-      return _currencyTotalCard(
-          l10n, currency, interest, principal, payments);
+      return _currencyTotalCard(l10n, currency, interest, principal, payments);
     }).toList();
 
     return Column(
@@ -259,17 +260,18 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
       children: [
         _sectionLabel(l10n.lendingInterestIncomeTotalsByCurrency),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: cards,
-        ),
+        Wrap(spacing: 12, runSpacing: 12, children: cards),
       ],
     );
   }
 
-  Widget _currencyTotalCard(AppLocalizations l10n, String currency,
-      double interest, double principal, int payments) {
+  Widget _currencyTotalCard(
+    AppLocalizations l10n,
+    String currency,
+    double interest,
+    double principal,
+    int payments,
+  ) {
     return Container(
       width: 220,
       padding: const EdgeInsets.all(16),
@@ -305,8 +307,10 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
             style: TextStyle(fontSize: 11, color: context.textSubtle),
           ),
           const SizedBox(height: 10),
-          _miniStat(l10n.lendingInterestIncomePrincipalReceived,
-              _moneyDisplay(principal, currency)),
+          _miniStat(
+            l10n.lendingInterestIncomePrincipalReceived,
+            _moneyDisplay(principal, currency),
+          ),
           const SizedBox(height: 4),
           _miniStat(l10n.lendingInterestIncomePaymentsCount, '$payments'),
         ],
@@ -318,8 +322,7 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: TextStyle(fontSize: 11, color: context.textMuted)),
+        Text(label, style: TextStyle(fontSize: 11, color: context.textMuted)),
         Text(
           value,
           style: TextStyle(
@@ -336,13 +339,17 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
   // ---------- per-month bar ----------
 
   Widget _buildMonthlyChart(AppLocalizations l10n, List<dynamic> byMonth) {
-    final rows = byMonth.whereType<Map>().map((m) {
-      final r = m.cast<String, dynamic>();
-      return (
-        month: (r['month'] ?? '').toString(),
-        interest: (r['interest_received'] as num?)?.toDouble() ?? 0,
-      );
-    }).where((r) => r.month.isNotEmpty).toList();
+    final rows = byMonth
+        .whereType<Map>()
+        .map((m) {
+          final r = m.cast<String, dynamic>();
+          return (
+            month: (r['month'] ?? '').toString(),
+            interest: (r['interest_received'] as num?)?.toDouble() ?? 0,
+          );
+        })
+        .where((r) => r.month.isNotEmpty)
+        .toList();
 
     if (rows.isEmpty) return const SizedBox.shrink();
 
@@ -411,7 +418,9 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
           width: 84,
           child: Text(
             // No currency symbol here (months may mix) — a plain magnitude.
-            NumberFormat('#,##0.00').format(interest.abs() < 0.005 ? 0 : interest),
+            NumberFormat(
+              '#,##0.00',
+            ).format(interest.abs() < 0.005 ? 0 : interest),
             textAlign: TextAlign.right,
             style: TextStyle(
               fontSize: 12,
@@ -478,12 +487,21 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
       child: Row(
         children: [
           h(l10n.lendingInterestIncomeBorrower, flex: 3),
-          h(l10n.lendingInterestIncomeInterestReceived,
-              align: TextAlign.right, flex: 2),
-          h(l10n.lendingInterestIncomePrincipalReceived,
-              align: TextAlign.right, flex: 2),
-          h(l10n.lendingInterestIncomePaymentsCount,
-              align: TextAlign.right, flex: 1),
+          h(
+            l10n.lendingInterestIncomeInterestReceived,
+            align: TextAlign.right,
+            flex: 2,
+          ),
+          h(
+            l10n.lendingInterestIncomePrincipalReceived,
+            align: TextAlign.right,
+            flex: 2,
+          ),
+          h(
+            l10n.lendingInterestIncomePaymentsCount,
+            align: TextAlign.right,
+            flex: 1,
+          ),
         ],
       ),
     );
@@ -496,11 +514,13 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
     final principal = (r['principal_received'] as num?)?.toDouble() ?? 0;
     final payments = (r['payments_count'] as num?)?.toInt() ?? 0;
 
-    Widget cell(String t,
-        {TextAlign align = TextAlign.start,
-        int flex = 1,
-        Color? color,
-        FontWeight weight = FontWeight.w600}) {
+    Widget cell(
+      String t, {
+      TextAlign align = TextAlign.start,
+      int flex = 1,
+      Color? color,
+      FontWeight weight = FontWeight.w600,
+    }) {
       return Expanded(
         flex: flex,
         child: Text(
@@ -537,17 +557,20 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(currency,
-                    style:
-                        TextStyle(fontSize: 10, color: context.textSubtle)),
+                Text(
+                  currency,
+                  style: TextStyle(fontSize: 10, color: context.textSubtle),
+                ),
               ],
             ),
           ),
-          cell(_money(interest, currency),
-              align: TextAlign.right,
-              flex: 2,
-              color: context.positive,
-              weight: FontWeight.w700),
+          cell(
+            _money(interest, currency),
+            align: TextAlign.right,
+            flex: 2,
+            color: context.positive,
+            weight: FontWeight.w700,
+          ),
           cell(_money(principal, currency), align: TextAlign.right, flex: 2),
           cell('$payments', align: TextAlign.right, flex: 1),
         ],
@@ -558,10 +581,13 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
   // ---------- §7872 below-market callout ----------
 
   Widget _buildBelowMarketCallout(
-      AppLocalizations l10n, List<dynamic> belowMarket) {
+    AppLocalizations l10n,
+    List<dynamic> belowMarket,
+  ) {
     final accent = context.warning;
-    final loans =
-        belowMarket.whereType<Map>().map((m) => m.cast<String, dynamic>());
+    final loans = belowMarket.whereType<Map>().map(
+      (m) => m.cast<String, dynamic>(),
+    );
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -592,7 +618,10 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
           Text(
             l10n.lendingInterestIncomeBelowMarketBody,
             style: TextStyle(
-                fontSize: 12, color: context.textMuted, height: 1.35),
+              fontSize: 12,
+              color: context.textMuted,
+              height: 1.35,
+            ),
           ),
           const SizedBox(height: 12),
           for (final loan in loans) _belowMarketRow(loan),
@@ -614,15 +643,18 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
             height: 6,
             margin: const EdgeInsets.only(right: 10),
             decoration: BoxDecoration(
-                color: context.warning, shape: BoxShape.circle),
+              color: context.warning,
+              shape: BoxShape.circle,
+            ),
           ),
           Expanded(
             child: Text(
               name,
               style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: context.textPrimary),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.textPrimary,
+              ),
             ),
           ),
           Text(

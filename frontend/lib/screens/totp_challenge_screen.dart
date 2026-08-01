@@ -60,10 +60,9 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
                 Text(
                   l.authTotpTitle,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -95,7 +94,9 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
                 if (_error != null) ...[
                   Text(
                     _error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),

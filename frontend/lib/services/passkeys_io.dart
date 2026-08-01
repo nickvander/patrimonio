@@ -54,12 +54,14 @@ class PasskeyService {
   /// devices slip through this gate and get a clean ceremony error instead.
   bool get isAvailable => Platform.isAndroid;
 
-  PasskeyException _unavailable() => PasskeyException(_t(
-        'Passkeys aren\'t available on this device. Use your password to '
-        'sign in.',
-        'Las claves de acceso no están disponibles en este dispositivo. Usa '
-        'tu contraseña para acceder.',
-      ));
+  PasskeyException _unavailable() => PasskeyException(
+    _t(
+      'Passkeys aren\'t available on this device. Use your password to '
+          'sign in.',
+      'Las claves de acceso no están disponibles en este dispositivo. Usa '
+          'tu contraseña para acceder.',
+    ),
+  );
 
   // ---------------------------------------------------------------------------
   // Registration ceremony (authenticated user adds a passkey).
@@ -85,15 +87,21 @@ class PasskeyService {
     );
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, _t('Could not start passkey registration.',
-            'No se pudo iniciar el registro de la clave de acceso.')),
+        _decodeError(
+          startRes.body,
+          _t(
+            'Could not start passkey registration.',
+            'No se pudo iniciar el registro de la clave de acceso.',
+          ),
+        ),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
     final nonce = startJson['nonce'] as String;
     final options = startJson['options'] as Map<String, dynamic>;
-    final publicKeyOpts =
-        Map<String, dynamic>.from(options['publicKey'] as Map<String, dynamic>);
+    final publicKeyOpts = Map<String, dynamic>.from(
+      options['publicKey'] as Map<String, dynamic>,
+    );
 
     if (hardwareKeyOnly) {
       // Mirror of the web impl's security-key path: force cross-platform
@@ -102,7 +110,8 @@ class PasskeyService {
       // passkey doesn't pre-reject the ceremony before the physical key is
       // tried. (Full rationale in passkeys_web.dart.)
       final sel = Map<String, dynamic>.from(
-          (publicKeyOpts['authenticatorSelection'] as Map?) ?? const {});
+        (publicKeyOpts['authenticatorSelection'] as Map?) ?? const {},
+      );
       sel['authenticatorAttachment'] = 'cross-platform';
       publicKeyOpts['authenticatorSelection'] = sel;
       publicKeyOpts['extensions'] = <String, dynamic>{};
@@ -113,16 +122,19 @@ class PasskeyService {
     //    passkey sheet (Google Password Manager / security key).
     final String? responseJson;
     try {
-      responseJson = await _channel.invokeMethod<String>(
-        'create',
-        {'requestJson': jsonEncode(publicKeyOpts)},
-      );
+      responseJson = await _channel.invokeMethod<String>('create', {
+        'requestJson': jsonEncode(publicKeyOpts),
+      });
     } on PlatformException catch (e) {
       throw mapNativeCredentialError(e, registering: true);
     }
     if (responseJson == null) {
-      throw PasskeyException(_t('Passkey enrolment was cancelled.',
-          'Se canceló el registro de la clave de acceso.'));
+      throw PasskeyException(
+        _t(
+          'Passkey enrolment was cancelled.',
+          'Se canceló el registro de la clave de acceso.',
+        ),
+      );
     }
     final credJson = jsonDecode(responseJson) as Map<String, dynamic>;
     final transports = extractTransports(credJson);
@@ -150,8 +162,13 @@ class PasskeyService {
     );
     if (finishRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(finishRes.body, _t('Could not save the new passkey.',
-            'No se pudo guardar la nueva clave de acceso.')),
+        _decodeError(
+          finishRes.body,
+          _t(
+            'Could not save the new passkey.',
+            'No se pudo guardar la nueva clave de acceso.',
+          ),
+        ),
       );
     }
     return PasskeySummary.fromJson(
@@ -166,8 +183,12 @@ class PasskeyService {
   Future<AuthUser> signInWithPasskey({required String username}) async {
     if (!isAvailable) throw _unavailable();
     if (username.trim().isEmpty) {
-      throw PasskeyException(_t('Enter your username first.',
-          'Primero ingresa tu nombre de usuario.'));
+      throw PasskeyException(
+        _t(
+          'Enter your username first.',
+          'Primero ingresa tu nombre de usuario.',
+        ),
+      );
     }
 
     final startRes = await _client.post(
@@ -180,16 +201,22 @@ class PasskeyService {
     );
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, _t('Could not start passkey sign-in.',
-            'No se pudo iniciar el acceso con clave de acceso.')),
+        _decodeError(
+          startRes.body,
+          _t(
+            'Could not start passkey sign-in.',
+            'No se pudo iniciar el acceso con clave de acceso.',
+          ),
+        ),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
     final nonce = startJson['nonce'] as String;
     final options = startJson['options'] as Map<String, dynamic>;
 
-    final credJson =
-        await _assert(options['publicKey'] as Map<String, dynamic>);
+    final credJson = await _assert(
+      options['publicKey'] as Map<String, dynamic>,
+    );
 
     final finishRes = await _client.post(
       Uri.parse('$_baseUrl/login/finish'),
@@ -201,8 +228,10 @@ class PasskeyService {
     );
     if (finishRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(finishRes.body, _t('Passkey sign-in failed.',
-            'Falló el acceso con clave de acceso.')),
+        _decodeError(
+          finishRes.body,
+          _t('Passkey sign-in failed.', 'Falló el acceso con clave de acceso.'),
+        ),
       );
     }
     final body = jsonDecode(finishRes.body) as Map<String, dynamic>;
@@ -215,7 +244,7 @@ class PasskeyService {
   // ---------------------------------------------------------------------------
 
   Future<({Map<String, dynamic> credential, String nonce})>
-      reauthWithPasskey() async {
+  reauthWithPasskey() async {
     if (!isAvailable) throw _unavailable();
 
     final startRes = await _client.post(
@@ -230,16 +259,22 @@ class PasskeyService {
     }
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, _t('Could not start passkey verification.',
-            'No se pudo iniciar la verificación con clave de acceso.')),
+        _decodeError(
+          startRes.body,
+          _t(
+            'Could not start passkey verification.',
+            'No se pudo iniciar la verificación con clave de acceso.',
+          ),
+        ),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
     final nonce = startJson['nonce'] as String;
     final options = startJson['options'] as Map<String, dynamic>;
 
-    final credJson =
-        await _assert(options['publicKey'] as Map<String, dynamic>);
+    final credJson = await _assert(
+      options['publicKey'] as Map<String, dynamic>,
+    );
     return (credential: credJson, nonce: nonce);
   }
 
@@ -262,8 +297,13 @@ class PasskeyService {
     );
     if (res.statusCode == 204) return;
     throw PasskeyException(
-      _decodeError(res.body, _t('Could not set the new password.',
-          'No se pudo establecer la nueva contraseña.')),
+      _decodeError(
+        res.body,
+        _t(
+          'Could not set the new password.',
+          'No se pudo establecer la nueva contraseña.',
+        ),
+      ),
     );
   }
 
@@ -281,8 +321,13 @@ class PasskeyService {
     }
     if (res.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(res.body, _t('Could not load passkeys.',
-            'No se pudieron cargar las claves de acceso.')),
+        _decodeError(
+          res.body,
+          _t(
+            'Could not load passkeys.',
+            'No se pudieron cargar las claves de acceso.',
+          ),
+        ),
       );
     }
     final raw = jsonDecode(res.body) as List<dynamic>;
@@ -301,8 +346,13 @@ class PasskeyService {
     }
     if (res.statusCode != 204) {
       throw PasskeyException(
-        _decodeError(res.body, _t('Could not remove the passkey.',
-            'No se pudo eliminar la clave de acceso.')),
+        _decodeError(
+          res.body,
+          _t(
+            'Could not remove the passkey.',
+            'No se pudo eliminar la clave de acceso.',
+          ),
+        ),
       );
     }
   }
@@ -312,16 +362,19 @@ class PasskeyService {
   Future<Map<String, dynamic>> _assert(Map<String, dynamic> publicKey) async {
     final String? responseJson;
     try {
-      responseJson = await _channel.invokeMethod<String>(
-        'getCredential',
-        {'requestJson': jsonEncode(publicKey)},
-      );
+      responseJson = await _channel.invokeMethod<String>('getCredential', {
+        'requestJson': jsonEncode(publicKey),
+      });
     } on PlatformException catch (e) {
       throw mapNativeCredentialError(e, registering: false);
     }
     if (responseJson == null) {
-      throw PasskeyException(_t('Passkey sign-in was cancelled.',
-          'Se canceló el acceso con clave de acceso.'));
+      throw PasskeyException(
+        _t(
+          'Passkey sign-in was cancelled.',
+          'Se canceló el acceso con clave de acceso.',
+        ),
+      );
     }
     return jsonDecode(responseJson) as Map<String, dynamic>;
   }
@@ -359,61 +412,86 @@ PasskeyException mapNativeCredentialError(
   required bool registering,
 }) {
   final probe = '${e.code} ${e.message ?? ''}'.toUpperCase();
-  final verb =
-      registering ? _t('enrolment', 'registro') : _t('sign-in', 'acceso');
+  final verb = registering
+      ? _t('enrolment', 'registro')
+      : _t('sign-in', 'acceso');
   if (probe.contains('CANCEL')) {
     // TYPE_USER_CANCELED / CreateCredentialCancellationException et al.
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'Passkey $verb was cancelled or timed out. Please try again.',
         'El $verb con clave de acceso se canceló o expiró. Inténtalo de '
-        'nuevo.'));
+            'nuevo.',
+      ),
+    );
   }
   if (probe.contains('NO_CREDENTIAL')) {
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'No matching passkey is available on this phone. Register one from '
-        'Security first, or use your password.',
+            'Security first, or use your password.',
         'No hay una clave de acceso disponible en este teléfono. Primero '
-        'registra una desde Seguridad, o usa tu contraseña.'));
+            'registra una desde Seguridad, o usa tu contraseña.',
+      ),
+    );
   }
   if (probe.contains('INVALID_STATE')) {
-    return PasskeyException(registering
-        ? _t(
-            'A passkey for this account already exists on this device. To '
-            'replace it, remove it on the Security screen first.',
-            'Ya existe una clave de acceso para esta cuenta en este '
-            'dispositivo. Para reemplazarla, primero elimínala en la '
-            'pantalla de Seguridad.')
-        : _t('This passkey isn\'t recognised for this account.',
-            'Esta clave de acceso no se reconoce para esta cuenta.'));
+    return PasskeyException(
+      registering
+          ? _t(
+              'A passkey for this account already exists on this device. To '
+                  'replace it, remove it on the Security screen first.',
+              'Ya existe una clave de acceso para esta cuenta en este '
+                  'dispositivo. Para reemplazarla, primero elimínala en la '
+                  'pantalla de Seguridad.',
+            )
+          : _t(
+              'This passkey isn\'t recognised for this account.',
+              'Esta clave de acceso no se reconoce para esta cuenta.',
+            ),
+    );
   }
   if (probe.contains('NOT_ALLOWED') || probe.contains('ABORT')) {
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'Passkey $verb was cancelled or timed out. Please try again.',
         'El $verb con clave de acceso se canceló o expiró. Inténtalo de '
-        'nuevo.'));
+            'nuevo.',
+      ),
+    );
   }
   if (probe.contains('NOT_SUPPORTED') || probe.contains('UNSUPPORTED')) {
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'This authenticator isn\'t supported. Try a different device or '
-        'security key.',
+            'security key.',
         'Este autenticador no es compatible. Prueba con otro dispositivo o '
-        'llave de seguridad.'));
+            'llave de seguridad.',
+      ),
+    );
   }
   if (probe.contains('SECURITY')) {
     // On native this usually means Digital Asset Links verification failed:
     // the server's /.well-known/assetlinks.json is missing, unreachable
     // (Cloudflare Access without the Bypass policy!), or lists a different
     // signing cert than the installed APK's.
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'Passkey $verb was blocked: this app isn\'t authorized for the '
-        'server\'s domain. Check the server\'s assetlinks.json setup.',
+            'server\'s domain. Check the server\'s assetlinks.json setup.',
         'El $verb con clave de acceso se bloqueó: esta app no está '
-        'autorizada para el dominio del servidor. Revisa la configuración '
-        'de assetlinks.json del servidor.'));
+            'autorizada para el dominio del servidor. Revisa la configuración '
+            'de assetlinks.json del servidor.',
+      ),
+    );
   }
   final detail = e.message?.isNotEmpty == true ? e.message! : e.code;
-  return PasskeyException(_t('Passkey $verb failed: $detail',
-      'El $verb con clave de acceso falló: $detail'));
+  return PasskeyException(
+    _t(
+      'Passkey $verb failed: $detail',
+      'El $verb con clave de acceso falló: $detail',
+    ),
+  );
 }
 
 String _decodeError(String body, String fallback) {

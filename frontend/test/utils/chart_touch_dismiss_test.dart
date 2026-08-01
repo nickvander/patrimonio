@@ -38,13 +38,14 @@ void main() {
     test('finger lift (touch tap-up) dismisses — the pinned-tooltip bug', () {
       // Sanity: this is exactly the case fl_chart keeps "interested" —
       // proving the built-in gate alone would leave the tooltip pinned.
-      expect(_tapUp(PointerDeviceKind.touch).isInterestedForInteractions,
-          isTrue);
+      expect(
+        _tapUp(PointerDeviceKind.touch).isInterestedForInteractions,
+        isTrue,
+      );
       expect(chartTouchDismisses(_tapUp(PointerDeviceKind.touch)), isTrue);
     });
 
-    test('stylus tap-up dismisses (cannot hover; no exit event will come)',
-        () {
+    test('stylus tap-up dismisses (cannot hover; no exit event will come)', () {
       expect(chartTouchDismisses(_tapUp(PointerDeviceKind.stylus)), isTrue);
     });
 
@@ -54,8 +55,7 @@ void main() {
       expect(chartTouchDismisses(_tapUp(PointerDeviceKind.trackpad)), isFalse);
     });
 
-    test('pointer exit / gesture ends dismiss; presses and hovers do not',
-        () {
+    test('pointer exit / gesture ends dismiss; presses and hovers do not', () {
       // Dismissals: exit, pan end/cancel, long-press end, tap cancel.
       expect(
         chartTouchDismisses(const FlPointerExitEvent(PointerExitEvent())),
@@ -70,23 +70,20 @@ void main() {
       expect(chartTouchDismisses(const FlTapCancelEvent()), isTrue);
 
       // Non-dismissals: the tooltip must stay up while scrubbing/hovering.
+      expect(chartTouchDismisses(FlPanDownEvent(DragDownDetails())), isFalse);
       expect(
-        chartTouchDismisses(FlPanDownEvent(DragDownDetails())),
+        chartTouchDismisses(
+          FlPanUpdateEvent(DragUpdateDetails(globalPosition: Offset.zero)),
+        ),
         isFalse,
       );
+      expect(chartTouchDismisses(FlTapDownEvent(TapDownDetails())), isFalse);
       expect(
-        chartTouchDismisses(FlPanUpdateEvent(DragUpdateDetails(
-          globalPosition: Offset.zero,
-        ))),
-        isFalse,
-      );
-      expect(
-        chartTouchDismisses(FlTapDownEvent(TapDownDetails())),
-        isFalse,
-      );
-      expect(
-        chartTouchDismisses(const FlPointerHoverEvent(
-            PointerHoverEvent(kind: PointerDeviceKind.mouse))),
+        chartTouchDismisses(
+          const FlPointerHoverEvent(
+            PointerHoverEvent(kind: PointerDeviceKind.mouse),
+          ),
+        ),
         isFalse,
       );
     });
@@ -106,19 +103,28 @@ void main() {
       );
       // Stylus can't hover on web either.
       expect(
-        chartTouchDismisses(const FlPointerHoverEvent(
-            PointerHoverEvent(kind: PointerDeviceKind.stylus))),
+        chartTouchDismisses(
+          const FlPointerHoverEvent(
+            PointerHoverEvent(kind: PointerDeviceKind.stylus),
+          ),
+        ),
         isTrue,
       );
       // Real mouse/trackpad hover keeps showing.
       expect(
-        chartTouchDismisses(const FlPointerEnterEvent(
-            PointerEnterEvent(kind: PointerDeviceKind.mouse))),
+        chartTouchDismisses(
+          const FlPointerEnterEvent(
+            PointerEnterEvent(kind: PointerDeviceKind.mouse),
+          ),
+        ),
         isFalse,
       );
       expect(
-        chartTouchDismisses(const FlPointerHoverEvent(
-            PointerHoverEvent(kind: PointerDeviceKind.trackpad))),
+        chartTouchDismisses(
+          const FlPointerHoverEvent(
+            PointerHoverEvent(kind: PointerDeviceKind.trackpad),
+          ),
+        ),
         isFalse,
       );
     });

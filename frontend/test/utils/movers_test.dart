@@ -2,10 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/utils/movers.dart';
 
 Map<String, dynamic> _h(String symbol, {double? gl, double? day}) => {
-      'symbol': symbol,
-      'gain_loss_usd': gl,
-      'day_change_usd': day,
-    };
+  'symbol': symbol,
+  'gain_loss_usd': gl,
+  'day_change_usd': day,
+};
 
 void main() {
   group('topDollarMovers', () {

@@ -50,13 +50,14 @@ WealthProjectionFetcher mxAwareFetcher(List<Map<String, Object?>> calls) {
 }
 
 Finder _mxSwitch() => find.descendant(
-      of: find
-          .ancestor(
-              of: find.text('Retire in Mexico'),
-              matching: find.byType(MergeSemantics))
-          .first,
-      matching: find.byType(Switch),
-    );
+  of: find
+      .ancestor(
+        of: find.text('Retire in Mexico'),
+        matching: find.byType(MergeSemantics),
+      )
+      .first,
+  matching: find.byType(Switch),
+);
 
 Future<void> _toggleOn(WidgetTester tester) async {
   await tester.ensureVisible(_mxSwitch());
@@ -69,102 +70,122 @@ Future<void> _toggleOn(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-      'default off: no scenario params in the request, no scenario controls, '
-      'single expense slider present', (tester) async {
-    setTestSize(tester, const Size(1300, 1800));
-    final calls = <Map<String, Object?>>[];
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: mxAwareFetcher(calls),
-      usdMxnRate: 17.0,
-    ));
-    await tester.pumpAndSettle();
+    'default off: no scenario params in the request, no scenario controls, '
+    'single expense slider present',
+    (tester) async {
+      setTestSize(tester, const Size(1300, 1800));
+      final calls = <Map<String, Object?>>[];
+      await tester.pumpWidget(
+        buildProjectionHost(
+          projectionFetcher: mxAwareFetcher(calls),
+          usdMxnRate: 17.0,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(calls.single['mxScenario'], false);
-    expect(find.text('Annual expenses'), findsOneWidget);
-    expect(find.text('Retire in Mexico'), findsOneWidget); // the toggle row
-    expect(find.text('U.S. spending (USD/yr)'), findsNothing);
-    expect(find.text('Mexico spending (MXN/yr)'), findsNothing);
-    expect(find.text('Retire in Mexico scenario'), findsNothing);
-  });
+      expect(calls.single['mxScenario'], false);
+      expect(find.text('Annual expenses'), findsOneWidget);
+      expect(find.text('Retire in Mexico'), findsOneWidget); // the toggle row
+      expect(find.text('U.S. spending (USD/yr)'), findsNothing);
+      expect(find.text('Mexico spending (MXN/yr)'), findsNothing);
+      expect(find.text('Retire in Mexico scenario'), findsNothing);
+    },
+  );
 
   testWidgets(
-      'toggle on: seeds the MXN portion from expenses × live rate, swaps the '
-      'expense input for the split, sends scenario params, hides the '
-      'lifestyle chips, and renders the dual-currency panel', (tester) async {
+    'toggle on: seeds the MXN portion from expenses × live rate, swaps the '
+    'expense input for the split, sends scenario params, hides the '
+    'lifestyle chips, and renders the dual-currency panel',
+    (tester) async {
+      setTestSize(tester, const Size(1300, 1800));
+      final calls = <Map<String, Object?>>[];
+      await tester.pumpWidget(
+        buildProjectionHost(
+          projectionFetcher: mxAwareFetcher(calls),
+          usdMxnRate: 17.0,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(ChoiceChip, 'Lean'), findsOneWidget);
+
+      await _toggleOn(tester);
+
+      // Request carries the scenario: all-MXN seed = $40k default × 17.00,
+      // rounded to a clean MXN 1,000; the live rate rides along.
+      final call = calls.last;
+      expect(call['mxScenario'], true);
+      expect(call['usdPortion'], 0.0);
+      expect(call['mxnPortion'], 680000.0);
+      expect(call['drift'], 0.0);
+      expect(call['rate'], 17.0);
+
+      // The split replaces the single expense input.
+      expect(find.text('Annual expenses'), findsNothing);
+      expect(find.text('U.S. spending (USD/yr)'), findsOneWidget);
+      expect(find.text('Mexico spending (MXN/yr)'), findsOneWidget);
+      expect(find.text('Long-run FX drift (USD/MXN)'), findsOneWidget);
+      // Native-currency value labels, ISO-code prefixed.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && normSpace(w.data ?? '') == 'MXN 680,000',
+        ),
+        findsOneWidget,
+      );
+      // The lifestyle presets scale the (now inert) single figure — hidden.
+      expect(find.widgetWithText(ChoiceChip, 'Lean'), findsNothing);
+
+      // Dual-currency results panel, straight from the backend block.
+      expect(find.text('Retire in Mexico scenario'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              normSpace(w.data ?? '') == 'USD 1,000,000 · MXN 17,000,000',
+        ),
+        findsOneWidget,
+      );
+      // House display rule: cents keep below $10k, drop at/above.
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              normSpace(w.data ?? '') == 'USD 3,300.00 · MXN 56,100',
+        ),
+        findsOneWidget,
+      );
+      // gen-l10n orders (now, retire) alphabetically — same as the template.
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              normSpace(w.data ?? '') ==
+                  'USD/MXN 17.00 today → ≈17.00 at retirement',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('es-MX: scenario controls and panel render localized', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     final calls = <Map<String, Object?>>[];
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: mxAwareFetcher(calls),
-      usdMxnRate: 17.0,
-    ));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(ChoiceChip, 'Lean'), findsOneWidget);
-
-    await _toggleOn(tester);
-
-    // Request carries the scenario: all-MXN seed = $40k default × 17.00,
-    // rounded to a clean MXN 1,000; the live rate rides along.
-    final call = calls.last;
-    expect(call['mxScenario'], true);
-    expect(call['usdPortion'], 0.0);
-    expect(call['mxnPortion'], 680000.0);
-    expect(call['drift'], 0.0);
-    expect(call['rate'], 17.0);
-
-    // The split replaces the single expense input.
-    expect(find.text('Annual expenses'), findsNothing);
-    expect(find.text('U.S. spending (USD/yr)'), findsOneWidget);
-    expect(find.text('Mexico spending (MXN/yr)'), findsOneWidget);
-    expect(find.text('Long-run FX drift (USD/MXN)'), findsOneWidget);
-    // Native-currency value labels, ISO-code prefixed.
-    expect(
-      find.byWidgetPredicate((w) =>
-          w is Text && normSpace(w.data ?? '') == 'MXN 680,000'),
-      findsOneWidget,
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: mxAwareFetcher(calls),
+        usdMxnRate: 17.0,
+        locale: const Locale('es'),
+      ),
     );
-    // The lifestyle presets scale the (now inert) single figure — hidden.
-    expect(find.widgetWithText(ChoiceChip, 'Lean'), findsNothing);
-
-    // Dual-currency results panel, straight from the backend block.
-    expect(find.text('Retire in Mexico scenario'), findsOneWidget);
-    expect(
-      find.byWidgetPredicate((w) =>
-          w is Text &&
-          normSpace(w.data ?? '') == 'USD 1,000,000 · MXN 17,000,000'),
-      findsOneWidget,
-    );
-    // House display rule: cents keep below $10k, drop at/above.
-    expect(
-      find.byWidgetPredicate((w) =>
-          w is Text && normSpace(w.data ?? '') == 'USD 3,300.00 · MXN 56,100'),
-      findsOneWidget,
-    );
-    // gen-l10n orders (now, retire) alphabetically — same as the template.
-    expect(
-      find.byWidgetPredicate((w) =>
-          w is Text &&
-          normSpace(w.data ?? '') ==
-              'USD/MXN 17.00 today → ≈17.00 at retirement'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('es-MX: scenario controls and panel render localized',
-      (tester) async {
-    setTestSize(tester, const Size(1300, 1800));
-    final calls = <Map<String, Object?>>[];
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: mxAwareFetcher(calls),
-      usdMxnRate: 17.0,
-      locale: const Locale('es'),
-    ));
     await tester.pumpAndSettle();
 
     final toggle = find.descendant(
       of: find
           .ancestor(
-              of: find.text('Retiro en México'),
-              matching: find.byType(MergeSemantics))
+            of: find.text('Retiro en México'),
+            matching: find.byType(MergeSemantics),
+          )
           .first,
       matching: find.byType(Switch),
     );
@@ -177,28 +198,35 @@ void main() {
     expect(find.text('Gasto en EE. UU. (USD/año)'), findsOneWidget);
     expect(find.text('Gasto en México (MXN/año)'), findsOneWidget);
     expect(
-        find.text('Deriva cambiaria de largo plazo (USD/MXN)'), findsOneWidget);
+      find.text('Deriva cambiaria de largo plazo (USD/MXN)'),
+      findsOneWidget,
+    );
     expect(find.text('Escenario de retiro en México'), findsOneWidget);
     expect(find.text('Ingreso en el retiro (mensual)'), findsOneWidget);
     // The two same-typed rate placeholders render in declaration order (the
     // §2 transposition trap): today's rate first, at-retirement second.
     expect(
-      find.byWidgetPredicate((w) =>
-          w is Text &&
-          normSpace(w.data ?? '') == 'USD/MXN 17.00 hoy → ≈17.00 al retiro'),
+      find.byWidgetPredicate(
+        (w) =>
+            w is Text &&
+            normSpace(w.data ?? '') == 'USD/MXN 17.00 hoy → ≈17.00 al retiro',
+      ),
       findsOneWidget,
     );
   });
 
-  testWidgets('committed toggle persists the scenario fields in the blob',
-      (tester) async {
+  testWidgets('committed toggle persists the scenario fields in the blob', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     final writes = <String, dynamic>{};
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: mxAwareFetcher(<Map<String, Object?>>[]),
-      settingWriter: (key, value) async => writes[key] = value,
-      usdMxnRate: 17.0,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: mxAwareFetcher(<Map<String, Object?>>[]),
+        settingWriter: (key, value) async => writes[key] = value,
+        usdMxnRate: 17.0,
+      ),
+    );
     await tester.pumpAndSettle();
 
     await _toggleOn(tester);
@@ -212,62 +240,70 @@ void main() {
   });
 
   testWidgets(
-      'a restored blob re-activates the scenario with its saved split and '
-      'drift (no re-seeding over the user\'s values)', (tester) async {
-    setTestSize(tester, const Size(1300, 1800));
-    final calls = <Map<String, Object?>>[];
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: mxAwareFetcher(calls),
-      usdMxnRate: 17.0,
-      settingReader: (key) async => key == 'projection_assumptions'
-          ? {
-              'mx_scenario': true,
-              'annual_expenses_usd_portion': 12000.0,
-              'annual_expenses_mxn_portion': 300000.0,
-              'fx_annual_drift': 0.02,
-            }
-          : null,
-    ));
-    await tester.pumpAndSettle();
+    'a restored blob re-activates the scenario with its saved split and '
+    'drift (no re-seeding over the user\'s values)',
+    (tester) async {
+      setTestSize(tester, const Size(1300, 1800));
+      final calls = <Map<String, Object?>>[];
+      await tester.pumpWidget(
+        buildProjectionHost(
+          projectionFetcher: mxAwareFetcher(calls),
+          usdMxnRate: 17.0,
+          settingReader: (key) async => key == 'projection_assumptions'
+              ? {
+                  'mx_scenario': true,
+                  'annual_expenses_usd_portion': 12000.0,
+                  'annual_expenses_mxn_portion': 300000.0,
+                  'fx_annual_drift': 0.02,
+                }
+              : null,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    // The initial fetch already runs the scenario with the restored values.
-    expect(calls.last['mxScenario'], true);
-    expect(calls.last['usdPortion'], 12000.0);
-    expect(calls.last['mxnPortion'], 300000.0);
-    expect(calls.last['drift'], 0.02);
+      // The initial fetch already runs the scenario with the restored values.
+      expect(calls.last['mxScenario'], true);
+      expect(calls.last['usdPortion'], 12000.0);
+      expect(calls.last['mxnPortion'], 300000.0);
+      expect(calls.last['drift'], 0.02);
 
-    expect(find.text('Annual expenses'), findsNothing);
-    expect(
-      find.byWidgetPredicate(
-          (w) => w is Text && normSpace(w.data ?? '') == 'USD 12,000'),
-      findsOneWidget,
-    );
-    expect(
-      find.byWidgetPredicate(
-          (w) => w is Text && normSpace(w.data ?? '') == 'MXN 300,000'),
-      findsOneWidget,
-    );
-    expect(find.text('2.0%'), findsOneWidget); // the restored drift
+      expect(find.text('Annual expenses'), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && normSpace(w.data ?? '') == 'USD 12,000',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && normSpace(w.data ?? '') == 'MXN 300,000',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('2.0%'), findsOneWidget); // the restored drift
 
-    // A malformed drift/portion clamps instead of exploding: covered by the
-    // hydration clamp test below.
-  });
+      // A malformed drift/portion clamps instead of exploding: covered by the
+      // hydration clamp test below.
+    },
+  );
 
   testWidgets('hydration clamps hostile scenario values', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
     final calls = <Map<String, Object?>>[];
-    await tester.pumpWidget(buildProjectionHost(
-      projectionFetcher: mxAwareFetcher(calls),
-      usdMxnRate: 17.0,
-      settingReader: (key) async => key == 'projection_assumptions'
-          ? {
-              'mx_scenario': true,
-              'annual_expenses_usd_portion': -5.0,
-              'annual_expenses_mxn_portion': 9.0e15,
-              'fx_annual_drift': 3.5,
-            }
-          : null,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: mxAwareFetcher(calls),
+        usdMxnRate: 17.0,
+        settingReader: (key) async => key == 'projection_assumptions'
+            ? {
+                'mx_scenario': true,
+                'annual_expenses_usd_portion': -5.0,
+                'annual_expenses_mxn_portion': 9.0e15,
+                'fx_annual_drift': 3.5,
+              }
+            : null,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(calls.last['usdPortion'], 0.0); // floored at 0

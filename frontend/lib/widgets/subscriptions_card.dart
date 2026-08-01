@@ -18,17 +18,21 @@ import '../utils/theme_colors.dart';
 /// "did I actually cancel that?".
 class SubscriptionsCard extends StatefulWidget {
   final List<dynamic> subscriptions;
+
   /// Conversion factor for the USD-stored `monthly_usd` field.
   /// 1.0 for USD reporting, USD/MXN rate when reporting in MXN.
   final double conversionFactor;
+
   /// USD/MXN spot used to convert native MXN amounts (and any other
   /// foreign currency) into the reporting currency for display.
   final double usdMxnRate;
   final NumberFormat currencyFormat;
   final String targetCurrency;
+
   /// Optional callback to seed the transactions tab's search with the
   /// merchant name so the user can drill into the underlying rows.
   final void Function(String merchant)? onTapMerchant;
+
   /// "This isn't a subscription, stop showing it." Dismisses the row
   /// and POSTs to `/dashboard/subscriptions/ignore` so the detector
   /// skips this merchant on its next run.
@@ -89,144 +93,145 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
         // Width-responsive off the card's OWN constraint (inner
         // LayoutBuilder, per the skill rule), not MediaQuery — the card can
         // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(builder: (context, c) {
-          // House ~420 phone breakpoint: compact chrome — no leading icon,
-          // title compressed to a small uppercase overline (the
-          // portfolio_card idiom). Wider layouts are unchanged.
-          final isPhone = c.maxWidth < 420;
-          return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: LayoutBuilder(
+          builder: (context, c) {
+            // House ~420 phone breakpoint: compact chrome — no leading icon,
+            // title compressed to a small uppercase overline (the
+            // portfolio_card idiom). Wider layouts are unchanged.
+            final isPhone = c.maxWidth < 420;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!isPhone) ...[
-                  Icon(
-                    Icons.autorenew_rounded,
-                    size: 18,
-                    color: context.purpleAccent,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Text(
-                  isPhone
-                      ? l.cfSubscriptionsTitle.toUpperCase()
-                      : l.cfSubscriptionsTitle,
-                  style: isPhone
-                      ? TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                          color: context.textSubtle,
-                        )
-                      : TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: context.textPrimary,
-                        ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    l.cfSubscriptionsActiveCount(active.length) +
-                        (stopped.isEmpty
-                            ? ''
-                            : ' · ${l.cfSubscriptionsStoppedCount(stopped.length)}'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: context.textSubtle,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  l.cfPerMonthApprox(widget.currencyFormat
-                      .displayMoney(totalMonthly * widget.conversionFactor)),
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: context.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l.cfSubscriptionsSubtitle,
-              style: TextStyle(fontSize: 11, color: context.textSubtle),
-            ),
-            const SizedBox(height: 12),
-            if (active.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  l.cfSubscriptionsNoneActive,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: context.textSubtle,
-                  ),
-                ),
-              )
-            else
-              for (var i = 0; i < active.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: context.hairline),
-                _row(context, active[i], cancelled: false),
-              ],
-            if (stopped.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Divider(height: 1, color: context.hairline),
-              InkWell(
-                onTap: () => setState(
-                  () => _stoppedExpanded = !_stoppedExpanded,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Row(
-                    children: [
+                Row(
+                  children: [
+                    if (!isPhone) ...[
                       Icon(
-                        _stoppedExpanded
-                            ? Icons.expand_less
-                            : Icons.expand_more,
+                        Icons.autorenew_rounded,
                         size: 18,
-                        color: context.textSubtle,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        l.cfSubscriptionsStoppedHeader(stopped.length),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.textPrimary,
-                        ),
+                        color: context.purpleAccent,
                       ),
                       const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          l.cfSubscriptionsStoppedHint,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: context.textSubtle,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                    ],
+                    Text(
+                      isPhone
+                          ? l.cfSubscriptionsTitle.toUpperCase()
+                          : l.cfSubscriptionsTitle,
+                      style: isPhone
+                          ? TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: context.textSubtle,
+                            )
+                          : TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: context.textPrimary,
+                            ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        l.cfSubscriptionsActiveCount(active.length) +
+                            (stopped.isEmpty
+                                ? ''
+                                : ' · ${l.cfSubscriptionsStoppedCount(stopped.length)}'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSubtle,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      l.cfPerMonthApprox(
+                        widget.currencyFormat.displayMoney(
+                          totalMonthly * widget.conversionFactor,
                         ),
                       ),
-                    ],
-                  ),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: context.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              if (_stoppedExpanded)
-                for (var i = 0; i < stopped.length; i++) ...[
-                  if (i > 0) Divider(height: 1, color: context.hairline),
-                  _row(context, stopped[i], cancelled: true),
+                const SizedBox(height: 4),
+                Text(
+                  l.cfSubscriptionsSubtitle,
+                  style: TextStyle(fontSize: 11, color: context.textSubtle),
+                ),
+                const SizedBox(height: 12),
+                if (active.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      l.cfSubscriptionsNoneActive,
+                      style: TextStyle(fontSize: 12, color: context.textSubtle),
+                    ),
+                  )
+                else
+                  for (var i = 0; i < active.length; i++) ...[
+                    if (i > 0) Divider(height: 1, color: context.hairline),
+                    _row(context, active[i], cancelled: false),
+                  ],
+                if (stopped.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: context.hairline),
+                  InkWell(
+                    onTap: () =>
+                        setState(() => _stoppedExpanded = !_stoppedExpanded),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _stoppedExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            size: 18,
+                            color: context.textSubtle,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            l.cfSubscriptionsStoppedHeader(stopped.length),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: context.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              l.cfSubscriptionsStoppedHint,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.textSubtle,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_stoppedExpanded)
+                    for (var i = 0; i < stopped.length; i++) ...[
+                      if (i > 0) Divider(height: 1, color: context.hairline),
+                      _row(context, stopped[i], cancelled: true),
+                    ],
                 ],
-            ],
-          ],
-          );
-        }),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -250,18 +255,16 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
     final cadenceLabel = cadence <= 8
         ? l.cfCadenceWeekly
         : cadence <= 16
-            ? l.cfCadenceBiweekly
-            : cadence <= 35
-                ? l.cfCadenceMonthly
-                : l.cfCadenceEveryNDays(cadence);
+        ? l.cfCadenceBiweekly
+        : cadence <= 35
+        ? l.cfCadenceMonthly
+        : l.cfCadenceEveryNDays(cadence);
 
     // Muted treatment for cancelled rows: lower opacity icon tile,
     // subdued text. The row is still tappable to drill into the
     // historical transactions.
-    final accent =
-        cancelled ? context.neutralAccent : context.purpleAccent;
-    final primaryColor =
-        cancelled ? context.textSubtle : context.textPrimary;
+    final accent = cancelled ? context.neutralAccent : context.purpleAccent;
+    final primaryColor = cancelled ? context.textSubtle : context.textPrimary;
 
     return InkWell(
       onTap: widget.onTapMerchant == null
@@ -280,9 +283,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                cancelled
-                    ? Icons.history_toggle_off
-                    : Icons.repeat_rounded,
+                cancelled ? Icons.history_toggle_off : Icons.repeat_rounded,
                 color: accent,
                 size: 18,
               ),
@@ -306,10 +307,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                   Text(
                     '$cadenceLabel · ${l.cfChargesCount(occurrences)}'
                     '${lastDate == null ? '' : ' · ${l.cfLastCharged(DateFormat('MMM d').format(lastDate))}'}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: context.textSubtle,
-                    ),
+                    style: TextStyle(fontSize: 11, color: context.textSubtle),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -365,10 +363,16 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 ],
                 Text(
                   cancelled
-                      ? l.cfWasPerMonth(widget.currencyFormat
-                          .displayMoney(monthlyUsd * widget.conversionFactor))
-                      : l.cfPerMonth(widget.currencyFormat
-                          .displayMoney(monthlyUsd * widget.conversionFactor)),
+                      ? l.cfWasPerMonth(
+                          widget.currencyFormat.displayMoney(
+                            monthlyUsd * widget.conversionFactor,
+                          ),
+                        )
+                      : l.cfPerMonth(
+                          widget.currencyFormat.displayMoney(
+                            monthlyUsd * widget.conversionFactor,
+                          ),
+                        ),
                   style: TextStyle(
                     fontSize: 11,
                     color: context.textSubtle,
@@ -413,8 +417,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
     final visible = slices.take(maxChips).toList();
     final hidden = slices.length - visible.length;
     final l = AppLocalizations.of(context);
-    final accent =
-        cancelled ? context.neutralAccent : context.purpleAccent;
+    final accent = cancelled ? context.neutralAccent : context.purpleAccent;
     return Wrap(
       spacing: 4,
       runSpacing: 4,
@@ -428,9 +431,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
             ),
             child: Text(
               '${slice['account_name'] ?? '—'} · '
-              '${((slice['share'] as num?)?.toDouble() ?? 0.0) * 100 >= 1
-                  ? (((slice['share'] as num?)?.toDouble() ?? 0.0) * 100).round()
-                  : '<1'}%',
+              '${((slice['share'] as num?)?.toDouble() ?? 0.0) * 100 >= 1 ? (((slice['share'] as num?)?.toDouble() ?? 0.0) * 100).round() : '<1'}%',
               style: TextStyle(
                 fontSize: 11,
                 color: accent,
@@ -443,10 +444,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
             padding: const EdgeInsets.only(left: 2),
             child: Text(
               l.cfPlusNMore(hidden),
-              style: TextStyle(
-                fontSize: 11,
-                color: context.textSubtle,
-              ),
+              style: TextStyle(fontSize: 11, color: context.textSubtle),
             ),
           ),
       ],

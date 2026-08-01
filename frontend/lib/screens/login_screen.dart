@@ -36,10 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      await AuthService.instance.login(
-        _username.text.trim(),
-        _password.text,
-      );
+      await AuthService.instance.login(_username.text.trim(), _password.text);
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -50,8 +47,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signInWithPasskey() async {
     final username = _username.text.trim();
     if (username.isEmpty) {
-      setState(() =>
-          _error = AppLocalizations.of(context).authEnterUsernameFirst);
+      setState(
+        () => _error = AppLocalizations.of(context).authEnterUsernameFirst,
+      );
       return;
     }
     setState(() {
@@ -59,8 +57,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final user =
-          await PasskeyService.instance.signInWithPasskey(username: username);
+      final user = await PasskeyService.instance.signInWithPasskey(
+        username: username,
+      );
       // The cookie has been set; tell AuthService the user is in.
       // refreshStatus() re-validates against the server and emits the
       // signed-in state for the AuthGate to pick up.
@@ -69,8 +68,10 @@ class _LoginScreenState extends State<LoginScreen> {
       // (e.g. some flake), still surface a meaningful error rather
       // than silently sitting on the login screen.
       if (AuthService.instance.current.phase != AuthPhase.signedIn) {
-        setState(() => _error =
-            'Signed in as ${user.username} but session refresh failed.');
+        setState(
+          () => _error =
+              'Signed in as ${user.username} but session refresh failed.',
+        );
       }
     } on PasskeyException catch (e) {
       setState(() => _error = e.message);
@@ -99,10 +100,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(
                     'Patrimonio',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -139,7 +139,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (_error != null) ...[
                     Text(
                       _error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -173,10 +175,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _submitting
                         ? null
                         : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ForgotPasswordScreen(),
-                              ),
+                            MaterialPageRoute(
+                              builder: (_) => const ForgotPasswordScreen(),
                             ),
+                          ),
                     child: Text(l.authForgotPassword),
                   ),
                   // Native only: reopen the backend-setup screen (clearing the

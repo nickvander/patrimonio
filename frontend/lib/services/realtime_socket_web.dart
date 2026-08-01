@@ -42,7 +42,9 @@ class WebRealtimeSocket implements RealtimeSocket {
   void close() {
     try {
       _socket?.close();
-    } catch (_) {/* already closed */}
+    } catch (_) {
+      /* already closed */
+    }
     _socket = null;
   }
 }

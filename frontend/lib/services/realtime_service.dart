@@ -19,6 +19,7 @@ enum RealtimeEventType {
   /// Carries no data — consumers must NOT refetch on it. Its only job is
   /// to reset [RealtimeService]'s watchdog.
   heartbeat,
+
   /// Server signalled the per-user broadcast buffer overflowed for
   /// this subscriber — client should refetch everything as the
   /// always-correct recovery.
@@ -28,14 +29,12 @@ enum RealtimeEventType {
 
 class RealtimeEvent {
   final RealtimeEventType type;
+
   /// Optional institution name for `syncComplete`. Empty string for
   /// every other event type.
   final String institution;
 
-  const RealtimeEvent({
-    required this.type,
-    this.institution = '',
-  });
+  const RealtimeEvent({required this.type, this.institution = ''});
 }
 
 /// Decode one server frame into a [RealtimeEvent]; null when the payload
@@ -91,10 +90,13 @@ class RealtimeService {
 
   RealtimeSocket? _socket;
   StreamController<RealtimeEvent>? _events;
+
   /// Tracks the next reconnect delay (ms). Reset on a clean open.
   int _backoffMs = 1000;
+
   /// True after `dispose()` so reconnect attempts halt.
   bool _disposed = false;
+
   /// Fires when nothing has arrived for [_silenceTimeout]. A socket
   /// dropped by a sleeping device or a NAT/proxy timeout frequently
   /// produces NO close event — without this the client sits on a
@@ -102,9 +104,11 @@ class RealtimeService {
   /// (the backstop that reloads the dashboard after an import) is lost
   /// until the user forces a refresh by hand.
   Timer? _watchdog;
+
   /// Guards against stacking two reconnect timers when the watchdog and
   /// the socket's own onClose both fire for the same drop.
   bool _reconnectPending = false;
+
   /// True once a socket has opened. Distinguishes the boot connection
   /// (whose data the screen just loaded) from a RE-connection, after which
   /// the client is missing every push sent while the socket was down.
@@ -164,8 +168,10 @@ class RealtimeService {
     _watchdog?.cancel();
     if (_disposed) return;
     _watchdog = Timer(_silenceTimeout, () {
-      debugPrint('realtime: no frames for ${_silenceTimeout.inSeconds}s — '
-          'assuming the socket is dead, reconnecting');
+      debugPrint(
+        'realtime: no frames for ${_silenceTimeout.inSeconds}s — '
+        'assuming the socket is dead, reconnecting',
+      );
       // Drop our reference FIRST so `connect()` doesn't see a socket that
       // still claims to be open, then close (which may or may not fire
       // onClose on a half-open connection — `_reconnectPending` makes the

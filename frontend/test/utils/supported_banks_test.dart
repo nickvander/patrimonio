@@ -4,19 +4,22 @@ import 'package:patrimonio/utils/supported_banks.dart';
 
 void main() {
   group('kSupportedMxBanks — single source of truth', () {
-    test('lists exactly the advertised institutions with a validated parser', () {
-      // Banks whose parsers were built/validated against real statements
-      // (see backend/src/services/parser/mod.rs dispatch).
-      expect(kSupportedMxBanks, [
-        'Nu México',
-        'Banamex',
-        'Banorte',
-        'Scotiabank',
-        'Cetesdirecto',
-        'HealthEquity',
-        'Fidelity NetBenefits',
-      ]);
-    });
+    test(
+      'lists exactly the advertised institutions with a validated parser',
+      () {
+        // Banks whose parsers were built/validated against real statements
+        // (see backend/src/services/parser/mod.rs dispatch).
+        expect(kSupportedMxBanks, [
+          'Nu México',
+          'Banamex',
+          'Banorte',
+          'Scotiabank',
+          'Cetesdirecto',
+          'HealthEquity',
+          'Fidelity NetBenefits',
+        ]);
+      },
+    );
 
     test('omits banks we have no parser for', () {
       // These have no backend parser — advertising them is the trust bug this

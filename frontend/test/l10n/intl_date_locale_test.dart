@@ -36,28 +36,32 @@ void main() {
     expect(DateFormat('MMMM').format(monday), 'January');
   });
 
-  test('locale change via localeNotifier re-points Intl (listener path)',
-      () async {
-    // Initialize symbols once (resolved synchronously with the bundled
-    // date_symbol_data_local data), then flip locales through the notifier
-    // exactly like the dashboard language toggle does.
-    await syncIntlLocale(const Locale('en'));
+  test(
+    'locale change via localeNotifier re-points Intl (listener path)',
+    () async {
+      // Initialize symbols once (resolved synchronously with the bundled
+      // date_symbol_data_local data), then flip locales through the notifier
+      // exactly like the dashboard language toggle does.
+      await syncIntlLocale(const Locale('en'));
 
-    localeNotifier.value = const Locale('es');
-    // F6: bare 'es' → es_MX (Mexico-style numbers).
-    expect(Intl.defaultLocale, 'es_MX');
-    expect(DateFormat('EEEE').format(monday), 'lunes');
+      localeNotifier.value = const Locale('es');
+      // F6: bare 'es' → es_MX (Mexico-style numbers).
+      expect(Intl.defaultLocale, 'es_MX');
+      expect(DateFormat('EEEE').format(monday), 'lunes');
 
-    localeNotifier.value = const Locale('en');
-    expect(Intl.defaultLocale, 'en');
-    expect(DateFormat('EEEE').format(monday), 'Monday');
-  });
+      localeNotifier.value = const Locale('en');
+      expect(Intl.defaultLocale, 'en');
+      expect(DateFormat('EEEE').format(monday), 'Monday');
+    },
+  );
 
-  test('country-qualified locales use the underscore tag Intl expects',
-      () async {
-    await syncIntlLocale(const Locale('es', 'MX'));
-    expect(Intl.defaultLocale, 'es_MX');
-    // es_MX is in the bundled symbol set, so formatting resolves directly.
-    expect(DateFormat('EEEE').format(monday), 'lunes');
-  });
+  test(
+    'country-qualified locales use the underscore tag Intl expects',
+    () async {
+      await syncIntlLocale(const Locale('es', 'MX'));
+      expect(Intl.defaultLocale, 'es_MX');
+      // es_MX is in the bundled symbol set, so formatting resolves directly.
+      expect(DateFormat('EEEE').format(monday), 'lunes');
+    },
+  );
 }

@@ -52,9 +52,9 @@ class AllocationTargetsParse {
 
   const AllocationTargetsParse.unset() : this._(true, false, const {});
   const AllocationTargetsParse.malformed(Map<String, double> salvaged)
-      : this._(false, true, salvaged);
+    : this._(false, true, salvaged);
   const AllocationTargetsParse.ok(Map<String, double> targets)
-      : this._(false, false, targets);
+    : this._(false, false, targets);
 }
 
 /// Pure, defensive reader for the C4-A setting shape:
@@ -164,7 +164,10 @@ RebalanceGuidance computeRebalanceMoves({
 
   if (totalUsd <= 0) {
     return RebalanceGuidance(
-        moves: const [], truncated: false, allOnTarget: allOnTarget);
+      moves: const [],
+      truncated: false,
+      allOnTarget: allOnTarget,
+    );
   }
 
   int byPpDesc(_Leg a, _Leg b) {
@@ -188,8 +191,9 @@ RebalanceGuidance computeRebalanceMoves({
     final movedPp = math.min(s.pp, d.pp);
     s.pp -= movedPp;
     d.pp -= movedPp;
-    raw.add(RebalanceMove(
-        s.key, d.key, (movedPp / 100 * totalUsd).roundToDouble()));
+    raw.add(
+      RebalanceMove(s.key, d.key, (movedPp / 100 * totalUsd).roundToDouble()),
+    );
   }
 
   final kept = raw.where((m) => m.amountUsd >= minMoveUsd).toList();
@@ -197,22 +201,25 @@ RebalanceGuidance computeRebalanceMoves({
   final truncated =
       kept.length > maxLines || (raw.length > kept.length && shown.isNotEmpty);
   return RebalanceGuidance(
-      moves: shown, truncated: truncated, allOnTarget: allOnTarget);
+    moves: shown,
+    truncated: truncated,
+    allOnTarget: allOnTarget,
+  );
 }
 
 /// Display label for a canonical asset-class key — must echo the allocation
 /// band / filter-chip vocabulary (the shared `pfFilterAsset*` strings), so
 /// "equity" reads "Stocks & funds" here exactly as it does one card up.
 String rebalanceClassLabel(String key, AppLocalizations l) => switch (key) {
-      'equity' => l.pfFilterAssetEquity,
-      'bonds' => l.pfFilterAssetBonds,
-      'cash' => l.pfFilterAssetCash,
-      'crypto' => l.pfFilterAssetCrypto,
-      'real_estate' => l.pfFilterAssetRealEstate,
-      'commodities' => l.pfFilterAssetCommodities,
-      'other' => l.pfFilterAssetOther,
-      _ => key,
-    };
+  'equity' => l.pfFilterAssetEquity,
+  'bonds' => l.pfFilterAssetBonds,
+  'cash' => l.pfFilterAssetCash,
+  'crypto' => l.pfFilterAssetCrypto,
+  'real_estate' => l.pfFilterAssetRealEstate,
+  'commodities' => l.pfFilterAssetCommodities,
+  'other' => l.pfFilterAssetOther,
+  _ => key,
+};
 
 /// Target allocation & rebalancing card (backlog-4 WS2).
 ///
@@ -271,8 +278,9 @@ class _RebalancingCardState extends State<RebalancingCard> {
   Future<void> _load() async {
     dynamic raw;
     try {
-      raw = await (widget.loadTargetsOverride ??
-          () => widget.apiService.getSetting('allocation_targets'))();
+      raw =
+          await (widget.loadTargetsOverride ??
+              () => widget.apiService.getSetting('allocation_targets'))();
     } catch (_) {
       // Best-effort read: a failed fetch degrades to the setup CTA
       // rather than an error card (the setting is cheap to re-enter and
@@ -316,7 +324,9 @@ class _RebalancingCardState extends State<RebalancingCard> {
       // that omits asset_class) — bucket it as 'unclassified' so it stays in
       // the denominator and surfaces in the footnote, not silently folded
       // into 'other' where it would inflate a targetable class.
-      final key = (rawKey != null && rawKey.isNotEmpty) ? rawKey : 'unclassified';
+      final key = (rawKey != null && rawKey.isNotEmpty)
+          ? rawKey
+          : 'unclassified';
       if (rawKey == null || rawKey.isEmpty) {
         unclassifiedHoldingsUsd += item.value;
       }
@@ -352,8 +362,12 @@ class _RebalancingCardState extends State<RebalancingCard> {
     return switch (_status) {
       _TargetsStatus.unset => _buildCta(context),
       _TargetsStatus.malformed => _buildRepair(context),
-      _ => _buildFull(context, actualPct, totalUsd,
-          unclassifiedHoldingsUsd / totalUsd * 100),
+      _ => _buildFull(
+        context,
+        actualPct,
+        totalUsd,
+        unclassifiedHoldingsUsd / totalUsd * 100,
+      ),
     };
   }
 
@@ -380,8 +394,11 @@ class _RebalancingCardState extends State<RebalancingCard> {
     );
   }
 
-  Widget _headerRow(BuildContext context, AppLocalizations l,
-      {Widget? trailing}) {
+  Widget _headerRow(
+    BuildContext context,
+    AppLocalizations l, {
+    Widget? trailing,
+  }) {
     final title = MergeSemantics(
       child: Semantics(
         header: true,
@@ -423,10 +440,14 @@ class _RebalancingCardState extends State<RebalancingCard> {
   // ---------------------------------------------------------------------
 
   Widget _buildSkeleton(
-      BuildContext context, Map<String, double> actualUsd, double totalUsd) {
+    BuildContext context,
+    Map<String, double> actualUsd,
+    double totalUsd,
+  ) {
     final visibleClasses = actualUsd.entries
-        .where((e) =>
-            e.key != 'unclassified' && e.value / totalUsd * 100 >= 0.5)
+        .where(
+          (e) => e.key != 'unclassified' && e.value / totalUsd * 100 >= 0.5,
+        )
         .length;
     final rows = visibleClasses.clamp(3, kAllocationClassKeys.length);
     return _card(context, [
@@ -493,8 +514,11 @@ class _RebalancingCardState extends State<RebalancingCard> {
           child: Row(
             children: [
               ExcludeSemantics(
-                child:
-                    Icon(Icons.warning_amber_rounded, color: color, size: 18),
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  color: color,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -523,13 +547,18 @@ class _RebalancingCardState extends State<RebalancingCard> {
   // Full card — drift rows + guidance.
   // ---------------------------------------------------------------------
 
-  Widget _buildFull(BuildContext context, Map<String, double> actualPct,
-      double totalUsd, double unclassifiedHoldingsPct) {
+  Widget _buildFull(
+    BuildContext context,
+    Map<String, double> actualPct,
+    double totalUsd,
+    double unclassifiedHoldingsPct,
+  ) {
     final l = AppLocalizations.of(context);
 
     final rows = kAllocationClassKeys
-        .where((key) =>
-            (_targets[key] ?? 0) > 0 || (actualPct[key] ?? 0) >= 0.5)
+        .where(
+          (key) => (_targets[key] ?? 0) > 0 || (actualPct[key] ?? 0) >= 0.5,
+        )
         .toList();
     final unclassifiedPct = actualPct['unclassified'] ?? 0;
 
@@ -559,8 +588,11 @@ class _RebalancingCardState extends State<RebalancingCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ExcludeSemantics(
-                  child: Icon(Icons.help_outline,
-                      size: 13, color: context.textFaint),
+                  child: Icon(
+                    Icons.help_outline,
+                    size: 13,
+                    color: context.textFaint,
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -571,13 +603,19 @@ class _RebalancingCardState extends State<RebalancingCard> {
                     // have no holdings rows to classify — nudging there is
                     // impossible advice, so they get the descriptive note.
                     unclassifiedHoldingsPct >= 0.05
-                        ? l.rebUnclassifiedFootnote(localizePercentString(
-                            context, unclassifiedPct.toStringAsFixed(1)))
+                        ? l.rebUnclassifiedFootnote(
+                            localizePercentString(
+                              context,
+                              unclassifiedPct.toStringAsFixed(1),
+                            ),
+                          )
                         : l.rebUnclassifiedBalanceFootnote(
                             localizePercentString(
-                                context, unclassifiedPct.toStringAsFixed(1))),
-                    style:
-                        TextStyle(fontSize: 11.5, color: context.textFaint),
+                              context,
+                              unclassifiedPct.toStringAsFixed(1),
+                            ),
+                          ),
+                    style: TextStyle(fontSize: 11.5, color: context.textFaint),
                   ),
                 ),
               ],
@@ -642,8 +680,11 @@ class _RebalancingCardState extends State<RebalancingCard> {
                   ExcludeSemantics(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 1.5),
-                      child: Icon(Icons.swap_horiz,
-                          size: 14, color: context.textMuted),
+                      child: Icon(
+                        Icons.swap_horiz,
+                        size: 14,
+                        color: context.textMuted,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -692,13 +733,20 @@ class _RebalancingCardState extends State<RebalancingCard> {
   /// One class row: label + actual/target figures + delta chip, over a
   /// drift bar (fill = actual %, 2px tick at target %). Fill turns from
   /// positive to warning past the ±2pp band.
-  Widget _driftRow(BuildContext context, AppLocalizations l, String key,
-      double actualPct, double targetPct) {
+  Widget _driftRow(
+    BuildContext context,
+    AppLocalizations l,
+    String key,
+    double actualPct,
+    double targetPct,
+  ) {
     final delta = actualPct - targetPct;
     final within = delta.abs() <= kRebalanceBandPp;
     final accent = within ? context.positive : context.warning;
-    final deltaStr = localizeNumberString(context,
-        '${delta >= 0 ? '+' : '-'}${delta.abs().toStringAsFixed(1)}');
+    final deltaStr = localizeNumberString(
+      context,
+      '${delta >= 0 ? '+' : '-'}${delta.abs().toStringAsFixed(1)}',
+    );
     final chipText = within ? l.rebOnTargetChip : l.rebDeltaChip(deltaStr);
     final actualStr = actualPct.toStringAsFixed(1);
     final targetStr = _fmtPct(targetPct);
@@ -741,12 +789,15 @@ class _RebalancingCardState extends State<RebalancingCard> {
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                            color: accent.withValues(alpha: 0.35)),
+                          color: accent.withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Text(
                         chipText,
@@ -763,54 +814,59 @@ class _RebalancingCardState extends State<RebalancingCard> {
                 const SizedBox(height: 6),
                 SizedBox(
                   height: 14,
-                  child: LayoutBuilder(builder: (ctx, constraints) {
-                    final w = constraints.maxWidth;
-                    final fillW = w * (actualPct / 100).clamp(0.0, 1.0);
-                    final tickLeft =
-                        ((w - 2) * (targetPct / 100)).clamp(0.0, w - 2);
-                    return Stack(children: [
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 3,
-                        child: Container(
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: ctx.hairline,
-                            borderRadius: BorderRadius.circular(4),
+                  child: LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      final w = constraints.maxWidth;
+                      final fillW = w * (actualPct / 100).clamp(0.0, 1.0);
+                      final tickLeft = ((w - 2) * (targetPct / 100)).clamp(
+                        0.0,
+                        w - 2,
+                      );
+                      return Stack(
+                        children: [
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 3,
+                            child: Container(
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: ctx.hairline,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        top: 3,
-                        child: Container(
-                          width: fillW,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(4),
+                          Positioned(
+                            left: 0,
+                            top: 3,
+                            child: Container(
+                              width: fillW,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      // Target tick: full-height 2px mark in the primary
-                      // text colour, readable over both the empty track
-                      // and the positive/warning fill in either theme.
-                      Positioned(
-                        left: tickLeft,
-                        top: 0,
-                        child: Container(
-                          width: 2,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color:
-                                ctx.textPrimary.withValues(alpha: 0.85),
-                            borderRadius: BorderRadius.circular(1),
+                          // Target tick: full-height 2px mark in the primary
+                          // text colour, readable over both the empty track
+                          // and the positive/warning fill in either theme.
+                          Positioned(
+                            left: tickLeft,
+                            top: 0,
+                            child: Container(
+                              width: 2,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: ctx.textPrimary.withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(1),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ]);
-                  }),
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -843,8 +899,8 @@ class _RebalancingCardState extends State<RebalancingCard> {
     } else {
       prefill = const {};
     }
-    final hasExisting = _status == _TargetsStatus.ready ||
-        _status == _TargetsStatus.malformed;
+    final hasExisting =
+        _status == _TargetsStatus.ready || _status == _TargetsStatus.malformed;
 
     final outcome = await showModalBottomSheet<_EditorOutcome>(
       context: context,
@@ -853,10 +909,8 @@ class _RebalancingCardState extends State<RebalancingCard> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _TargetsEditorSheet(
-        initial: prefill,
-        hasExisting: hasExisting,
-      ),
+      builder: (_) =>
+          _TargetsEditorSheet(initial: prefill, hasExisting: hasExisting),
     );
     if (outcome == null || !mounted) return;
     if (outcome.remove) {
@@ -868,7 +922,7 @@ class _RebalancingCardState extends State<RebalancingCard> {
 
   Future<void> _putSetting(dynamic value) =>
       (widget.saveTargetsOverride ??
-          (v) => widget.apiService.putSetting('allocation_targets', v))(value);
+      (v) => widget.apiService.putSetting('allocation_targets', v))(value);
 
   /// Optimistic save: the card flips to the new targets immediately; a
   /// failed PUT reverts and surfaces a snackbar.
@@ -890,8 +944,7 @@ class _RebalancingCardState extends State<RebalancingCard> {
       'v': 1,
       'targets': {
         for (final e in targets.entries)
-          if (e.value > 0)
-            e.key: e.value % 1 == 0 ? e.value.toInt() : e.value,
+          if (e.value > 0) e.key: e.value % 1 == 0 ? e.value.toInt() : e.value,
       },
     };
     try {
@@ -939,11 +992,8 @@ class _EditorOutcome {
   final bool remove;
   final Map<String, double>? targets;
 
-  const _EditorOutcome.save(Map<String, double> this.targets)
-      : remove = false;
-  const _EditorOutcome.remove()
-      : remove = true,
-        targets = null;
+  const _EditorOutcome.save(Map<String, double> this.targets) : remove = false;
+  const _EditorOutcome.remove() : remove = true, targets = null;
 }
 
 /// Rejects any edit that isn't `up to 3 digits, optionally a dot and one
@@ -954,7 +1004,9 @@ class _PercentInputFormatter extends TextInputFormatter {
 
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     return _re.hasMatch(newValue.text) ? newValue : oldValue;
   }
 }
@@ -967,10 +1019,7 @@ class _TargetsEditorSheet extends StatefulWidget {
   final Map<String, double> initial;
   final bool hasExisting;
 
-  const _TargetsEditorSheet({
-    required this.initial,
-    required this.hasExisting,
-  });
+  const _TargetsEditorSheet({required this.initial, required this.hasExisting});
 
   @override
   State<_TargetsEditorSheet> createState() => _TargetsEditorSheetState();
@@ -980,9 +1029,7 @@ class _TargetsEditorSheetState extends State<_TargetsEditorSheet> {
   late final Map<String, TextEditingController> _controllers = {
     for (final key in kAllocationClassKeys)
       key: TextEditingController(
-        text: (widget.initial[key] ?? 0) > 0
-            ? _fmt(widget.initial[key]!)
-            : '',
+        text: (widget.initial[key] ?? 0) > 0 ? _fmt(widget.initial[key]!) : '',
       ),
   };
 
@@ -1022,9 +1069,9 @@ class _TargetsEditorSheetState extends State<_TargetsEditorSheet> {
   }
 
   bool get _inRange => kAllocationClassKeys.every((key) {
-        final v = _valueOf(key);
-        return !v.isNaN && v >= 0 && v <= 100;
-      });
+    final v = _valueOf(key);
+    return !v.isNaN && v >= 0 && v <= 100;
+  });
 
   bool get _valid => _inRange && (_total - 100).abs() <= 0.05;
 
@@ -1044,8 +1091,10 @@ class _TargetsEditorSheetState extends State<_TargetsEditorSheet> {
         bestKey = key;
       }
     }
-    final next =
-        (((bestVal + residual) * 10).roundToDouble() / 10).clamp(0.0, 100.0);
+    final next = (((bestVal + residual) * 10).roundToDouble() / 10).clamp(
+      0.0,
+      100.0,
+    );
     _controllers[bestKey]!.text = next > 0 ? _fmt(next) : '';
   }
 
@@ -1092,12 +1141,13 @@ class _TargetsEditorSheetState extends State<_TargetsEditorSheet> {
     final total = _total;
     final totalStr = total.isNaN
         ? '—'
-        : (total % 1 == 0 ? total.toInt().toString() : total.toStringAsFixed(1));
+        : (total % 1 == 0
+              ? total.toInt().toString()
+              : total.toStringAsFixed(1));
     final residualActive = !total.isNaN && (100 - total).abs() >= 0.05;
 
     return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
@@ -1141,7 +1191,8 @@ class _TargetsEditorSheetState extends State<_TargetsEditorSheet> {
                         child: TextField(
                           controller: _controllers[key],
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                            decimal: true,
+                          ),
                           textAlign: TextAlign.right,
                           inputFormatters: [_PercentInputFormatter()],
                           style: const TextStyle(
@@ -1198,7 +1249,8 @@ class _TargetsEditorSheetState extends State<_TargetsEditorSheet> {
                   alignment: Alignment.centerLeft,
                   child: TextButton(
                     style: TextButton.styleFrom(
-                        foregroundColor: context.negative),
+                      foregroundColor: context.negative,
+                    ),
                     onPressed: _confirmRemove,
                     child: Text(l.rebRemoveTargets),
                   ),

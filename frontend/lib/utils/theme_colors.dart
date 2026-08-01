@@ -66,20 +66,19 @@ extension ThemeColorsExt on BuildContext {
   /// Replaces ad-hoc `Colors.white.withValues(alpha: X)`. In light mode
   /// the alpha is scaled up ~1.6× so the same call site reads with
   /// comparable visual weight in both brightnesses.
-  Color tint(double alpha) => _scheme.onSurface
-      .withValues(alpha: _isDark ? alpha : (alpha * 1.6).clamp(0.0, 1.0));
+  Color tint(double alpha) => _scheme.onSurface.withValues(
+    alpha: _isDark ? alpha : (alpha * 1.6).clamp(0.0, 1.0),
+  );
 
   /// Accent border / fill alphas that match dark-tuned values in
   /// light mode. Saturated brand accents (00E676 emerald, 1DE9B6 teal,
   /// FF4081 pink) at 0.18-0.35 alpha disappear on a white card; this
   /// helper boosts the alpha in light so call sites can stay simple.
-  Color accentSoft(Color accent) => _isDark
-      ? accent.withValues(alpha: 0.18)
-      : accent.withValues(alpha: 0.32);
+  Color accentSoft(Color accent) =>
+      _isDark ? accent.withValues(alpha: 0.18) : accent.withValues(alpha: 0.32);
 
-  Color accentBorder(Color accent) => _isDark
-      ? accent.withValues(alpha: 0.35)
-      : accent.withValues(alpha: 0.55);
+  Color accentBorder(Color accent) =>
+      _isDark ? accent.withValues(alpha: 0.35) : accent.withValues(alpha: 0.55);
 
   /// Foreground (label/icon) colour to place *on top of* a filled accent
   /// background — returns whichever of black/white has the HIGHER WCAG
@@ -93,8 +92,8 @@ extension ThemeColorsExt on BuildContext {
   /// with the theme and always clears AA against the button fill.
   Color onAccent(Color accent) =>
       contrastRatio(Colors.white, accent) >= contrastRatio(Colors.black, accent)
-          ? Colors.white
-          : Colors.black;
+      ? Colors.white
+      : Colors.black;
 
   // ---------------------------------------------------------------------------
   // Semantic accents (delegate to BrandPalette).

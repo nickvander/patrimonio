@@ -9,24 +9,26 @@ import 'package:patrimonio/services/response_cache.dart';
 /// the test VM and break it).
 void main() {
   group('ResponseCache hit / miss', () {
-    test('miss fetches and caches; subsequent read is a hit (no re-fetch)',
-        () async {
-      final cache = ResponseCache(ttl: const Duration(seconds: 30));
-      var calls = 0;
-      Future<int> fetch() async {
-        calls++;
-        return 42;
-      }
+    test(
+      'miss fetches and caches; subsequent read is a hit (no re-fetch)',
+      () async {
+        final cache = ResponseCache(ttl: const Duration(seconds: 30));
+        var calls = 0;
+        Future<int> fetch() async {
+          calls++;
+          return 42;
+        }
 
-      expect(cache.isFresh('k'), isFalse);
-      expect(await cache.getOrFetch('k', fetch), 42);
-      expect(calls, 1);
-      expect(cache.isFresh('k'), isTrue);
+        expect(cache.isFresh('k'), isFalse);
+        expect(await cache.getOrFetch('k', fetch), 42);
+        expect(calls, 1);
+        expect(cache.isFresh('k'), isTrue);
 
-      // Second read inside TTL must not call fetch again.
-      expect(await cache.getOrFetch('k', fetch), 42);
-      expect(calls, 1);
-    });
+        // Second read inside TTL must not call fetch again.
+        expect(await cache.getOrFetch('k', fetch), 42);
+        expect(calls, 1);
+      },
+    );
 
     test('set / peek stores a value directly', () {
       final cache = ResponseCache();
@@ -119,25 +121,27 @@ void main() {
       expect(cache.peek('b'), isNull);
     });
 
-    test('a fetch in flight when clear() runs does NOT repopulate the cache',
-        () async {
-      // This is the core finance-safety guard: a read that started before
-      // a mutation must not write its now-stale result back after the
-      // mutation invalidated the cache.
-      final cache = ResponseCache();
-      final completer = Completer<int>();
-      final read = cache.getOrFetch('k', () => completer.future);
+    test(
+      'a fetch in flight when clear() runs does NOT repopulate the cache',
+      () async {
+        // This is the core finance-safety guard: a read that started before
+        // a mutation must not write its now-stale result back after the
+        // mutation invalidated the cache.
+        final cache = ResponseCache();
+        final completer = Completer<int>();
+        final read = cache.getOrFetch('k', () => completer.future);
 
-      // Mutation happens while the fetch is outstanding.
-      cache.clear();
+        // Mutation happens while the fetch is outstanding.
+        cache.clear();
 
-      // Now the in-flight fetch resolves with pre-mutation data.
-      completer.complete(99);
-      expect(await read, 99); // caller still gets its value
-      // ...but it must NOT have been cached (it predates the clear()).
-      expect(cache.peek('k'), isNull);
-      expect(cache.isFresh('k'), isFalse);
-    });
+        // Now the in-flight fetch resolves with pre-mutation data.
+        completer.complete(99);
+        expect(await read, 99); // caller still gets its value
+        // ...but it must NOT have been cached (it predates the clear()).
+        expect(cache.peek('k'), isNull);
+        expect(cache.isFresh('k'), isFalse);
+      },
+    );
   });
 
   group('in-flight de-dupe', () {
@@ -159,20 +163,22 @@ void main() {
       expect(calls, 1); // de-duped to a single network call
     });
 
-    test('a fresh fetch after the in-flight one settles is a new call',
-        () async {
-      final cache = ResponseCache(ttl: const Duration(seconds: 30));
-      var calls = 0;
-      Future<int> fetch() async {
-        calls++;
-        return calls;
-      }
+    test(
+      'a fresh fetch after the in-flight one settles is a new call',
+      () async {
+        final cache = ResponseCache(ttl: const Duration(seconds: 30));
+        var calls = 0;
+        Future<int> fetch() async {
+          calls++;
+          return calls;
+        }
 
-      expect(await cache.getOrFetch('k', fetch), 1);
-      cache.invalidate('k');
-      expect(await cache.getOrFetch('k', fetch), 2);
-      expect(calls, 2);
-    });
+        expect(await cache.getOrFetch('k', fetch), 1);
+        cache.invalidate('k');
+        expect(await cache.getOrFetch('k', fetch), 2);
+        expect(calls, 2);
+      },
+    );
   });
 
   group('forceRefresh', () {

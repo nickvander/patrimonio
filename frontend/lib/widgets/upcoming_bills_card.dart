@@ -54,98 +54,123 @@ class UpcomingBillsCard extends StatelessWidget {
         // Width-responsive off the card's OWN constraint (inner
         // LayoutBuilder, per the skill rule), not MediaQuery — the card can
         // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(builder: (context, c) {
-          // House ~420 phone breakpoint: compact chrome — no leading icon,
-          // title compressed to a small uppercase overline (the
-          // portfolio_card idiom). Wider layouts are unchanged.
-          final isPhone = c.maxWidth < 420;
-          return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: LayoutBuilder(
+          builder: (context, c) {
+            // House ~420 phone breakpoint: compact chrome — no leading icon,
+            // title compressed to a small uppercase overline (the
+            // portfolio_card idiom). Wider layouts are unchanged.
+            final isPhone = c.maxWidth < 420;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!isPhone) ...[
-                  Icon(Icons.event_repeat_rounded,
-                      color: context.purpleAccent, size: 18),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    isPhone ? l.billsTitle.toUpperCase() : l.billsTitle,
-                    style: isPhone
-                        ? TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                            color: context.textSubtle,
-                          )
-                        : TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: context.textPrimary,
-                          ),
-                    // maxLines only on the phone overline; wider layouts
-                    // keep the original wrap behaviour pixel-identical.
-                    maxLines: isPhone ? 1 : null,
-                    overflow: isPhone ? TextOverflow.ellipsis : null,
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
                   children: [
-                    Text(
-                      currencyFormat.displayMoney(totalUsd * conversionFactor),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    if (!isPhone) ...[
+                      Icon(
+                        Icons.event_repeat_rounded,
                         color: context.purpleAccent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Text(
+                        isPhone ? l.billsTitle.toUpperCase() : l.billsTitle,
+                        style: isPhone
+                            ? TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                                color: context.textSubtle,
+                              )
+                            : TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: context.textPrimary,
+                              ),
+                        // maxLines only on the phone overline; wider layouts
+                        // keep the original wrap behaviour pixel-identical.
+                        maxLines: isPhone ? 1 : null,
+                        overflow: isPhone ? TextOverflow.ellipsis : null,
                       ),
                     ),
-                    Text(
-                      l.billsNext12,
-                      style:
-                          TextStyle(color: context.textFaint, fontSize: 11),
-                    ),
-                    // The 12-month total reads alarmingly large on its own;
-                    // the monthly average reframes it as "a year of bills"
-                    // rather than a single scary number.
-                    Text(
-                      l.cfPerMonthApprox(currencyFormat
-                          .displayMoney(totalUsd / 12 * conversionFactor)),
-                      style:
-                          TextStyle(color: context.textFaint, fontSize: 11),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          currencyFormat.displayMoney(
+                            totalUsd * conversionFactor,
+                          ),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: context.purpleAccent,
+                          ),
+                        ),
+                        Text(
+                          l.billsNext12,
+                          style: TextStyle(
+                            color: context.textFaint,
+                            fontSize: 11,
+                          ),
+                        ),
+                        // The 12-month total reads alarmingly large on its own;
+                        // the monthly average reframes it as "a year of bills"
+                        // rather than a single scary number.
+                        Text(
+                          l.cfPerMonthApprox(
+                            currencyFormat.displayMoney(
+                              totalUsd / 12 * conversionFactor,
+                            ),
+                          ),
+                          style: TextStyle(
+                            color: context.textFaint,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
+                // Header→chart gap tightens with the phone overline header.
+                SizedBox(height: isPhone ? 12 : 20),
+                LayoutBuilder(
+                  builder: (context, outer) {
+                    // Month-label density off the inner width (~1 per 46px, keep
+                    // the last) — a full 12-month forecast rendered a two-line
+                    // month+year label under every bar and collided on phones.
+                    // 200 tall (was 160): the two-line labels plus y-ticks were
+                    // crowding the plot itself.
+                    final count = forecast.isEmpty ? 1 : forecast.length;
+                    final minLabels = count < 2 ? count : 2;
+                    final maxLabels = (outer.maxWidth / 46.0).floor().clamp(
+                      minLabels,
+                      count,
+                    );
+                    final labelStep = (count / maxLabels).ceil().clamp(
+                      1,
+                      count,
+                    );
+                    return SizedBox(
+                      height: 200,
+                      child: _chart(context, forecast, maxMonth, labelStep),
+                    );
+                  },
+                ),
               ],
-            ),
-            // Header→chart gap tightens with the phone overline header.
-            SizedBox(height: isPhone ? 12 : 20),
-            LayoutBuilder(builder: (context, outer) {
-              // Month-label density off the inner width (~1 per 46px, keep
-              // the last) — a full 12-month forecast rendered a two-line
-              // month+year label under every bar and collided on phones.
-              // 200 tall (was 160): the two-line labels plus y-ticks were
-              // crowding the plot itself.
-              final count = forecast.isEmpty ? 1 : forecast.length;
-              final minLabels = count < 2 ? count : 2;
-              final maxLabels =
-                  (outer.maxWidth / 46.0).floor().clamp(minLabels, count);
-              final labelStep = (count / maxLabels).ceil().clamp(1, count);
-              return SizedBox(
-                height: 200,
-                child: _chart(context, forecast, maxMonth, labelStep),
-              );
-            }),
-          ],
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _chart(BuildContext context, List<BillMonth> forecast, double maxY,
-      int labelStep) {
+  Widget _chart(
+    BuildContext context,
+    List<BillMonth> forecast,
+    double maxY,
+    int labelStep,
+  ) {
     final groups = <BarChartGroupData>[];
     for (var i = 0; i < forecast.length; i++) {
       groups.add(
@@ -156,8 +181,9 @@ class UpcomingBillsCard extends StatelessWidget {
               toY: forecast[i].totalUsd * conversionFactor,
               width: 14,
               color: context.purpleAccent,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(4)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(4),
+              ),
             ),
           ],
         ),
@@ -178,10 +204,12 @@ class UpcomingBillsCard extends StatelessWidget {
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -230,13 +258,17 @@ class UpcomingBillsCard extends StatelessWidget {
                       Text(
                         DateFormat.MMM().format(month),
                         style: TextStyle(
-                            color: context.textSubtle, fontSize: 10),
+                          color: context.textSubtle,
+                          fontSize: 10,
+                        ),
                       ),
                       if (showYear)
                         Text(
                           DateFormat.y().format(month),
                           style: TextStyle(
-                              color: context.textFaint, fontSize: 9),
+                            color: context.textFaint,
+                            fontSize: 9,
+                          ),
                         ),
                     ],
                   ),

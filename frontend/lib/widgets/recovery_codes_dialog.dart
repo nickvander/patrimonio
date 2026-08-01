@@ -100,7 +100,9 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
                 TextButton.icon(
                   onPressed: _copy,
                   icon: Icon(_copied ? Icons.check : Icons.copy, size: 18),
-                  label: Text(_copied ? l.dlgRecoveryCopied : l.dlgRecoveryCopyAll),
+                  label: Text(
+                    _copied ? l.dlgRecoveryCopied : l.dlgRecoveryCopyAll,
+                  ),
                 ),
               ],
             ),

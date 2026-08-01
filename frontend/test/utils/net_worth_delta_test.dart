@@ -9,9 +9,9 @@ import 'package:patrimonio/utils/net_worth_delta.dart';
 // ago" chip below it.
 
 Map<String, dynamic> _point(String date, double netWorth) => {
-      'date': date,
-      'net_worth': netWorth,
-    };
+  'date': date,
+  'net_worth': netWorth,
+};
 
 /// Daily history from [start] (inclusive) for [days] points, linearly
 /// interpolated from [startValue] to [endValue].
@@ -20,12 +20,11 @@ List<Map<String, dynamic>> _dailyHistory(
   int days,
   double startValue,
   double endValue,
-) =>
-    List.generate(days, (i) {
-      final d = start.add(Duration(days: i));
-      final v = startValue + (endValue - startValue) * i / (days - 1);
-      return _point(d.toIso8601String().substring(0, 10), v);
-    });
+) => List.generate(days, (i) {
+  final d = start.add(Duration(days: i));
+  final v = startValue + (endValue - startValue) * i / (days - 1);
+  return _point(d.toIso8601String().substring(0, 10), v);
+});
 
 void main() {
   group('computeNetWorthDelta — anchor fallback and honest label', () {
@@ -66,10 +65,7 @@ void main() {
     test('null when no anchor lands within tolerance of either window', () {
       // Second point is 15 days before the latest: 15 days off the 30d
       // target and 8 days off the 7d target — both outside +/-5.
-      final history = [
-        _point('2026-07-09', 1000),
-        _point('2026-07-24', 1200),
-      ];
+      final history = [_point('2026-07-09', 1000), _point('2026-07-24', 1200)];
       expect(computeNetWorthDelta(history), isNull);
     });
 
@@ -116,10 +112,7 @@ void main() {
 
   group('computeMomYoyDeltas — calendar-anchored deltas', () {
     test('MoM present with a month of history, YoY absent', () {
-      final history = [
-        _point('2026-06-24', 1000),
-        _point('2026-07-24', 1150),
-      ];
+      final history = [_point('2026-06-24', 1000), _point('2026-07-24', 1150)];
       final deltas = computeMomYoyDeltas(history);
       expect(deltas.mom, isNotNull);
       expect(deltas.mom!.windowLabel, 'MoM');

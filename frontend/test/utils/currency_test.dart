@@ -75,8 +75,7 @@ void main() {
       expect(displayCurrencyAmount(1000000.0, 'USD'), '\$1,000,000');
     });
 
-    test('negatives use the magnitude for the threshold and keep the sign',
-        () {
+    test('negatives use the magnitude for the threshold and keep the sign', () {
       // Rounds half away from zero (NumberFormat's own rounding), so
       // -12,345.67 → -$12,346.
       expect(displayCurrencyAmount(-12345.67, 'USD'), '-\$12,346');
@@ -84,8 +83,10 @@ void main() {
     });
 
     test('small amounts are byte-identical to formatCurrencyAmount', () {
-      expect(displayCurrencyAmount(1234.56, 'USD'),
-          formatCurrencyAmount(1234.56, 'USD'));
+      expect(
+        displayCurrencyAmount(1234.56, 'USD'),
+        formatCurrencyAmount(1234.56, 'USD'),
+      );
       expect(displayCurrencyAmount(0.0, 'USD'), '\$0.00');
     });
 
@@ -101,13 +102,18 @@ void main() {
       expect(displayCurrencyWithCode(9591.25, 'USD'), 'USD 9,591.25');
     });
 
-    test('es-MX locale keeps Mexico conventions (comma groups, dot decimal)',
-        () {
-      final es = NumberFormat.currency(
-          locale: 'es_MX', name: 'USD', symbol: '\$');
-      expect(es.displayMoney(1234567.89), '\$1,234,568');
-      expect(es.displayMoney(9999.99), '\$9,999.99');
-    });
+    test(
+      'es-MX locale keeps Mexico conventions (comma groups, dot decimal)',
+      () {
+        final es = NumberFormat.currency(
+          locale: 'es_MX',
+          name: 'USD',
+          symbol: '\$',
+        );
+        expect(es.displayMoney(1234567.89), '\$1,234,568');
+        expect(es.displayMoney(9999.99), '\$9,999.99');
+      },
+    );
   });
 
   group('wholeMoney — always centless (estimate surfaces)', () {
@@ -120,8 +126,10 @@ void main() {
     });
 
     test('matches displayMoney at/above the threshold', () {
-      expect(moneyFormat('USD').wholeMoney(385783.67),
-          displayCurrencyAmount(385783.67, 'USD'));
+      expect(
+        moneyFormat('USD').wholeMoney(385783.67),
+        displayCurrencyAmount(385783.67, 'USD'),
+      );
     });
 
     test('rounds half away from zero and keeps the sign', () {
@@ -131,7 +139,10 @@ void main() {
 
     test('es-MX locale keeps Mexico conventions', () {
       final es = NumberFormat.currency(
-          locale: 'es_MX', name: 'USD', symbol: '\$');
+        locale: 'es_MX',
+        name: 'USD',
+        symbol: '\$',
+      );
       expect(es.wholeMoney(3300.75), '\$3,301');
     });
   });
@@ -149,13 +160,15 @@ void main() {
       expect(norm(compactMoney(6738101, 'MXN')), isNot(startsWith('\$')));
     });
 
-    test('no stray decimals on sub-1000 ticks (was "\$50.00" next to "\$150")',
-        () {
-      expect(compactMoney(50, 'USD'), '\$50');
-      expect(compactMoney(100, 'USD'), '\$100');
-      expect(compactMoney(150, 'USD'), '\$150');
-      expect(norm(compactMoney(50, 'MXN')), 'MXN 50');
-    });
+    test(
+      'no stray decimals on sub-1000 ticks (was "\$50.00" next to "\$150")',
+      () {
+        expect(compactMoney(50, 'USD'), '\$50');
+        expect(compactMoney(100, 'USD'), '\$100');
+        expect(compactMoney(150, 'USD'), '\$150');
+        expect(norm(compactMoney(50, 'MXN')), 'MXN 50');
+      },
+    );
 
     test('USD keeps the plain \$ and compact magnitudes', () {
       expect(compactMoney(1530000, 'USD'), '\$1.53M');
@@ -204,8 +217,11 @@ void main() {
       final reserved = compactMoneyAxisWidth(0, 3000, 'MXN');
       for (final tick in [870, 1740, 2610, 3000]) {
         final label = compactMoney(tick, 'MXN');
-        expect(reserved, greaterThanOrEqualTo(labelWidth(label)),
-            reason: 'reserved box must fit "$label"');
+        expect(
+          reserved,
+          greaterThanOrEqualTo(labelWidth(label)),
+          reason: 'reserved box must fit "$label"',
+        );
       }
     });
 
@@ -215,23 +231,33 @@ void main() {
       final reserved = compactMoneyAxisWidth(0, 10200, 'USD');
       for (final tick in [999, 9990, 10200]) {
         final label = compactMoney(tick, 'USD');
-        expect(reserved, greaterThanOrEqualTo(labelWidth(label)),
-            reason: 'reserved box must fit "$label"');
+        expect(
+          reserved,
+          greaterThanOrEqualTo(labelWidth(label)),
+          reason: 'reserved box must fit "$label"',
+        );
       }
     });
 
     test('MXN reservation is wider than USD at the same scale', () {
       // "MXN " is a wider prefix than "$": USD mode must not pay for it.
-      expect(compactMoneyAxisWidth(0, 3000, 'MXN'),
-          greaterThan(compactMoneyAxisWidth(0, 3000, 'USD')));
-      expect(compactMoneyAxisWidth(0, 35000000, 'MXN'),
-          greaterThan(compactMoneyAxisWidth(0, 35000000, 'USD')));
+      expect(
+        compactMoneyAxisWidth(0, 3000, 'MXN'),
+        greaterThan(compactMoneyAxisWidth(0, 3000, 'USD')),
+      );
+      expect(
+        compactMoneyAxisWidth(0, 35000000, 'MXN'),
+        greaterThan(compactMoneyAxisWidth(0, 35000000, 'USD')),
+      );
     });
 
     test('a negative extent reserves extra width for the sign', () {
       final signed = compactMoneyAxisWidth(-2500, 2500, 'USD');
       expect(signed, greaterThan(compactMoneyAxisWidth(0, 2500, 'USD')));
-      expect(signed, greaterThanOrEqualTo(labelWidth(compactMoney(-2500, 'USD'))));
+      expect(
+        signed,
+        greaterThanOrEqualTo(labelWidth(compactMoney(-2500, 'USD'))),
+      );
     });
 
     test('es-MX compact suffixes (" M") are measured, not assumed', () {
@@ -240,15 +266,20 @@ void main() {
         final reserved = compactMoneyAxisWidth(0, 35000000, 'MXN');
         for (final tick in [5000000, 17400000, 30000000]) {
           final label = compactMoney(tick, 'MXN');
-          expect(reserved, greaterThanOrEqualTo(labelWidth(label)),
-              reason: 'reserved box must fit "$label"');
+          expect(
+            reserved,
+            greaterThanOrEqualTo(labelWidth(label)),
+            reason: 'reserved box must fit "$label"',
+          );
         }
       });
     });
 
     test('memoized result is stable across repeated calls', () {
-      expect(compactMoneyAxisWidth(0, 3000, 'MXN'),
-          compactMoneyAxisWidth(0, 3000, 'MXN'));
+      expect(
+        compactMoneyAxisWidth(0, 3000, 'MXN'),
+        compactMoneyAxisWidth(0, 3000, 'MXN'),
+      );
     });
   });
 }

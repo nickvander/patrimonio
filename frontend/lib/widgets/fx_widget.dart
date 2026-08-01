@@ -8,6 +8,7 @@ import '../utils/theme_colors.dart';
 
 class FxWidget extends StatefulWidget {
   final Map<String, dynamic> latestRate;
+
   /// Async callback invoked when the user taps the "Refresh now" button.
   /// Dashboard wires it to force-refresh the FX rate (bypassing cache)
   /// and reload the dashboard so the new value flows through every card.
@@ -52,7 +53,9 @@ class _FxWidgetState extends State<FxWidget> {
                 Text(
                   l.lwFxExchangeRate,
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -67,8 +70,9 @@ class _FxWidgetState extends State<FxWidget> {
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation(context.positive),
+                                valueColor: AlwaysStoppedAnimation(
+                                  context.positive,
+                                ),
                               ),
                             )
                           : const Icon(Icons.edit_outlined, size: 20),
@@ -95,8 +99,9 @@ class _FxWidgetState extends State<FxWidget> {
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation(context.positive),
+                                  valueColor: AlwaysStoppedAnimation(
+                                    context.positive,
+                                  ),
                                 ),
                               )
                             : const Icon(Icons.refresh, size: 20),
@@ -140,7 +145,9 @@ class _FxWidgetState extends State<FxWidget> {
                       if (latestRate['recorded_at'] != null) ...[
                         const SizedBox(height: 12),
                         _buildTimestampBlock(
-                            context, latestRate['recorded_at']),
+                          context,
+                          latestRate['recorded_at'],
+                        ),
                       ],
                       if (source.isNotEmpty) ...[
                         const SizedBox(height: 8),
@@ -155,18 +162,20 @@ class _FxWidgetState extends State<FxWidget> {
                     ],
                   ),
                 ),
-                LayoutBuilder(builder: (ctx, c) {
-                  // Hide the decorative icon below ~340px so the rate column
-                  // doesn't fight a fixed 48px sibling on tiny phones.
-                  if (MediaQuery.sizeOf(ctx).width < 360) {
-                    return const SizedBox.shrink();
-                  }
-                  return Icon(
-                    Icons.currency_exchange,
-                    size: 48,
-                    color: context.tealAccent,
-                  );
-                }),
+                LayoutBuilder(
+                  builder: (ctx, c) {
+                    // Hide the decorative icon below ~340px so the rate column
+                    // doesn't fight a fixed 48px sibling on tiny phones.
+                    if (MediaQuery.sizeOf(ctx).width < 360) {
+                      return const SizedBox.shrink();
+                    }
+                    return Icon(
+                      Icons.currency_exchange,
+                      size: 48,
+                      color: context.tealAccent,
+                    );
+                  },
+                ),
               ],
             ),
           ],
@@ -209,8 +218,9 @@ class _FxWidgetState extends State<FxWidget> {
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   ],
@@ -243,9 +253,9 @@ class _FxWidgetState extends State<FxWidget> {
     final parsed = double.tryParse(entered.trim());
     if (parsed == null || parsed <= 0) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.lwFxManualInvalid)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.lwFxManualInvalid)));
       return;
     }
 
@@ -260,14 +270,14 @@ class _FxWidgetState extends State<FxWidget> {
         await widget.onRefresh!();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.lwFxManualSaved)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.lwFxManualSaved)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.lwFxManualFailed(e.toString()))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.lwFxManualFailed(e.toString()))));
     } finally {
       if (mounted) setState(() => _savingManual = false);
     }

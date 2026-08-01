@@ -90,9 +90,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
     );
     if (result == true && mounted) {
       final l = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.secPasswordChangedSnack)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.secPasswordChangedSnack)));
       // After change-password the server revokes all our sessions —
       // refreshStatus will drop us back to login.
       await AuthService.instance.refreshStatus();
@@ -120,8 +120,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(l.secFailedWithReason(
-              e.toString().replaceFirst('Exception: ', ''))),
+          content: Text(
+            l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')),
+          ),
         ),
       );
       return;
@@ -139,9 +140,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
       ),
     );
     if (result == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.secPasswordChangedSnack)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.secPasswordChangedSnack)));
       // Sessions were revoked server-side — drop back to login.
       await AuthService.instance.refreshStatus();
     }
@@ -179,7 +180,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
+          SnackBar(
+            content: Text(
+              l.secFailedWithReason(
+                e.toString().replaceFirst('Exception: ', ''),
+              ),
+            ),
+          ),
         );
       }
     }
@@ -199,15 +206,21 @@ class _SecurityScreenState extends State<SecurityScreen> {
         ),
       );
       if (ok == true && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secTwoFactorEnabledSnack)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.secTwoFactorEnabledSnack)));
         await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
+          SnackBar(
+            content: Text(
+              l.secFailedWithReason(
+                e.toString().replaceFirst('Exception: ', ''),
+              ),
+            ),
+          ),
         );
       }
     }
@@ -226,15 +239,21 @@ class _SecurityScreenState extends State<SecurityScreen> {
     try {
       await _api.disableTotp(pw);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secTwoFactorDisabledSnack)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.secTwoFactorDisabledSnack)));
         await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
+          SnackBar(
+            content: Text(
+              l.secFailedWithReason(
+                e.toString().replaceFirst('Exception: ', ''),
+              ),
+            ),
+          ),
         );
       }
     }
@@ -263,15 +282,21 @@ class _SecurityScreenState extends State<SecurityScreen> {
     try {
       await _api.revokeSession(session.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secSessionSignedOutSnack)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.secSessionSignedOutSnack)));
         await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
+          SnackBar(
+            content: Text(
+              l.secFailedWithReason(
+                e.toString().replaceFirst('Exception: ', ''),
+              ),
+            ),
+          ),
         );
       }
     }
@@ -335,16 +360,20 @@ class _SecurityScreenState extends State<SecurityScreen> {
       final n = await _api.revokeOtherSessions();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l.secOtherSessionsSignedOutSnack(n)),
-          ),
+          SnackBar(content: Text(l.secOtherSessionsSignedOutSnack(n))),
         );
         await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
+          SnackBar(
+            content: Text(
+              l.secFailedWithReason(
+                e.toString().replaceFirst('Exception: ', ''),
+              ),
+            ),
+          ),
         );
       }
     }
@@ -362,7 +391,12 @@ class _SecurityScreenState extends State<SecurityScreen> {
     final parts = <String>[];
     if (browser.isNotEmpty) parts.add(browser);
     if (os.isNotEmpty) parts.add(l.secOnOs(os));
-    if (parts.isEmpty) parts.add(ua.isEmpty ? l.secUnknownDevice : ua.substring(0, ua.length > 40 ? 40 : ua.length));
+    if (parts.isEmpty)
+      parts.add(
+        ua.isEmpty
+            ? l.secUnknownDevice
+            : ua.substring(0, ua.length > 40 ? 40 : ua.length),
+      );
     if (s.ipAddress != null && s.ipAddress!.isNotEmpty) {
       parts.add('· ${s.ipAddress}');
     }
@@ -372,9 +406,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
   String _browserName(String ua) {
     final lower = ua.toLowerCase();
     if (lower.contains('edg/')) return 'Edge';
-    if (lower.contains('chrome/') && !lower.contains('chromium/')) return 'Chrome';
+    if (lower.contains('chrome/') && !lower.contains('chromium/'))
+      return 'Chrome';
     if (lower.contains('firefox/')) return 'Firefox';
-    if (lower.contains('safari/') && !lower.contains('chrome/')) return 'Safari';
+    if (lower.contains('safari/') && !lower.contains('chrome/'))
+      return 'Safari';
     if (lower.contains('curl/')) return 'curl';
     if (lower.contains('playwright')) return 'Playwright';
     return '';
@@ -409,101 +445,99 @@ class _SecurityScreenState extends State<SecurityScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : ListView(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 16),
-                  children: [
-                    _section(l.secAccountSection),
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.account_circle_outlined),
-                        title: Text(
-                          _user?.username ?? '—',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(
-                          (_user?.email != null && _user!.email!.isNotEmpty)
-                              ? _user!.email!
-                              : l.secAccountNoEmail,
-                        ),
-                      ),
+          ? Center(child: Text(_error!))
+          : ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              children: [
+                _section(l.secAccountSection),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.account_circle_outlined),
+                    title: Text(
+                      _user?.username ?? '—',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 16),
-                    _section(l.secPasswordSection),
-                    Card(
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: const Icon(Icons.lock_outline),
-                            title: Text(l.secChangePassword),
-                            subtitle: Text(l.secChangePasswordSubtitle),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: _changePassword,
-                          ),
-                          // Passkey-gated set-password: only offered when the
-                          // user actually holds a passkey to step up with. A
-                          // user who knows their password but has no passkey
-                          // simply uses "Change password" above.
-                          if ((_passkeys ?? const []).isNotEmpty) ...[
-                            const Divider(height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.key_outlined),
-                              title: Text(l.secSetPasswordWithPasskey),
-                              subtitle:
-                                  Text(l.secSetPasswordWithPasskeySubtitle),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: _setPasswordWithPasskey,
-                            ),
-                          ],
-                        ],
-                      ),
+                    subtitle: Text(
+                      (_user?.email != null && _user!.email!.isNotEmpty)
+                          ? _user!.email!
+                          : l.secAccountNoEmail,
                     ),
-                    const SizedBox(height: 16),
-                    _section(l.secTwoFactorSection),
-                    Card(
-                      child: ListTile(
-                        leading: Icon(
-                          (_user?.totpEnabled ?? false)
-                              ? Icons.verified_user
-                              : Icons.shield_outlined,
-                          color: (_user?.totpEnabled ?? false)
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
-                        ),
-                        title: Text(
-                          (_user?.totpEnabled ?? false)
-                              ? l.secTotpEnabled
-                              : l.secAddAuthenticatorApp,
-                        ),
-                        subtitle: Text(
-                          (_user?.totpEnabled ?? false)
-                              ? l.secTotpEnabledSubtitle
-                              : l.secAddAuthenticatorSubtitle,
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: (_user?.totpEnabled ?? false)
-                            ? _disableTotp
-                            : _enrollTotp,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _section(l.secRecoveryCodesSection),
-                    // The low/no-codes lockout warning is gated on 2FA
-                    // being enabled — see RecoveryCodesCard.
-                    RecoveryCodesCard(
-                      totpEnabled: _user?.totpEnabled ?? false,
-                      unusedCodes: _unusedRecoveryCodes,
-                      onRegenerate: _regenerateRecoveryCodes,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPasskeysSection(),
-                    const SizedBox(height: 16),
-                    _buildInvitesSection(),
-                    const SizedBox(height: 16),
-                    _buildSessionsSection(),
-                  ],
+                  ),
                 ),
+                const SizedBox(height: 16),
+                _section(l.secPasswordSection),
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.lock_outline),
+                        title: Text(l.secChangePassword),
+                        subtitle: Text(l.secChangePasswordSubtitle),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _changePassword,
+                      ),
+                      // Passkey-gated set-password: only offered when the
+                      // user actually holds a passkey to step up with. A
+                      // user who knows their password but has no passkey
+                      // simply uses "Change password" above.
+                      if ((_passkeys ?? const []).isNotEmpty) ...[
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: const Icon(Icons.key_outlined),
+                          title: Text(l.secSetPasswordWithPasskey),
+                          subtitle: Text(l.secSetPasswordWithPasskeySubtitle),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _setPasswordWithPasskey,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _section(l.secTwoFactorSection),
+                Card(
+                  child: ListTile(
+                    leading: Icon(
+                      (_user?.totpEnabled ?? false)
+                          ? Icons.verified_user
+                          : Icons.shield_outlined,
+                      color: (_user?.totpEnabled ?? false)
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                    title: Text(
+                      (_user?.totpEnabled ?? false)
+                          ? l.secTotpEnabled
+                          : l.secAddAuthenticatorApp,
+                    ),
+                    subtitle: Text(
+                      (_user?.totpEnabled ?? false)
+                          ? l.secTotpEnabledSubtitle
+                          : l.secAddAuthenticatorSubtitle,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: (_user?.totpEnabled ?? false)
+                        ? _disableTotp
+                        : _enrollTotp,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _section(l.secRecoveryCodesSection),
+                // The low/no-codes lockout warning is gated on 2FA
+                // being enabled — see RecoveryCodesCard.
+                RecoveryCodesCard(
+                  totpEnabled: _user?.totpEnabled ?? false,
+                  unusedCodes: _unusedRecoveryCodes,
+                  onRegenerate: _regenerateRecoveryCodes,
+                ),
+                const SizedBox(height: 16),
+                _buildPasskeysSection(),
+                const SizedBox(height: 16),
+                _buildInvitesSection(),
+                const SizedBox(height: 16),
+                _buildSessionsSection(),
+              ],
+            ),
     );
   }
 
@@ -527,15 +561,19 @@ class _SecurityScreenState extends State<SecurityScreen> {
       await Clipboard.setData(ClipboardData(text: invite.url));
       // Clipboard.setData is another async gap; re-check before using context.
       if (!mounted) return;
-      final expires = DateFormat.yMMMd().add_jm().format(invite.expiresAt.toLocal());
+      final expires = DateFormat.yMMMd().add_jm().format(
+        invite.expiresAt.toLocal(),
+      );
       final isReadOnly = role == 'read_only';
       await showDialog<void>(
         context: context,
         builder: (ctx) {
           return AlertDialog(
-            title: Text(isReadOnly
-                ? l.secReadOnlyInviteReadyTitle
-                : l.secInviteReadyTitle),
+            title: Text(
+              isReadOnly
+                  ? l.secReadOnlyInviteReadyTitle
+                  : l.secInviteReadyTitle,
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -546,15 +584,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       : l.secInviteReadyBody,
                 ),
                 const SizedBox(height: 6),
-                Text(expires,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  expires,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 12),
                 SelectableText(
                   invite.url,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                  ),
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -585,7 +622,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
+        SnackBar(
+          content: Text(
+            l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')),
+          ),
+        ),
       );
     }
   }
@@ -625,7 +666,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.secRevokeFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
+        SnackBar(
+          content: Text(
+            l.secRevokeFailedWithReason(
+              e.toString().replaceFirst('Exception: ', ''),
+            ),
+          ),
+        ),
       );
     }
   }
@@ -634,7 +681,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
     final l = AppLocalizations.of(context);
     final invites = _invites ?? const <InviteSummary>[];
     final now = DateTime.now();
-    final live = invites.where((i) => !i.used && i.expiresAt.isAfter(now)).toList();
+    final live = invites
+        .where((i) => !i.used && i.expiresAt.isAfter(now))
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -669,8 +718,8 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       invites[i].used
                           ? Icons.check_circle_outline
                           : invites[i].expiresAt.isBefore(now)
-                              ? Icons.history_toggle_off
-                              : Icons.link,
+                          ? Icons.history_toggle_off
+                          : Icons.link,
                     ),
                     title: Row(
                       children: [
@@ -679,8 +728,8 @@ class _SecurityScreenState extends State<SecurityScreen> {
                             invites[i].used
                                 ? l.secInviteRedeemed
                                 : invites[i].expiresAt.isBefore(now)
-                                    ? l.secInviteExpired
-                                    : l.secInviteActive,
+                                ? l.secInviteExpired
+                                : l.secInviteActive,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -692,10 +741,19 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     ),
                     subtitle: Text(
                       invites[i].used && invites[i].usedAt != null
-                          ? l.secInviteUsedOn(DateFormat.yMMMd().format(invites[i].usedAt!.toLocal()))
-                          : l.secInviteExpiresOn(DateFormat.yMMMd().add_jm().format(invites[i].expiresAt.toLocal())),
+                          ? l.secInviteUsedOn(
+                              DateFormat.yMMMd().format(
+                                invites[i].usedAt!.toLocal(),
+                              ),
+                            )
+                          : l.secInviteExpiresOn(
+                              DateFormat.yMMMd().add_jm().format(
+                                invites[i].expiresAt.toLocal(),
+                              ),
+                            ),
                     ),
-                    trailing: invites[i].used || invites[i].expiresAt.isBefore(now)
+                    trailing:
+                        invites[i].used || invites[i].expiresAt.isBefore(now)
                         ? null
                         : IconButton(
                             tooltip: l.secRevoke,
@@ -763,8 +821,10 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(l.secThisDevice),
-                          Text(l.secThisDeviceSubtitle,
-                              style: const TextStyle(fontSize: 11)),
+                          Text(
+                            l.secThisDeviceSubtitle,
+                            style: const TextStyle(fontSize: 11),
+                          ),
                         ],
                       ),
                     ),
@@ -779,8 +839,10 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(l.secSecurityKey),
-                          Text(l.secSecurityKeySubtitle,
-                              style: const TextStyle(fontSize: 11)),
+                          Text(
+                            l.secSecurityKeySubtitle,
+                            style: const TextStyle(fontSize: 11),
+                          ),
                         ],
                       ),
                     ),
@@ -837,28 +899,34 @@ class _SecurityScreenState extends State<SecurityScreen> {
     final l = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(hardwareKeyOnly
-            ? l.secInsertSecurityKeyPrompt
-            : l.secConfirmBiometricPrompt),
+        content: Text(
+          hardwareKeyOnly
+              ? l.secInsertSecurityKeyPrompt
+              : l.secConfirmBiometricPrompt,
+        ),
         duration: const Duration(seconds: 3),
       ),
     );
     try {
-      await PasskeyService.instance
-          .registerNewPasskey(nickname: nickname, hardwareKeyOnly: hardwareKeyOnly);
+      await PasskeyService.instance.registerNewPasskey(
+        nickname: nickname,
+        hardwareKeyOnly: hardwareKeyOnly,
+      );
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.secPasskeyAddedSnack)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.secPasskeyAddedSnack)));
     } on PasskeyException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -888,13 +956,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
       await PasskeyService.instance.remove(pk.id);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.secPasskeyRemovedSnack)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.secPasskeyRemovedSnack)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -950,7 +1019,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         if (sessions[i].isCurrent)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: scheme.primaryContainer,
                               borderRadius: BorderRadius.circular(12),
@@ -972,7 +1043,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                           // log.
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: context.warning.withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(12),
@@ -1024,7 +1097,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
       return Icons.smartphone;
     }
     if (lower.contains('ipad')) return Icons.tablet;
-    if (lower.contains('mac') || lower.contains('windows') || lower.contains('linux')) {
+    if (lower.contains('mac') ||
+        lower.contains('windows') ||
+        lower.contains('linux')) {
       return Icons.computer;
     }
     return Icons.devices_other;
@@ -1032,31 +1107,31 @@ class _SecurityScreenState extends State<SecurityScreen> {
 
   /// Small outlined pill used to flag a read-only invite in the list.
   Widget _roleChip(String label) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSecondaryContainer,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: Theme.of(context).colorScheme.onSecondaryContainer,
+      ),
+    ),
+  );
 
   Widget _section(String label) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 8),
-        child: Text(
-          label.toUpperCase(),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                letterSpacing: 1.2,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-        ),
-      );
+    padding: const EdgeInsets.only(top: 8, bottom: 8),
+    child: Text(
+      label.toUpperCase(),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        letterSpacing: 1.2,
+        color: Theme.of(context).colorScheme.outline,
+      ),
+    ),
+  );
 }
 
 class _ChangePasswordDialog extends StatefulWidget {
@@ -1323,7 +1398,9 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
   Future<void> _confirm() async {
     final raw = _code.text.trim();
     if (raw.length != 6) {
-      setState(() => _error = AppLocalizations.of(context).secEnterSixDigitCode);
+      setState(
+        () => _error = AppLocalizations.of(context).secEnterSixDigitCode,
+      );
       return;
     }
     setState(() {
@@ -1390,9 +1467,9 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
                       TextButton.icon(
                         onPressed: () =>
                             setState(() => _showSecret = !_showSecret),
-                        icon: Icon(_showSecret
-                            ? Icons.visibility_off
-                            : Icons.visibility),
+                        icon: Icon(
+                          _showSecret ? Icons.visibility_off : Icons.visibility,
+                        ),
                         label: Text(_showSecret ? l.secHide : l.secShow),
                       ),
                     ],
@@ -1440,10 +1517,7 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: TextStyle(color: scheme.error),
-              ),
+              Text(_error!, style: TextStyle(color: scheme.error)),
             ],
           ],
         ),
@@ -1547,7 +1621,9 @@ class _PasskeyRow extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final title = passkey.nickname?.trim().isNotEmpty == true
         ? passkey.nickname!.trim()
-        : (passkey.isHardwareKey ? l.secHardwareKeyTitle : l.secDevicePasskeyTitle);
+        : (passkey.isHardwareKey
+              ? l.secHardwareKeyTitle
+              : l.secDevicePasskeyTitle);
     // Icon mirrors the authenticator class so the user can tell a phone
     // biometric ("This iPhone") apart from a roaming key ("YubiKey on
     // keychain") at a glance.
@@ -1555,7 +1631,9 @@ class _PasskeyRow extends StatelessWidget {
     // "Platform passkey" rather than "Platform biometric" — a platform
     // credential isn't necessarily a biometric (it may be a device PIN), and
     // overclaiming "biometric" read as wrong for keys the browser mislabeled.
-    final kind = passkey.isHardwareKey ? l.secHardwareKeyKind : l.secPlatformPasskeyKind;
+    final kind = passkey.isHardwareKey
+        ? l.secHardwareKeyKind
+        : l.secPlatformPasskeyKind;
     final lastUsed = _lastUsed(l, passkey.lastUsedAt);
     final subtitleParts = <String>[
       kind,
@@ -1667,8 +1745,7 @@ class _NicknamePromptDialogState extends State<_NicknamePromptDialog> {
               border: const OutlineInputBorder(),
             ),
             maxLength: 64,
-            onSubmitted: (v) =>
-                Navigator.pop(context, _controller.text.trim()),
+            onSubmitted: (v) => Navigator.pop(context, _controller.text.trim()),
           ),
         ],
       ),
@@ -1692,12 +1769,9 @@ class _NicknamePromptDialogState extends State<_NicknamePromptDialog> {
 /// fetch, consistent with the bundled-fonts policy).
 class _TotpQrPainter extends CustomPainter {
   _TotpQrPainter(this.data)
-      : _image = QrImage(
-          QrCode.fromData(
-            data: data,
-            errorCorrectLevel: QrErrorCorrectLevel.M,
-          ),
-        );
+    : _image = QrImage(
+        QrCode.fromData(data: data, errorCorrectLevel: QrErrorCorrectLevel.M),
+      );
 
   final String data;
   final QrImage _image;

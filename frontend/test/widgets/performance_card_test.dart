@@ -21,53 +21,56 @@ import 'package:patrimonio/widgets/tracked_lots_sheet.dart';
 /// Canned GET /benchmark-comparison payload: 118 purchases, ~$103k invested,
 /// index ahead — the exact shape `_benchmarkSection` reads.
 Map<String, dynamic> _comparisonPayload() => {
-      'invested_usd': 103436.0,
-      'lot_count': 118,
-      'your_value_usd': 110000.0,
-      'benchmark_value_usd': 115000.0,
-    };
+  'invested_usd': 103436.0,
+  'lot_count': 118,
+  'your_value_usd': 110000.0,
+  'benchmark_value_usd': 115000.0,
+};
 
 /// The same payload with the additive per-symbol breakdown (frozen contract):
 /// two tracked symbols sorted by invested desc + one untracked holding.
 /// VOO: (44000−43000)/40000 × 100 = +2.5 pts ahead of the index.
 /// AAPL: (19000−19800)/20000 × 100 = −4.0 pts behind, single lot (=1 plural).
 Map<String, dynamic> _comparisonPayloadWithSymbols() => {
-      ..._comparisonPayload(),
-      'symbols': [
-        {
-          'symbol': 'VOO',
-          'lot_count': 12,
-          'invested_usd': 40000.0,
-          'your_value_usd': 44000.0,
-          'benchmark_value_usd': 43000.0,
-          'first_acquired': '2024-03-15',
-          'last_acquired': '2026-06-01',
-        },
-        {
-          'symbol': 'AAPL',
-          'lot_count': 1,
-          'invested_usd': 20000.0,
-          'your_value_usd': 19000.0,
-          'benchmark_value_usd': 19800.0,
-          'first_acquired': '2025-01-10',
-          'last_acquired': '2025-01-10',
-        },
-      ],
-      'untracked': [
-        {'symbol': 'FXAIX', 'value_usd': 25000.0},
-      ],
-      'untracked_value_usd': 25000.0,
-    };
+  ..._comparisonPayload(),
+  'symbols': [
+    {
+      'symbol': 'VOO',
+      'lot_count': 12,
+      'invested_usd': 40000.0,
+      'your_value_usd': 44000.0,
+      'benchmark_value_usd': 43000.0,
+      'first_acquired': '2024-03-15',
+      'last_acquired': '2026-06-01',
+    },
+    {
+      'symbol': 'AAPL',
+      'lot_count': 1,
+      'invested_usd': 20000.0,
+      'your_value_usd': 19000.0,
+      'benchmark_value_usd': 19800.0,
+      'first_acquired': '2025-01-10',
+      'last_acquired': '2025-01-10',
+    },
+  ],
+  'untracked': [
+    {'symbol': 'FXAIX', 'value_usd': 25000.0},
+  ],
+  'untracked_value_usd': 25000.0,
+};
 
 /// es "NBSP before %"-style codepoints must count as plain spaces so string
 /// assertions prove content without pinning the exact whitespace codepoint.
 String _normSpace(String s) =>
     s.replaceAll('\u00A0', ' ').replaceAll('\u202F', ' ');
 
-
 /// Text finder that compares whitespace-normalized content.
-Finder _findText(String expected) => find.byWidgetPredicate((w) =>
-    w is Text && w.data != null && _normSpace(w.data!) == _normSpace(expected));
+Finder _findText(String expected) => find.byWidgetPredicate(
+  (w) =>
+      w is Text &&
+      w.data != null &&
+      _normSpace(w.data!) == _normSpace(expected),
+);
 
 const _caveatEn =
     'Covers only purchases with recorded lots — recent buys weigh most, so '
@@ -84,11 +87,11 @@ const _subtitleEs =
     'comprado el índice en cada fecha de compra';
 
 Widget _host(Widget child, {Locale? locale}) => MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SingleChildScrollView(child: child)),
-    );
+  locale: locale,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: SingleChildScrollView(child: child)),
+);
 
 void _useSurface(WidgetTester tester, Size size) {
   tester.view.physicalSize = size;
@@ -99,13 +102,13 @@ void _useSurface(WidgetTester tester, Size size) {
 
 void main() {
   PerformanceCard card({Map<String, dynamic>? comparison}) => PerformanceCard(
-        apiService: ApiService(),
-        conversionFactor: 1.0,
-        currencyFormat: NumberFormat.currency(symbol: r'$'),
-        historyFetchOverride: () async => <dynamic>[],
-        comparisonFetchOverride: () async => comparison ?? _comparisonPayload(),
-        twrFetchOverride: () async => null,
-      );
+    apiService: ApiService(),
+    conversionFactor: 1.0,
+    currencyFormat: NumberFormat.currency(symbol: r'$'),
+    historyFetchOverride: () async => <dynamic>[],
+    comparisonFetchOverride: () async => comparison ?? _comparisonPayload(),
+    twrFetchOverride: () async => null,
+  );
 
   group('PerformanceCard — bmContribCaveat comprehension caption', () {
     Future<void> pumpAndExpect(
@@ -120,8 +123,11 @@ void main() {
       await tester.pumpWidget(_host(card(), locale: locale));
       await tester.pumpAndSettle();
 
-      expect(find.text(subtitle), findsOneWidget,
-          reason: 'section subtitle missing');
+      expect(
+        find.text(subtitle),
+        findsOneWidget,
+        reason: 'section subtitle missing',
+      );
       final caveatFinder = find.text(caveat);
       expect(caveatFinder, findsOneWidget, reason: 'caveat caption missing');
       // The caveat sits with the explanatory text, directly under the
@@ -134,105 +140,128 @@ void main() {
     }
 
     testWidgets('renders under the comparison subtitle (en)', (tester) async {
-      await pumpAndExpect(tester,
-          subtitle: _subtitleEn, caveat: _caveatEn);
+      await pumpAndExpect(tester, subtitle: _subtitleEn, caveat: _caveatEn);
     });
 
     testWidgets('renders under the comparison subtitle (es)', (tester) async {
-      await pumpAndExpect(tester,
-          locale: const Locale('es'), subtitle: _subtitleEs, caveat: _caveatEs);
+      await pumpAndExpect(
+        tester,
+        locale: const Locale('es'),
+        subtitle: _subtitleEs,
+        caveat: _caveatEs,
+      );
     });
   });
 
   group('PerformanceCard — tracked-lots drill-down', () {
-    Future<void> pumpCard(WidgetTester tester,
-        {Locale? locale, Map<String, dynamic>? comparison}) async {
+    Future<void> pumpCard(
+      WidgetTester tester, {
+      Locale? locale,
+      Map<String, dynamic>? comparison,
+    }) async {
       // Wide surface (>= 720): the money-weighted section renders inline,
       // not behind the phone-only disclosure.
       _useSurface(tester, const Size(1440, 900));
       await tester.pumpWidget(
-          _host(card(comparison: comparison), locale: locale));
+        _host(card(comparison: comparison), locale: locale),
+      );
       await tester.pumpAndSettle();
     }
 
     testWidgets(
-        'purchases line is a button that opens the sheet: symbols sorted, '
-        'plurals, signed pts with house colors, untracked total (en)',
-        (tester) async {
-      final semantics = tester.ensureSemantics();
-      await pumpCard(tester, comparison: _comparisonPayloadWithSymbols());
+      'purchases line is a button that opens the sheet: symbols sorted, '
+      'plurals, signed pts with house colors, untracked total (en)',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        await pumpCard(tester, comparison: _comparisonPayloadWithSymbols());
 
-      // Visible affordance on the purchases line, announced as a button
-      // with the explanatory hint.
-      final affordance = _findText("See what's tracked");
-      expect(affordance, findsOneWidget);
-      expect(
-        tester.getSemantics(affordance),
-        isSemantics(
-          isButton: true,
-          hasTapAction: true,
-          hint: 'Shows which tickers have recorded lots and which are '
-              'excluded',
-        ),
-      );
+        // Visible affordance on the purchases line, announced as a button
+        // with the explanatory hint.
+        final affordance = _findText("See what's tracked");
+        expect(affordance, findsOneWidget);
+        expect(
+          tester.getSemantics(affordance),
+          isSemantics(
+            isButton: true,
+            hasTapAction: true,
+            hint:
+                'Shows which tickers have recorded lots and which are '
+                'excluded',
+          ),
+        );
 
-      await tester.tap(affordance);
-      await tester.pumpAndSettle();
+        await tester.tap(affordance);
+        await tester.pumpAndSettle();
 
-      expect(find.byType(TrackedLotsSheet), findsOneWidget);
-      expect(_findText("What's tracked"), findsOneWidget);
-      expect(
-        _findText('Purchases with recorded lots, compared with buying the '
-            'index on the same dates'),
-        findsOneWidget,
-      );
+        expect(find.byType(TrackedLotsSheet), findsOneWidget);
+        expect(_findText("What's tracked"), findsOneWidget);
+        expect(
+          _findText(
+            'Purchases with recorded lots, compared with buying the '
+            'index on the same dates',
+          ),
+          findsOneWidget,
+        );
 
-      // Both tracked symbols, in the server's invested-desc order.
-      expect(find.text('VOO'), findsOneWidget);
-      expect(find.text('AAPL'), findsOneWidget);
-      expect(tester.getTopLeft(find.text('VOO')).dy,
-          lessThan(tester.getTopLeft(find.text('AAPL')).dy));
+        // Both tracked symbols, in the server's invested-desc order.
+        expect(find.text('VOO'), findsOneWidget);
+        expect(find.text('AAPL'), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.text('VOO')).dy,
+          lessThan(tester.getTopLeft(find.text('AAPL')).dy),
+        );
 
-      // Lot-count plurals + localized first-buy month-year.
-      expect(_findText('12 lots · first buy Mar 2024'), findsOneWidget);
-      expect(_findText('1 lot · first buy Jan 2025'), findsOneWidget);
+        // Lot-count plurals + localized first-buy month-year.
+        expect(_findText('12 lots · first buy Mar 2024'), findsOneWidget);
+        expect(_findText('1 lot · first buy Jan 2025'), findsOneWidget);
 
-      // invested → current value via displayMoney (≥ $10k drops cents).
-      expect(_findText(r'$40,000 → $44,000'), findsOneWidget);
-      expect(_findText(r'$20,000 → $19,000'), findsOneWidget);
+        // invested → current value via displayMoney (≥ $10k drops cents).
+        expect(_findText(r'$40,000 → $44,000'), findsOneWidget);
+        expect(_findText(r'$20,000 → $19,000'), findsOneWidget);
 
-      // Signed pts vs index, house positive/negative colors.
-      final sheetCtx = tester.element(find.byType(TrackedLotsSheet));
-      final aheadFinder = _findText('+2.5 pts vs index');
-      final behindFinder = _findText('-4.0 pts vs index');
-      expect(aheadFinder, findsOneWidget);
-      expect(behindFinder, findsOneWidget);
-      expect(tester.widget<Text>(aheadFinder).style?.color,
-          sheetCtx.positive);
-      expect(tester.widget<Text>(behindFinder).style?.color,
-          sheetCtx.negative);
+        // Signed pts vs index, house positive/negative colors.
+        final sheetCtx = tester.element(find.byType(TrackedLotsSheet));
+        final aheadFinder = _findText('+2.5 pts vs index');
+        final behindFinder = _findText('-4.0 pts vs index');
+        expect(aheadFinder, findsOneWidget);
+        expect(behindFinder, findsOneWidget);
+        expect(
+          tester.widget<Text>(aheadFinder).style?.color,
+          sheetCtx.positive,
+        );
+        expect(
+          tester.widget<Text>(behindFinder).style?.color,
+          sheetCtx.negative,
+        );
 
-      // Untracked section: header, row, excluded total, add-lots hint.
-      expect(
+        // Untracked section: header, row, excluded total, add-lots hint.
+        expect(
           _findText('Not included — no recorded purchase data'),
-          findsOneWidget);
-      expect(find.text('FXAIX'), findsOneWidget);
-      expect(_findText(r'$25,000'), findsOneWidget);
-      expect(_findText(r'$25,000 of holdings excluded'), findsOneWidget);
-      expect(
-          _findText('Add purchase lots to include these holdings in the '
-              'comparison.'),
-          findsOneWidget);
+          findsOneWidget,
+        );
+        expect(find.text('FXAIX'), findsOneWidget);
+        expect(_findText(r'$25,000'), findsOneWidget);
+        expect(_findText(r'$25,000 of holdings excluded'), findsOneWidget);
+        expect(
+          _findText(
+            'Add purchase lots to include these holdings in the '
+            'comparison.',
+          ),
+          findsOneWidget,
+        );
 
-      expect(tester.takeException(), isNull);
-      semantics.dispose();
-    });
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+      },
+    );
 
     testWidgets('sheet strings localize (es): plurals, first buy, pts, '
         'untracked', (tester) async {
-      await pumpCard(tester,
-          locale: const Locale('es'),
-          comparison: _comparisonPayloadWithSymbols());
+      await pumpCard(
+        tester,
+        locale: const Locale('es'),
+        comparison: _comparisonPayloadWithSymbols(),
+      );
 
       final affordance = _findText('Ver qué está registrado');
       expect(affordance, findsOneWidget);
@@ -241,8 +270,10 @@ void main() {
 
       expect(_findText('Qué está registrado'), findsOneWidget);
       expect(
-        _findText('Compras con lotes registrados, comparadas con comprar el '
-            'índice en las mismas fechas'),
+        _findText(
+          'Compras con lotes registrados, comparadas con comprar el '
+          'índice en las mismas fechas',
+        ),
         findsOneWidget,
       );
 
@@ -256,13 +287,18 @@ void main() {
       expect(_findText('+2.5 pts vs índice'), findsOneWidget);
       expect(_findText('-4.0 pts vs índice'), findsOneWidget);
 
-      expect(_findText('No incluido — sin datos de compras registradas'),
-          findsOneWidget);
+      expect(
+        _findText('No incluido — sin datos de compras registradas'),
+        findsOneWidget,
+      );
       expect(_findText(r'$25,000 de posiciones excluidas'), findsOneWidget);
       expect(
-          _findText('Agrega lotes de compra para incluir estas posiciones '
-              'en la comparación.'),
-          findsOneWidget);
+        _findText(
+          'Agrega lotes de compra para incluir estas posiciones '
+          'en la comparación.',
+        ),
+        findsOneWidget,
+      );
 
       expect(tester.takeException(), isNull);
     });

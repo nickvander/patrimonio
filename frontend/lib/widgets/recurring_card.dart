@@ -62,113 +62,122 @@ class RecurringCard extends StatelessWidget {
         padding: EdgeInsets.all(pad),
         // Width-responsive off the card's OWN constraint (inner
         // LayoutBuilder, per the skill rule), not MediaQuery.
-        child: LayoutBuilder(builder: (context, c) {
-          final isPhone = c.maxWidth < 420;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (!isPhone) ...[
-                    Icon(Icons.autorenew_rounded,
-                        color: context.info, size: 18),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            isPhone ? l.recTitle.toUpperCase() : l.recTitle,
-                            style: isPhone
-                                ? TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.6,
-                                    color: context.textSubtle,
-                                  )
-                                : TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: context.textPrimary,
-                                  ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // "Expected" chip — the card's contract with the
-                        // user: these are projections, not postings.
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: context.tint(0.08),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: context.hairline),
-                          ),
-                          child: Text(
-                            l.recExpectedChip,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.4,
-                              color: context.textSubtle,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final isPhone = c.maxWidth < 420;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (!isPhone) ...[
+                      Icon(
+                        Icons.autorenew_rounded,
+                        color: context.info,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              isPhone ? l.recTitle.toUpperCase() : l.recTitle,
+                              style: isPhone
+                                  ? TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.6,
+                                      color: context.textSubtle,
+                                    )
+                                  : TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: context.textPrimary,
+                                    ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          // "Expected" chip — the card's contract with the
+                          // user: these are projections, not postings.
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: context.tint(0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: context.hairline),
+                            ),
+                            child: Text(
+                              l.recExpectedChip,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.4,
+                                color: context.textSubtle,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () => _openManageSheet(context),
-                    child: Text(l.recManage),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                l.recExpectedNote,
-                style: TextStyle(fontSize: 11, color: context.textFaint),
-              ),
-              SizedBox(height: isPhone ? 10 : 14),
-              if (rules.isEmpty)
+                    TextButton(
+                      onPressed: () => _openManageSheet(context),
+                      child: Text(l.recManage),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  l.recNoRules,
-                  style: TextStyle(fontSize: 12, color: context.textMuted),
-                )
-              else ...[
-                _totalsRow(context, l, isPhone, inflowsUsd, outflowsUsd),
+                  l.recExpectedNote,
+                  style: TextStyle(fontSize: 11, color: context.textFaint),
+                ),
                 SizedBox(height: isPhone ? 10 : 14),
-                if (items.isEmpty)
+                if (rules.isEmpty)
                   Text(
-                    l.recNothingUpcoming,
+                    l.recNoRules,
                     style: TextStyle(fontSize: 12, color: context.textMuted),
                   )
-                else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: context.tileSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: context.hairline),
-                    ),
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < items.length; i++) ...[
-                          if (i > 0)
-                            Divider(height: 1, color: context.hairline),
-                          _itemRow(context, items[i] as Map, isPhone),
+                else ...[
+                  _totalsRow(context, l, isPhone, inflowsUsd, outflowsUsd),
+                  SizedBox(height: isPhone ? 10 : 14),
+                  if (items.isEmpty)
+                    Text(
+                      l.recNothingUpcoming,
+                      style: TextStyle(fontSize: 12, color: context.textMuted),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: context.tileSurface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: context.hairline),
+                      ),
+                      child: Column(
+                        children: [
+                          for (var i = 0; i < items.length; i++) ...[
+                            if (i > 0)
+                              Divider(height: 1, color: context.hairline),
+                            _itemRow(context, items[i] as Map, isPhone),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
+                ],
               ],
-            ],
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
   }
@@ -176,8 +185,13 @@ class RecurringCard extends StatelessWidget {
   /// Header totals: expected in / expected out for the period, converted
   /// to the dashboard's display currency. Code-labelled (per the spec:
   /// every amount carries its currency label).
-  Widget _totalsRow(BuildContext context, AppLocalizations l, bool isPhone,
-      double inflowsUsd, double outflowsUsd) {
+  Widget _totalsRow(
+    BuildContext context,
+    AppLocalizations l,
+    bool isPhone,
+    double inflowsUsd,
+    double outflowsUsd,
+  ) {
     Widget cell(String label, double usd, Color color, {String sign = ''}) {
       return Expanded(
         child: Column(
@@ -358,9 +372,9 @@ class _ManageRecurringSheetState extends State<_ManageRecurringSheet> {
       await widget.onDeleteRule(id);
       if (!mounted) return;
       setState(() => _rules.removeWhere((r) => r['id'].toString() == id));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.recRuleDeleted)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.recRuleDeleted)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -415,14 +429,18 @@ class _ManageRecurringSheetState extends State<_ManageRecurringSheet> {
   }
 
   Widget _ruleRow(
-      BuildContext context, AppLocalizations l, Map<String, dynamic> rule) {
+    BuildContext context,
+    AppLocalizations l,
+    Map<String, dynamic> rule,
+  ) {
     final id = rule['id'].toString();
     final active = rule['active'] == true;
     final amount = (rule['amount'] as num?)?.toDouble() ?? 0;
     final currency = (rule['currency'] ?? 'USD').toString();
     final cadence = (rule['cadence'] ?? 'monthly').toString();
     final nextDue = DateTime.tryParse(
-        (rule['effective_next_due'] ?? rule['next_due_date'] ?? '').toString());
+      (rule['effective_next_due'] ?? rule['next_due_date'] ?? '').toString(),
+    );
     final busy = _busy.contains(id);
 
     final subtitleParts = <String>[

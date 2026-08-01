@@ -78,17 +78,17 @@ CategoryStyle categoryStyleFor(String? prettyLabel, Brightness brightness) {
 /// category.
 @visibleForTesting
 List<Color> categoryFallbackPalette(Brightness b) => [
-      BrandPalette.terracotta(b),
-      BrandPalette.gold(b),
-      BrandPalette.info(b),
-      BrandPalette.teal(b),
-      BrandPalette.pink(b),
-      BrandPalette.purple(b),
-      BrandPalette.yellow(b),
-      _azure(b),
-      _cyan(b),
-      _ember(b),
-    ];
+  BrandPalette.terracotta(b),
+  BrandPalette.gold(b),
+  BrandPalette.info(b),
+  BrandPalette.teal(b),
+  BrandPalette.pink(b),
+  BrandPalette.purple(b),
+  BrandPalette.yellow(b),
+  _azure(b),
+  _cyan(b),
+  _ember(b),
+];
 
 const IconData _fallbackIcon = Icons.label_outline;
 const IconData _uncategorizedIcon = Icons.receipt_long_outlined;
@@ -130,9 +130,14 @@ const Map<String, _Spec> _registry = {
   'dividendos': _Spec(Icons.area_chart_outlined, BrandPalette.positive),
   'retirement / pension': _Spec(Icons.savings_outlined, BrandPalette.positive),
   'jubilación / pensión': _Spec(Icons.savings_outlined, BrandPalette.positive),
-  'tax refund': _Spec(Icons.replay_circle_filled_outlined, BrandPalette.positive),
-  'devolución de impuestos':
-      _Spec(Icons.replay_circle_filled_outlined, BrandPalette.positive),
+  'tax refund': _Spec(
+    Icons.replay_circle_filled_outlined,
+    BrandPalette.positive,
+  ),
+  'devolución de impuestos': _Spec(
+    Icons.replay_circle_filled_outlined,
+    BrandPalette.positive,
+  ),
 
   // --- Transfers (TRANSFER_IN / TRANSFER_OUT + detailed) --------------------
   'transfer in': _Spec(Icons.call_received, _cyan),
@@ -174,8 +179,10 @@ const Map<String, _Spec> _registry = {
   'groceries': _Spec(Icons.shopping_cart_outlined, BrandPalette.terracotta),
   'supermercado': _Spec(Icons.shopping_cart_outlined, BrandPalette.terracotta),
   'beer, wine & liquor': _Spec(Icons.liquor_outlined, BrandPalette.terracotta),
-  'cerveza, vino y licor':
-      _Spec(Icons.liquor_outlined, BrandPalette.terracotta),
+  'cerveza, vino y licor': _Spec(
+    Icons.liquor_outlined,
+    BrandPalette.terracotta,
+  ),
 
   // --- Transportation (TRANSPORTATION + detailed) — lake blue. --------------
   'transportation': _Spec(Icons.directions_car_outlined, BrandPalette.info),
@@ -185,8 +192,7 @@ const Map<String, _Spec> _registry = {
   'parking': _Spec(Icons.local_parking, BrandPalette.info),
   'estacionamiento': _Spec(Icons.local_parking, BrandPalette.info),
   'public transit': _Spec(Icons.directions_bus_outlined, BrandPalette.info),
-  'transporte público':
-      _Spec(Icons.directions_bus_outlined, BrandPalette.info),
+  'transporte público': _Spec(Icons.directions_bus_outlined, BrandPalette.info),
   'rideshare': _Spec(Icons.local_taxi_outlined, BrandPalette.info),
   'viajes compartidos': _Spec(Icons.local_taxi_outlined, BrandPalette.info),
 
@@ -201,8 +207,10 @@ const Map<String, _Spec> _registry = {
   // --- Shopping (GENERAL_MERCHANDISE + detailed) — purple. ------------------
   'shopping': _Spec(Icons.shopping_bag_outlined, BrandPalette.purple),
   'compras': _Spec(Icons.shopping_bag_outlined, BrandPalette.purple),
-  'online marketplaces':
-      _Spec(Icons.shopping_bag_outlined, BrandPalette.purple),
+  'online marketplaces': _Spec(
+    Icons.shopping_bag_outlined,
+    BrandPalette.purple,
+  ),
   'tiendas en línea': _Spec(Icons.shopping_bag_outlined, BrandPalette.purple),
   'clothing': _Spec(Icons.checkroom, BrandPalette.purple),
   'ropa': _Spec(Icons.checkroom, BrandPalette.purple),
@@ -246,13 +254,17 @@ const Map<String, _Spec> _registry = {
   'personal loan payment': _Spec(Icons.credit_score, BrandPalette.gold),
   'pago de préstamo personal': _Spec(Icons.credit_score, BrandPalette.gold),
   'car payment': _Spec(Icons.directions_car_filled_outlined, BrandPalette.gold),
-  'pago de auto':
-      _Spec(Icons.directions_car_filled_outlined, BrandPalette.gold),
+  'pago de auto': _Spec(
+    Icons.directions_car_filled_outlined,
+    BrandPalette.gold,
+  ),
   'mortgage payment': _Spec(Icons.house_outlined, BrandPalette.gold),
   'pago de hipoteca': _Spec(Icons.house_outlined, BrandPalette.gold),
   'student loan payment': _Spec(Icons.school_outlined, BrandPalette.gold),
-  'pago de préstamo estudiantil':
-      _Spec(Icons.school_outlined, BrandPalette.gold),
+  'pago de préstamo estudiantil': _Spec(
+    Icons.school_outlined,
+    BrandPalette.gold,
+  ),
 
   // --- Bank fees (BANK_FEES + detailed) — ember. -----------------------------
   'bank fees': _Spec(Icons.receipt_long_outlined, _ember),
@@ -262,8 +274,10 @@ const Map<String, _Spec> _registry = {
   'atm fee': _Spec(Icons.local_atm, _ember),
   'comisión de cajero': _Spec(Icons.local_atm, _ember),
   'foreign transaction fee': _Spec(Icons.currency_exchange, _ember),
-  'comisión por transacción internacional':
-      _Spec(Icons.currency_exchange, _ember),
+  'comisión por transacción internacional': _Spec(
+    Icons.currency_exchange,
+    _ember,
+  ),
 
   // --- Medical (MEDICAL) — rose. ---------------------------------------------
   'medical': _Spec(Icons.medical_services_outlined, _rose),
@@ -278,8 +292,10 @@ const Map<String, _Spec> _registry = {
   'belleza y peluquería': _Spec(Icons.content_cut, BrandPalette.teal),
 
   // --- Government & non-profit (GOVERNMENT_AND_NON_PROFIT) -------------------
-  'government & non-profit':
-      _Spec(Icons.account_balance_outlined, BrandPalette.neutral),
+  'government & non-profit': _Spec(
+    Icons.account_balance_outlined,
+    BrandPalette.neutral,
+  ),
   'gobierno y ong': _Spec(Icons.account_balance_outlined, BrandPalette.neutral),
 
   // --- Explicit "no signal" buckets — neutral on purpose. --------------------

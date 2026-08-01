@@ -36,12 +36,14 @@ void main() {
     };
   }
 
-  testWidgets('F14: rapid commits coalesce into one debounced fetch',
-      (tester) async {
+  testWidgets('F14: rapid commits coalesce into one debounced fetch', (
+    tester,
+  ) async {
     setTestSize(tester, const Size(1300, 1800));
     final fetches = <double>[];
-    await tester
-        .pumpWidget(buildProjectionHost(projectionFetcher: countingFetcher(fetches)));
+    await tester.pumpWidget(
+      buildProjectionHost(projectionFetcher: countingFetcher(fetches)),
+    );
     await tester.pumpAndSettle();
     expect(fetches.length, 1); // initial load
 
@@ -65,20 +67,32 @@ void main() {
     final fetches = <double>[];
     final fetcher = countingFetcher(fetches);
 
-    await tester.pumpWidget(buildProjectionHost(
-        projectionFetcher: fetcher, currentNetWorth: 500000.0));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: fetcher,
+        currentNetWorth: 500000.0,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(fetches, [500000.0]);
 
     // Material change (> $1): one refetch from the new balance.
-    await tester.pumpWidget(buildProjectionHost(
-        projectionFetcher: fetcher, currentNetWorth: 512345.0));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: fetcher,
+        currentNetWorth: 512345.0,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(fetches, [500000.0, 512345.0]);
 
     // Sub-dollar wiggle: no refetch.
-    await tester.pumpWidget(buildProjectionHost(
-        projectionFetcher: fetcher, currentNetWorth: 512345.5));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        projectionFetcher: fetcher,
+        currentNetWorth: 512345.5,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(fetches, [500000.0, 512345.0]);
   });

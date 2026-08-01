@@ -126,8 +126,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       _accountId = a['id']?.toString();
       break;
     }
-    _accountId ??=
-        widget.accounts.isNotEmpty ? widget.accounts.first['id']?.toString() : null;
+    _accountId ??= widget.accounts.isNotEmpty
+        ? widget.accounts.first['id']?.toString()
+        : null;
   }
 
   @override
@@ -159,8 +160,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     final raw = double.parse(_amountController.text.trim());
     // App convention: expense = negative, income = positive.
     final signed = _isExpense ? -raw : raw;
-    final currency =
-        (account['currency'] ?? 'USD').toString().toUpperCase();
+    final currency = (account['currency'] ?? 'USD').toString().toUpperCase();
 
     setState(() => _saving = true);
     try {
@@ -223,12 +223,15 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       widget.onCreated();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(ruleError ??
+          content: Text(
+            ruleError ??
                 (_isEditing
                     ? l.dlgTxUpdated
                     : _repeats != null
-                        ? '${l.dlgTxAdded} · ${l.recRuleCreated}'
-                        : l.dlgTxAdded))),
+                    ? '${l.dlgTxAdded} · ${l.recRuleCreated}'
+                    : l.dlgTxAdded),
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -244,8 +247,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final selectedAcct = _selectedAccount();
-    final currency =
-        (selectedAcct?['currency'] ?? 'USD').toString().toUpperCase();
+    final currency = (selectedAcct?['currency'] ?? 'USD')
+        .toString()
+        .toUpperCase();
 
     return AlertDialog(
       title: Text(_isEditing ? l.dlgTxEditTitle : l.dlgTxTitle),
@@ -255,196 +259,201 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           child: Form(
             key: _formKey,
             child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.accounts.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    l.dlgTxNoAccounts,
-                    style: TextStyle(color: context.warning),
-                  ),
-                ),
-              DropdownButtonFormField<String>(
-                initialValue: _accountId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: l.dlgTxAccount,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: widget.accounts.map<DropdownMenuItem<String>>((a) {
-                  final id = a['id']?.toString();
-                  final nick = (a['nickname'] ?? '').toString();
-                  final name = (a['name'] ?? '').toString();
-                  final label = nick.isNotEmpty ? nick : name;
-                  final acctCurrency =
-                      (a['currency'] ?? 'USD').toString().toUpperCase();
-                  // The account's native currency rides as its own
-                  // non-shrinking token ("Checking · MXN") so picking an
-                  // account states the entry currency up front — the long
-                  // name ellipsizes, the currency never does.
-                  return DropdownMenuItem(
-                    value: id,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: maskAwareNameText(label, const TextStyle()),
-                        ),
-                        Text(
-                          ' · $acctCurrency',
-                          maxLines: 1,
-                          style: TextStyle(color: context.textMuted),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onChanged: (v) => setState(() => _accountId = v),
-              ),
-              const SizedBox(height: 12),
-              SegmentedButton<bool>(
-                segments: [
-                  ButtonSegment(
-                    value: true,
-                    // Expense = outflow = money leaving (down), matching the
-                    // OUTFLOW arrow on every transaction row and detail panel.
-                    icon: const Icon(Icons.arrow_downward, size: 14),
-                    label: Text(l.dlgTxExpense),
-                  ),
-                  ButtonSegment(
-                    value: false,
-                    icon: const Icon(Icons.arrow_upward, size: 14),
-                    label: Text(l.dlgTxIncome),
-                  ),
-                ],
-                selected: {_isExpense},
-                onSelectionChanged: (s) =>
-                    setState(() => _isExpense = s.first),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    // Amount is the most cramped field (currency prefix +
-                    // digits) — it gets the wider flex; the date can afford
-                    // to scale down (FittedBox below).
-                    flex: 3,
-                    child: TextFormField(
-                      controller: _amountController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'^[0-9]*\.?[0-9]{0,2}')),
-                      ],
-                      decoration: InputDecoration(
-                        labelText: l.dlgTxAmount,
-                        prefixText: '$currency ',
-                        // Material hides prefixText until the field is
-                        // focused or non-empty; force the label to float so
-                        // the entry currency is visible from the start.
-                        floatingLabelBehavior: FloatingLabelBehavior.always,
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      validator: (v) {
-                        final raw = double.tryParse((v ?? '').trim());
-                        if (raw == null) return l.dlgTxAmountRequired;
-                        if (raw <= 0) return l.dlgTxAmountPositive;
-                        return null;
-                      },
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.accounts.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      l.dlgTxNoAccounts,
+                      style: TextStyle(color: context.warning),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _date,
-                          firstDate:
-                              DateTime.now().subtract(const Duration(days: 365 * 5)),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) setState(() => _date = picked);
-                      },
-                      child: InputDecorator(
-                        decoration: InputDecoration(
-                          labelText: l.dlgTxDate,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        // Scale down rather than overflow in the narrower
-                        // flex on phone widths (390px dialogs).
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: AlignmentDirectional.centerStart,
-                          child: Text(DateFormat('MMM d, y').format(_date)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descController,
-                decoration: InputDecoration(
-                  labelText: l.dlgTxDescription,
-                  hintText: l.dlgTxDescriptionHint,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                textCapitalization: TextCapitalization.sentences,
-                validator: (v) =>
-                    (v ?? '').trim().isEmpty ? l.dlgTxDescriptionRequired : null,
-              ),
-              const SizedBox(height: 12),
-              _buildCategoryField(l),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _notesController,
-                decoration: InputDecoration(
-                  labelText: l.dlgTxNotes,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                maxLines: 2,
-              ),
-              // "Repeats" — creates a recurring rule alongside the
-              // transaction (expected-only; nothing auto-posts). Hidden
-              // in edit mode: correcting an existing row shouldn't mint
-              // a new rule.
-              if (!_isEditing) ...[
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String?>(
-                  initialValue: _repeats,
+                DropdownButtonFormField<String>(
+                  initialValue: _accountId,
                   isExpanded: true,
                   decoration: InputDecoration(
-                    labelText: l.recRepeats,
+                    labelText: l.dlgTxAccount,
                     border: const OutlineInputBorder(),
                     isDense: true,
                   ),
-                  items: [
-                    DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(l.recRepeatsNever),
-                    ),
-                    for (final c in kRecurringCadences)
-                      DropdownMenuItem<String?>(
-                        value: c,
-                        child: Text(cadenceLabel(l, c)),
+                  items: widget.accounts.map<DropdownMenuItem<String>>((a) {
+                    final id = a['id']?.toString();
+                    final nick = (a['nickname'] ?? '').toString();
+                    final name = (a['name'] ?? '').toString();
+                    final label = nick.isNotEmpty ? nick : name;
+                    final acctCurrency = (a['currency'] ?? 'USD')
+                        .toString()
+                        .toUpperCase();
+                    // The account's native currency rides as its own
+                    // non-shrinking token ("Checking · MXN") so picking an
+                    // account states the entry currency up front — the long
+                    // name ellipsizes, the currency never does.
+                    return DropdownMenuItem(
+                      value: id,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: maskAwareNameText(label, const TextStyle()),
+                          ),
+                          Text(
+                            ' · $acctCurrency',
+                            maxLines: 1,
+                            style: TextStyle(color: context.textMuted),
+                          ),
+                        ],
                       ),
-                  ],
-                  onChanged: (v) => setState(() => _repeats = v),
+                    );
+                  }).toList(),
+                  onChanged: (v) => setState(() => _accountId = v),
                 ),
+                const SizedBox(height: 12),
+                SegmentedButton<bool>(
+                  segments: [
+                    ButtonSegment(
+                      value: true,
+                      // Expense = outflow = money leaving (down), matching the
+                      // OUTFLOW arrow on every transaction row and detail panel.
+                      icon: const Icon(Icons.arrow_downward, size: 14),
+                      label: Text(l.dlgTxExpense),
+                    ),
+                    ButtonSegment(
+                      value: false,
+                      icon: const Icon(Icons.arrow_upward, size: 14),
+                      label: Text(l.dlgTxIncome),
+                    ),
+                  ],
+                  selected: {_isExpense},
+                  onSelectionChanged: (s) =>
+                      setState(() => _isExpense = s.first),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      // Amount is the most cramped field (currency prefix +
+                      // digits) — it gets the wider flex; the date can afford
+                      // to scale down (FittedBox below).
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _amountController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^[0-9]*\.?[0-9]{0,2}'),
+                          ),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: l.dlgTxAmount,
+                          prefixText: '$currency ',
+                          // Material hides prefixText until the field is
+                          // focused or non-empty; force the label to float so
+                          // the entry currency is visible from the start.
+                          floatingLabelBehavior: FloatingLabelBehavior.always,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        validator: (v) {
+                          final raw = double.tryParse((v ?? '').trim());
+                          if (raw == null) return l.dlgTxAmountRequired;
+                          if (raw <= 0) return l.dlgTxAmountPositive;
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _date,
+                            firstDate: DateTime.now().subtract(
+                              const Duration(days: 365 * 5),
+                            ),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) setState(() => _date = picked);
+                        },
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: l.dlgTxDate,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          // Scale down rather than overflow in the narrower
+                          // flex on phone widths (390px dialogs).
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text(DateFormat('MMM d, y').format(_date)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descController,
+                  decoration: InputDecoration(
+                    labelText: l.dlgTxDescription,
+                    hintText: l.dlgTxDescriptionHint,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
+                  validator: (v) => (v ?? '').trim().isEmpty
+                      ? l.dlgTxDescriptionRequired
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                _buildCategoryField(l),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _notesController,
+                  decoration: InputDecoration(
+                    labelText: l.dlgTxNotes,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  maxLines: 2,
+                ),
+                // "Repeats" — creates a recurring rule alongside the
+                // transaction (expected-only; nothing auto-posts). Hidden
+                // in edit mode: correcting an existing row shouldn't mint
+                // a new rule.
+                if (!_isEditing) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: _repeats,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: l.recRepeats,
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(l.recRepeatsNever),
+                      ),
+                      for (final c in kRecurringCadences)
+                        DropdownMenuItem<String?>(
+                          value: c,
+                          child: Text(cadenceLabel(l, c)),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _repeats = v),
+                  ),
+                ],
               ],
-            ],
-          ),
+            ),
           ),
         ),
       ),
@@ -454,8 +463,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           child: Text(l.actionCancel),
         ),
         FilledButton(
-          onPressed:
-              (_saving || _accountId == null) ? null : _submit,
+          onPressed: (_saving || _accountId == null) ? null : _submit,
           child: _saving
               ? const SizedBox(
                   width: 16,
@@ -484,8 +492,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           (s) => s.toLowerCase().contains(query),
         );
       },
-      fieldViewBuilder:
-          (context, controller, focusNode, onFieldSubmitted) {
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
         return TextFormField(
           controller: controller,
           focusNode: focusNode,
@@ -516,7 +523,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                     onTap: () => onSelected(option),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       child: Text(option),
                     ),
                   );

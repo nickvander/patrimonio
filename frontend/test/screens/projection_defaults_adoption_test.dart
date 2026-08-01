@@ -17,10 +17,12 @@ void main() {
     Locale locale = const Locale('en'),
   }) async {
     setTestSize(tester, const Size(1300, 1800));
-    await tester.pumpWidget(buildProjectionHost(
-      defaultsFetcher: () async => defaults,
-      locale: locale,
-    ));
+    await tester.pumpWidget(
+      buildProjectionHost(
+        defaultsFetcher: () async => defaults,
+        locale: locale,
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -53,8 +55,7 @@ void main() {
       expect(find.text(r'$152'), findsOneWidget);
       expect(find.text('Basado en 1 mes de tus datos'), findsOneWidget);
       expect(find.text(r'$40,000'), findsOneWidget);
-      expect(
-          find.text('Estimación — ajústala a tu gasto'), findsOneWidget);
+      expect(find.text('Estimación — ajústala a tu gasto'), findsOneWidget);
     });
   });
 
@@ -66,8 +67,9 @@ void main() {
       'months_of_data': 6,
     };
 
-    testWidgets('en: both adopted with "based on 6 months" hints',
-        (tester) async {
+    testWidgets('en: both adopted with "based on 6 months" hints', (
+      tester,
+    ) async {
       await pumpWithDefaults(tester, defaults);
 
       expect(find.text(r'$152'), findsOneWidget);

@@ -14,15 +14,15 @@ import 'skeleton.dart';
 /// [ApiService.getInstrumentDetail] so widget tests can feed canned C-A
 /// payloads without touching the network (subclassing ApiService is off the
 /// table in the test VM). Production callers never set it.
-typedef InstrumentDetailFetcher = Future<Map<String, dynamic>> Function(
-    String symbol, {String range});
+typedef InstrumentDetailFetcher =
+    Future<Map<String, dynamic>> Function(String symbol, {String range});
 
 /// Test seam for the round-3 asset-class editor: matches the shape of
 /// [ApiService.setAssetClassOverride] (`assetClass == null` clears the
 /// override) so widget tests can drive the optimistic-update and
 /// error-revert paths without the network. Production callers never set it.
-typedef AssetClassMutator = Future<Map<String, dynamic>> Function(
-    String symbol, String? assetClass);
+typedef AssetClassMutator =
+    Future<Map<String, dynamic>> Function(String symbol, String? assetClass);
 
 // ---------- I3 pure helpers (time-proportional x-axis) ----------
 // Exposed for unit tests; no widget state involved.
@@ -33,7 +33,8 @@ typedef AssetClassMutator = Future<Map<String, dynamic>> Function(
 /// Output is sorted ascending regardless of input order.
 @visibleForTesting
 List<({DateTime date, double close})> dedupeDailyCloses(
-    List<({DateTime date, double close})> points) {
+  List<({DateTime date, double close})> points,
+) {
   final byDay = <DateTime, double>{};
   for (final p in points) {
     byDay[DateTime.utc(p.date.year, p.date.month, p.date.day)] = p.close;
@@ -312,9 +313,11 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         .replaceAll('_', ' ')
         .split(' ')
         .where((p) => p.isNotEmpty)
-        .map((p) => acronyms.contains(p.toLowerCase())
-            ? p.toUpperCase()
-            : p[0].toUpperCase() + p.substring(1).toLowerCase())
+        .map(
+          (p) => acronyms.contains(p.toLowerCase())
+              ? p.toUpperCase()
+              : p[0].toUpperCase() + p.substring(1).toLowerCase(),
+        )
         .join(' ');
   }
 
@@ -402,9 +405,11 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: context.textMuted)),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textMuted),
+            ),
             const SizedBox(height: 12),
             FilledButton(onPressed: _load, child: Text(l10n.pfDivRetry)),
           ],
@@ -693,7 +698,9 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
     }
     // Pad the y-window so the line doesn't hug the chart edges; guard the
     // all-flat series (a single close repeated) against a zero interval.
-    final pad = (rawMax - rawMin) == 0 ? (rawMax.abs() * 0.05 + 1) : (rawMax - rawMin) * 0.10;
+    final pad = (rawMax - rawMin) == 0
+        ? (rawMax.abs() * 0.05 + 1)
+        : (rawMax - rawMin) * 0.10;
     final minY = rawMin - pad;
     final maxY = rawMax + pad;
     final yInterval = (maxY - minY) / 4;
@@ -701,10 +708,8 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
     // ~4 date labels along the bottom; month+day inside a quarter,
     // month+year beyond it.
     final spanDays = points.last.date.difference(points.first.date).inDays;
-    final dateFmt =
-        spanDays > 130 ? DateFormat('MMM yy') : DateFormat('MMM d');
+    final dateFmt = spanDays > 130 ? DateFormat('MMM yy') : DateFormat('MMM d');
     final xInterval = dayOffsetTickInterval(spanDays);
-
 
     // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
     // LineChart's built-in handling kept it pinned on mobile web. The inline
@@ -725,10 +730,12 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -903,8 +910,9 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color:
-                selected ? accent.withValues(alpha: 0.12) : context.tint(0.04),
+            color: selected
+                ? accent.withValues(alpha: 0.12)
+                : context.tint(0.04),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -939,29 +947,36 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         : (gainUsd >= 0 ? context.positive : context.negative);
 
     final tiles = <Widget>[
-      _statTile(l10n.insStatMarketValue,
-          valueUsd == null ? '—' : _money(valueUsd)),
       _statTile(
-          l10n.insStatQuantity, quantity == null ? '—' : _qty(quantity)),
-      _statTile(l10n.insStatCostBasis,
-          costBasis == null ? '—' : _money(costBasis)),
+        l10n.insStatMarketValue,
+        valueUsd == null ? '—' : _money(valueUsd),
+      ),
+      _statTile(l10n.insStatQuantity, quantity == null ? '—' : _qty(quantity)),
+      _statTile(
+        l10n.insStatCostBasis,
+        costBasis == null ? '—' : _money(costBasis),
+      ),
       _statTile(l10n.insStatGain, gainText, valueColor: gainColor),
-      _statTile(l10n.insStatWeight,
-          weightPct == null ? '—' : '${weightPct.toStringAsFixed(2)}%'),
+      _statTile(
+        l10n.insStatWeight,
+        weightPct == null ? '—' : '${weightPct.toStringAsFixed(2)}%',
+      ),
       _assetClassTile(l10n, assetClass),
     ];
 
-    return LayoutBuilder(builder: (ctx, c) {
-      const perRow = 2;
-      final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
-        ],
-      );
-    });
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        const perRow = 2;
+        final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
+          ],
+        );
+      },
+    );
   }
 
   Widget _statTile(String label, String value, {Color? valueColor}) {
@@ -1036,8 +1051,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
                   if (isOverride)
                     Text(
                       l10n.ins3ManualCaption,
-                      style:
-                          TextStyle(fontSize: 10, color: context.textSubtle),
+                      style: TextStyle(fontSize: 10, color: context.textSubtle),
                     ),
                 ],
               ),
@@ -1057,7 +1071,9 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
                     Flexible(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: context.tealAccent.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(6),
@@ -1075,8 +1091,11 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
                       ),
                     ),
                   const SizedBox(width: 6),
-                  Icon(Icons.edit_outlined,
-                      size: 14, color: context.textSubtle),
+                  Icon(
+                    Icons.edit_outlined,
+                    size: 14,
+                    color: context.textSubtle,
+                  ),
                 ],
               ),
             ],
@@ -1101,8 +1120,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
     // C3-A guarantees only asset_class + asset_class_source; if the backend
     // additionally volunteers the heuristic class while overridden, the
     // Automatic row names what it reverts to.
-    final heuristicClass =
-        (_data['asset_class_heuristic'] ?? '').toString();
+    final heuristicClass = (_data['asset_class_heuristic'] ?? '').toString();
 
     final picked = await showModalBottomSheet<String>(
       context: context,
@@ -1135,7 +1153,8 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
                     label: heuristicClass.isEmpty
                         ? l10n.ins3Automatic
                         : l10n.ins3AutomaticWithClass(
-                            _assetClassLabel(l10n, heuristicClass)),
+                            _assetClassLabel(l10n, heuristicClass),
+                          ),
                     selected: false,
                     value: _kAutomaticSentinel,
                   ),
@@ -1212,8 +1231,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
     final l10n = AppLocalizations.of(context);
     final prevClass = (_data['asset_class'] ?? '').toString();
     final prevSource = (_data['asset_class_source'] ?? '').toString();
-    final heuristicClass =
-        (_data['asset_class_heuristic'] ?? '').toString();
+    final heuristicClass = (_data['asset_class_heuristic'] ?? '').toString();
 
     // Optimistic flip. Clearing without knowing the heuristic keeps the
     // class text but drops the "manual" caption; the PUT response below
@@ -1222,8 +1240,8 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
       _classMutationInFlight = true;
       _data = {
         ..._data,
-        'asset_class': newClass ??
-            (heuristicClass.isEmpty ? prevClass : heuristicClass),
+        'asset_class':
+            newClass ?? (heuristicClass.isEmpty ? prevClass : heuristicClass),
         'asset_class_source': newClass == null ? 'heuristic' : 'override',
       };
     });
@@ -1252,7 +1270,9 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         final data = await _fetch(_range);
         if (!mounted) return;
         setState(() => _data = data);
-      } catch (_) {/* keep the reconciled payload */}
+      } catch (_) {
+        /* keep the reconciled payload */
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -1262,9 +1282,9 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
           'asset_class_source': prevSource,
         };
       });
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text(l10n.ins3UpdateError)),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(l10n.ins3UpdateError)));
     } finally {
       if (mounted) setState(() => _classMutationInFlight = false);
     }
@@ -1301,13 +1321,17 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
               for (var i = 0; i < rows.length; i++) ...[
                 if (i > 0)
                   Divider(
-                      height: 1, color: context.hairline.withValues(alpha: 0.5)),
+                    height: 1,
+                    color: context.hairline.withValues(alpha: 0.5),
+                  ),
                 _lotRow(l10n, rows[i]),
               ],
               Divider(height: 1, color: context.hairline),
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -1394,8 +1418,9 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   // ---------- accounts holding the symbol ----------
 
   Widget _buildAccounts(AppLocalizations l10n, List<dynamic> accounts) {
-    final rows =
-        accounts.whereType<Map>().map((m) => m.cast<String, dynamic>());
+    final rows = accounts.whereType<Map>().map(
+      (m) => m.cast<String, dynamic>(),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1408,11 +1433,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: context.hairline),
           ),
-          child: Column(
-            children: [
-              for (final r in rows) _accountRow(l10n, r),
-            ],
-          ),
+          child: Column(children: [for (final r in rows) _accountRow(l10n, r)]),
         ),
       ],
     );
@@ -1442,12 +1463,19 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
           ),
           if (type.isNotEmpty) ...[
             const SizedBox(width: 8),
-            _smallChip(_prettyType(type), context.textMuted, context.tint(0.06)),
+            _smallChip(
+              _prettyType(type),
+              context.textMuted,
+              context.tint(0.06),
+            ),
           ],
           if (taxAdvantaged) ...[
             const SizedBox(width: 6),
-            _smallChip(l10n.pfDivDetailTaxAdvantaged, context.warning,
-                context.warning.withValues(alpha: 0.12)),
+            _smallChip(
+              l10n.pfDivDetailTaxAdvantaged,
+              context.warning,
+              context.warning.withValues(alpha: 0.12),
+            ),
           ],
           const SizedBox(width: 10),
           Text(

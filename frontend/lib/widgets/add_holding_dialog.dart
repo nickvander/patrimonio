@@ -45,18 +45,21 @@ class _AddHoldingDialogState extends State<AddHoldingDialog> {
         widget.accountId,
         symbol: _symbol.text.trim().toUpperCase(),
         quantity: double.parse(_qty.text.trim()),
-        costBasis:
-            _cost.text.trim().isEmpty ? null : double.tryParse(_cost.text.trim()),
+        costBasis: _cost.text.trim().isEmpty
+            ? null
+            : double.tryParse(_cost.text.trim()),
       );
       widget.onAdded();
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.toString().replaceFirst('Exception: ', '')),
-        backgroundColor: context.negative,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: context.negative,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -67,8 +70,10 @@ class _AddHoldingDialogState extends State<AddHoldingDialog> {
     final es = Localizations.localeOf(context).languageCode == 'es';
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      title: Text(es ? 'Agregar posición' : 'Add holding',
-          style: const TextStyle(fontWeight: FontWeight.bold)),
+      title: Text(
+        es ? 'Agregar posición' : 'Add holding',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
       content: Form(
         key: _formKey,
         child: Column(
@@ -93,8 +98,9 @@ class _AddHoldingDialogState extends State<AddHoldingDialog> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _qty,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               style: TextStyle(color: context.textPrimary),
               decoration: InputDecoration(
                 labelText: es ? 'Número de acciones' : 'Number of shares',
@@ -110,8 +116,9 @@ class _AddHoldingDialogState extends State<AddHoldingDialog> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _cost,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               style: TextStyle(color: context.textPrimary),
               decoration: InputDecoration(
                 labelText: es

@@ -69,10 +69,12 @@ class PasskeyService {
     bool hardwareKeyOnly = false,
   }) async {
     if (!isAvailable) {
-      throw PasskeyException(_t(
-        'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
-        'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
-      ));
+      throw PasskeyException(
+        _t(
+          'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
+          'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
+        ),
+      );
     }
 
     // 1. Ask the server for the challenge + options.
@@ -85,15 +87,21 @@ class PasskeyService {
     );
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, _t('Could not start passkey registration.',
-            'No se pudo iniciar el registro de la clave de acceso.')),
+        _decodeError(
+          startRes.body,
+          _t(
+            'Could not start passkey registration.',
+            'No se pudo iniciar el registro de la clave de acceso.',
+          ),
+        ),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
     final nonce = startJson['nonce'] as String;
     final options = startJson['options'] as Map<String, dynamic>;
-    final publicKeyOpts =
-        Map<String, dynamic>.from(options['publicKey'] as Map<String, dynamic>);
+    final publicKeyOpts = Map<String, dynamic>.from(
+      options['publicKey'] as Map<String, dynamic>,
+    );
 
     if (hardwareKeyOnly) {
       // Force a roaming security key: the browser then prompts "insert your
@@ -106,7 +114,8 @@ class PasskeyService {
       // NotAllowedError — see the security-key registration path for the
       // relaxed-UV alternative).
       final sel = Map<String, dynamic>.from(
-          (publicKeyOpts['authenticatorSelection'] as Map?) ?? const {});
+        (publicKeyOpts['authenticatorSelection'] as Map?) ?? const {},
+      );
       sel['authenticatorAttachment'] = 'cross-platform';
       publicKeyOpts['authenticatorSelection'] = sel;
       // Strip the credProtect extension on the security-key path. webauthn-rs
@@ -160,8 +169,13 @@ class PasskeyService {
     );
     if (finishRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(finishRes.body, _t('Could not save the new passkey.',
-            'No se pudo guardar la nueva clave de acceso.')),
+        _decodeError(
+          finishRes.body,
+          _t(
+            'Could not save the new passkey.',
+            'No se pudo guardar la nueva clave de acceso.',
+          ),
+        ),
       );
     }
     return PasskeySummary.fromJson(
@@ -179,14 +193,20 @@ class PasskeyService {
   /// assertion challenge to that account's registered passkeys.
   Future<AuthUser> signInWithPasskey({required String username}) async {
     if (!isAvailable) {
-      throw PasskeyException(_t(
-        'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
-        'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
-      ));
+      throw PasskeyException(
+        _t(
+          'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
+          'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
+        ),
+      );
     }
     if (username.trim().isEmpty) {
-      throw PasskeyException(_t('Enter your username first.',
-          'Primero ingresa tu nombre de usuario.'));
+      throw PasskeyException(
+        _t(
+          'Enter your username first.',
+          'Primero ingresa tu nombre de usuario.',
+        ),
+      );
     }
 
     final startRes = await _client.post(
@@ -199,16 +219,22 @@ class PasskeyService {
     );
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, _t('Could not start passkey sign-in.',
-            'No se pudo iniciar el acceso con clave de acceso.')),
+        _decodeError(
+          startRes.body,
+          _t(
+            'Could not start passkey sign-in.',
+            'No se pudo iniciar el acceso con clave de acceso.',
+          ),
+        ),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
     final nonce = startJson['nonce'] as String;
     final options = startJson['options'] as Map<String, dynamic>;
 
-    final publicKey =
-        _coerceRequestOptions(options['publicKey'] as Map<String, dynamic>);
+    final publicKey = _coerceRequestOptions(
+      options['publicKey'] as Map<String, dynamic>,
+    );
     final assertion = await _callCredentialsGet(publicKey);
     final credJson = _encodeAssertionCredential(assertion);
 
@@ -222,8 +248,10 @@ class PasskeyService {
     );
     if (finishRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(finishRes.body, _t('Passkey sign-in failed.',
-            'Falló el acceso con clave de acceso.')),
+        _decodeError(
+          finishRes.body,
+          _t('Passkey sign-in failed.', 'Falló el acceso con clave de acceso.'),
+        ),
       );
     }
     final body = jsonDecode(finishRes.body) as Map<String, dynamic>;
@@ -246,12 +274,14 @@ class PasskeyService {
   /// assertion credential + the server nonce. Throws [PasskeyException] if
   /// the user has no passkey, cancels the OS prompt, or the assertion fails.
   Future<({Map<String, dynamic> credential, String nonce})>
-      reauthWithPasskey() async {
+  reauthWithPasskey() async {
     if (!isAvailable) {
-      throw PasskeyException(_t(
-        'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
-        'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
-      ));
+      throw PasskeyException(
+        _t(
+          'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
+          'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
+        ),
+      );
     }
 
     final startRes = await _client.post(
@@ -266,16 +296,22 @@ class PasskeyService {
     }
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, _t('Could not start passkey verification.',
-            'No se pudo iniciar la verificación con clave de acceso.')),
+        _decodeError(
+          startRes.body,
+          _t(
+            'Could not start passkey verification.',
+            'No se pudo iniciar la verificación con clave de acceso.',
+          ),
+        ),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
     final nonce = startJson['nonce'] as String;
     final options = startJson['options'] as Map<String, dynamic>;
 
-    final publicKey =
-        _coerceRequestOptions(options['publicKey'] as Map<String, dynamic>);
+    final publicKey = _coerceRequestOptions(
+      options['publicKey'] as Map<String, dynamic>,
+    );
     final assertion = await _callCredentialsGet(publicKey);
     final credJson = _encodeAssertionCredential(assertion);
 
@@ -310,8 +346,13 @@ class PasskeyService {
     // session would have been a 401 from require_auth, but the body text
     // differs; either way the actionable message is "try the step-up again".
     throw PasskeyException(
-      _decodeError(res.body, _t('Could not set the new password.',
-          'No se pudo establecer la nueva contraseña.')),
+      _decodeError(
+        res.body,
+        _t(
+          'Could not set the new password.',
+          'No se pudo establecer la nueva contraseña.',
+        ),
+      ),
     );
   }
 
@@ -326,8 +367,13 @@ class PasskeyService {
     }
     if (res.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(res.body, _t('Could not load passkeys.',
-            'No se pudieron cargar las claves de acceso.')),
+        _decodeError(
+          res.body,
+          _t(
+            'Could not load passkeys.',
+            'No se pudieron cargar las claves de acceso.',
+          ),
+        ),
       );
     }
     final raw = jsonDecode(res.body) as List<dynamic>;
@@ -346,8 +392,13 @@ class PasskeyService {
     }
     if (res.statusCode != 204) {
       throw PasskeyException(
-        _decodeError(res.body, _t('Could not remove the passkey.',
-            'No se pudo eliminar la clave de acceso.')),
+        _decodeError(
+          res.body,
+          _t(
+            'Could not remove the passkey.',
+            'No se pudo eliminar la clave de acceso.',
+          ),
+        ),
       );
     }
   }
@@ -373,8 +424,10 @@ Future<JSObject> _callCredentialsCreate(JSObject publicKey) async {
   final credentials = navigator['credentials'] as JSObject;
   final JSObject? result;
   try {
-    final promise =
-        credentials.callMethod<JSPromise<JSAny?>>('create'.toJS, wrap);
+    final promise = credentials.callMethod<JSPromise<JSAny?>>(
+      'create'.toJS,
+      wrap,
+    );
     result = (await promise.toDart) as JSObject?;
   } catch (e) {
     // The browser rejects the create() promise with a DOMException for the
@@ -385,8 +438,12 @@ Future<JSObject> _callCredentialsCreate(JSObject publicKey) async {
     throw _mapCredentialError(e, registering: true);
   }
   if (result == null) {
-    throw PasskeyException(_t('Passkey enrolment was cancelled.',
-        'Se canceló el registro de la clave de acceso.'));
+    throw PasskeyException(
+      _t(
+        'Passkey enrolment was cancelled.',
+        'Se canceló el registro de la clave de acceso.',
+      ),
+    );
   }
   return result;
 }
@@ -398,15 +455,18 @@ Future<JSObject> _callCredentialsGet(JSObject publicKey) async {
   final credentials = navigator['credentials'] as JSObject;
   final JSObject? result;
   try {
-    final promise =
-        credentials.callMethod<JSPromise<JSAny?>>('get'.toJS, wrap);
+    final promise = credentials.callMethod<JSPromise<JSAny?>>('get'.toJS, wrap);
     result = (await promise.toDart) as JSObject?;
   } catch (e) {
     throw _mapCredentialError(e, registering: false);
   }
   if (result == null) {
-    throw PasskeyException(_t('Passkey sign-in was cancelled.',
-        'Se canceló el acceso con clave de acceso.'));
+    throw PasskeyException(
+      _t(
+        'Passkey sign-in was cancelled.',
+        'Se canceló el acceso con clave de acceso.',
+      ),
+    );
   }
   return result;
 }
@@ -434,54 +494,75 @@ PasskeyException _mapCredentialError(Object e, {required bool registering}) {
       ? _t('enrolment', 'registro')
       : _t('sign-in', 'acceso');
   if (probe.contains('InvalidStateError')) {
-    return PasskeyException(registering
-        ? _t(
-            'A passkey for this account already exists on the authenticator you '
-            'used. If you\'re adding a DIFFERENT security key, your browser is '
-            'likely offering a saved/synced passkey instead of the new key — '
-            'in the prompt choose "Use a different device" (or insert the key '
-            'and pick the security-key / USB option). To replace the existing '
-            'passkey, remove it on this screen first.',
-            'Ya existe una clave de acceso para esta cuenta en el autenticador '
-            'que usaste. Si estás agregando una llave de seguridad DISTINTA, tu '
-            'navegador probablemente esté ofreciendo una clave guardada o '
-            'sincronizada en lugar de la nueva — en el aviso elige "Usar otro '
-            'dispositivo" (o inserta la llave y elige la opción de llave de '
-            'seguridad / USB). Para reemplazar la clave existente, primero '
-            'elimínala en esta pantalla.')
-        : _t('This passkey isn\'t recognised for this account.',
-            'Esta clave de acceso no se reconoce para esta cuenta.'));
+    return PasskeyException(
+      registering
+          ? _t(
+              'A passkey for this account already exists on the authenticator you '
+                  'used. If you\'re adding a DIFFERENT security key, your browser is '
+                  'likely offering a saved/synced passkey instead of the new key — '
+                  'in the prompt choose "Use a different device" (or insert the key '
+                  'and pick the security-key / USB option). To replace the existing '
+                  'passkey, remove it on this screen first.',
+              'Ya existe una clave de acceso para esta cuenta en el autenticador '
+                  'que usaste. Si estás agregando una llave de seguridad DISTINTA, tu '
+                  'navegador probablemente esté ofreciendo una clave guardada o '
+                  'sincronizada en lugar de la nueva — en el aviso elige "Usar otro '
+                  'dispositivo" (o inserta la llave y elige la opción de llave de '
+                  'seguridad / USB). Para reemplazar la clave existente, primero '
+                  'elimínala en esta pantalla.',
+            )
+          : _t(
+              'This passkey isn\'t recognised for this account.',
+              'Esta clave de acceso no se reconoce para esta cuenta.',
+            ),
+    );
   }
   if (probe.contains('NotAllowedError') || probe.contains('AbortError')) {
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'Passkey $verb was cancelled or timed out. Please try again.',
-        'El $verb con clave de acceso se canceló o expiró. Inténtalo de nuevo.'));
+        'El $verb con clave de acceso se canceló o expiró. Inténtalo de nuevo.',
+      ),
+    );
   }
   if (probe.contains('NotSupportedError')) {
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'This authenticator isn\'t supported. Try a different device or '
-        'security key.',
+            'security key.',
         'Este autenticador no es compatible. Prueba con otro dispositivo o '
-        'llave de seguridad.'));
+            'llave de seguridad.',
+      ),
+    );
   }
   if (probe.contains('SecurityError')) {
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'Passkey $verb was blocked for security reasons (the site origin '
-        'or domain didn\'t match). Make sure you\'re on the right URL.',
+            'or domain didn\'t match). Make sure you\'re on the right URL.',
         'El $verb con clave de acceso se bloqueó por razones de seguridad (el '
-        'origen o dominio del sitio no coincidió). Asegúrate de estar en la URL '
-        'correcta.'));
+            'origen o dominio del sitio no coincidió). Asegúrate de estar en la URL '
+            'correcta.',
+      ),
+    );
   }
   if (probe.contains('ConstraintError')) {
-    return PasskeyException(_t(
+    return PasskeyException(
+      _t(
         'This authenticator can\'t satisfy the required settings (e.g. it '
-        'needs a PIN or biometric). Try a different one.',
+            'needs a PIN or biometric). Try a different one.',
         'Este autenticador no cumple con los ajustes requeridos (p. ej. '
-        'necesita un PIN o biometría). Prueba con otro.'));
+            'necesita un PIN o biometría). Prueba con otro.',
+      ),
+    );
   }
   final detail = message.isNotEmpty ? message : e.toString();
-  return PasskeyException(_t('Passkey $verb failed: $detail',
-      'El $verb con clave de acceso falló: $detail'));
+  return PasskeyException(
+    _t(
+      'Passkey $verb failed: $detail',
+      'El $verb con clave de acceso falló: $detail',
+    ),
+  );
 }
 
 // ----- decoding server → JS (base64url strings → ArrayBuffer) -----

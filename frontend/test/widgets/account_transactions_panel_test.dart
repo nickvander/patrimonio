@@ -28,8 +28,9 @@ List<Map<String, dynamic>> _makeTable(int n) {
     for (var i = 0; i < n; i++)
       {
         'id': 'tx-$i',
-        'date': DateFormat('yyyy-MM-dd')
-            .format(today.subtract(Duration(days: i))),
+        'date': DateFormat(
+          'yyyy-MM-dd',
+        ).format(today.subtract(Duration(days: i))),
         'amount': 10.0 + i,
         'currency': 'USD',
         'description': 'MERCHANT $i',
@@ -104,7 +105,9 @@ class _FakeHoldingsBackend {
   }
 
   Future<Map<String, dynamic>> restore(
-      String accountId, String holdingId) async {
+    String accountId,
+    String holdingId,
+  ) async {
     restoreCalls++;
     deleted = false;
     return Map<String, dynamic>.of(holding);
@@ -112,10 +115,10 @@ class _FakeHoldingsBackend {
 }
 
 Widget _host(Widget panel) => MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: panel),
-    );
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(body: panel),
+);
 
 AccountTransactionsScreen _panel({
   required AccountTransactionsFetcher fetcher,
@@ -133,11 +136,13 @@ AccountTransactionsScreen _panel({
     transactionsFetcher: fetcher,
     transactionUpdater: updates == null
         ? null
-        : (String id,
-            {String? userCategory,
+        : (
+            String id, {
+            String? userCategory,
             String? userNotes,
             String? userDescription,
-            String? accountId}) async {
+            String? accountId,
+          }) async {
             updates.add((id: id, userCategory: userCategory));
           },
   );
@@ -187,13 +192,16 @@ void main() {
       expect(find.text('Load more'), findsNothing);
     });
 
-    testWidgets('full-body spinner appears for the initial load only',
-        (tester) async {
+    testWidgets('full-body spinner appears for the initial load only', (
+      tester,
+    ) async {
       _setViewSize(tester, const Size(1000, 900));
       final table = _makeTable(5);
       final gate = Completer<void>();
-      Future<List<dynamic>> gatedFetch(
-          {required int limit, required int offset}) async {
+      Future<List<dynamic>> gatedFetch({
+        required int limit,
+        required int offset,
+      }) async {
         await gate.future;
         return [
           for (final t in table.skip(offset).take(limit))
@@ -218,32 +226,33 @@ void main() {
 
   group('Account panel — running balance per row', () {
     testWidgets(
-        'rows show "balance after" anchored on the header balance: top row '
-        '= current balance, older rows walk back through the amounts',
-        (tester) async {
-      _setViewSize(tester, const Size(1000, 900));
-      // 3 rows, amounts 10/11/12 (all inflows, positive), account balance 1000.
-      final table = _makeTable(3);
-      // Row 1 carries a statement-persisted balance — exact, no '≈'.
-      table[1]['balance_after'] = 555.25;
-      final backend = _FakeBackend(table);
+      'rows show "balance after" anchored on the header balance: top row '
+      '= current balance, older rows walk back through the amounts',
+      (tester) async {
+        _setViewSize(tester, const Size(1000, 900));
+        // 3 rows, amounts 10/11/12 (all inflows, positive), account balance 1000.
+        final table = _makeTable(3);
+        // Row 1 carries a statement-persisted balance — exact, no '≈'.
+        table[1]['balance_after'] = 555.25;
+        final backend = _FakeBackend(table);
 
-      await tester.pumpWidget(_host(_panel(fetcher: backend.fetch)));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_host(_panel(fetcher: backend.fetch)));
+        await tester.pumpAndSettle();
 
-      // Top row's balance-after IS the account's current balance
-      // (estimated → '≈' prefix, since manual rows persist nothing).
-      expect(find.text(r'Bal. ≈ $1,000.00'), findsOneWidget);
-      // The persisted statement figure wins and renders plain.
-      expect(find.text(r'Bal. $555.25'), findsOneWidget);
-      // The row below it re-anchors on the exact figure: the older row's
-      // balance predates row 1's inflow of 11 arriving, so 555.25 − 11 = 544.25.
-      expect(find.text(r'Bal. ≈ $544.25'), findsOneWidget);
+        // Top row's balance-after IS the account's current balance
+        // (estimated → '≈' prefix, since manual rows persist nothing).
+        expect(find.text(r'Bal. ≈ $1,000.00'), findsOneWidget);
+        // The persisted statement figure wins and renders plain.
+        expect(find.text(r'Bal. $555.25'), findsOneWidget);
+        // The row below it re-anchors on the exact figure: the older row's
+        // balance predates row 1's inflow of 11 arriving, so 555.25 − 11 = 544.25.
+        expect(find.text(r'Bal. ≈ $544.25'), findsOneWidget);
 
-      // Single-account host: the meta line no longer repeats the
-      // account name the panel header already shows.
-      expect(find.text('Food & drink · Checking'), findsNothing);
-    });
+        // Single-account host: the meta line no longer repeats the
+        // account name the panel header already shows.
+        expect(find.text('Food & drink · Checking'), findsNothing);
+      },
+    );
   });
 
   group('Account panel — delete-undo snackbar (round 3)', () {
@@ -279,8 +288,7 @@ void main() {
                           account: _investmentAccount,
                           allAccounts: const [_investmentAccount],
                           conversionFactor: 1.0,
-                          currencyFormat:
-                              NumberFormat.currency(symbol: r'$'),
+                          currencyFormat: NumberFormat.currency(symbol: r'$'),
                           targetCurrency: 'USD',
                           usdMxnRate: 0,
                           transactionsFetcher: backend.fetch,
@@ -315,115 +323,129 @@ void main() {
     }
 
     testWidgets(
-        'with the panel OPEN, the undo snackbar renders above the panel '
-        'route and its Undo is tappable (restores in place)',
-        (tester) async {
-      _setViewSize(tester, const Size(1000, 900));
-      final holdings = _FakeHoldingsBackend();
-      final balanceUpdates = <(String, double)>[];
+      'with the panel OPEN, the undo snackbar renders above the panel '
+      'route and its Undo is tappable (restores in place)',
+      (tester) async {
+        _setViewSize(tester, const Size(1000, 900));
+        final holdings = _FakeHoldingsBackend();
+        final balanceUpdates = <(String, double)>[];
 
-      await tester.pumpWidget(
-          dialogHost(holdings: holdings, balanceUpdates: balanceUpdates));
-      await deleteThroughConfirm(tester);
-      expect(holdings.deleteCalls, 1);
+        await tester.pumpWidget(
+          dialogHost(holdings: holdings, balanceUpdates: balanceUpdates),
+        );
+        await deleteThroughConfirm(tester);
+        expect(holdings.deleteCalls, 1);
 
-      // The regression: pre-fix the snackbar sat on the ROOT messenger,
-      // underneath the panel route — this tap would land on the modal
-      // barrier (dismissing the panel) instead of the Undo button.
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+        // The regression: pre-fix the snackbar sat on the ROOT messenger,
+        // underneath the panel route — this tap would land on the modal
+        // barrier (dismissing the panel) instead of the Undo button.
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
 
-      expect(holdings.restoreCalls, 1);
-      // Panel never closed, and the restored row is back on screen.
-      expect(find.byType(AccountTransactionsScreen), findsOneWidget);
-      expect(find.byTooltip('Remove AAPL'), findsOneWidget);
-    });
+        expect(holdings.restoreCalls, 1);
+        // Panel never closed, and the restored row is back on screen.
+        expect(find.byType(AccountTransactionsScreen), findsOneWidget);
+        expect(find.byTooltip('Remove AAPL'), findsOneWidget);
+      },
+    );
 
     testWidgets(
-        'closing the panel mid-countdown re-homes the snackbar on the root '
-        'messenger; Undo still restores AND pushes the fresh balance to '
-        'the dashboard (onBalanceUpdate) despite the disposed State',
-        (tester) async {
-      _setViewSize(tester, const Size(1000, 900));
-      final holdings = _FakeHoldingsBackend();
-      final balanceUpdates = <(String, double)>[];
+      'closing the panel mid-countdown re-homes the snackbar on the root '
+      'messenger; Undo still restores AND pushes the fresh balance to '
+      'the dashboard (onBalanceUpdate) despite the disposed State',
+      (tester) async {
+        _setViewSize(tester, const Size(1000, 900));
+        final holdings = _FakeHoldingsBackend();
+        final balanceUpdates = <(String, double)>[];
 
-      await tester.pumpWidget(
-          dialogHost(holdings: holdings, balanceUpdates: balanceUpdates));
-      await deleteThroughConfirm(tester);
-      // In-panel post-delete sync already told the dashboard "0 left".
-      expect(balanceUpdates.last, ('acct-inv', 0.0));
+        await tester.pumpWidget(
+          dialogHost(holdings: holdings, balanceUpdates: balanceUpdates),
+        );
+        await deleteThroughConfirm(tester);
+        // In-panel post-delete sync already told the dashboard "0 left".
+        expect(balanceUpdates.last, ('acct-inv', 0.0));
 
-      // Dismiss the panel via its barrier while the countdown runs. The
-      // panel State (and its nested messenger + snackbar) is disposed…
-      await tester.tapAt(const Offset(20, 20));
-      await tester.pumpAndSettle();
-      expect(find.byType(AccountTransactionsScreen), findsNothing);
+        // Dismiss the panel via its barrier while the countdown runs. The
+        // panel State (and its nested messenger + snackbar) is disposed…
+        await tester.tapAt(const Offset(20, 20));
+        await tester.pumpAndSettle();
+        expect(find.byType(AccountTransactionsScreen), findsNothing);
 
-      // …but the undo affordance survives on the root messenger.
-      expect(find.text('Deleted AAPL'), findsOneWidget);
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+        // …but the undo affordance survives on the root messenger.
+        expect(find.text('Deleted AAPL'), findsOneWidget);
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
 
-      expect(holdings.restoreCalls, 1);
-      // Defect-2 regression: with no panel State left, the undo closure
-      // itself must refresh the dashboard — Σ holding values, like the
-      // backend's recompute.
-      expect(balanceUpdates.last, ('acct-inv', 500.0));
-    });
+        expect(holdings.restoreCalls, 1);
+        // Defect-2 regression: with no panel State left, the undo closure
+        // itself must refresh the dashboard — Σ holding values, like the
+        // backend's recompute.
+        expect(balanceUpdates.last, ('acct-inv', 500.0));
+      },
+    );
   });
 
   group('Account panel — in-place post-edit refresh', () {
     testWidgets(
-        'an edit refetches at loaded depth without remounting the list: '
-        'same ScrollPosition object, same offset, no spinner', (tester) async {
-      _setViewSize(tester, const Size(1000, 900));
-      final backend = _FakeBackend(_makeTable(60));
-      final updates = <_Update>[];
+      'an edit refetches at loaded depth without remounting the list: '
+      'same ScrollPosition object, same offset, no spinner',
+      (tester) async {
+        _setViewSize(tester, const Size(1000, 900));
+        final backend = _FakeBackend(_makeTable(60));
+        final updates = <_Update>[];
 
-      await tester
-          .pumpWidget(_host(_panel(fetcher: backend.fetch, updates: updates)));
-      await tester.pumpAndSettle();
-      expect(find.text('Showing 50 of 50'), findsOneWidget);
+        await tester.pumpWidget(
+          _host(_panel(fetcher: backend.fetch, updates: updates)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Showing 50 of 50'), findsOneWidget);
 
-      // Scroll partway down the virtualised list and remember exactly
-      // where we are — including the ScrollPosition OBJECT, whose
-      // identity only survives if the list is never remounted.
-      await tester.drag(_innerListScrollable(), const Offset(0, -400));
-      await tester.pump();
-      final positionBefore =
-          tester.state<ScrollableState>(_innerListScrollable()).position;
-      final pixelsBefore = positionBefore.pixels;
-      expect(pixelsBefore, greaterThan(0));
+        // Scroll partway down the virtualised list and remember exactly
+        // where we are — including the ScrollPosition OBJECT, whose
+        // identity only survives if the list is never remounted.
+        await tester.drag(_innerListScrollable(), const Offset(0, -400));
+        await tester.pump();
+        final positionBefore = tester
+            .state<ScrollableState>(_innerListScrollable())
+            .position;
+        final pixelsBefore = positionBefore.pixels;
+        expect(pixelsBefore, greaterThan(0));
 
-      // Drive an edit through the exact callback the detail editors use.
-      backend.table[3]['user_category'] = 'Coffee';
-      final tab = tester.widget<TransactionsTab>(find.byType(TransactionsTab));
-      await tab.onUpdate!('tx-3', userCategory: 'Coffee');
-      await tester.pump();
+        // Drive an edit through the exact callback the detail editors use.
+        backend.table[3]['user_category'] = 'Coffee';
+        final tab = tester.widget<TransactionsTab>(
+          find.byType(TransactionsTab),
+        );
+        await tab.onUpdate!('tx-3', userCategory: 'Coffee');
+        await tester.pump();
 
-      // The PATCH reached the injected updater…
-      expect(updates, [(id: 'tx-3', userCategory: 'Coffee')]);
-      // …followed by ONE depth-preserving refetch from the top (the old
-      // behavior re-downloaded up to 1,000 rows per edit).
-      expect(backend.calls, hasLength(2));
-      expect(backend.calls.last, (limit: 50, offset: 0));
+        // The PATCH reached the injected updater…
+        expect(updates, [(id: 'tx-3', userCategory: 'Coffee')]);
+        // …followed by ONE depth-preserving refetch from the top (the old
+        // behavior re-downloaded up to 1,000 rows per edit).
+        expect(backend.calls, hasLength(2));
+        expect(backend.calls.last, (limit: 50, offset: 0));
 
-      // No full-body spinner, no list remount: the refreshed rows landed
-      // in the SAME scroll position object at the same offset.
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      final positionAfter =
-          tester.state<ScrollableState>(_innerListScrollable()).position;
-      expect(identical(positionBefore, positionAfter), isTrue,
-          reason: 'a remount would have created a new ScrollPosition');
-      expect(positionAfter.pixels, pixelsBefore);
+        // No full-body spinner, no list remount: the refreshed rows landed
+        // in the SAME scroll position object at the same offset.
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        final positionAfter = tester
+            .state<ScrollableState>(_innerListScrollable())
+            .position;
+        expect(
+          identical(positionBefore, positionAfter),
+          isTrue,
+          reason: 'a remount would have created a new ScrollPosition',
+        );
+        expect(positionAfter.pixels, pixelsBefore);
 
-      // The refetched data is actually on screen (list still full depth,
-      // Load more still offered — hasMore was not clobbered).
-      expect(find.text('Showing 50 of 50'), findsOneWidget);
-      expect(find.text('Load more'), findsOneWidget);
-      await tester.pumpAndSettle();
-    });
+        // The refetched data is actually on screen (list still full depth,
+        // Load more still offered — hasMore was not clobbered).
+        expect(find.text('Showing 50 of 50'), findsOneWidget);
+        expect(find.text('Load more'), findsOneWidget);
+        await tester.pumpAndSettle();
+      },
+    );
   });
 
   group('Account panel — realtime refresh (manual-tx-edit QA fix 3)', () {
@@ -433,49 +455,56 @@ void main() {
     // opener's realtime stream and maps TransactionsChanged/resync onto
     // the same depth-preserving in-place refetch a local edit uses.
     testWidgets(
-        'a TransactionsChanged push refetches in place (no spinner) and a '
-        'burst of events coalesces into ONE refetch', (tester) async {
+      'a TransactionsChanged push refetches in place (no spinner) and a '
+      'burst of events coalesces into ONE refetch',
+      (tester) async {
+        _setViewSize(tester, const Size(1000, 900));
+        final backend = _FakeBackend(_makeTable(5));
+        final events = StreamController<RealtimeEvent>.broadcast();
+        addTearDown(events.close);
+
+        await tester.pumpWidget(
+          _host(_panel(fetcher: backend.fetch, realtimeEvents: events.stream)),
+        );
+        await tester.pumpAndSettle();
+        expect(backend.calls, hasLength(1));
+        expect(find.text('Row 0'), findsOneWidget);
+
+        // Out-of-band edit lands server-side, then the push arrives — twice
+        // in quick succession (e.g. the editing surface's own follow-up).
+        backend.table[0]['user_description'] = 'Row 0 (edited elsewhere)';
+        events.add(
+          const RealtimeEvent(type: RealtimeEventType.transactionsChanged),
+        );
+        events.add(
+          const RealtimeEvent(type: RealtimeEventType.transactionsChanged),
+        );
+        await tester.pump(); // deliver stream events → debounce armed
+        // Inside the debounce window nothing has refetched yet.
+        expect(backend.calls, hasLength(1));
+        await tester.pump(const Duration(milliseconds: 450));
+        await tester.pumpAndSettle();
+
+        // One coalesced, depth-preserving refetch from the top…
+        expect(backend.calls, hasLength(2));
+        expect(backend.calls.last, (limit: 50, offset: 0));
+        // …that landed the edit without a full-body spinner/remount.
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.text('Row 0 (edited elsewhere)'), findsOneWidget);
+      },
+    );
+
+    testWidgets('non-transaction pushes (fx rate ticks) do not refetch', (
+      tester,
+    ) async {
       _setViewSize(tester, const Size(1000, 900));
       final backend = _FakeBackend(_makeTable(5));
       final events = StreamController<RealtimeEvent>.broadcast();
       addTearDown(events.close);
 
       await tester.pumpWidget(
-          _host(_panel(fetcher: backend.fetch, realtimeEvents: events.stream)));
-      await tester.pumpAndSettle();
-      expect(backend.calls, hasLength(1));
-      expect(find.text('Row 0'), findsOneWidget);
-
-      // Out-of-band edit lands server-side, then the push arrives — twice
-      // in quick succession (e.g. the editing surface's own follow-up).
-      backend.table[0]['user_description'] = 'Row 0 (edited elsewhere)';
-      events.add(
-          const RealtimeEvent(type: RealtimeEventType.transactionsChanged));
-      events.add(
-          const RealtimeEvent(type: RealtimeEventType.transactionsChanged));
-      await tester.pump(); // deliver stream events → debounce armed
-      // Inside the debounce window nothing has refetched yet.
-      expect(backend.calls, hasLength(1));
-      await tester.pump(const Duration(milliseconds: 450));
-      await tester.pumpAndSettle();
-
-      // One coalesced, depth-preserving refetch from the top…
-      expect(backend.calls, hasLength(2));
-      expect(backend.calls.last, (limit: 50, offset: 0));
-      // …that landed the edit without a full-body spinner/remount.
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(find.text('Row 0 (edited elsewhere)'), findsOneWidget);
-    });
-
-    testWidgets('non-transaction pushes (fx rate ticks) do not refetch',
-        (tester) async {
-      _setViewSize(tester, const Size(1000, 900));
-      final backend = _FakeBackend(_makeTable(5));
-      final events = StreamController<RealtimeEvent>.broadcast();
-      addTearDown(events.close);
-
-      await tester.pumpWidget(
-          _host(_panel(fetcher: backend.fetch, realtimeEvents: events.stream)));
+        _host(_panel(fetcher: backend.fetch, realtimeEvents: events.stream)),
+      );
       await tester.pumpAndSettle();
       expect(backend.calls, hasLength(1));
 
@@ -484,8 +513,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 450));
       await tester.pumpAndSettle();
 
-      expect(backend.calls, hasLength(1),
-          reason: 'FX ticks are frequent and change nothing this list shows');
+      expect(
+        backend.calls,
+        hasLength(1),
+        reason: 'FX ticks are frequent and change nothing this list shows',
+      );
     });
   });
 }

@@ -20,16 +20,19 @@ class _FakeApiService extends ApiService {
   Future<List<dynamic>> getLoanPeople() async => const [];
 
   @override
-  Future<Map<String, dynamic>> getLoansSummary({bool forceRefresh = false}) async =>
-      const {
-        'active_count': 0,
-        'total_lent': 0,
-        'total_outstanding': 0,
-      };
+  Future<Map<String, dynamic>> getLoansSummary({
+    bool forceRefresh = false,
+  }) async => const {
+    'active_count': 0,
+    'total_lent': 0,
+    'total_outstanding': 0,
+  };
 
   @override
-  Future<Map<String, dynamic>> getInterestIncome({int? year}) async =>
-      const {'total_interest': 0, 'total_principal': 0};
+  Future<Map<String, dynamic>> getInterestIncome({int? year}) async => const {
+    'total_interest': 0,
+    'total_principal': 0,
+  };
 }
 
 void main() {
@@ -41,8 +44,9 @@ void main() {
   // (asserts stripped, so no red error box, just nothing). This mounts it
   // the way the dashboard does (bounded by the Scaffold body) and asserts
   // it lays out + shows its content without throwing.
-  testWidgets('LendingTab lays out under a bounded parent (empty state)',
-      (tester) async {
+  testWidgets('LendingTab lays out under a bounded parent (empty state)', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -63,35 +67,38 @@ void main() {
     expect(find.text('No loans yet'), findsOneWidget);
   });
 
-  testWidgets('LendingTab renders loan cards + the mixed-currency note',
-      (tester) async {
-    final api = _FakeApiService(loans: [
-      {
-        'id': '1',
-        'borrower_name': 'Alice',
-        'principal': 100.0,
-        'outstanding': 100.0,
-        // Scheduled loan: total owed includes $20 of unpaid interest, so
-        // the card must disclose it under the Outstanding figure.
-        'total_owed': 120.0,
-        'total_repaid': 0.0,
-        'interest_earned': 0.0,
-        'currency': 'USD',
-        'status': 'active',
-        'origination_date': '2026-01-01',
-      },
-      {
-        'id': '2',
-        'borrower_name': 'Bob',
-        'principal': 1800.0,
-        'outstanding': 1800.0,
-        'total_repaid': 0.0,
-        'interest_earned': 0.0,
-        'currency': 'MXN',
-        'status': 'active',
-        'origination_date': '2026-01-01',
-      },
-    ]);
+  testWidgets('LendingTab renders loan cards + the mixed-currency note', (
+    tester,
+  ) async {
+    final api = _FakeApiService(
+      loans: [
+        {
+          'id': '1',
+          'borrower_name': 'Alice',
+          'principal': 100.0,
+          'outstanding': 100.0,
+          // Scheduled loan: total owed includes $20 of unpaid interest, so
+          // the card must disclose it under the Outstanding figure.
+          'total_owed': 120.0,
+          'total_repaid': 0.0,
+          'interest_earned': 0.0,
+          'currency': 'USD',
+          'status': 'active',
+          'origination_date': '2026-01-01',
+        },
+        {
+          'id': '2',
+          'borrower_name': 'Bob',
+          'principal': 1800.0,
+          'outstanding': 1800.0,
+          'total_repaid': 0.0,
+          'interest_earned': 0.0,
+          'currency': 'MXN',
+          'status': 'active',
+          'origination_date': '2026-01-01',
+        },
+      ],
+    );
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -110,10 +117,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Alice'), findsOneWidget);
     expect(find.text('Bob'), findsOneWidget);
-    expect(
-      find.textContaining('converted to USD'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('converted to USD'), findsOneWidget);
 
     // Copy-pass regressions:
     // 1) The "Lent … · <date>" meta renders a locale-aware date, never the

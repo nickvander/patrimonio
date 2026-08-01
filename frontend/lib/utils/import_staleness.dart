@@ -58,10 +58,9 @@ class ImportStaleSnooze {
   }
 
   Map<String, String> toJson() => {
-        'until': until.toUtc().toIso8601String(),
-        if (dataAsOf != null)
-          'data_as_of': dataAsOf!.toUtc().toIso8601String(),
-      };
+    'until': until.toUtc().toIso8601String(),
+    if (dataAsOf != null) 'data_as_of': dataAsOf!.toUtc().toIso8601String(),
+  };
 }
 
 /// Parse the raw [kImportStaleSnoozesSettingKey] value. Tolerant: non-map
@@ -76,8 +75,9 @@ Map<String, ImportStaleSnooze> staleSnoozesFrom(dynamic raw) {
     if (until == null) return;
     out[key.toString()] = ImportStaleSnooze(
       until: until.toUtc(),
-      dataAsOf:
-          DateTime.tryParse((entry['data_as_of'] ?? '').toString())?.toUtc(),
+      dataAsOf: DateTime.tryParse(
+        (entry['data_as_of'] ?? '').toString(),
+      )?.toUtc(),
     );
   });
   return out;
@@ -87,10 +87,7 @@ Map<String, ImportStaleSnooze> staleSnoozesFrom(dynamic raw) {
 /// institution id strings) into a set. Non-list roots → empty.
 Set<String> staleMutedFrom(dynamic raw) {
   if (raw is! List) return <String>{};
-  return raw
-      .map((e) => e.toString())
-      .where((s) => s.isNotEmpty)
-      .toSet();
+  return raw.map((e) => e.toString()).where((s) => s.isNotEmpty).toSet();
 }
 
 /// Parse the raw `app_settings` value into a usable threshold: absent /
@@ -179,22 +176,24 @@ List<StaleImportInstitution> staleImportInstitutions(
     if (key.isEmpty) continue;
     final prev = byKey[key];
     if (prev == null || age < prev.age) {
-      byKey[key] =
-          (id: id, name: name, age: age, last: accountLastDataAt(acc));
+      byKey[key] = (id: id, name: name, age: age, last: accountLastDataAt(acc));
     }
   }
   final clock = (now ?? DateTime.now()).toUtc();
-  final stale = byKey.values
-      .where((e) => e.age >= thresholdDays)
-      .where((e) => !muted.contains(e.id))
-      .where((e) => !(snoozes[e.id]?.suppresses(e.last, clock) ?? false))
-      .map((e) => StaleImportInstitution(
-            institutionId: e.id,
-            name: e.name,
-            daysStale: e.age,
-            lastDataAt: e.last,
-          ))
-      .toList()
-    ..sort((a, b) => b.daysStale.compareTo(a.daysStale));
+  final stale =
+      byKey.values
+          .where((e) => e.age >= thresholdDays)
+          .where((e) => !muted.contains(e.id))
+          .where((e) => !(snoozes[e.id]?.suppresses(e.last, clock) ?? false))
+          .map(
+            (e) => StaleImportInstitution(
+              institutionId: e.id,
+              name: e.name,
+              daysStale: e.age,
+              lastDataAt: e.last,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => b.daysStale.compareTo(a.daysStale));
   return stale;
 }

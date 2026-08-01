@@ -50,8 +50,8 @@ class NetWorthGoalTile extends StatelessWidget {
     final color = pct >= 1.0
         ? context.positive
         : pct >= 0.5
-            ? context.tealAccent
-            : context.yellowAccent;
+        ? context.tealAccent
+        : context.yellowAccent;
 
     return Card(
       elevation: 4,
@@ -112,7 +112,8 @@ class NetWorthGoalTile extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               l.pfGoalCurrent(
-                  currencyFormat.displayMoney(netWorthUsd * conversionFactor)),
+                currencyFormat.displayMoney(netWorthUsd * conversionFactor),
+              ),
               style: TextStyle(
                 fontSize: 12,
                 color: context.textSubtle,
@@ -164,13 +165,16 @@ class NetWorthGoalTile extends StatelessWidget {
     final latest = points.last;
     final latestDate = DateTime.parse((latest['date']).toString());
     final latestNet = (latest['net_worth'] as num).toDouble();
-    final target = DateTime(latestDate.year - 1, latestDate.month, latestDate.day);
+    final target = DateTime(
+      latestDate.year - 1,
+      latestDate.month,
+      latestDate.day,
+    );
 
     Map anchor = points.first;
-    var bestDist = (DateTime.parse((points.first['date']).toString())
-            .difference(target)
-            .inDays)
-        .abs();
+    var bestDist = (DateTime.parse(
+      (points.first['date']).toString(),
+    ).difference(target).inDays).abs();
     for (final p in points) {
       final d = DateTime.parse((p['date']).toString());
       if (!d.isBefore(latestDate)) continue;
@@ -204,7 +208,10 @@ class NetWorthGoalTile extends StatelessWidget {
     if (monthlyDelta <= 0) {
       return latestNet >= goalUsd
           ? const _PaceVerdict.ahead()
-          : _PaceVerdict.behind(warning: true, requiredMonthlyUsd: requiredMonthly);
+          : _PaceVerdict.behind(
+              warning: true,
+              requiredMonthlyUsd: requiredMonthly,
+            );
     }
 
     if (latestNet >= goalUsd) return const _PaceVerdict.ahead();
@@ -218,13 +225,17 @@ class NetWorthGoalTile extends StatelessWidget {
 
     if (projectedYear < goalYear) {
       return _PaceVerdict.ahead(
-          projected: projected, monthlyDeltaUsd: monthlyDelta);
+        projected: projected,
+        monthlyDeltaUsd: monthlyDelta,
+      );
     }
     if (projectedYear > goalYear) {
       return _PaceVerdict.behind(requiredMonthlyUsd: requiredMonthly);
     }
     return _PaceVerdict.onTrack(
-        projected: projected, monthlyDeltaUsd: monthlyDelta);
+      projected: projected,
+      monthlyDeltaUsd: monthlyDelta,
+    );
   }
 
   /// Whole months from now until the end of [goalYear] (December). Zero once
@@ -261,31 +272,31 @@ class _PaceVerdict {
   final double? requiredMonthlyUsd;
 
   const _PaceVerdict.ahead({this.projected, this.monthlyDeltaUsd})
-      : _kind = 0,
-        warning = false,
-        requiredMonthlyUsd = null;
+    : _kind = 0,
+      warning = false,
+      requiredMonthlyUsd = null;
   const _PaceVerdict.onTrack({this.projected, this.monthlyDeltaUsd})
-      : _kind = 1,
-        warning = false,
-        requiredMonthlyUsd = null;
+    : _kind = 1,
+      warning = false,
+      requiredMonthlyUsd = null;
   const _PaceVerdict.behind({this.warning = false, this.requiredMonthlyUsd})
-      : _kind = 2,
-        projected = null,
-        monthlyDeltaUsd = null;
+    : _kind = 2,
+      projected = null,
+      monthlyDeltaUsd = null;
 
   IconData get icon => _kind == 0
       ? Icons.trending_up_rounded
       : _kind == 1
-          ? Icons.check_circle_outline_rounded
-          : Icons.trending_down_rounded;
+      ? Icons.check_circle_outline_rounded
+      : Icons.trending_down_rounded;
 
   Color color(BuildContext context) {
     if (warning) return context.warning;
     return _kind == 0
         ? context.positive
         : _kind == 1
-            ? context.tealAccent
-            : context.warning;
+        ? context.tealAccent
+        : context.warning;
   }
 
   String label(
@@ -296,25 +307,25 @@ class _PaceVerdict {
     final base = _kind == 0
         ? l.pfGoalPaceAhead
         : _kind == 1
-            ? l.pfGoalPaceOnTrack
-            : l.pfGoalPaceBehind;
+        ? l.pfGoalPaceOnTrack
+        : l.pfGoalPaceBehind;
 
     // On-pace projection: "<verdict> · on pace for ~<month year> at +$X/mo".
-    if (projected != null &&
-        monthlyDeltaUsd != null &&
-        monthlyDeltaUsd! > 0) {
+    if (projected != null && monthlyDeltaUsd != null && monthlyDeltaUsd! > 0) {
       // yMMM follows the locale ("Jun 2028" / "jun 2028").
       final when = DateFormat.yMMM().format(projected!);
-      final rate =
-          currencyFormat.displayMoney(monthlyDeltaUsd! * conversionFactor);
+      final rate = currencyFormat.displayMoney(
+        monthlyDeltaUsd! * conversionFactor,
+      );
       // gen-l10n orders positional args alphabetically: (rate, when).
       return '$base · ${l.pfGoalOnPaceFor(rate, when)}';
     }
 
     // Behind: surface the catch-up contribution to still hit the goal year.
     if (_kind == 2 && requiredMonthlyUsd != null && requiredMonthlyUsd! > 0) {
-      final need =
-          currencyFormat.displayMoney(requiredMonthlyUsd! * conversionFactor);
+      final need = currencyFormat.displayMoney(
+        requiredMonthlyUsd! * conversionFactor,
+      );
       return '$base · ${l.pfGoalNeedPerMonth(need)}';
     }
 

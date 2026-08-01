@@ -18,8 +18,10 @@ const _storageKey = 'patrimonio:plaid_oauth';
 /// what lets [pendingPlaidOAuth] resume the SAME session if an OAuth bank
 /// navigates the tab away and back.
 void openPlaidLink(String linkToken, {String mode = 'link'}) {
-  web.window.localStorage
-      .setItem(_storageKey, jsonEncode({'token': linkToken, 'mode': mode}));
+  web.window.localStorage.setItem(
+    _storageKey,
+    jsonEncode({'token': linkToken, 'mode': mode}),
+  );
   PlaidLink.create(configuration: LinkTokenConfiguration(token: linkToken));
   PlaidLink.open();
 }

@@ -71,8 +71,7 @@ String formatCurrencyAmount(double amount, String currency) {
 String compactMoney(num value, String currency) {
   final sign = value < 0 ? '-' : '';
   final magnitude = NumberFormat.compact().format(value.abs());
-  return '$sign${currencySymbol(currency)}$magnitude'
-      .replaceAll(' ', '\u00A0');
+  return '$sign${currencySymbol(currency)}$magnitude'.replaceAll(' ', '\u00A0');
 }
 
 /// Per-(locale, currency, range, font) memo for [compactMoneyAxisWidth] so
@@ -114,8 +113,10 @@ double compactMoneyAxisWidth(
 
   double widest = 0;
   for (final value in _axisWidthCandidates(minValue, maxValue)) {
-    widest =
-        math.max(widest, _tickTextWidth(compactMoney(value, currency), fontSize));
+    widest = math.max(
+      widest,
+      _tickTextWidth(compactMoney(value, currency), fontSize),
+    );
   }
   return _axisWidthCache[key] = (widest + _axisTickPadding).ceilToDouble();
 }
@@ -253,6 +254,8 @@ String formatCurrencyWithCode(double amount, String currency) {
 /// [MoneyDisplayFormat.displayMoney]).
 String displayCurrencyWithCode(double amount, String currency) {
   final code = currency.toUpperCase();
-  return NumberFormat.currency(name: code, symbol: '$code ')
-      .displayMoney(amount);
+  return NumberFormat.currency(
+    name: code,
+    symbol: '$code ',
+  ).displayMoney(amount);
 }

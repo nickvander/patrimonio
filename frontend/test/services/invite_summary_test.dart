@@ -7,11 +7,11 @@ import 'package:patrimonio/services/auth_service.dart';
 /// parser must default to 'owner' (the historical contract).
 void main() {
   Map<String, dynamic> base() => {
-        'id': 'abc',
-        'created_at': '2026-05-30T00:00:00Z',
-        'expires_at': '2026-06-30T00:00:00Z',
-        'used': false,
-      };
+    'id': 'abc',
+    'created_at': '2026-05-30T00:00:00Z',
+    'expires_at': '2026-06-30T00:00:00Z',
+    'used': false,
+  };
 
   group('InviteSummary.role', () {
     test('parses an explicit read_only role', () {

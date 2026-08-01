@@ -44,13 +44,14 @@ List<BudgetSuggestion> suggestBudgetsFromInsights({
     if (raw is! Map) continue;
     final avg = (raw['trailing_avg'] as num?)?.toDouble() ?? 0.0;
     if (avg <= 0) continue;
-    final code = (raw['user_category'] ??
-            raw['category_detailed'] ??
-            raw['category'] ??
-            '')
-        .toString()
-        .trim()
-        .toUpperCase();
+    final code =
+        (raw['user_category'] ??
+                raw['category_detailed'] ??
+                raw['category'] ??
+                '')
+            .toString()
+            .trim()
+            .toUpperCase();
     if (skip.contains(code)) continue;
     final label = prettyCategory(
       userCategory: raw['user_category']?.toString(),

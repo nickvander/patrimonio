@@ -10,7 +10,7 @@
 /// are skipped rather than treated as 0 — an unknown must not masquerade
 /// as a flat performer. Exact zeros land in neither list.
 ({List<Map<String, dynamic>> gainers, List<Map<String, dynamic>> losers})
-    topDollarMovers(
+topDollarMovers(
   List<dynamic> holdings, {
   required String field,
   int count = 3,
