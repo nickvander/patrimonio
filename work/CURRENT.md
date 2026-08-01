@@ -67,12 +67,34 @@ Overview banner and two bell rows.
   unchanged; it still backs the security screen's session flag and is the
   fallback anchor for a user with no recorded visit.
 
+### Chart range selector fills its row on phones (`4f29a8b`)
+
+Spotted from the phone: under the net-worth chart the 1M / YTD / 1Y / 5Y / ALL
+control shrink-wrapped its labels — a stub covering ~60% of the card with dead
+space beside it, five segments of five widths ("YTD" is wider than "1M").
+`DateRangeSelector` gains an opt-in `fill` that divides the width evenly and
+lets the selected pill fill its cell; the phone call site uses it and drops its
+horizontal scroll wrapper (`Expanded` needs a bounded width, and 2-4 character
+labels never needed to scroll). Opt-in, not automatic: content-sized stays
+right where the selector shares a line with a card title or the Performance
+card's benchmark picker — the `c20620b` / `theme/buttons.dart` rule, touch-width
+full-bleed vs pointer-width label-sized. Verified headless at 390px and 1440px;
+4 widget tests, whose harness constrains width LOOSELY (what the card's Column
+actually hands the selector, and the reason the old version shrink-wrapped).
+
+**Noticed, not fixed** — same card, worth a follow-up: the x-axis emits
+duplicate labels when history is sparse ("Jul 2026" seven times across a 1Y
+range on the dev account), and the rightmost label clips at the card edge on
+phones ("Aug 1" in the report screenshot).
+
 Gates: clippy clean, full backend suite green (277 lib + 138 dashboard + all
 other suites, 0 failures) including 8 new regression tests — retire-on-import,
 re-dating, retire-on-mute, don't-touch-unattributable, settled installment,
 rescheduled installment, visit-not-login anchor, anchor-holds-within-a-visit.
-`flutter analyze` at the 18-info baseline, `flutter test` 771 passing (no
-frontend change was needed for either fix).
+`flutter analyze` at the 18-info baseline, `flutter test` 775 passing (771 +
+the 4 range-selector tests; neither notification fix needed a frontend
+change). All three commits pushed and deployed to thelab; APK cut at
+`4f29a8b`.
 
 ## 2026-07-27 — Sync reaper + year-panic fix (audit item 7 + one tail finding)
 
