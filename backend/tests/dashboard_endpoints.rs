@@ -2105,6 +2105,54 @@ async fn reloading_within_a_visit_does_not_move_the_anchor() {
     );
 }
 
+#[tokio::test]
+#[serial_test::serial]
+async fn since_last_login_largest_move_carries_account_id() {
+    // Additive-field regression (P1-2): largest_move now names the moved
+    // account by id (uuid as text) so the client can scope its drill-down
+    // to the account. account_name / delta_usd must be unchanged.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+
+    // Anchor 24h ago, snapshots straddling it: $1,000.00 two days back,
+    // $3,612.87 now → a +$2,612.87 move on this depository account.
+    sqlx::query("UPDATE users SET previous_login_at = NOW() - INTERVAL '24 hours' WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO balance_snapshots \
+             (account_id, balance, balance_usd, as_of_date, currency, user_id, created_at) \
+         VALUES ($1, 1000.00, 1000.00, CURRENT_DATE - 2, 'USD', $2, NOW() - INTERVAL '48 hours'), \
+                ($1, 3612.87, 3612.87, CURRENT_DATE, 'USD', $2, NOW())",
+    )
+    .bind(account)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .expect("seed straddling snapshots");
+
+    let body = since_last_login_body(&app, &token).await;
+    let mv = &body["largest_move"];
+    assert!(mv.is_object(), "largest_move present: {body}");
+    assert_eq!(
+        mv["account_id"],
+        account.to_string(),
+        "the additive account_id is the seeded account's uuid: {mv}"
+    );
+    // The pre-existing fields are untouched by the addition.
+    assert_eq!(mv["account_name"], "Checking", "{mv}");
+    let delta = mv["delta_usd"].as_f64().expect("delta_usd is a number");
+    assert!(
+        (delta - 2612.87).abs() < 0.01,
+        "delta_usd unchanged by the additive field: {delta}"
+    );
+}
+
 // =====================================================================
 // /api/dashboard/subscriptions/ignore + /ignored
 // =====================================================================

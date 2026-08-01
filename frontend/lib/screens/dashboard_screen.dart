@@ -35,6 +35,7 @@ import '../utils/month_window.dart';
 import '../utils/net_worth_delta.dart';
 import '../utils/percent_format.dart';
 import '../utils/setup_check_l10n.dart';
+import '../utils/spending_insight.dart';
 import '../utils/supported_banks.dart';
 import '../utils/sync_progress.dart';
 import '../utils/theme_colors.dart';
@@ -70,6 +71,7 @@ import '../widgets/recurring_card.dart';
 import '../widgets/since_last_login_banner.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/spending_by_category_card.dart';
+import '../widgets/spending_insight_sheet.dart';
 import '../widgets/subscriptions_card.dart';
 import '../widgets/sync_error_banner.dart';
 import '../widgets/sync_status_card.dart';
@@ -276,6 +278,16 @@ class _DashboardScreenState extends State<DashboardScreen>
   // _txDateSeed; the two travel together so the spike drill-down lands on
   // "that category, that month" in a single filter application.
   String? _txCategorySeed;
+  // Pending account seed from the bell's largest-move tap. One-shot,
+  // mirrors _txCategorySeed; travels with _txDateSeed so the drill-down
+  // lands on "that account, that window" in one filter application.
+  String? _txAccountSeed;
+  // Spike-comparison banner payload for the Transactions tab. DISPLAY
+  // state, not a one-shot seed: cleared only on user dismiss or when a
+  // newer spike drill-down replaces it. Visibility is gated inside the
+  // tab by the seeded category filter still being active, so leaving it
+  // set after the user clears filters is inert.
+  SpendingSpikeInsight? _txSpikeBanner;
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
   // Active section: an index into [_destinations]. Replaces the old
@@ -2790,14 +2802,59 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// jump to the Transactions tab. Shared by the since-last-visit banner
   /// and the bell's digest rows, so both drill into exactly the rows
   /// they're talking about.
-  void _jumpToTransactionsSince(DateTime anchor) {
-    setState(
-      () => _txDateSeed = (
+  ///
+  /// [accountId] additionally scopes the jump to one account (the bell's
+  /// largest-move row, whose payload names the account that moved). The
+  /// optional positional keeps ONE method tear-off-compatible with both
+  /// callback shapes — `void Function(DateTime)` (banner + digest rows)
+  /// and `void Function(DateTime, String)` (the account-scoped row) — so
+  /// no adapter lambdas at the three call sites.
+  void _jumpToTransactionsSince(DateTime anchor, [String? accountId]) {
+    setState(() {
+      _txDateSeed = (
         start: DateTime(anchor.year, anchor.month, anchor.day),
         end: DateTime.now(),
-      ),
-    );
+      );
+      if (accountId != null && accountId.isNotEmpty) {
+        _txAccountSeed = accountId;
+      }
+    });
     _goToNav(NavId.transactions);
+  }
+
+  /// Bell spending-spike tap → the insight detail sheet (context first;
+  /// the P0 category+month drill-down moved behind the sheet's "See all
+  /// transactions" CTA). Post-frame because the desktop bell is a
+  /// PopupMenuButton whose item onTap fires DURING the menu's dismissal
+  /// route pop — opening the sheet synchronously would race it (the
+  /// mobile bell sheet already pops itself before invoking row onTap).
+  void _openSpendingSpikeSheet(SpendingSpikeInsight insight) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
+      final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
+      showSpendingInsightSheet(
+        context,
+        insight: insight,
+        transactions: _transactions ?? const [],
+        currencyFormat: moneyFormat(_targetCurrency),
+        conversionFactor: conversionFactor,
+        targetCurrency: _targetCurrency,
+        usdMxnRate: fxRate,
+        apiService: _apiService,
+        onSeeTransactions: () {
+          // The P0 seeding verbatim — a malformed/missing recent_month
+          // degrades to a category-only filter via monthWindow's null —
+          // plus the comparison-banner payload for the landing tab.
+          setState(() {
+            _txCategorySeed = insight.categoryLabel;
+            _txDateSeed = monthWindow(insight.recentMonth);
+            _txSpikeBanner = insight;
+          });
+          _goToNav(NavId.transactions);
+        },
+      );
+    });
   }
 
   /// Ids of server inbox rows already marked read (`read_at` set). They
@@ -4389,17 +4446,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                 accountAlerts: _accountAlerts,
                 spendingInsights: _spendingInsights,
                 subscriptions: _subscriptions ?? const [],
-                // Spike rows drill into the actual transactions: category
-                // filter (prettified label) + the insight's month window.
-                // A malformed/missing recent_month degrades to a
-                // category-only filter — never a bare tab switch.
-                onJumpToSpendingCategory: (label, month) {
-                  setState(() {
-                    _txCategorySeed = label;
-                    _txDateSeed = monthWindow(month);
-                  });
-                  _goToNav(NavId.transactions);
-                },
+                // Spike rows open the insight detail sheet (context
+                // first); its "See all transactions" CTA performs the
+                // category+month drill-down.
+                onSpendingSpikeTap: _openSpendingSpikeSheet,
+                // Largest-move rows carrying account_id scope the jump to
+                // the moved account; the optional-positional tear-off
+                // also serves the date-only sites below.
+                onJumpToAccountTransactions: _jumpToTransactionsSince,
                 // Price-hike rows reuse the SubscriptionsCard merchant
                 // jump: search seeded so the charge history is adjacent.
                 onJumpToMerchant: (m) {
@@ -5679,6 +5733,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         onDateSeedConsumed: () => setState(() => _txDateSeed = null),
         categorySeed: _txCategorySeed,
         onCategorySeedConsumed: () => setState(() => _txCategorySeed = null),
+        accountIdSeed: _txAccountSeed,
+        onAccountSeedConsumed: () => setState(() => _txAccountSeed = null),
+        spikeBanner: _txSpikeBanner,
+        onSpikeBannerDismissed: () => setState(() => _txSpikeBanner = null),
         fxTransfers: _fxTransfers ?? const [],
         onConfirmFxTransfer: (id) async {
           try {

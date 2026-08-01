@@ -68,6 +68,7 @@ Widget _boundedHost(Widget tab) => _localizedApp(
 
 TransactionsTab _tab(
   List<dynamic> txs, {
+  List<dynamic> accounts = const [],
   List<_Update>? updates,
   List<dynamic> fxTransfers = const [],
   bool hasMore = false,
@@ -80,9 +81,12 @@ TransactionsTab _tab(
   VoidCallback? onDateSeedConsumed,
   String? categorySeed,
   VoidCallback? onCategorySeedConsumed,
+  String? accountIdSeed,
+  VoidCallback? onAccountSeedConsumed,
 }) {
   return TransactionsTab(
     transactions: txs,
+    accounts: accounts,
     conversionFactor: 1.0,
     currencyFormat: currencyFormat ?? NumberFormat.currency(symbol: r'$'),
     targetCurrency: targetCurrency,
@@ -95,6 +99,8 @@ TransactionsTab _tab(
     onDateSeedConsumed: onDateSeedConsumed,
     categorySeed: categorySeed,
     onCategorySeedConsumed: onCategorySeedConsumed,
+    accountIdSeed: accountIdSeed,
+    onAccountSeedConsumed: onAccountSeedConsumed,
     onUpdate: updates == null
         ? null
         : (
@@ -914,6 +920,121 @@ void main() {
         expect(find.widgetWithText(InputChip, 'Jul 1–Jul 31'), findsOneWidget);
         expect(find.widgetWithText(InputChip, 'Gas & electric'), findsNothing);
         expect((dateConsumed, catConsumed), (1, 0));
+      },
+    );
+  });
+
+  group('Bell largest-move drill-down — one-shot accountIdSeed', () {
+    // Two accounts; the seed pins "Cards". Fixed dates, mirroring the
+    // category-seed fixture above.
+    List<Map<String, dynamic>> fixture() => [
+      {
+        'id': 'cards-1',
+        'date': '2026-07-15',
+        'amount': -25.0,
+        'currency': 'USD',
+        'description': 'TX cards-1',
+        'user_description': 'Row cards-1',
+        'category': 'GENERAL_MERCHANDISE',
+        'account_id': 'acc-cards',
+        'account_name': 'Cards',
+      },
+      {
+        'id': 'chk-1',
+        'date': '2026-07-14',
+        'amount': -30.0,
+        'currency': 'USD',
+        'description': 'TX chk-1',
+        'user_description': 'Row chk-1',
+        'category': 'GENERAL_MERCHANDISE',
+        'account_id': 'acc-chk',
+        'account_name': 'Checking',
+      },
+    ];
+
+    const accounts = [
+      {'id': 'acc-cards', 'name': 'Cards'},
+      {'id': 'acc-chk', 'name': 'Checking'},
+    ];
+
+    testWidgets(
+      'the seed filters to the account, renders a dismissible chip, and '
+      'fires the consumed callback exactly once',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        var consumed = 0;
+        await tester.pumpWidget(
+          _unboundedHost(
+            _tab(
+              fixture(),
+              accounts: accounts,
+              accountIdSeed: 'acc-cards',
+              onAccountSeedConsumed: () => consumed++,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Row cards-1'), findsOneWidget);
+        expect(find.text('Row chk-1'), findsNothing);
+        // The chip shows the account NAME (resolved via the accounts
+        // list), not the raw id.
+        expect(find.widgetWithText(InputChip, 'Cards'), findsOneWidget);
+        expect(consumed, 1);
+      },
+    );
+
+    testWidgets('removing the chip restores the hidden rows', (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      await tester.pumpWidget(
+        _unboundedHost(
+          _tab(fixture(), accounts: accounts, accountIdSeed: 'acc-cards'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Row chk-1'), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(InputChip, 'Cards'),
+          matching: find.byIcon(Icons.clear),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Row chk-1'), findsOneWidget);
+      expect(find.text('Row cards-1'), findsOneWidget);
+    });
+
+    testWidgets(
+      'one-shot regression: a rebuild with the SAME seed does not re-apply '
+      'after the user cleared the filter',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        var consumed = 0;
+        Widget host() => _unboundedHost(
+          _tab(
+            fixture(),
+            accounts: accounts,
+            accountIdSeed: 'acc-cards',
+            onAccountSeedConsumed: () => consumed++,
+          ),
+        );
+        await tester.pumpWidget(host());
+        await tester.pumpAndSettle();
+        expect(find.text('Row chk-1'), findsNothing);
+
+        // The user clears everything…
+        await tester.tap(find.text('Clear all'));
+        await tester.pumpAndSettle();
+        expect(find.text('Row chk-1'), findsOneWidget);
+
+        // …then a dashboard rebuild hands the tab the SAME seed value.
+        // It must NOT re-apply over the user's edit.
+        await tester.pumpWidget(host());
+        await tester.pumpAndSettle();
+        expect(find.text('Row chk-1'), findsOneWidget);
+        expect(find.byType(InputChip), findsNothing);
+        expect(consumed, 1);
       },
     );
   });

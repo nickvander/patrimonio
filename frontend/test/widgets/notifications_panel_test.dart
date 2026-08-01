@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/utils/app_locale.dart';
+import 'package:patrimonio/utils/spending_insight.dart';
 import 'package:patrimonio/widgets/notifications_panel.dart';
 
 void main() {
@@ -12,8 +13,7 @@ void main() {
     AppLocalizations? loc,
     Map<String, dynamic>? spendingInsights,
     List<dynamic> subscriptions = const [],
-    void Function(String categoryLabel, String recentMonth)?
-    onJumpToSpendingCategory,
+    void Function(SpendingSpikeInsight insight)? onSpendingSpikeTap,
     void Function(String merchant)? onJumpToMerchant,
   }) {
     return deriveNotifications(
@@ -23,7 +23,7 @@ void main() {
       onJumpToManagement: () {},
       spendingInsights: spendingInsights,
       subscriptions: subscriptions,
-      onJumpToSpendingCategory: onJumpToSpendingCategory,
+      onSpendingSpikeTap: onSpendingSpikeTap,
       onJumpToMerchant: onJumpToMerchant,
     );
   }
@@ -98,47 +98,52 @@ void main() {
       expect(out, hasLength(3));
     });
 
-    // The drill-down contract: the tap must deliver the PRETTIFIED label
-    // (the string TxFilters.categories matches against) plus the payload's
-    // recent_month — never the uppercased raw code from the row id, which
-    // would silently filter to zero rows.
-    test(
-      'tapping a spike row delivers the prettified label + recent_month',
-      () {
-        (String, String)? received;
-        final out = derive(
-          spendingInsights: {
-            'recent_month': '2026-07',
-            'lookback': 3,
-            'categories': [
-              {
-                'category_detailed': 'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY',
-                'category': 'RENT_AND_UTILITIES',
-                'recent': 330.0,
-                'previous_avg': 100.0,
-                'trailing_avg': 150.0,
-              },
-            ],
-          },
-          onJumpToSpendingCategory: (label, month) => received = (label, month),
-        );
-        expect(out.single.title, contains('Gas & electric'));
-        out.single.onTap!();
-        expect(received, ('Gas & electric', '2026-07'));
-        expect(
-          received!.$1,
-          isNot('RENT_AND_UTILITIES_GAS_AND_ELECTRICITY'),
-          reason: 'the raw code would match nothing in the category filter',
-        );
-      },
-    );
+    // The drill-down contract: the tap must deliver a SpendingSpikeInsight
+    // whose label is the PRETTIFIED one (the string TxFilters.categories
+    // matches against) — never the uppercased raw code from the row id,
+    // which would silently filter to zero rows — carrying every payload
+    // figure the sheet and the comparison banner render.
+    test('tapping a spike row delivers the full SpendingSpikeInsight', () {
+      SpendingSpikeInsight? received;
+      final out = derive(
+        spendingInsights: {
+          'recent_month': '2026-07',
+          'lookback': 3,
+          'categories': [
+            {
+              'category_detailed': 'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY',
+              'category': 'RENT_AND_UTILITIES',
+              'recent': 330.0,
+              'previous_avg': 100.0,
+              'trailing_avg': 150.0,
+            },
+          ],
+        },
+        onSpendingSpikeTap: (insight) => received = insight,
+      );
+      expect(out.single.title, contains('Gas & electric'));
+      out.single.onTap!();
+      expect(received, isNotNull);
+      expect(received!.categoryLabel, 'Gas & electric');
+      expect(
+        received!.categoryLabel,
+        isNot('RENT_AND_UTILITIES_GAS_AND_ELECTRICITY'),
+        reason: 'the raw code would match nothing in the category filter',
+      );
+      expect(received!.recentMonth, '2026-07');
+      expect(received!.recentUsd, 330.0);
+      expect(received!.previousAvgUsd, 100.0);
+      expect(received!.trailingAvgUsd, 150.0);
+      expect(received!.lookbackMonths, 3);
+      expect(received!.pctIncrease, closeTo(230.0, 0.001));
+    });
 
     test('es-MX: the delivered label is the Spanish one the row displayed', () {
       // prettyCategory reads the global locale notifier — pin es and
       // restore so sibling tests keep their English labels.
       localeNotifier.value = const Locale('es');
       addTearDown(() => localeNotifier.value = null);
-      (String, String)? received;
+      SpendingSpikeInsight? received;
       final es = lookupAppLocalizations(const Locale('es'));
       final out = derive(
         loc: es,
@@ -155,17 +160,18 @@ void main() {
             },
           ],
         },
-        onJumpToSpendingCategory: (label, month) => received = (label, month),
+        onSpendingSpikeTap: (insight) => received = insight,
       );
       expect(out.single.title, contains('Gas y electricidad'));
       out.single.onTap!();
-      expect(received, ('Gas y electricidad', '2026-07'));
+      expect(received!.categoryLabel, 'Gas y electricidad');
+      expect(received!.recentMonth, '2026-07');
     });
 
     test(
       'a payload without recent_month degrades to an empty month string',
       () {
-        (String, String)? received;
+        SpendingSpikeInsight? received;
         final out = derive(
           spendingInsights: {
             'lookback': 3,
@@ -179,10 +185,11 @@ void main() {
               },
             ],
           },
-          onJumpToSpendingCategory: (label, month) => received = (label, month),
+          onSpendingSpikeTap: (insight) => received = insight,
         );
         out.single.onTap!();
-        expect(received, ('Groceries', ''));
+        expect(received!.categoryLabel, 'Groceries');
+        expect(received!.recentMonth, '');
       },
     );
   });
@@ -416,6 +423,109 @@ void main() {
       final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
       expect(mover.title, contains('1,234.50'));
       expect(mover.title, isNot(contains('MXN')));
+    });
+
+    // The P1 account-scoped drill-down: a payload carrying account_id
+    // (additive backend field) routes the largest-move tap through
+    // onJumpToAccountTransactions with both the anchor and the id.
+    test('largest move with account_id invokes the account-scoped jump', () {
+      (DateTime, String)? scoped;
+      DateTime? dateOnly;
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [],
+        onJumpToManagement: () {},
+        sinceLastLogin: {
+          'previous_login_at': '2026-07-20T10:00:00Z',
+          'new_transactions': 0,
+          'largest_move': {
+            'account_name': 'Cards',
+            'delta_usd': 2612.87,
+            'account_id': 'acc-uuid-1',
+          },
+          'sync_errors': <String>[],
+        },
+        onJumpToTransactions: (a) => dateOnly = a,
+        onJumpToAccountTransactions: (a, id) => scoped = (a, id),
+      );
+      out.firstWhere((n) => n.id.startsWith('since_move:')).onTap!();
+      expect(scoped, (DateTime.parse('2026-07-20T10:00:00Z'), 'acc-uuid-1'));
+      expect(dateOnly, isNull, reason: 'the scoped jump supersedes date-only');
+    });
+
+    test('largest move without account_id (older server) falls back to the '
+        'date-only jump', () {
+      (DateTime, String)? scoped;
+      DateTime? dateOnly;
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [],
+        onJumpToManagement: () {},
+        sinceLastLogin: digest,
+        onJumpToTransactions: (a) => dateOnly = a,
+        onJumpToAccountTransactions: (a, id) => scoped = (a, id),
+      );
+      out.firstWhere((n) => n.id.startsWith('since_move:')).onTap!();
+      expect(dateOnly, DateTime.parse('2026-07-20T10:00:00Z'));
+      expect(scoped, isNull);
+    });
+  });
+
+  group('net-worth-since-sync drill-down (P1-3)', () {
+    // Latest snapshot Jul 25, prior Jul 24 → +1% move; the tap must
+    // anchor on the PRIOR date so the seeded window spans the move.
+    const history = [
+      {'date': '2026-07-24', 'net_worth': 100000.0},
+      {'date': '2026-07-25', 'net_worth': 101000.0},
+    ];
+
+    test('the row is tappable and passes the PRIOR snapshot date', () {
+      DateTime? received;
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: history,
+        onJumpToManagement: () {},
+        onJumpToTransactions: (a) => received = a,
+      );
+      final row = out.firstWhere(
+        (n) => n.id.startsWith('net_worth_since_sync:'),
+      );
+      expect(row.onTap, isNotNull);
+      row.onTap!();
+      expect(received, DateTime.parse('2026-07-24'));
+    });
+
+    test('an unparseable prior date leaves the row non-tappable', () {
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [
+          {'date': 'not-a-date', 'net_worth': 100000.0},
+          {'date': '2026-07-25', 'net_worth': 101000.0},
+        ],
+        onJumpToManagement: () {},
+        onJumpToTransactions: (_) => fail('must not fire'),
+      );
+      final row = out.firstWhere(
+        (n) => n.id.startsWith('net_worth_since_sync:'),
+      );
+      expect(row.onTap, isNull);
+    });
+
+    test('without the callback the row stays non-tappable', () {
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: history,
+        onJumpToManagement: () {},
+      );
+      final row = out.firstWhere(
+        (n) => n.id.startsWith('net_worth_since_sync:'),
+      );
+      expect(row.onTap, isNull);
     });
   });
 

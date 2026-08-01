@@ -95,6 +95,29 @@
   "txAmountMax": "Max",
   "txAmountFilterHelp": "Matches the amount regardless of sign or currency.",
   "txClearAll": "Clear all",
+  "txSpikeBanner": "{category} in {monthLabel}: {recent} spent — {percent} above your {months}-month average of {average}",
+  "@txSpikeBanner": {
+    "placeholders": {
+      "average": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      },
+      "monthLabel": {
+        "type": "String"
+      },
+      "months": {
+        "type": "int"
+      },
+      "percent": {
+        "type": "String"
+      },
+      "recent": {
+        "type": "String"
+      }
+    }
+  },
   "txEmptyTitle": "No transactions yet",
   "txEmptyBody": "Link a bank, import a statement, or add an account manually\nto start seeing activity here.",
   "txAddAccount": "Add an account",
@@ -634,6 +657,99 @@
     }
   },
   "cfBudgetsShowFewer": "Show fewer",
+  "cfInsightRecentLabel": "Spent in {monthLabel}",
+  "@cfInsightRecentLabel": {
+    "placeholders": {
+      "monthLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "cfInsightAvgLabel": "{months}-month average",
+  "@cfInsightAvgLabel": {
+    "placeholders": {
+      "months": {
+        "type": "int"
+      }
+    }
+  },
+  "cfInsightDelta": "{amount} above average ({percent})",
+  "@cfInsightDelta": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "cfInsightTrendTitle": "Last {months} months",
+  "@cfInsightTrendTitle": {
+    "placeholders": {
+      "months": {
+        "type": "int"
+      }
+    }
+  },
+  "cfInsightTrendSemantics": "Monthly spending for {category} over the last {months} months",
+  "@cfInsightTrendSemantics": {
+    "placeholders": {
+      "category": {
+        "type": "String"
+      },
+      "months": {
+        "type": "int"
+      }
+    }
+  },
+  "cfInsightTopMerchantsTitle": "Top merchants in {monthLabel}",
+  "@cfInsightTopMerchantsTitle": {
+    "placeholders": {
+      "monthLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "cfInsightMerchantTxCount": "{count, plural, =1{1 transaction} other{{count} transactions}}",
+  "@cfInsightMerchantTxCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cfInsightNoMerchantData": "No loaded transactions for this month yet",
+  "cfInsightSeeTransactions": "See all transactions",
+  "cfInsightSetBudget": "Set budget",
+  "cfInsightUpdateBudget": "Update budget",
+  "cfInsightBudgetDialogTitle": "Monthly budget for {category}",
+  "@cfInsightBudgetDialogTitle": {
+    "placeholders": {
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "cfInsightBudgetDialogHint": "Suggested from your {months}-month average",
+  "@cfInsightBudgetDialogHint": {
+    "placeholders": {
+      "months": {
+        "type": "int"
+      }
+    }
+  },
+  "cfInsightBudgetSaved": "Budget saved: {amount} for {category}",
+  "@cfInsightBudgetSaved": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "category": {
+        "type": "String"
+      }
+    }
+  },
   "cfTransfersTitle": "Cross-currency transfers",
   "cfTransfersSubtitle": "Linked Wise / Remitly / wire pairs. Implied rate is the effective FX the service used; spot is the market rate on the source date.",
   "cfTransfersSpot": "spot {rate}",

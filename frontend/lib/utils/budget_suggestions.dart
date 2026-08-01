@@ -15,6 +15,14 @@ class BudgetSuggestion {
   const BudgetSuggestion(this.label, this.amount, this.monthlyAvg);
 }
 
+/// The house budget rounding rule: a USD amount rounded UP to the next
+/// \$10 (420 stays 420, 415.01 → 420) so a seeded budget reads cleanly and
+/// leaves a little headroom over the average. Shared by
+/// [suggestBudgetsFromInsights] and the insight sheet's "Set budget"
+/// prefill so the two can never suggest different numbers for the same
+/// average.
+double roundBudgetUpToTen(double usd) => (usd / 10.0).ceil() * 10.0;
+
 /// Build budget suggestions from a `/dashboard/spending-insights` `categories`
 /// list. Pure (no I/O) so it's unit-testable independent of the widget and the
 /// ApiService.
@@ -63,7 +71,7 @@ List<BudgetSuggestion> suggestBudgetsFromInsights({
   final out = <BudgetSuggestion>[];
   byLabel.forEach((label, avg) {
     if (existing.containsKey(label) || avg < 10.0) return;
-    out.add(BudgetSuggestion(label, (avg / 10.0).ceil() * 10.0, avg));
+    out.add(BudgetSuggestion(label, roundBudgetUpToTen(avg), avg));
   });
   out.sort((a, b) => b.monthlyAvg.compareTo(a.monthlyAvg));
   return out;

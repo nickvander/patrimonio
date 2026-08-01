@@ -14,6 +14,9 @@ import '../utils/category_style.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/merchant_total.dart';
+import '../utils/month_window.dart';
+import '../utils/percent_format.dart';
+import '../utils/spending_insight.dart';
 import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
 import '../utils/url_opener.dart';
@@ -252,6 +255,30 @@ class TransactionsTab extends StatefulWidget {
   /// month tap) must not half-clear category state, and vice versa.
   final VoidCallback? onCategorySeedConsumed;
 
+  /// Account drill-down seed (the bell's largest-move tap). An account id
+  /// dropped into the account filter with the same one-shot semantics as
+  /// [dateSeed]/[categorySeed]: applied once, then user edits stick. The
+  /// seeded account surfaces as a removable chip like any other filter.
+  final String? accountIdSeed;
+
+  /// Fires after the widget has consumed [accountIdSeed]. Separate from
+  /// the other consumed callbacks for the same reason they are separate
+  /// from each other: a partial-seed caller must not half-clear state.
+  final VoidCallback? onAccountSeedConsumed;
+
+  /// Spike-comparison banner payload (the insight the user drilled down
+  /// from). DISPLAY state, not a one-shot seed: the dashboard owns and
+  /// clears it (via [onSpikeBannerDismissed] or replacement by a newer
+  /// spike). The banner renders only while the seeded category filter is
+  /// still active, so removing the category chip / Clear all hides it
+  /// with zero extra state.
+  final SpendingSpikeInsight? spikeBanner;
+
+  /// The banner's × was tapped — the dashboard clears its copy. Filters
+  /// are deliberately untouched: dismissing the context line must not
+  /// also unfilter the list out from under the user.
+  final VoidCallback? onSpikeBannerDismissed;
+
   /// Detected cross-currency cash transfers — indexed by source/dest
   /// transaction id in the detail modal to show "Linked to <leg>".
   /// Defaults to empty so older call sites compile without changes.
@@ -347,6 +374,10 @@ class TransactionsTab extends StatefulWidget {
     this.onDateSeedConsumed,
     this.categorySeed,
     this.onCategorySeedConsumed,
+    this.accountIdSeed,
+    this.onAccountSeedConsumed,
+    this.spikeBanner,
+    this.onSpikeBannerDismissed,
     this.fxTransfers = const [],
     this.onDetectFxTransfers,
     this.onConfirmFxTransfer,
@@ -488,6 +519,7 @@ class TransactionsTabState extends State<TransactionsTab> {
     _maybeApplySeeds(
       dateSeed: widget.dateSeed,
       categorySeed: widget.categorySeed,
+      accountIdSeed: widget.accountIdSeed,
     );
   }
 
@@ -510,24 +542,32 @@ class TransactionsTabState extends State<TransactionsTab> {
     final categoryChanged =
         widget.categorySeed != null &&
         widget.categorySeed != oldWidget.categorySeed;
-    if (dateChanged || categoryChanged) {
+    final accountChanged =
+        widget.accountIdSeed != null &&
+        widget.accountIdSeed != oldWidget.accountIdSeed;
+    if (dateChanged || categoryChanged || accountChanged) {
       _maybeApplySeeds(
         dateSeed: dateChanged ? widget.dateSeed : null,
         categorySeed: categoryChanged ? widget.categorySeed : null,
+        accountIdSeed: accountChanged ? widget.accountIdSeed : null,
       );
     }
   }
 
-  /// Drop drill-down seeds (a chart-tap date window and/or a bell-tap
-  /// category label) into the active filters, both in ONE setState so a
-  /// dependent fetch can never observe half-applied filters. Pushes the
-  /// per-seed consumed callbacks so the dashboard clears its copies and
-  /// manual filter edits aren't overwritten on the next rebuild.
+  /// Drop drill-down seeds (a chart-tap date window, a bell-tap category
+  /// label and/or a largest-move account id) into the active filters, all
+  /// in ONE setState so a dependent fetch can never observe half-applied
+  /// filters. Pushes the per-seed consumed callbacks so the dashboard
+  /// clears its copies and manual filter edits aren't overwritten on the
+  /// next rebuild.
   void _maybeApplySeeds({
     ({DateTime start, DateTime end})? dateSeed,
     String? categorySeed,
+    String? accountIdSeed,
   }) {
-    if (dateSeed == null && categorySeed == null) return;
+    if (dateSeed == null && categorySeed == null && accountIdSeed == null) {
+      return;
+    }
     // Schedule for after the current build so initState callers don't
     // setState during the build pass.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -543,9 +583,13 @@ class TransactionsTabState extends State<TransactionsTab> {
         if (categorySeed != null) {
           _filters = _filters.copyWith(categories: {categorySeed});
         }
+        if (accountIdSeed != null) {
+          _filters = _filters.copyWith(accountIds: {accountIdSeed});
+        }
       });
       if (dateSeed != null) widget.onDateSeedConsumed?.call();
       if (categorySeed != null) widget.onCategorySeedConsumed?.call();
+      if (accountIdSeed != null) widget.onAccountSeedConsumed?.call();
     });
   }
 
@@ -1046,6 +1090,74 @@ class TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
+  /// One-line spike-comparison banner ("Groceries in Mar 2026: $612.00
+  /// spent — 45% above your 6-month average of $420.00") shown right
+  /// under the filter-chip strip after a bell/sheet drill-down.
+  ///
+  /// Visibility IS the "while the category seed is active" rule: it
+  /// renders only while the insight's category is still in the active
+  /// category filter (and its month parses), so removing the category
+  /// chip, Clear all, or _clearFiltersAndSearch hides it automatically —
+  /// no extra state to reconcile. The × reports up via
+  /// [TransactionsTab.onSpikeBannerDismissed] without touching filters.
+  Widget _spikeBannerLine(bool isNarrow) {
+    final insight = widget.spikeBanner;
+    if (insight == null) return const SizedBox.shrink();
+    if (!_filters.categories.contains(insight.categoryLabel)) {
+      return const SizedBox.shrink();
+    }
+    final window = monthWindow(insight.recentMonth);
+    if (window == null) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
+    final monthLabel = DateFormat.yMMM(
+      Localizations.localeOf(context).toString(),
+    ).format(window.start);
+    // The insight's figures are USD-stored (same payload the bell rows
+    // format), so they scale through the injected conversion factor.
+    String money(double usd) =>
+        widget.currencyFormat.format(usd * widget.conversionFactor);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+        decoration: BoxDecoration(
+          color: context.tint(0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: context.hairline),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.trending_up, color: context.warning, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                // gen-l10n orders these alphabetically →
+                // (average, category, monthLabel, months, percent, recent).
+                l.txSpikeBanner(
+                  money(insight.previousAvgUsd),
+                  insight.categoryLabel,
+                  monthLabel,
+                  insight.lookbackMonths,
+                  formatPercent(context, insight.pctIncrease, digits: 0),
+                  money(insight.recentUsd),
+                ),
+                maxLines: isNarrow ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, color: context.textPrimary),
+              ),
+            ),
+            // Default IconButton constraints = the 48dp touch floor.
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              tooltip: l.txDismiss,
+              onPressed: widget.onSpikeBannerDismissed,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _filterChip(String label, VoidCallback onRemove) {
     return InputChip(
       label: Text(label),
@@ -1205,6 +1317,7 @@ class TransactionsTabState extends State<TransactionsTab> {
                     SizedBox(height: 40, child: _searchField()),
                   ],
                   _activeFilterChips(isNarrow),
+                  _spikeBannerLine(isNarrow),
                   const SizedBox(height: 8),
                   Text(
                     l.txShowingCount(

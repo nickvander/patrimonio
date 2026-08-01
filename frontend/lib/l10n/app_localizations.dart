@@ -524,6 +524,19 @@ abstract class AppLocalizations {
   /// **'Clear all'**
   String get txClearAll;
 
+  /// No description provided for @txSpikeBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'{category} in {monthLabel}: {recent} spent — {percent} above your {months}-month average of {average}'**
+  String txSpikeBanner(
+    String average,
+    String category,
+    String monthLabel,
+    int months,
+    String percent,
+    String recent,
+  );
+
   /// No description provided for @txEmptyTitle.
   ///
   /// In en, this message translates to:
@@ -3115,6 +3128,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show fewer'**
   String get cfBudgetsShowFewer;
+
+  /// No description provided for @cfInsightRecentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Spent in {monthLabel}'**
+  String cfInsightRecentLabel(String monthLabel);
+
+  /// No description provided for @cfInsightAvgLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{months}-month average'**
+  String cfInsightAvgLabel(int months);
+
+  /// No description provided for @cfInsightDelta.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} above average ({percent})'**
+  String cfInsightDelta(String amount, String percent);
+
+  /// No description provided for @cfInsightTrendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Last {months} months'**
+  String cfInsightTrendTitle(int months);
+
+  /// No description provided for @cfInsightTrendSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly spending for {category} over the last {months} months'**
+  String cfInsightTrendSemantics(String category, int months);
+
+  /// No description provided for @cfInsightTopMerchantsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Top merchants in {monthLabel}'**
+  String cfInsightTopMerchantsTitle(String monthLabel);
+
+  /// No description provided for @cfInsightMerchantTxCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 transaction} other{{count} transactions}}'**
+  String cfInsightMerchantTxCount(int count);
+
+  /// No description provided for @cfInsightNoMerchantData.
+  ///
+  /// In en, this message translates to:
+  /// **'No loaded transactions for this month yet'**
+  String get cfInsightNoMerchantData;
+
+  /// No description provided for @cfInsightSeeTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'See all transactions'**
+  String get cfInsightSeeTransactions;
+
+  /// No description provided for @cfInsightSetBudget.
+  ///
+  /// In en, this message translates to:
+  /// **'Set budget'**
+  String get cfInsightSetBudget;
+
+  /// No description provided for @cfInsightUpdateBudget.
+  ///
+  /// In en, this message translates to:
+  /// **'Update budget'**
+  String get cfInsightUpdateBudget;
+
+  /// No description provided for @cfInsightBudgetDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly budget for {category}'**
+  String cfInsightBudgetDialogTitle(String category);
+
+  /// No description provided for @cfInsightBudgetDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested from your {months}-month average'**
+  String cfInsightBudgetDialogHint(int months);
+
+  /// No description provided for @cfInsightBudgetSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Budget saved: {amount} for {category}'**
+  String cfInsightBudgetSaved(String amount, String category);
 
   /// No description provided for @cfTransfersTitle.
   ///

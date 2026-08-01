@@ -1,7 +1,38 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-01 (bell spike/hike rows drill down)
-> **Branch:** `main` (uncommitted working tree — pending review).
+> **Last updated:** 2026-08-01 (bell drill-down P0 + P1 shipped)
+> **Branch:** `main`.
+
+## 2026-08-01 — P1: insight sheet, comparison banner, account-scoped moves
+
+Follow-up to the P0 drill-down below, same subagent pipeline (PM design →
+dev → adversarial verify). Design call: tapping a spike row now opens an
+**insight sheet** (context-first, matching the app's detail-sheet idiom —
+dividend/instrument/fx sheets); the raw list stays one tap away.
+
+* **`spending_insight_sheet.dart`** (new) — M3 bottom sheet for a spike:
+  recent vs N-month average, 6-month per-category bar trend and top-5
+  merchants (both computed client-side from already-loaded transactions,
+  per-row FX→USD, sharing `isBudgetableSpend` with the budgets card so the
+  numbers agree), "See all transactions" (performs the P0 category+month
+  seeding) and "Set/Update budget" prefilled from the trailing average via
+  the budgets-card rounding rule.
+* **Comparison banner** on Transactions while the seeded category filter is
+  active: "Gas & electric in Jul: $190 spent — 230% above your 3-month
+  average of $57.70". Dismissible; clears with the filter.
+* **`utils/spending_insight.dart`** (new) — `SpendingSpikeInsight` model
+  threaded through the tap path + pure bucket/merchant helpers (unit-tested
+  incl. zero-fill contiguity and Dec rollover).
+* **Account-scoped largest-move row** — backend `BalanceMove` gains additive
+  `account_id`; the "+$2,612.87 on Cards" row now seeds
+  `TxFilters.accountIds` (third one-shot seed) + the date window; older
+  server payloads degrade to the date-only jump.
+* **Net-worth rows are tappable** — anchored on the prior snapshot date via
+  the existing `_jumpToTransactionsSince`.
+* 15 l10n keys in both arbs (es-MX reviewed); alphabetical-placeholder
+  call sites pinned by bilingual exact-string tests.
+* Tests: frontend 792→829, backend 242→243 (largest_move carries
+  account_id). All gates green (fmt/clippy/analyze/format/full suites).
 
 ## 2026-08-01 — Spending-spike and price-hike bell rows now drill down
 

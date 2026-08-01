@@ -6,6 +6,7 @@ import '../services/preferences.dart';
 import '../utils/budget_suggestions.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
+import '../utils/spending_insight.dart';
 import '../utils/theme_colors.dart';
 
 /// "How much have I spent this month per budgeted category?" card.
@@ -310,28 +311,16 @@ class _BudgetsCardState extends State<BudgetsCard> {
       if (d == null || d.isBefore(monthStart) || !d.isBefore(monthEnd)) {
         continue;
       }
+      // Shared exclusion predicate (utils/spending_insight.dart), mirroring
+      // the backend cash-flow exclusions (dashboard.rs): an internal
+      // transfer, an investment buy, or a credit-card payment is not
+      // spending, so it must not eat into a budget. The insight sheet's
+      // per-month trend calls the SAME predicate so the two surfaces can't
+      // disagree. (The rarer loan-leg / FX-pair anti-joins need server-side
+      // data; those would require driving this card off the
+      // /spending-by-category endpoint.)
+      if (!isBudgetableSpend(m)) continue;
       final amount = (m['amount'] as num?)?.toDouble() ?? 0.0;
-      if (amount >= 0) continue;
-      // Mirror the backend cash-flow exclusions (dashboard.rs): an internal
-      // transfer, an investment buy, or a credit-card payment is not spending,
-      // so it must not eat into a budget. Honor a user re-categorization the
-      // same way the backend now does (user_category overrides the raw one).
-      // (The rarer loan-leg / FX-pair anti-joins need server-side data; those
-      // would require driving this card off the /spending-by-category endpoint.)
-      final userCat = m['user_category']?.toString().trim() ?? '';
-      final effCat =
-          (userCat.isNotEmpty ? userCat : (m['category']?.toString() ?? ''))
-              .toUpperCase();
-      if (effCat == 'TRANSFER_IN' ||
-          effCat == 'TRANSFER_OUT' ||
-          effCat == 'TRANSFER' ||
-          effCat == 'INVESTMENT') {
-        continue;
-      }
-      if ((m['category_detailed']?.toString() ?? '') ==
-          'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT') {
-        continue;
-      }
       // Budgets are USD; convert each row from its native currency so a
       // MXN grocery run isn't compared 1:1 against a USD budget.
       final spentUsd = convertCurrency(

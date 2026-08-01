@@ -238,6 +238,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txClearAll => 'Clear all';
 
   @override
+  String txSpikeBanner(
+    String average,
+    String category,
+    String monthLabel,
+    int months,
+    String percent,
+    String recent,
+  ) {
+    return '$category in $monthLabel: $recent spent — $percent above your $months-month average of $average';
+  }
+
+  @override
   String get txEmptyTitle => 'No transactions yet';
 
   @override
@@ -1856,6 +1868,75 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cfBudgetsShowFewer => 'Show fewer';
+
+  @override
+  String cfInsightRecentLabel(String monthLabel) {
+    return 'Spent in $monthLabel';
+  }
+
+  @override
+  String cfInsightAvgLabel(int months) {
+    return '$months-month average';
+  }
+
+  @override
+  String cfInsightDelta(String amount, String percent) {
+    return '$amount above average ($percent)';
+  }
+
+  @override
+  String cfInsightTrendTitle(int months) {
+    return 'Last $months months';
+  }
+
+  @override
+  String cfInsightTrendSemantics(String category, int months) {
+    return 'Monthly spending for $category over the last $months months';
+  }
+
+  @override
+  String cfInsightTopMerchantsTitle(String monthLabel) {
+    return 'Top merchants in $monthLabel';
+  }
+
+  @override
+  String cfInsightMerchantTxCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transactions',
+      one: '1 transaction',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cfInsightNoMerchantData =>
+      'No loaded transactions for this month yet';
+
+  @override
+  String get cfInsightSeeTransactions => 'See all transactions';
+
+  @override
+  String get cfInsightSetBudget => 'Set budget';
+
+  @override
+  String get cfInsightUpdateBudget => 'Update budget';
+
+  @override
+  String cfInsightBudgetDialogTitle(String category) {
+    return 'Monthly budget for $category';
+  }
+
+  @override
+  String cfInsightBudgetDialogHint(int months) {
+    return 'Suggested from your $months-month average';
+  }
+
+  @override
+  String cfInsightBudgetSaved(String amount, String category) {
+    return 'Budget saved: $amount for $category';
+  }
 
   @override
   String get cfTransfersTitle => 'Cross-currency transfers';

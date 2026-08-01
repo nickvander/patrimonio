@@ -91,6 +91,14 @@ void main() {
     expect(out, isEmpty);
   });
 
+  test('roundBudgetUpToTen: exact multiples stay, anything over rounds up', () {
+    expect(roundBudgetUpToTen(420.0), 420.0); // exact multiple unchanged
+    expect(roundBudgetUpToTen(421.0), 430.0);
+    expect(roundBudgetUpToTen(415.01), 420.0);
+    expect(roundBudgetUpToTen(0.0), 0.0);
+    expect(roundBudgetUpToTen(0.01), 10.0);
+  });
+
   test('respects the active locale for labels', () {
     localeNotifier.value = const Locale('es');
     final out = suggestBudgetsFromInsights(

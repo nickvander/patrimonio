@@ -3516,6 +3516,10 @@ struct SinceLastLogin {
 struct BalanceMove {
     account_name: String,
     delta_usd: f64,
+    /// The moved account's id (uuid as text). Additive field so the
+    /// client can scope its "show me the transactions" drill-down to the
+    /// account, not just the date window; older clients simply ignore it.
+    account_id: String,
 }
 
 /// "What changed since your last visit." Anchors on the end of the previous
@@ -3617,6 +3621,8 @@ async fn since_last_login(
         )
         SELECT
             COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
+            -- uuid as text so the row decodes without a Uuid column type
+            after.account_id::text AS account_id,
             CASE WHEN is_liability_account_type(a.account_type)
                  THEN -(after.balance_usd - before.balance_usd)
                  ELSE (after.balance_usd - before.balance_usd)
@@ -3637,11 +3643,13 @@ async fn since_last_login(
         .iter()
         .filter_map(|r| {
             let name: String = r.try_get("account_name").ok()?;
+            let account_id: String = r.try_get("account_id").ok()?;
             let delta: rust_decimal::Decimal = r.try_get("delta_usd").ok()?;
             let delta_f: f64 = delta.to_string().parse().ok()?;
             Some(BalanceMove {
                 account_name: name,
                 delta_usd: delta_f,
+                account_id,
             })
         })
         .max_by(|a, b| {

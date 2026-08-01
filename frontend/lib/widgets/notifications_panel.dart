@@ -6,6 +6,7 @@ import '../theme/palette.dart';
 import '../utils/account_category.dart';
 import '../utils/category.dart';
 import '../utils/percent_format.dart';
+import '../utils/spending_insight.dart';
 import '../utils/theme_colors.dart';
 
 /// One notification row shown in the bell-icon popover.
@@ -148,13 +149,14 @@ List<AppNotification> deriveNotifications({
   /// supersedes a same-merchant lower-priced one).
   List<dynamic> subscriptions = const [],
 
-  /// Drill into a spending-spike row: the Transactions tab is seeded with
-  /// the category's PRETTIFIED label (the same string the row displayed —
-  /// TxFilters.categories matches prettified labels, so passing the raw
-  /// uppercased code would silently show zero rows) plus the insight's
-  /// `recent_month` ('YYYY-MM'; may be empty when the payload lacked it).
-  void Function(String categoryLabel, String recentMonth)?
-  onJumpToSpendingCategory,
+  /// Tap on a spending-spike row. Carries the full [SpendingSpikeInsight]
+  /// (the dashboard opens the insight detail sheet from it, and threads it
+  /// on to the transactions-tab comparison banner). The insight's label is
+  /// the PRETTIFIED one the row displayed — TxFilters.categories matches
+  /// prettified labels, so the raw uppercased code would silently show
+  /// zero rows — and its `recentMonth` may be '' when the payload lacked
+  /// it (consumers degrade via monthWindow's null).
+  void Function(SpendingSpikeInsight insight)? onSpendingSpikeTap,
 
   /// Drill into a subscription price-hike row: the Transactions tab's
   /// search is seeded with the merchant, verbatim (same jump the
@@ -181,6 +183,13 @@ List<AppNotification> deriveNotifications({
   /// Jump to the Transactions tab pre-filtered to "since [anchor]" when a
   /// digest row is tapped. Receives the previous-login anchor.
   void Function(DateTime anchor)? onJumpToTransactions,
+
+  /// Account-scoped variant for the digest's largest-move row: jump to the
+  /// Transactions tab filtered to "since [anchor]" AND to the account that
+  /// moved, so the list shows exactly the rows behind the move. Only used
+  /// when the payload carries `account_id`; older-server payloads (no
+  /// account_id) fall back to the date-only [onJumpToTransactions] jump.
+  void Function(DateTime anchor, String accountId)? onJumpToAccountTransactions,
 
   /// The user's reporting currency, and the factor that takes a USD-stored
   /// figure into it (1.0 for USD, the USD/MXN rate for MXN) — same pair the
@@ -403,6 +412,12 @@ List<AppNotification> deriveNotifications({
             DateFormat('MMM d').format(latestDt),
           );
           final up = delta >= 0;
+          // Drill into the move window: seed the date filter from the
+          // PRIOR snapshot's date through today (the existing since-jump),
+          // so the list shows the transactions across the move. A row
+          // whose prior date doesn't parse stays non-tappable rather than
+          // jumping to a wrong window.
+          final priorDt = DateTime.tryParse(prior['date']?.toString() ?? '');
           out.add(
             AppNotification(
               id: 'net_worth_since_sync:$latestDateStr',
@@ -416,6 +431,9 @@ List<AppNotification> deriveNotifications({
                   ? l.lwNotifNetWorthUpTitle(amount, pctStr)
                   : l.lwNotifNetWorthDownTitle(amount, pctStr),
               detail: detail,
+              onTap: (onJumpToTransactions == null || priorDt == null)
+                  ? null
+                  : () => onJumpToTransactions(priorDt),
             ),
           );
         }
@@ -462,6 +480,11 @@ List<AppNotification> deriveNotifications({
         final up = deltaUsd >= 0;
         final signed =
             '${up ? '+' : '−'}${money(deltaUsd.abs() * conversionFactor, targetCurrency)}';
+        // Account-scoped drill-down when the payload carries account_id
+        // (additive field): the tap filters to the moved account AND the
+        // window. An older server's payload has no account_id, so the row
+        // degrades to the P0 date-only jump rather than losing its tap.
+        final accountId = (move['account_id'] ?? '').toString();
         out.add(
           AppNotification(
             id: 'since_move:$sinceAnchorIso',
@@ -472,9 +495,11 @@ List<AppNotification> deriveNotifications({
             // gen-l10n orders these alphabetically → (account, amount).
             title: l.lwSinceLargestMove(account, signed),
             detail: l.lwNotifSinceVisitDetail(anchorStr),
-            onTap: onJumpToTransactions == null
-                ? null
-                : () => onJumpToTransactions(sinceAnchor),
+            onTap: (accountId.isNotEmpty && onJumpToAccountTransactions != null)
+                ? () => onJumpToAccountTransactions(sinceAnchor, accountId)
+                : (onJumpToTransactions == null
+                      ? null
+                      : () => onJumpToTransactions(sinceAnchor)),
           ),
         );
       }
@@ -495,7 +520,7 @@ List<AppNotification> deriveNotifications({
     // Raw category codes that aren't worth nagging about — they have no
     // single actionable merchant/behaviour behind them.
     const skip = {'UNCATEGORIZED', 'OTHER', 'OTHER_OTHER'};
-    final spikes = <({String code, String label, double pct, double avg})>[];
+    final spikes = <({String code, SpendingSpikeInsight insight})>[];
     for (final raw in insightCats) {
       if (raw is! Map) continue;
       final recent = (raw['recent'] as num?)?.toDouble() ?? 0.0;
@@ -517,26 +542,45 @@ List<AppNotification> deriveNotifications({
         detailed: raw['category_detailed']?.toString(),
         primary: raw['category']?.toString(),
       );
-      spikes.add((code: code, label: label, pct: pct, avg: prev));
+      spikes.add((
+        code: code,
+        insight: SpendingSpikeInsight(
+          categoryLabel: label,
+          recentMonth: recentMonth,
+          recentUsd: recent,
+          previousAvgUsd: prev,
+          trailingAvgUsd: (raw['trailing_avg'] as num?)?.toDouble() ?? 0.0,
+          lookbackMonths: lookback,
+        ),
+      ));
     }
-    // Biggest absolute increase first; cap at three so the bell stays calm.
-    spikes.sort((a, b) => (b.pct * b.avg).compareTo(a.pct * a.avg));
+    // Biggest absolute increase first (recent − previousAvg, exactly the
+    // old pct*avg sort key rewritten); cap at three so the bell stays calm.
+    spikes.sort(
+      (a, b) => (b.insight.recentUsd - b.insight.previousAvgUsd).compareTo(
+        a.insight.recentUsd - a.insight.previousAvgUsd,
+      ),
+    );
     for (final s in spikes.take(3)) {
+      final insight = s.insight;
       out.add(
         AppNotification(
           id: 'spending_up:${s.code}:$recentMonth',
           icon: Icons.trending_up,
           accent: BrandPalette.warning(brightness),
-          title: l.lwNotifSpendingUpTitle(s.label, '${(s.pct * 100).round()}%'),
+          title: l.lwNotifSpendingUpTitle(
+            insight.categoryLabel,
+            '${insight.pctIncrease.round()}%',
+          ),
           detail: l.lwNotifSpendingUpDetail(
             lookback,
-            money(s.avg * conversionFactor, targetCurrency),
+            money(insight.previousAvgUsd * conversionFactor, targetCurrency),
           ),
-          // Pass the prettified label (never s.code — see the param doc)
-          // and the month, so the tap lands on the actual transactions.
-          onTap: onJumpToSpendingCategory == null
+          // Pass the whole insight (label prettified, never s.code — see
+          // the param doc) so the sheet/banner render the row's figures.
+          onTap: onSpendingSpikeTap == null
               ? null
-              : () => onJumpToSpendingCategory(s.label, recentMonth),
+              : () => onSpendingSpikeTap(insight),
         ),
       );
     }
