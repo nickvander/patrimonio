@@ -5035,19 +5035,20 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     Widget buildChartsColumn({required bool compact}) {
-      // Same horizontally-scrolling range selector buildNetWorthHeader
-      // builds. On compact layouts it moves INSIDE the card, below the
-      // chart, so range switching is thumb-reachable and visually bound to
-      // the plot it controls.
-      final rangeSelector = SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DateRangeSelector(
-          selectedRange: _selectedRange,
-          onRangeChanged: (range) {
-            setState(() => _selectedRange = range);
-            Preferences.setDateRange(range.name);
-          },
-        ),
+      // The range selector buildNetWorthHeader builds, but full-bleed: on
+      // compact layouts it moves INSIDE the card, below the chart, where it
+      // is the only thing on its line — so it divides the card evenly
+      // instead of shrink-wrapping into a stubby left-aligned pill with
+      // dead space beside it. `fill` needs a bounded width, hence no
+      // horizontal scroll wrapper here (the labels are 2-4 characters; a
+      // fifth of a phone card is ample).
+      final rangeSelector = DateRangeSelector(
+        fill: true,
+        selectedRange: _selectedRange,
+        onRangeChanged: (range) {
+          setState(() => _selectedRange = range);
+          Preferences.setDateRange(range.name);
+        },
       );
       return Column(
         // Stretch, not the default center: children fill the column width
