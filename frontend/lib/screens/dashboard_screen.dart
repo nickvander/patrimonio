@@ -283,6 +283,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   // mirrors _txCategorySeed; travels with _txDateSeed so the drill-down
   // lands on "that account, that window" in one filter application.
   String? _txAccountSeed;
+  // Pending sync-time seed from a bell since-visit row. The RAW anchor
+  // instant (previous_login_at / prior snapshot) — never date-truncated:
+  // truncating the UTC instant is what turned a 7:59pm Jul 31 CST anchor
+  // into an Aug 1 window. One-shot like the other seeds; it becomes
+  // TxFilters.createdSince, filtering by when the sync PRODUCED each row
+  // rather than the bank-posted date (which can precede the anchor).
+  DateTime? _txCreatedSinceSeed;
   // Spike-comparison banner payload for the Transactions tab. DISPLAY
   // state, not a one-shot seed: cleared only on user dismiss or when a
   // newer spike drill-down replaces it. Visibility is gated inside the
@@ -2805,10 +2812,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  /// Seed the transactions date filter from [anchor] through today and
-  /// jump to the Transactions tab. Shared by the since-last-visit banner
-  /// and the bell's digest rows, so both drill into exactly the rows
-  /// they're talking about.
+  /// Seed the transactions sync-time filter with [anchor] and jump to the
+  /// Transactions tab. Shared by the since-last-visit banner and the
+  /// bell's digest rows, so both drill into exactly the rows they're
+  /// talking about: the digest COUNTS rows by `created_at > anchor` (what
+  /// the sync produced since the user was last here), so the drill-down
+  /// must filter the same way. The old date-window seed could NEVER show
+  /// them faithfully — card transactions post days before the sync
+  /// fetches them, so "new since Jul 31" rows may all be DATED Jul 28–30
+  /// — and its `DateTime(y, m, d)` truncation of the raw UTC anchor also
+  /// shifted the window a day ahead of the bell's label in negative-UTC
+  /// timezones (7:59pm Jul 31 in Mexico City seeded Aug 1). Passing the
+  /// raw instant through moots both.
   ///
   /// [accountId] additionally scopes the jump to one account (the bell's
   /// largest-move row, whose payload names the account that moved). The
@@ -2818,10 +2833,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// no adapter lambdas at the three call sites.
   void _jumpToTransactionsSince(DateTime anchor, [String? accountId]) {
     setState(() {
-      _txDateSeed = (
-        start: DateTime(anchor.year, anchor.month, anchor.day),
-        end: DateTime.now(),
-      );
+      _txCreatedSinceSeed = anchor;
       if (accountId != null && accountId.isNotEmpty) {
         _txAccountSeed = accountId;
       }
@@ -3381,6 +3393,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           // hasMore back to true on a fully loaded list and re-ran the
           // filter cascade after every edit).
           _transactionsHasMore = false;
+          // An EMPTY offset-0 refetch proves the whole table is empty —
+          // drop any remembered total so the count line can't keep
+          // saying "Showing 0 of N" after the last rows were deleted.
+          if (data.transactions.isEmpty) _txTotal = 0;
         }
         _overview = data.overview;
         _trendData = data.trends;
@@ -3635,6 +3651,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         // than we asked for, we hit the tail of the table — no point
         // offering Load more again.
         _transactionsHasMore = page.rows.length >= pageSize;
+        // An empty page at offset == loaded proves the loaded rows ARE
+        // the whole table — pin the total so a stale header value from
+        // before a delete can't linger as the "of N" denominator.
+        if (page.rows.isEmpty) _txTotal = _transactions!.length;
       }
     });
   }
@@ -4135,6 +4155,10 @@ class _DashboardScreenState extends State<DashboardScreen>
             // can't be more pages. A full page on a depth-preserving reload
             // tells us nothing new, so keep the flag.
             _transactionsHasMore = false;
+            // And an EMPTY offset-0 page proves the table is empty — clear
+            // any remembered total (same rationale as the post-mutation
+            // refresh above: no stale "Showing 0 of N").
+            if (refetchedTxs.isEmpty) _txTotal = 0;
           }
         }
 
@@ -4490,7 +4514,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 onSpendingSpikeTap: _openSpendingSpikeSheet,
                 // Largest-move rows carrying account_id scope the jump to
                 // the moved account; the optional-positional tear-off
-                // also serves the date-only sites below.
+                // also serves the anchor-only sites below.
                 onJumpToAccountTransactions: _jumpToTransactionsSince,
                 // Price-hike rows reuse the SubscriptionsCard merchant
                 // jump: search seeded so the charge history is adjacent.
@@ -5540,10 +5564,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 summary: _sinceLastLogin,
                 currencyFormat: currencyFormat,
                 conversionFactor: conversionFactor,
-                // Seeds a custom date range from the previous-login
-                // anchor through today so the transactions list is
-                // pre-filtered to exactly the rows the banner is
-                // talking about (shared with the bell's digest rows).
+                // Seeds the sync-time filter from the previous-login
+                // anchor so the transactions list is pre-filtered to
+                // exactly the rows the banner counted — created_at >
+                // anchor (shared with the bell's digest rows).
                 onJumpToTransactions: _jumpToTransactionsSince,
                 onJumpToManagement: () => _goToNav(NavId.settings),
               ),
@@ -5777,6 +5801,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         onCategorySeedConsumed: () => setState(() => _txCategorySeed = null),
         accountIdSeed: _txAccountSeed,
         onAccountSeedConsumed: () => setState(() => _txAccountSeed = null),
+        createdSinceSeed: _txCreatedSinceSeed,
+        onCreatedSinceSeedConsumed: () =>
+            setState(() => _txCreatedSinceSeed = null),
         spikeBanner: _txSpikeBanner,
         onSpikeBannerDismissed: () => setState(() => _txSpikeBanner = null),
         fxTransfers: _fxTransfers ?? const [],

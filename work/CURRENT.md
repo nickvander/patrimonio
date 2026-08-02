@@ -1,7 +1,32 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-02 (filter editor restyle + stable tx total)
+> **Last updated:** 2026-08-02 (since-visit drill-downs fixed; empty-page totals)
 > **Branch:** `main`.
+
+## 2026-08-02 (later) — Since-visit drill-downs filter by sync time
+
+Phone repro: "+$2,612.87 on Cards · since Jul 31" → tap → empty list with
+chips "Cards · Aug 1–Aug 1". Two stacked bugs: the seed date-truncated the
+RAW UTC anchor (7:59pm Jul 31 CST → Aug 1 window, a day past the bell's
+own label), and — deeper — the digest counts rows by `created_at > anchor`
+while the drill-down filtered by bank-POSTED date, which can precede the
+anchor by days on cards. A date window can never faithfully show "what's
+new since your visit".
+
+* Both tx list endpoints now expose `created_at` (additive). TxFilters
+  gains `createdSince` (drill-down-only — not in the Filter & sort editor)
+  matching rows by sync time, with a posted-date approximation fallback
+  for rows an older server sends without `created_at`. Renders as a
+  dismissible "New since Jul 31" chip (`txNewSince`, en+es).
+* `_jumpToTransactionsSince` seeds the raw instant (fourth one-shot seed,
+  same `_maybeApplySeeds` single-setState path) — no truncation, no date
+  window. Month/spike drill-downs keep their date windows.
+* Stale-total edge closed: a SUCCESSFUL empty offset-0 page now emits
+  `X-Total-Count: 0` (DB errors still emit no header); the frontend also
+  clears remembered totals when emptiness is proven against older servers.
+* Regression test encodes the exact repro: row POSTED Jul 28, synced after
+  a Jul 31 anchor → shown. Frontend 844→856, backend suites extended; all
+  green. Rig seed data (1,200 rows) purged from the dev DB.
 
 ## 2026-08-02 — Filter & sort restyle + stable transaction totals
 

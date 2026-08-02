@@ -41,7 +41,8 @@ List<Map<String, dynamic>> _makeTxs(int n) {
   ];
 }
 
-Widget _localizedApp(Widget body) => MaterialApp(
+Widget _localizedApp(Widget body, {Locale? locale}) => MaterialApp(
+  locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(body: body),
@@ -52,8 +53,10 @@ Widget _localizedApp(Widget body) => MaterialApp(
 /// keeps the host from attaching to the route's PrimaryScrollController,
 /// which the tab's inner Scrollbar+ListView pair resolves on the test
 /// platform (two attached positions would trip the scrollbar debug assert).
-Widget _unboundedHost(Widget tab) =>
-    _localizedApp(SingleChildScrollView(primary: false, child: tab));
+Widget _unboundedHost(Widget tab, {Locale? locale}) => _localizedApp(
+  SingleChildScrollView(primary: false, child: tab),
+  locale: locale,
+);
 
 /// Account-panel-style host: fixed header stub + Expanded slot → the tab
 /// sees a BOUNDED height and must size/scroll the rows region from it.
@@ -83,6 +86,8 @@ TransactionsTab _tab(
   VoidCallback? onCategorySeedConsumed,
   String? accountIdSeed,
   VoidCallback? onAccountSeedConsumed,
+  DateTime? createdSinceSeed,
+  VoidCallback? onCreatedSinceSeedConsumed,
 }) {
   return TransactionsTab(
     transactions: txs,
@@ -101,6 +106,8 @@ TransactionsTab _tab(
     onCategorySeedConsumed: onCategorySeedConsumed,
     accountIdSeed: accountIdSeed,
     onAccountSeedConsumed: onAccountSeedConsumed,
+    createdSinceSeed: createdSinceSeed,
+    onCreatedSinceSeedConsumed: onCreatedSinceSeedConsumed,
     onUpdate: updates == null
         ? null
         : (
@@ -1035,6 +1042,189 @@ void main() {
         expect(find.text('Row chk-1'), findsOneWidget);
         expect(find.byType(InputChip), findsNothing);
         expect(consumed, 1);
+      },
+    );
+  });
+
+  group('Since-visit drill-down — one-shot createdSinceSeed', () {
+    // Sync-time fixture: the "since your last visit" digest counts rows by
+    // created_at > anchor, so the drill-down must slice by created_at too.
+    // 'late-sync' is the user-repro shape — POSTED days before the anchor's
+    // labeled day but SYNCED after it; 'early-sync' posted nearer the
+    // anchor but synced before it. A posted-date window gets BOTH wrong.
+    // created_at extremes are >14h clear of the anchor instant so the
+    // expectations hold in any test-VM timezone.
+    List<Map<String, dynamic>> fixture() => [
+      {
+        'id': 'early-sync',
+        'date': '2026-07-30',
+        'amount': -30.0,
+        'currency': 'USD',
+        'description': 'TX early-sync',
+        'user_description': 'Row early-sync',
+        'category': 'GENERAL_MERCHANDISE',
+        'account_name': 'Cards',
+        'created_at': '2026-07-29T12:00:00Z',
+      },
+      {
+        'id': 'late-sync',
+        'date': '2026-07-28',
+        'amount': -25.0,
+        'currency': 'USD',
+        'description': 'TX late-sync',
+        'user_description': 'Row late-sync',
+        'category': 'GENERAL_MERCHANDISE',
+        'account_name': 'Cards',
+        'created_at': '2026-08-02T12:00:00Z',
+      },
+    ];
+
+    // Local-time anchor (the bell formats the anchor's LOCAL day) so the
+    // chip label is deterministic regardless of the test VM's timezone.
+    DateTime anchor() => DateTime(2026, 7, 31, 19, 59);
+
+    testWidgets(
+      'en: the seed filters by SYNC time (not posted date), renders a '
+      'dismissible "New since {date}" chip, and the consumed callback '
+      'fires exactly once',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        var consumed = 0;
+        await tester.pumpWidget(
+          _unboundedHost(
+            _tab(
+              fixture(),
+              createdSinceSeed: anchor(),
+              onCreatedSinceSeedConsumed: () => consumed++,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Synced after the anchor → shown, even though it POSTED Jul 28
+        // (before the anchor's labeled day). Synced before → hidden, even
+        // though it posted Jul 30.
+        expect(find.text('Row late-sync'), findsOneWidget);
+        expect(find.text('Row early-sync'), findsNothing);
+
+        // Chip pins the l10n placeholder: MMMd of the anchor's local day.
+        expect(
+          find.widgetWithText(InputChip, 'New since Jul 31'),
+          findsOneWidget,
+        );
+        expect(consumed, 1);
+
+        // × clears just this filter and restores the hidden row.
+        await tester.tap(
+          find.descendant(
+            of: find.widgetWithText(InputChip, 'New since Jul 31'),
+            matching: find.byIcon(Icons.clear),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Row early-sync'), findsOneWidget);
+        expect(find.text('Row late-sync'), findsOneWidget);
+        expect(find.byType(InputChip), findsNothing);
+      },
+    );
+
+    testWidgets('es: chip label is "Nuevas desde {date}" with the locale-'
+        'formatted day', (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      await tester.pumpWidget(
+        _unboundedHost(
+          _tab(fixture(), createdSinceSeed: anchor()),
+          locale: const Locale('es'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Computed via the same skeleton the widget uses, so the assertion
+      // pins the template + placeholder without pinning CLDR month names.
+      final expected = 'Nuevas desde ${DateFormat.MMMd('es').format(anchor())}';
+      expect(find.widgetWithText(InputChip, expected), findsOneWidget);
+      expect(find.text('Row late-sync'), findsOneWidget);
+      expect(find.text('Row early-sync'), findsNothing);
+    });
+
+    testWidgets(
+      'one-shot regression: a rebuild with the SAME seed instant does not '
+      're-apply after the user cleared the filters',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        var consumed = 0;
+        Widget host() => _unboundedHost(
+          _tab(
+            fixture(),
+            createdSinceSeed: anchor(),
+            onCreatedSinceSeedConsumed: () => consumed++,
+          ),
+        );
+        await tester.pumpWidget(host());
+        await tester.pumpAndSettle();
+        expect(find.text('Row early-sync'), findsNothing);
+
+        // The user clears everything…
+        await tester.tap(find.text('Clear all'));
+        await tester.pumpAndSettle();
+        expect(find.text('Row early-sync'), findsOneWidget);
+
+        // …then a dashboard rebuild hands the tab the SAME seed instant
+        // (DateTime compares by value). It must NOT re-apply.
+        await tester.pumpWidget(host());
+        await tester.pumpAndSettle();
+        expect(find.text('Row early-sync'), findsOneWidget);
+        expect(find.byType(InputChip), findsNothing);
+        expect(consumed, 1);
+      },
+    );
+
+    testWidgets(
+      'user-repro regression: "+\$2,612.87 on Cards — since Jul 31" → a row '
+      'DATED Jul 28 whose created_at is after the (UTC) Aug 1 anchor IS '
+      'shown, account seed and all',
+      (tester) async {
+        _setViewSize(tester, const Size(1200, 900));
+        // 7:59pm Jul 31 in Mexico City (UTC-6) — the raw instant is
+        // already Aug 1 in UTC. The old code truncated this to a local
+        // Aug 1 date window and showed "0 of 2502".
+        final utcAnchor = DateTime.utc(2026, 8, 1, 1, 59);
+        const accounts = [
+          {'id': 'acc-cards', 'name': 'Cards'},
+        ];
+        final rows = [
+          {
+            'id': 'cards-late',
+            'date': '2026-07-28',
+            'amount': -2612.87,
+            'currency': 'USD',
+            'description': 'TX cards-late',
+            'user_description': 'Row cards-late',
+            'category': 'GENERAL_MERCHANDISE',
+            'account_id': 'acc-cards',
+            'account_name': 'Cards',
+            'created_at': '2026-08-01T14:00:00Z',
+          },
+        ];
+        await tester.pumpWidget(
+          _unboundedHost(
+            _tab(
+              rows,
+              accounts: accounts,
+              accountIdSeed: 'acc-cards',
+              createdSinceSeed: utcAnchor,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // The row the digest counted is on screen — not an empty list.
+        expect(find.text('Row cards-late'), findsOneWidget);
+        // Both drill-down chips are present (account + sync-time).
+        expect(find.widgetWithText(InputChip, 'Cards'), findsOneWidget);
+        final chipLabel =
+            'New since ${DateFormat.MMMd().format(utcAnchor.toLocal())}';
+        expect(find.widgetWithText(InputChip, chipLabel), findsOneWidget);
       },
     );
   });

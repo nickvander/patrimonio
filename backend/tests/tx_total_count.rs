@@ -247,6 +247,32 @@ async fn seed_tx(
     .expect("seed tx")
 }
 
+/// Like [`seed_tx`] but with an explicit posted `date` and `created_at`
+/// instant, for the sync-time-vs-posted-date tests: a card transaction
+/// POSTS days before the sync INSERTS it, so the two must be controllable
+/// independently.
+async fn seed_tx_at(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    date: &str,
+    created_at: &str,
+) -> uuid::Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id, created_at) \
+         VALUES ($1, $2::date, $3, -5.00, 'USD', 'manual', $4, $5::timestamptz) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(date)
+    .bind(description)
+    .bind(user_id)
+    .bind(created_at)
+    .fetch_one(pool)
+    .await
+    .expect("seed tx with created_at")
+}
+
 /// Split `parent` into two children (direct INSERTs — the split endpoint's
 /// own behavior is covered elsewhere; here we only need the rows).
 async fn seed_split_children(
@@ -411,7 +437,7 @@ async fn dashboard_total_count_respects_filters_and_matches_paged_length() {
 
 #[tokio::test]
 #[serial_test::serial]
-async fn total_count_is_user_scoped_and_absent_on_empty_result() {
+async fn total_count_is_user_scoped_and_zero_on_empty_first_page() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
         return;
     };
@@ -435,24 +461,16 @@ async fn total_count_is_user_scoped_and_absent_on_empty_result() {
     assert_eq!(total_a, Some(5));
     assert_eq!(body_a.as_array().unwrap().len(), 5);
 
-    // User B has no transactions: an empty 200 array with NO header —
-    // never a reflection of A's count.
-    let res = app
-        .clone()
-        .oneshot(req(
-            Method::GET,
-            "/api/dashboard/transactions",
-            Some(&token_b),
-        ))
-        .await
-        .unwrap();
-    assert_eq!(res.status(), StatusCode::OK);
-    assert!(
-        res.headers().get("x-total-count").is_none(),
-        "empty result must carry no X-Total-Count header"
+    // User B has no transactions: an empty 200 array with X-Total-Count: 0
+    // — a successful empty FIRST page proves the total, and B's own zero
+    // is never a reflection of A's count.
+    let (total_b, body_b) = get(&app, "/api/dashboard/transactions", &token_b).await;
+    assert_eq!(
+        total_b,
+        Some(0),
+        "a successful empty first page proves the total is 0"
     );
-    let body = body_json(res.into_body()).await;
-    assert_eq!(body.as_array().unwrap().len(), 0);
+    assert_eq!(body_b.as_array().unwrap().len(), 0);
 
     // B can also never see A's account list. (The per-account endpoint's
     // cross-tenant behavior is asserted in the account test below.)
@@ -500,20 +518,173 @@ async fn account_transactions_total_count_same_contract() {
     assert_eq!(total2, Some(8));
     assert_eq!(body2.as_array().unwrap().len(), 2);
 
-    // Another user probing this account id: empty list, no header — the
-    // count must never leak across tenants.
-    let res = app
-        .clone()
-        .oneshot(req(Method::GET, &base, Some(&other_token)))
-        .await
-        .unwrap();
-    assert_eq!(res.status(), StatusCode::OK);
-    assert!(
-        res.headers().get("x-total-count").is_none(),
-        "cross-tenant probe gets no total"
-    );
+    // Another user probing this account id: empty list with a total of 0 —
+    // indistinguishable from a brand-new empty account, so the real count
+    // never leaks across tenants.
+    let (other_total, other_body) = get(&app, &base, &other_token).await;
     assert_eq!(
-        body_json(res.into_body()).await.as_array().unwrap().len(),
-        0
+        other_total,
+        Some(0),
+        "cross-tenant probe reads as an empty account (total 0), never the owner's count"
     );
+    assert_eq!(other_body.as_array().unwrap().len(), 0);
+}
+
+/// Fix A (since-visit drill-downs): both list endpoints now carry an
+/// RFC3339 `created_at` (row INSERT time — sync/import/manual-add) on
+/// every transaction, distinct from the bank-POSTED `date`. The frontend's
+/// "New since your last visit" filter matches on it, because a posted-date
+/// window can never faithfully show rows that POSTED before the anchor but
+/// were SYNCED after it.
+#[tokio::test]
+#[serial_test::serial]
+async fn created_at_present_parseable_and_ordered_on_both_endpoints() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    bootstrap(&app).await;
+    let (user_id, token) = seed_owner(&pool, "createdat").await;
+    let account = seed_account(&pool, user_id, "USD").await;
+
+    // The exact user-repro shape: the newest-POSTED row was synced FIRST,
+    // and an older-posted row arrived in a LATER sync — created_at order
+    // deliberately disagrees with posted-date order.
+    seed_tx_at(
+        &pool,
+        user_id,
+        account,
+        "posted jul 30, synced jul 29",
+        "2026-07-30",
+        "2026-07-29T18:00:00Z",
+    )
+    .await;
+    seed_tx_at(
+        &pool,
+        user_id,
+        account,
+        "posted jul 28, synced aug 1",
+        "2026-07-28",
+        "2026-08-01T02:00:00Z",
+    )
+    .await;
+    seed_tx_at(
+        &pool,
+        user_id,
+        account,
+        "posted jul 28, synced jul 29",
+        "2026-07-28",
+        "2026-07-29T12:00:00Z",
+    )
+    .await;
+
+    for uri in [
+        "/api/dashboard/transactions".to_string(),
+        format!("/api/accounts/{account}/transactions"),
+    ] {
+        let (_, body) = get(&app, &uri, &token).await;
+        let rows = body.as_array().unwrap();
+        assert_eq!(rows.len(), 3, "{uri}: all seeded rows returned");
+
+        let parsed: Vec<(chrono::NaiveDate, chrono::DateTime<chrono::FixedOffset>)> = rows
+            .iter()
+            .map(|r| {
+                let date: chrono::NaiveDate = r["date"]
+                    .as_str()
+                    .expect("date is a string")
+                    .parse()
+                    .expect("date parses");
+                let created = chrono::DateTime::parse_from_rfc3339(
+                    r["created_at"].as_str().expect("created_at is a string"),
+                )
+                .expect("created_at parses as RFC3339");
+                (date, created)
+            })
+            .collect();
+
+        // List contract: ORDER BY date DESC, created_at DESC — sane order
+        // means (date, created_at) is non-increasing lexicographically.
+        for pair in parsed.windows(2) {
+            let (d1, c1) = &pair[0];
+            let (d2, c2) = &pair[1];
+            assert!(
+                d1 > d2 || (d1 == d2 && c1 >= c2),
+                "{uri}: rows must be ordered by (date DESC, created_at DESC), got ({d1}, {c1}) before ({d2}, {c2})"
+            );
+        }
+        // And the seeded instants round-trip: the Aug 1 sync is among them.
+        assert!(
+            parsed.iter().any(|(_, c)| *c
+                == "2026-08-01T02:00:00Z"
+                    .parse::<chrono::DateTime<chrono::FixedOffset>>()
+                    .unwrap()),
+            "{uri}: the late-synced row's created_at survives the trip"
+        );
+    }
+}
+
+/// Fix B: deleting the last rows must not leave a stale total. A
+/// successful empty FIRST page (offset == 0) now carries `X-Total-Count:
+/// 0` (the total is provably zero); an empty page BEYOND the end (offset
+/// past the last row) still carries no header — it proves nothing.
+#[tokio::test]
+#[serial_test::serial]
+async fn empty_first_page_reports_zero_but_offset_beyond_end_stays_absent() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    bootstrap(&app).await;
+    let (user_id, token) = seed_owner(&pool, "emptier").await;
+    let account = seed_account(&pool, user_id, "USD").await;
+    for i in 0..3 {
+        seed_tx(
+            &pool,
+            user_id,
+            account,
+            &format!("doomed {i}"),
+            "-1.00",
+            "USD",
+        )
+        .await;
+    }
+
+    let acct_base = format!("/api/accounts/{account}/transactions");
+
+    // Populated: both endpoints agree on the non-zero total…
+    let (total, _) = get(&app, "/api/dashboard/transactions", &token).await;
+    assert_eq!(total, Some(3));
+    let (acct_total, _) = get(&app, &acct_base, &token).await;
+    assert_eq!(acct_total, Some(3));
+
+    // …and an empty offset-BEYOND-END page proves nothing → no header
+    // (the window function had no rows to ride on, and offset != 0).
+    for uri in [
+        "/api/dashboard/transactions?limit=4&offset=50".to_string(),
+        format!("{acct_base}?limit=4&offset=50"),
+    ] {
+        let (beyond_total, beyond_body) = get(&app, &uri, &token).await;
+        assert_eq!(
+            beyond_total, None,
+            "{uri}: empty page beyond the end must carry no header"
+        );
+        assert_eq!(beyond_body.as_array().unwrap().len(), 0);
+    }
+
+    // Delete everything (the user clearing out their manual rows)…
+    sqlx::query("DELETE FROM transactions WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .expect("delete all rows");
+
+    // …then the offset-0 fetch must report the provable zero, so the
+    // client can drop its remembered "of 3".
+    for uri in ["/api/dashboard/transactions".to_string(), acct_base] {
+        let (zero_total, zero_body) = get(&app, &uri, &token).await;
+        assert_eq!(
+            zero_total,
+            Some(0),
+            "{uri}: successful empty first page must report total 0"
+        );
+        assert_eq!(zero_body.as_array().unwrap().len(), 0);
+    }
 }

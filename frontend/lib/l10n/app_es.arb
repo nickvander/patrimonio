@@ -219,6 +219,7 @@
   "txDateCustomRange": "Rango personalizado",
   "txReset": "Restablecer",
   "txDateRange": "Rango de fechas",
+  "txNewSince": "Nuevas desde {date}",
   "txAccounts": "Cuentas",
   "txCategories": "Categorías",
   "txSplitSameAsParentUncategorised": "Igual que el original (sin categoría)",

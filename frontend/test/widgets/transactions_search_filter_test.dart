@@ -239,6 +239,94 @@ void main() {
     });
   });
 
+  group('Since-visit fix — sync-time predicate (TxFilters.createdSince)', () {
+    // The bell's anchor: 7:59pm Jul 31 in Mexico City (UTC-6) = 01:59 Aug 1
+    // UTC. The old date-window seed truncated this to Aug 1 and hid
+    // everything; the sync-time filter compares raw instants.
+    final anchor = DateTime.utc(2026, 8, 1, 1, 59);
+
+    Map<String, dynamic> tx({String? date, String? createdAt}) => {
+      'date': ?date,
+      'created_at': ?createdAt,
+    };
+
+    test(
+      'created_at strictly after the anchor matches; at/before does not',
+      () {
+        final f = TxFilters(createdSince: anchor);
+        expect(f.isActive, isTrue);
+        expect(f.badgeCount, 1);
+        expect(
+          f.matches(tx(date: '2026-07-28', createdAt: '2026-08-01T02:00:00Z')),
+          isTrue,
+        );
+        expect(
+          f.matches(tx(date: '2026-08-01', createdAt: '2026-08-01T01:59:00Z')),
+          isFalse,
+          reason: 'exactly-at-anchor is not "since" (must be strictly after)',
+        );
+        expect(
+          f.matches(tx(date: '2026-07-31', createdAt: '2026-07-31T23:00:00Z')),
+          isFalse,
+        );
+      },
+    );
+
+    test('the exact user repro: posted Jul 28, synced after a Jul 31 '
+        'evening anchor → SHOWN', () {
+      // 7:59pm Jul 31 Mexico City. The digest counted this row (created_at
+      // > anchor); the drill-down must show it even though its POSTED date
+      // is 3 days before the anchor's labeled day.
+      final f = TxFilters(createdSince: DateTime.utc(2026, 8, 1, 1, 59));
+      expect(
+        f.matches(tx(date: '2026-07-28', createdAt: '2026-08-01T14:00:00Z')),
+        isTrue,
+      );
+    });
+
+    test('missing created_at (older backend) falls back to the posted date '
+        'vs the anchor LOCAL day — both directions', () {
+      // Local-time anchor so the truncation is deterministic in the test
+      // VM regardless of its timezone: local Jul 31, 19:59.
+      final f = TxFilters(createdSince: DateTime(2026, 7, 31, 19, 59));
+      // Posted ON the anchor's local day → kept (approximation is
+      // inclusive: better than hiding everything).
+      expect(f.matches(tx(date: '2026-07-31')), isTrue);
+      // Posted after → kept.
+      expect(f.matches(tx(date: '2026-08-01')), isTrue);
+      // Posted before the anchor's local day → dropped (better than
+      // showing everything).
+      expect(f.matches(tx(date: '2026-07-30')), isFalse);
+      // Unparsable/absent date with no created_at → dropped.
+      expect(f.matches(tx()), isFalse);
+      expect(f.matches(tx(date: 'garbage')), isFalse);
+    });
+
+    test('unparsable created_at is treated as missing (falls back to the '
+        'posted date)', () {
+      final f = TxFilters(createdSince: DateTime(2026, 7, 31, 19, 59));
+      expect(
+        f.matches(tx(date: '2026-08-01', createdAt: 'not-a-timestamp')),
+        isTrue,
+      );
+      expect(
+        f.matches(tx(date: '2026-07-30', createdAt: 'not-a-timestamp')),
+        isFalse,
+      );
+    });
+
+    test('copyWith(clearCreatedSince: true) clears it; plain copyWith '
+        'preserves it (the filter dialog Apply must not drop it)', () {
+      final f = TxFilters(createdSince: anchor);
+      expect(f.copyWith(clearCreatedSince: true).createdSince, isNull);
+      expect(f.copyWith(clearCreatedSince: true).isActive, isFalse);
+      // An unrelated edit (e.g. the dialog applying a flow) keeps it.
+      expect(f.copyWith(flow: TxFlow.expense).createdSince, anchor);
+      // And the empty reset drops it like every other field.
+      expect(TxFilters.empty.createdSince, isNull);
+    });
+  });
+
   group('Task 8 — search + amount filter in the widget', () {
     testWidgets('typing a note fragment surfaces the noted row only', (
       tester,

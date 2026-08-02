@@ -593,6 +593,14 @@ pub struct TransactionResponse {
     pub balance_after: Option<f64>,
     pub account_name: String,
     pub institution_name: String,
+    /// RFC3339 instant the row was INSERTED (sync/import/manual-add time),
+    /// as opposed to `date` — the bank-POSTED day. Mirrors
+    /// `TransactionEntry.created_at` in api/dashboard.rs so the
+    /// since-last-visit drill-down can filter by sync time on either feed
+    /// (posted-date windows can never faithfully show "new since X" rows —
+    /// card transactions post days before the sync fetches them). Empty
+    /// string only if the column were somehow NULL (pre-default row).
+    pub created_at: String,
 }
 
 /// Optional paging for the per-account history. Both params are
@@ -641,6 +649,7 @@ async fn get_account_transactions(
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_category, t.user_notes, t.user_description, t.source,
                t.payment_payee, t.payment_payer, t.parent_id, t.balance_after,
+               t.created_at,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
         FROM transactions t
@@ -657,15 +666,23 @@ async fn get_account_transactions(
     .bind(limit)
     .bind(offset)
     .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    .await;
 
-    // Same window total on every row; read it off the first. Best-effort
-    // read semantics unchanged: a DB error above still yields an empty 200
-    // array, and with no rows there is no X-Total-Count header.
+    // Best-effort read semantics unchanged: a DB error still yields an
+    // empty 200 array with no header — but capture Result-ness first, so
+    // "succeeded and found nothing" stays distinguishable below.
+    let db_ok = rows.is_ok();
+    let rows = rows.unwrap_or_default();
+
+    // Same window total on every row; read it off the first. A successful
+    // empty FIRST page (offset == 0) provably means the account's total is
+    // 0 — emit it so the panel can clear a stale "Showing 0 of N" after
+    // the last rows were deleted. An empty page beyond the end (offset >
+    // 0) proves nothing → no header (see dashboard::total_count_headers).
     let total = rows
         .first()
-        .and_then(|r| r.try_get::<i64, _>("total_count").ok());
+        .and_then(|r| r.try_get::<i64, _>("total_count").ok())
+        .or((db_ok && offset == 0).then_some(0));
 
     let txs: Vec<TransactionResponse> = rows
         .iter()
@@ -738,6 +755,12 @@ async fn get_account_transactions(
                 .and_then(|d| d.to_string().parse().ok()),
             account_name: row.get("account_name"),
             institution_name: row.get("institution_name"),
+            created_at: row
+                .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("created_at")
+                .ok()
+                .flatten()
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default(),
         })
         .collect();
 

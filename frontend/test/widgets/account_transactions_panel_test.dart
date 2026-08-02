@@ -527,4 +527,99 @@ void main() {
       );
     });
   });
+
+  group(
+    'Account panel — proven-empty totals against an old server (Fix B)',
+    () {
+      /// Scripted fetcher: serves [responses] in order, recording calls.
+      /// Unlike _FakeBackend it can return a non-null totalCount first and
+      /// then an old-server (headerless) page, which is exactly the
+      /// mixed-server shape these regressions are about.
+      ({
+        List<({int limit, int offset})> calls,
+        AccountTransactionsFetcher fetch,
+      })
+      scripted(List<TxPage> responses) {
+        final calls = <({int limit, int offset})>[];
+        final queue = [...responses];
+        Future<TxPage> fetch({required int limit, required int offset}) async {
+          calls.add((limit: limit, offset: offset));
+          // Past the script → keep serving an empty headerless page.
+          return queue.isEmpty ? const TxPage(rows: []) : queue.removeAt(0);
+        }
+
+        return (calls: calls, fetch: fetch);
+      }
+
+      List<Map<String, dynamic>> rows(int n) => [
+        for (final t in _makeTable(n)) Map<String, dynamic>.of(t),
+      ];
+
+      testWidgets(
+        'an empty headerless page at offset==loaded pins the total to the '
+        'loaded rows: "Showing 2 of 5" → "Showing 2 of 2", Load more gone',
+        (tester) async {
+          _setViewSize(tester, const Size(1000, 900));
+          // Page 1 came from a new server (total 5); the tail was then
+          // deleted server-side and the follow-up page arrives from an old
+          // server with no header. Pre-fix the 5 lingered: the panel kept
+          // offering Load more (2 < 5) and fetching empty pages forever.
+          final backend = scripted([
+            TxPage(rows: rows(2), totalCount: 5),
+            const TxPage(rows: []),
+          ]);
+
+          await tester.pumpWidget(_host(_panel(fetcher: backend.fetch)));
+          await tester.pumpAndSettle();
+          expect(find.text('Showing 2 of 5'), findsOneWidget);
+          expect(find.text('Load more'), findsOneWidget);
+
+          await tester.tap(find.text('Load more'));
+          await tester.pumpAndSettle();
+
+          expect(backend.calls.last, (limit: 50, offset: 2));
+          // The empty page at offset == loaded proves the 2 rows are the
+          // whole account: stale denominator cleared, no more Load more.
+          expect(find.text('Showing 2 of 2'), findsOneWidget);
+          expect(find.text('Showing 2 of 5'), findsNothing);
+          expect(find.text('Load more'), findsNothing);
+        },
+      );
+
+      testWidgets('a headerless EMPTY refetch (delete-all elsewhere) clears a '
+          'previously non-null total instead of leaving a stale "of 3"', (
+        tester,
+      ) async {
+        _setViewSize(tester, const Size(1000, 900));
+        final backend = scripted([
+          TxPage(rows: rows(1), totalCount: 3),
+          const TxPage(rows: []),
+        ]);
+        final events = StreamController<RealtimeEvent>.broadcast();
+        addTearDown(events.close);
+
+        await tester.pumpWidget(
+          _host(_panel(fetcher: backend.fetch, realtimeEvents: events.stream)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Showing 1 of 3'), findsOneWidget);
+
+        // Every row was deleted from another surface; the push arrives and
+        // the in-place refetch returns an empty, headerless first page.
+        events.add(
+          const RealtimeEvent(type: RealtimeEventType.transactionsChanged),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 450));
+        await tester.pumpAndSettle();
+
+        expect(backend.calls, hasLength(2));
+        // Proven-empty: the remembered 3 is gone — no stale count line
+        // survives anywhere; the panel shows its real empty state.
+        expect(find.textContaining('Showing'), findsNothing);
+        expect(find.text('No transactions yet'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    },
+  );
 }

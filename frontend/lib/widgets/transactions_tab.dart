@@ -275,6 +275,21 @@ class TransactionsTab extends StatefulWidget {
   /// from each other: a partial-seed caller must not half-clear state.
   final VoidCallback? onAccountSeedConsumed;
 
+  /// Sync-time drill-down seed (the bell's since-last-visit rows). The
+  /// RAW anchor instant — no date truncation — dropped into
+  /// [TxFilters.createdSince] with the same one-shot semantics as
+  /// [accountIdSeed]: applied once, then user edits stick. The filter
+  /// surfaces as a removable "New since {date}" chip like any other. It
+  /// filters by the row's `created_at` (when the sync produced it), not
+  /// the posted date — see [TxFilters.createdSince] for why a date window
+  /// can never express "new since your last visit".
+  final DateTime? createdSinceSeed;
+
+  /// Fires after the widget has consumed [createdSinceSeed]. Separate
+  /// from the other consumed callbacks for the same reason they all are:
+  /// a partial-seed caller must not half-clear state.
+  final VoidCallback? onCreatedSinceSeedConsumed;
+
   /// Spike-comparison banner payload (the insight the user drilled down
   /// from). DISPLAY state, not a one-shot seed: the dashboard owns and
   /// clears it (via [onSpikeBannerDismissed] or replacement by a newer
@@ -386,6 +401,8 @@ class TransactionsTab extends StatefulWidget {
     this.onCategorySeedConsumed,
     this.accountIdSeed,
     this.onAccountSeedConsumed,
+    this.createdSinceSeed,
+    this.onCreatedSinceSeedConsumed,
     this.spikeBanner,
     this.onSpikeBannerDismissed,
     this.fxTransfers = const [],
@@ -530,6 +547,7 @@ class TransactionsTabState extends State<TransactionsTab> {
       dateSeed: widget.dateSeed,
       categorySeed: widget.categorySeed,
       accountIdSeed: widget.accountIdSeed,
+      createdSinceSeed: widget.createdSinceSeed,
     );
   }
 
@@ -555,11 +573,18 @@ class TransactionsTabState extends State<TransactionsTab> {
     final accountChanged =
         widget.accountIdSeed != null &&
         widget.accountIdSeed != oldWidget.accountIdSeed;
-    if (dateChanged || categoryChanged || accountChanged) {
+    final createdSinceChanged =
+        widget.createdSinceSeed != null &&
+        widget.createdSinceSeed != oldWidget.createdSinceSeed;
+    if (dateChanged ||
+        categoryChanged ||
+        accountChanged ||
+        createdSinceChanged) {
       _maybeApplySeeds(
         dateSeed: dateChanged ? widget.dateSeed : null,
         categorySeed: categoryChanged ? widget.categorySeed : null,
         accountIdSeed: accountChanged ? widget.accountIdSeed : null,
+        createdSinceSeed: createdSinceChanged ? widget.createdSinceSeed : null,
       );
     }
   }
@@ -574,8 +599,12 @@ class TransactionsTabState extends State<TransactionsTab> {
     ({DateTime start, DateTime end})? dateSeed,
     String? categorySeed,
     String? accountIdSeed,
+    DateTime? createdSinceSeed,
   }) {
-    if (dateSeed == null && categorySeed == null && accountIdSeed == null) {
+    if (dateSeed == null &&
+        categorySeed == null &&
+        accountIdSeed == null &&
+        createdSinceSeed == null) {
       return;
     }
     // Schedule for after the current build so initState callers don't
@@ -596,10 +625,16 @@ class TransactionsTabState extends State<TransactionsTab> {
         if (accountIdSeed != null) {
           _filters = _filters.copyWith(accountIds: {accountIdSeed});
         }
+        if (createdSinceSeed != null) {
+          _filters = _filters.copyWith(createdSince: createdSinceSeed);
+        }
       });
       if (dateSeed != null) widget.onDateSeedConsumed?.call();
       if (categorySeed != null) widget.onCategorySeedConsumed?.call();
       if (accountIdSeed != null) widget.onAccountSeedConsumed?.call();
+      if (createdSinceSeed != null) {
+        widget.onCreatedSinceSeedConsumed?.call();
+      }
     });
   }
 
@@ -1030,6 +1065,23 @@ class TransactionsTabState extends State<TransactionsTab> {
               dateRange: TxDateRange.all,
               clearCustomDates: true,
             ),
+          ),
+        ),
+      );
+    }
+    if (_filters.createdSince != null) {
+      // Since-last-visit drill-down (sync-time filter). The label shows
+      // the anchor's LOCAL day — the same day the bell row named — while
+      // the filter itself compares raw instants (see TxFilters.matches).
+      chips.add(
+        _filterChip(
+          l.txNewSince(
+            DateFormat.MMMd(
+              l.localeName,
+            ).format(_filters.createdSince!.toLocal()),
+          ),
+          () => setState(
+            () => _filters = _filters.copyWith(clearCreatedSince: true),
           ),
         ),
       );

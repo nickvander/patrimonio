@@ -514,6 +514,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   /// more" heuristic otherwise.
   bool _hasMoreAfterPage(TxPage page, int loadedCount, int requested) {
     if (page.totalCount != null) _totalCount = page.totalCount;
+    // Old server (no header) returning an EMPTY page: the fetch covered
+    // offset == loadedCount, so the loaded rows provably ARE the whole
+    // account — pin the total to them. Without this, a total remembered
+    // from before a delete lingered as a stale "Showing 0 of N".
+    if (page.totalCount == null && page.rows.isEmpty) {
+      _totalCount = loadedCount;
+    }
     final total = _totalCount;
     if (total != null) return loadedCount < total;
     return page.rows.length >= requested;
@@ -612,6 +619,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           // A short page proves we now hold the account's whole history; a
           // full page tells us nothing new, so leave the flag as-is.
           _hasMore = false;
+          // An empty offset-0 refetch proves emptiness outright — pin the
+          // total to what's on screen (the merge result) so a pre-delete
+          // total can't linger in the count line.
+          if (page.rows.isEmpty) _totalCount = _transactions!.length;
         }
       });
     } catch (e) {

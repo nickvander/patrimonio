@@ -724,6 +724,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get txDateRange => 'Rango de fechas';
 
   @override
+  String txNewSince(Object date) {
+    return 'Nuevas desde $date';
+  }
+
+  @override
   String get txAccounts => 'Cuentas';
 
   @override

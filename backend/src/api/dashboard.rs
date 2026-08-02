@@ -1268,8 +1268,11 @@ struct TransactionsQuery {
 /// `{rows, total}` would break every one of them, while an extra header is
 /// invisible to old clients and lets new ones show a stable "of N"
 /// denominator instead of a total that visibly counts up while pages
-/// stream in. Empty page (or a failed best-effort read) → no header; the
-/// client falls back to its loaded-count heuristic.
+/// stream in. A successful empty FIRST page (offset == 0) proves the total
+/// is 0, so callers pass `Some(0)` there — without it, a client that just
+/// deleted its last rows kept showing a stale "Showing 0 of N". An empty
+/// page beyond the end (offset > 0) or a failed best-effort read → no
+/// header; the client falls back to its loaded-count heuristic.
 pub(crate) fn total_count_headers(total: Option<i64>) -> HeaderMap {
     let mut headers = HeaderMap::new();
     if let Some(total) = total {
@@ -1313,7 +1316,8 @@ async fn recent_transactions(
                t.payment_payee, t.payment_payer,
                t.parent_id,
                t.pending,
-               t.source
+               t.source,
+               t.created_at
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
@@ -1349,15 +1353,23 @@ async fn recent_transactions(
     .bind(search)
     .bind(exclude_linked)
     .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    .await;
+
+    // Best-effort read semantics unchanged: a DB error still yields an
+    // empty 200 array with no header — but remember Result-ness first,
+    // because "the query succeeded and found nothing" is meaningful below.
+    let db_ok = rows.is_ok();
+    let rows = rows.unwrap_or_default();
 
     // The window total is the same on every row; read it off the first.
-    // Best-effort read semantics unchanged: a DB error above still yields
-    // an empty 200 array — and with no rows there is no header either.
+    // A successful empty FIRST page (offset == 0) provably means the
+    // filtered total is 0 — emit it so the client can clear a stale
+    // "Showing 0 of N" after deleting its last rows. An empty page beyond
+    // the end (offset > 0) proves nothing about the total → no header.
     let total = rows
         .first()
-        .and_then(|r| r.try_get::<i64, _>("total_count").ok());
+        .and_then(|r| r.try_get::<i64, _>("total_count").ok())
+        .or((db_ok && offset == 0).then_some(0));
 
     let entries: Vec<TransactionEntry> = rows
         .iter()
@@ -1428,6 +1440,12 @@ async fn recent_transactions(
                     .map(|u| u.to_string()),
                 pending: r.get("pending"),
                 source: r.try_get::<Option<String>, _>("source").ok().flatten(),
+                created_at: r
+                    .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("created_at")
+                    .ok()
+                    .flatten()
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default(),
             }
         })
         .collect();
@@ -3478,6 +3496,13 @@ struct TransactionEntry {
     /// (assuming 'plaid' put a "Synced via Plaid" chip on hand-typed
     /// rows); a null here renders as an explicit "unknown" state.
     source: Option<String>,
+    /// RFC3339 instant the row was INSERTED (sync/import/manual-add time),
+    /// as opposed to `date` — the bank-POSTED day. The since-last-visit
+    /// drill-down filters on this: card transactions post days before the
+    /// sync fetches them, so "new since Jul 31" rows can all be DATED
+    /// Jul 28–30 and no posted-date window can ever show them faithfully.
+    /// Empty string only if the column were somehow NULL (pre-default row).
+    created_at: String,
 }
 
 #[derive(Serialize)]

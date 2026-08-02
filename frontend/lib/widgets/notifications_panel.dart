@@ -412,11 +412,12 @@ List<AppNotification> deriveNotifications({
             DateFormat('MMM d').format(latestDt),
           );
           final up = delta >= 0;
-          // Drill into the move window: seed the date filter from the
-          // PRIOR snapshot's date through today (the existing since-jump),
-          // so the list shows the transactions across the move. A row
-          // whose prior date doesn't parse stays non-tappable rather than
-          // jumping to a wrong window.
+          // Drill into the move window: hand the PRIOR snapshot's date to
+          // the since-jump, which seeds the SYNC-TIME filter (rows whose
+          // created_at is after the anchor) — the same "what arrived since
+          // then" slice this row is describing, immune to bank-posted
+          // dates that predate the anchor. A row whose prior date doesn't
+          // parse stays non-tappable rather than jumping to a wrong slice.
           final priorDt = DateTime.tryParse(prior['date']?.toString() ?? '');
           out.add(
             AppNotification(
@@ -482,8 +483,9 @@ List<AppNotification> deriveNotifications({
             '${up ? '+' : '−'}${money(deltaUsd.abs() * conversionFactor, targetCurrency)}';
         // Account-scoped drill-down when the payload carries account_id
         // (additive field): the tap filters to the moved account AND the
-        // window. An older server's payload has no account_id, so the row
-        // degrades to the P0 date-only jump rather than losing its tap.
+        // since-anchor sync-time slice. An older server's payload has no
+        // account_id, so the row degrades to the unscoped since-jump
+        // rather than losing its tap.
         final accountId = (move['account_id'] ?? '').toString();
         out.add(
           AppNotification(

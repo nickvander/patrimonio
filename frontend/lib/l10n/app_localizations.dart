@@ -1335,6 +1335,12 @@ abstract class AppLocalizations {
   /// **'Date range'**
   String get txDateRange;
 
+  /// Active-filter chip for the since-last-visit drill-down: only transactions SYNCED after the user's previous visit are shown. {date} arrives pre-formatted (DateFormat.MMMd of the local anchor).
+  ///
+  /// In en, this message translates to:
+  /// **'New since {date}'**
+  String txNewSince(Object date);
+
   /// No description provided for @txAccounts.
   ///
   /// In en, this message translates to:

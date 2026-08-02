@@ -125,15 +125,19 @@ String? _countLine(WidgetTester tester, String prefix) {
   return texts.isEmpty ? null : texts.single;
 }
 
-TransactionsTab _staticTab(List<dynamic> txs, {int? totalCount}) =>
-    TransactionsTab(
-      transactions: txs,
-      conversionFactor: 1.0,
-      currencyFormat: NumberFormat.currency(symbol: r'$'),
-      targetCurrency: 'USD',
-      usdMxnRate: 0,
-      totalCount: totalCount,
-    );
+TransactionsTab _staticTab(
+  List<dynamic> txs, {
+  int? totalCount,
+  String? categorySeed,
+}) => TransactionsTab(
+  transactions: txs,
+  conversionFactor: 1.0,
+  currencyFormat: NumberFormat.currency(symbol: r'$'),
+  targetCurrency: 'USD',
+  usdMxnRate: 0,
+  totalCount: totalCount,
+  categorySeed: categorySeed,
+);
 
 void main() {
   group('count line denominator — bilingual, immediate', () {
@@ -165,6 +169,25 @@ void main() {
       await tester.pumpWidget(_localizedApp(_staticTab(_rows(27))));
       await tester.pump();
       expect(_countLine(tester, 'Showing '), 'Showing 27 of 27');
+    });
+
+    testWidgets('totalCount 0 renders "Showing 0 of 0" — a PROVEN-empty '
+        'total must not collapse into the loaded-count fallback', (
+      tester,
+    ) async {
+      _setViewSize(tester, const Size(1200, 900));
+      // A filter that matches nothing keeps the toolbar/count line on
+      // screen with a zero numerator (the tab's whole-list empty state
+      // only takes over when the loaded list itself is empty). The host
+      // reports the Fix-B proven-empty total: 0, not null.
+      await tester.pumpWidget(
+        _localizedApp(
+          _staticTab(_rows(1), totalCount: 0, categorySeed: 'Utilities'),
+        ),
+      );
+      await tester.pump(); // post-frame seed application
+      await tester.pump();
+      expect(_countLine(tester, 'Showing '), 'Showing 0 of 0');
     });
   });
 

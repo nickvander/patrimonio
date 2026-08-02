@@ -250,6 +250,13 @@
   "txDateCustomRange": "Custom range",
   "txReset": "Reset",
   "txDateRange": "Date range",
+  "txNewSince": "New since {date}",
+  "@txNewSince": {
+    "description": "Active-filter chip for the since-last-visit drill-down: only transactions SYNCED after the user's previous visit are shown. {date} arrives pre-formatted (DateFormat.MMMd of the local anchor).",
+    "placeholders": {
+      "date": {}
+    }
+  },
   "txAccounts": "Accounts",
   "txCategories": "Categories",
   "txSplitSameAsParentUncategorised": "Same as parent (uncategorised)",

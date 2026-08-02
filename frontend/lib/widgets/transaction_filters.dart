@@ -88,6 +88,14 @@ class TxFilters {
   // end). The dialog guarantees min <= max by swapping on Apply.
   final double? minAmount;
   final double? maxAmount;
+  // Sync-time cutoff for the since-last-visit drill-down: keep only rows
+  // whose `created_at` (the instant the SYNC produced the row) is after
+  // this anchor. Deliberately distinct from the posted-date window above —
+  // card transactions post days before the sync fetches them, so "new
+  // since your last visit" can never be expressed as a date window.
+  // Drill-down-only: not editable in the filter dialog, but it renders
+  // (and clears) as a chip in the active-filter strip like any filter.
+  final DateTime? createdSince;
 
   const TxFilters({
     this.accountIds = const {},
@@ -99,6 +107,7 @@ class TxFilters {
     this.customEnd,
     this.minAmount,
     this.maxAmount,
+    this.createdSince,
   });
 
   static const empty = TxFilters();
@@ -110,7 +119,8 @@ class TxFilters {
       status != TxStatus.all ||
       dateRange != TxDateRange.all ||
       minAmount != null ||
-      maxAmount != null;
+      maxAmount != null ||
+      createdSince != null;
 
   /// Count of active filters — drives the badge on the filter button.
   /// Treats account/category sets as a single bucket each (any value vs.
@@ -124,6 +134,7 @@ class TxFilters {
     if (dateRange != TxDateRange.all) n++;
     // Min/max are one conceptual "amount" filter, like the sets above.
     if (minAmount != null || maxAmount != null) n++;
+    if (createdSince != null) n++;
     return n;
   }
 
@@ -164,6 +175,8 @@ class TxFilters {
     double? minAmount,
     double? maxAmount,
     bool clearAmounts = false,
+    DateTime? createdSince,
+    bool clearCreatedSince = false,
   }) {
     return TxFilters(
       accountIds: accountIds ?? this.accountIds,
@@ -175,6 +188,9 @@ class TxFilters {
       customEnd: clearCustomDates ? null : (customEnd ?? this.customEnd),
       minAmount: clearAmounts ? null : (minAmount ?? this.minAmount),
       maxAmount: clearAmounts ? null : (maxAmount ?? this.maxAmount),
+      createdSince: clearCreatedSince
+          ? null
+          : (createdSince ?? this.createdSince),
     );
   }
 
@@ -215,6 +231,28 @@ class TxFilters {
       if (parsed == null) return false;
       final day = _stripTime(parsed);
       if (day.isBefore(window.start) || day.isAfter(window.end)) return false;
+    }
+    if (createdSince != null) {
+      // Instant-vs-instant comparison: `created_at` is an RFC3339 UTC
+      // timestamp and DateTime comparisons are zone-agnostic, so no local
+      // truncation here (truncating is exactly the timezone bug that made
+      // a 7:59pm Jul 31 CST anchor read as Aug 1).
+      final created = DateTime.tryParse(tx['created_at']?.toString() ?? '');
+      if (created != null) {
+        if (!created.isAfter(createdSince!)) return false;
+      } else {
+        // Older backend: no created_at on the row. Approximate with the
+        // bank-POSTED date — keep rows posted on/after the anchor's LOCAL
+        // day. Imperfect (late-synced rows posted earlier are missed),
+        // but honest: better than hiding everything or showing everything.
+        final raw = tx['date']?.toString();
+        if (raw == null) return false;
+        final posted = DateTime.tryParse(raw);
+        if (posted == null) return false;
+        if (_stripTime(posted).isBefore(_stripTime(createdSince!.toLocal()))) {
+          return false;
+        }
+      }
     }
     return true;
   }
@@ -352,6 +390,10 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
         customEnd: _draft.customEnd,
         minAmount: lo,
         maxAmount: hi,
+        // Not editable in this dialog (drill-down-only), but it must
+        // survive an Apply — dropping it here would silently widen the
+        // list the user is looking at.
+        createdSince: _draft.createdSince,
       ),
       _draftSort,
     ));
