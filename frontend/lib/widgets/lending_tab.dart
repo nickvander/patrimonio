@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/menus.dart';
 import '../utils/currency.dart' show MoneyDisplayFormat, moneyFormat;
 import '../utils/flat_schedule.dart';
 import '../utils/lending_summary.dart';
@@ -1354,6 +1355,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _currency,
                 isExpanded: true,
+                dropdownColor: houseDropdownColor(context),
+                borderRadius: kMenuRadius,
                 decoration: _decoration(
                   AppLocalizations.of(context).lendFieldCurrency,
                 ),
@@ -1933,6 +1936,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         DropdownButtonFormField<String>(
           initialValue: _ratePeriod,
           isExpanded: true,
+          dropdownColor: houseDropdownColor(context),
+          borderRadius: kMenuRadius,
           decoration: _decoration(
             AppLocalizations.of(context).lendFieldRateIsPer,
           ),
@@ -1951,6 +1956,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       DropdownButtonFormField<String>(
         initialValue: _paymentFrequency,
         isExpanded: true,
+        dropdownColor: houseDropdownColor(context),
+        borderRadius: kMenuRadius,
         decoration: _decoration(
           AppLocalizations.of(context).lendFieldPaymentFrequency,
         ),
@@ -3272,6 +3279,8 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                     DropdownButtonFormField<String>(
                       initialValue: _interestType,
                       isExpanded: true,
+                      dropdownColor: houseDropdownColor(context),
+                      borderRadius: kMenuRadius,
                       decoration: _decoration(
                         AppLocalizations.of(context).lendFieldInterestType,
                       ),

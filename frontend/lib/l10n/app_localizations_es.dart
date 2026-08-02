@@ -1436,6 +1436,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cfPeriodYtd => 'En lo que va del año';
 
   @override
+  String get cfPeriodLastMonthShort => 'Último mes';
+
+  @override
+  String get cfPeriod3MonthsShort => '3 meses';
+
+  @override
+  String get cfPeriodYtdShort => 'Este año';
+
+  @override
   String get cfSubscriptionsTitle => 'Cargos recurrentes';
 
   @override

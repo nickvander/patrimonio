@@ -6,6 +6,7 @@ import 'services/api_platform.dart';
 import 'services/backend_config.dart';
 import 'services/preferences.dart';
 import 'services/splash.dart';
+import 'theme/menus.dart';
 import 'theme/palette.dart';
 import 'theme/typography.dart';
 import 'utils/app_locale.dart';
@@ -113,20 +114,28 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
   // against; preserving it avoids visual regressions.
   ThemeData _buildDarkTheme() {
     const b = Brightness.dark;
+    final scheme = ColorScheme.fromSeed(
+      // Agave jade seed + heritage terracotta/gold overrides, per
+      // market_research §4. BrandPalette is the single source of truth.
+      seedColor: BrandPalette.seed(b),
+      brightness: b,
+      surface: BrandPalette.cardSurface(b),
+      secondary: BrandPalette.terracotta(b),
+      tertiary: BrandPalette.gold(b),
+    );
+    final textTheme = buildBrandTextTheme(ThemeData.dark().textTheme);
     return ThemeData(
       brightness: b,
-      colorScheme: ColorScheme.fromSeed(
-        // Agave jade seed + heritage terracotta/gold overrides, per
-        // market_research §4. BrandPalette is the single source of truth.
-        seedColor: BrandPalette.seed(b),
-        brightness: b,
-        surface: BrandPalette.cardSurface(b),
-        secondary: BrandPalette.terracotta(b),
-        tertiary: BrandPalette.gold(b),
-      ),
+      colorScheme: scheme,
       useMaterial3: true,
       scaffoldBackgroundColor: BrandPalette.scaffoldBackground(b),
-      textTheme: buildBrandTextTheme(ThemeData.dark().textTheme),
+      textTheme: textTheme,
+      // All floating menus share the house chrome (theme/menus.dart);
+      // popupMenuTheme covers PopupMenuButton/showMenu, menuTheme covers
+      // MenuAnchor. Dropdown routes have no theme hook — their call sites
+      // use houseDropdownColor/kMenuRadius from the same file.
+      popupMenuTheme: buildPopupMenuTheme(b, scheme, textTheme),
+      menuTheme: buildMenuTheme(b),
       cardTheme: CardThemeData(
         color: BrandPalette.cardSurface(b),
         elevation: 4,
@@ -173,6 +182,7 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
       secondary: BrandPalette.terracotta(b),
       tertiary: BrandPalette.gold(b),
     );
+    final textTheme = buildBrandTextTheme(ThemeData.light().textTheme);
     return ThemeData(
       brightness: b,
       colorScheme: scheme,
@@ -180,7 +190,10 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
       // Warm parchment scaffold so the white cards sit on warmth (not the
       // old cool off-white). Pure white-on-white would merge with cards.
       scaffoldBackgroundColor: BrandPalette.scaffoldBackground(b),
-      textTheme: buildBrandTextTheme(ThemeData.light().textTheme),
+      textTheme: textTheme,
+      // Same house menu chrome as the dark theme — see theme/menus.dart.
+      popupMenuTheme: buildPopupMenuTheme(b, scheme, textTheme),
+      menuTheme: buildMenuTheme(b),
       cardTheme: CardThemeData(
         color: Colors.white,
         // elevation 2 + a slightly stronger shadow gives cards real

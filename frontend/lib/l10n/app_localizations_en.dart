@@ -1418,6 +1418,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cfPeriodYtd => 'Year to date';
 
   @override
+  String get cfPeriodLastMonthShort => 'Last month';
+
+  @override
+  String get cfPeriod3MonthsShort => '3 months';
+
+  @override
+  String get cfPeriodYtdShort => 'This year';
+
+  @override
   String get cfSubscriptionsTitle => 'Recurring charges';
 
   @override

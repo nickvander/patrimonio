@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/menus.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -147,7 +148,8 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
     return DropdownButton<int?>(
       value: _year,
       underline: const SizedBox.shrink(),
-      borderRadius: BorderRadius.circular(10),
+      dropdownColor: houseDropdownColor(context),
+      borderRadius: kMenuRadius,
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,

@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/transaction_mutation_refresh.dart'
     show kTxBackendMaxPageSize;
+import '../theme/menus.dart';
 import '../theme/palette.dart';
 import '../theme/typography.dart';
 import '../utils/category.dart';
@@ -5254,6 +5255,8 @@ class _AccountMoverState extends State<_AccountMover> {
           child: DropdownButtonFormField<String>(
             initialValue: _selectedId,
             isExpanded: true,
+            dropdownColor: houseDropdownColor(context),
+            borderRadius: kMenuRadius,
             decoration: InputDecoration(
               labelText: l.txReassignTo,
               border: const OutlineInputBorder(),

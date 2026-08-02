@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/menus.dart';
 import '../theme/palette.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/recurrence.dart';
@@ -481,6 +482,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
           DropdownButtonFormField<String>(
             initialValue: _accountId,
             isExpanded: true,
+            dropdownColor: houseDropdownColor(context),
+            borderRadius: kMenuRadius,
             decoration: _fieldDecoration(labelText: l.dlgTxAccount),
             items: widget.accounts.map<DropdownMenuItem<String>>((a) {
               final id = a['id']?.toString();
@@ -626,6 +629,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             DropdownButtonFormField<String?>(
               initialValue: _repeats,
               isExpanded: true,
+              dropdownColor: houseDropdownColor(context),
+              borderRadius: kMenuRadius,
               decoration: _fieldDecoration(labelText: l.recRepeats),
               items: [
                 DropdownMenuItem<String?>(

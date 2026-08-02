@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/file_drop.dart';
+import '../theme/menus.dart';
 import '../theme/typography.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
@@ -602,6 +603,8 @@ class _ImportScreenState extends State<ImportScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _secondaryAccountIds[label],
                   isExpanded: true,
+                  dropdownColor: houseDropdownColor(context),
+                  borderRadius: kMenuRadius,
                   hint: Text(es ? 'Elegir cuenta…' : 'Choose account…'),
                   decoration: InputDecoration(
                     filled: true,
@@ -2006,6 +2009,8 @@ class _ImportScreenState extends State<ImportScreen> {
                             DropdownButtonFormField<String>(
                               initialValue: _selectedAccountId,
                               isExpanded: true,
+                              dropdownColor: houseDropdownColor(context),
+                              borderRadius: kMenuRadius,
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: context.tint(0.05),

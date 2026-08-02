@@ -2427,6 +2427,24 @@ abstract class AppLocalizations {
   /// **'Year to date'**
   String get cfPeriodYtd;
 
+  /// No description provided for @cfPeriodLastMonthShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Last month'**
+  String get cfPeriodLastMonthShort;
+
+  /// No description provided for @cfPeriod3MonthsShort.
+  ///
+  /// In en, this message translates to:
+  /// **'3 months'**
+  String get cfPeriod3MonthsShort;
+
+  /// No description provided for @cfPeriodYtdShort.
+  ///
+  /// In en, this message translates to:
+  /// **'This year'**
+  String get cfPeriodYtdShort;
+
   /// No description provided for @cfSubscriptionsTitle.
   ///
   /// In en, this message translates to:

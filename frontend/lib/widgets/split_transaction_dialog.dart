@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/menus.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -277,6 +278,8 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     return DropdownButtonFormField<String>(
       value: current.isEmpty ? widget.parentCategory : current,
       isDense: true,
+      dropdownColor: houseDropdownColor(context),
+      borderRadius: kMenuRadius,
       decoration: InputDecoration(
         isDense: true,
         labelText: l.txCategory,

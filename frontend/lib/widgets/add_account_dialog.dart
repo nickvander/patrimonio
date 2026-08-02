@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/menus.dart';
 import '../theme/palette.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
@@ -256,7 +257,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _type,
-                dropdownColor: Theme.of(context).colorScheme.surface,
+                dropdownColor: houseDropdownColor(context),
+                borderRadius: kMenuRadius,
                 decoration: _fieldDecoration(labelText: l.dlgAccountType),
                 items: [
                   for (final (groupKey, types) in _typeGroups) ...[
@@ -295,7 +297,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _currency,
-                dropdownColor: Theme.of(context).colorScheme.surface,
+                dropdownColor: houseDropdownColor(context),
+                borderRadius: kMenuRadius,
                 decoration: _fieldDecoration(labelText: l.dlgAccountCurrency),
                 items: ['USD', 'MXN']
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))

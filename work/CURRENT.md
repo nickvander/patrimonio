@@ -1,7 +1,28 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-02 (claim banners; fresh-context jumps; move → account panel)
+> **Last updated:** 2026-08-02 (period selector + menu chrome consistency)
 > **Branch:** `main`.
+
+## 2026-08-02 (evening) — Period selector + every menu on the house chrome
+
+* **Cash-flow period selector**: the phone branch's stock ChoiceChip
+  scroll row (uneven widths, YTD hidden off-screen) is now the house
+  `ConnectedSegments` at every width via a new
+  `CashFlowPeriodSelector` widget (enum moved out of the dashboard god
+  file). Below 560px of available width it uses compact bilingual
+  labels (`cfPeriod*Short`) — measured with the real Inter TTFs: full
+  labels cannot fit 4 equal segments on any phone, and the old wide
+  branch's 480px cap was ellipsizing desktop es-MX ("En lo que va del
+  año"); cap now 560.
+* **Menu chrome centralized**: new `theme/menus.dart`
+  (`buildPopupMenuTheme`/`buildMenuTheme` + `houseDropdownColor`/
+  `kMenuRadius`) installed in both themes — every PopupMenuButton/
+  showMenu/MenuAnchor gets cardSurface, 12px radius, no M3 tint,
+  house type at height 1.35. The legacy dropdown route has no theme
+  hook, so all 18 `DropdownButton(FormField)` sites reference the
+  helper pair (no copy-paste). Desktop bell popover verified intact.
+* Tests 901→912; both batches screenshot-verified on the rig (phone +
+  desktop, light + dark, en + es).
 
 ## 2026-08-02 (final batch) — Drill-downs carry their claim; jumps get a clean slate
 

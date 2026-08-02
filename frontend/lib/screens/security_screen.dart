@@ -794,17 +794,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
             if (supported)
               MenuAnchor(
                 alignmentOffset: const Offset(0, 6),
-                style: MenuStyle(
+                // Surface chrome (color/shape/elevation/padding) comes from
+                // the central menuTheme (theme/menus.dart); only the per-site
+                // anchor alignment stays here.
+                style: const MenuStyle(
                   alignment: AlignmentDirectional.bottomEnd,
-                  elevation: const WidgetStatePropertyAll(3),
-                  shape: WidgetStatePropertyAll(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(vertical: 6),
-                  ),
                 ),
                 builder: (context, controller, _) => TextButton.icon(
                   onPressed: () => controller.isOpen

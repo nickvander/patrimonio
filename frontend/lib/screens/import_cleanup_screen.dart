@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/menus.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
@@ -394,6 +395,8 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
       children: [
         DropdownButtonFormField<String>(
           initialValue: _bulkAccountId,
+          dropdownColor: houseDropdownColor(context),
+          borderRadius: kMenuRadius,
           decoration: InputDecoration(
             labelText: l.impAssignToAccount,
             border: const OutlineInputBorder(),

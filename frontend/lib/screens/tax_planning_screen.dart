@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/realtime_service.dart';
+import '../theme/menus.dart';
 import '../theme/typography.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
@@ -762,6 +763,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           l.taxYearLabel,
           DropdownButton<int>(
             value: _selectedYear,
+            dropdownColor: houseDropdownColor(context),
+            borderRadius: kMenuRadius,
             items: yearItems
                 .map(
                   (value) => DropdownMenuItem<int>(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/menus.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
 
@@ -115,6 +116,8 @@ class _TaxExportsCardState extends State<TaxExportsCard> {
               ),
               DropdownButton<int>(
                 value: _year,
+                dropdownColor: houseDropdownColor(context),
+                borderRadius: kMenuRadius,
                 items: yearItems
                     .map(
                       (y) => DropdownMenuItem<int>(

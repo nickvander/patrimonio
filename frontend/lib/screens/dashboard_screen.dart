@@ -51,6 +51,7 @@ import '../widgets/add_recurring_rule_dialog.dart';
 import '../widgets/add_transaction_dialog.dart';
 import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/budgets_card.dart';
+import '../widgets/cash_flow_period_selector.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/connected_segments.dart';
 import '../widgets/credit_utilization_card.dart';
@@ -127,14 +128,6 @@ class _NavDest {
     this.tier,
   );
 }
-
-/// Period the Cash Flow tab's headline cards summarize. Drives a
-/// calendar-month window passed to the trends endpoint:
-///   thisMonth   -> 1 month  (current)
-///   lastMonth   -> 2 months (so the prior month + a vs-comparison are present)
-///   threeMonths -> 3 months (aggregated)
-///   ytd         -> Jan..current of this year (aggregated)
-enum CashFlowPeriod { thisMonth, lastMonth, threeMonths, ytd }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -3558,102 +3551,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  /// Compact period chooser pinned to the top of the Cash Flow tab. Mirrors
-  /// the SegmentedButton style used elsewhere (e.g. the portfolio Flat/By
-  /// account toggle) so it reads as native. Horizontally scrollable so the
-  /// four labels never overflow on a phone.
-  ///
-  /// Below ~420px the compact-density SegmentedButton's segments fall under
-  /// the 48dp touch floor and the four labels crowd; phones instead get a
-  /// horizontally scrolling row of ChoiceChips — the same pattern as
-  /// SpendingByCategoryCard's `_rangeSelector`.
-  Widget _buildCashFlowPeriodSelector(AppLocalizations l) {
-    if (MediaQuery.sizeOf(context).width < 420) {
-      final periods = <(CashFlowPeriod, String)>[
-        (CashFlowPeriod.thisMonth, l.cfPeriodThisMonth),
-        (CashFlowPeriod.lastMonth, l.cfPeriodLastMonth),
-        (CashFlowPeriod.threeMonths, l.cfPeriod3Months),
-        (CashFlowPeriod.ytd, l.cfPeriodYtd),
-      ];
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < periods.length; i++) ...[
-              if (i > 0) const SizedBox(width: 8),
-              ChoiceChip(
-                label: Text(periods[i].$2),
-                selected: _cashFlowPeriod == periods[i].$1,
-                labelStyle: TextStyle(
-                  fontSize: 12,
-                  color: _cashFlowPeriod == periods[i].$1
-                      ? context.positive
-                      : context.textMuted,
-                  fontWeight: _cashFlowPeriod == periods[i].$1
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-                showCheckmark: false,
-                // Null while a period fetch is in flight — disables the
-                // chips the same way the SegmentedButton branch disables
-                // onSelectionChanged.
-                onSelected: _cashFlowLoading
-                    ? null
-                    : (_) {
-                        final value = periods[i].$1;
-                        if (value == _cashFlowPeriod) return;
-                        _onCashFlowPeriodChanged(value);
-                      },
-              ),
-            ],
-            // Trailing breathing room so the last chip never touches the
-            // screen edge mid-scroll.
-            const SizedBox(width: 16),
-          ],
-        ),
-      );
-    }
-    return Align(
-      alignment: Alignment.centerLeft,
-      // House connected button group. ConnectedSegments is built of
-      // Expandeds, so it gets a width cap instead of the old horizontal
-      // scroll guard (its Flexible labels ellipsize rather than
-      // overflow).
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: ConnectedSegments<CashFlowPeriod>(
-          segments: [
-            ConnectedSegment(
-              value: CashFlowPeriod.thisMonth,
-              label: l.cfPeriodThisMonth,
-            ),
-            ConnectedSegment(
-              value: CashFlowPeriod.lastMonth,
-              label: l.cfPeriodLastMonth,
-            ),
-            ConnectedSegment(
-              value: CashFlowPeriod.threeMonths,
-              label: l.cfPeriod3Months,
-            ),
-            ConnectedSegment(value: CashFlowPeriod.ytd, label: l.cfPeriodYtd),
-          ],
-          selected: _cashFlowPeriod,
-          // Disabled while a period fetch is in flight — the same
-          // non-interactive window the old null onSelectionChanged (and
-          // the chip branch's null onSelected) provided.
-          enabled: !_cashFlowLoading,
-          onSelected: (value) {
-            // Same re-tap guard the chip branch uses: re-selecting the
-            // current period must not refetch.
-            if (value == _cashFlowPeriod) return;
-            _onCashFlowPeriodChanged(value);
-          },
-        ),
-      ),
-    );
-  }
-
   /// Targeted refresh after hiding/unhiding a subscription merchant. Only
   /// the two subscription lists can change — re-pricing stocks and
   /// re-pulling the whole dashboard for that was pure waste.
@@ -6055,7 +5952,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildCashFlowPeriodSelector(l),
+          CashFlowPeriodSelector(
+            selected: _cashFlowPeriod,
+            // Disabled while a period fetch is in flight; the selector
+            // itself guards re-taps of the current period.
+            enabled: !_cashFlowLoading,
+            onChanged: _onCashFlowPeriodChanged,
+          ),
           SizedBox(height: gap),
           MonthlyCashFlowCard(
             trends: cashFlowSeries ?? const [],
