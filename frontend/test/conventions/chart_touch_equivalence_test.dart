@@ -71,14 +71,8 @@ const List<String> _copyPaths = [
 ];
 
 /// Files allowed to construct an inline `LineTouchData(` at all.
-/// account_balance_chart.dart predates the helper with a plain (non-snap)
-/// tooltip — frozen as legacy; migrating it to `standardLineTouch` shrinks
-/// this list. Everything else must use the helper.
-const Set<String> _inlineLineTouchDataFiles = {
-  _canonicalPath,
-  ..._copyPaths,
-  'lib/widgets/account_balance_chart.dart',
-};
+/// Everything else must use the helper.
+const Set<String> _inlineLineTouchDataFiles = {_canonicalPath, ..._copyPaths};
 
 void main() {
   group('chart-touch equivalence (SKILL.md §5)', () {

@@ -174,26 +174,23 @@ class AccountBalanceChart extends StatelessWidget {
                           ),
                         ),
                       ],
-                      lineTouchData: LineTouchData(
-                        handleBuiltInTouches: true,
-                        touchTooltipData: LineTouchTooltipData(
-                          getTooltipColor: (_) => context.tooltipSurface,
-                          getTooltipItems: (touchedSpots) {
-                            return touchedSpots.map((spot) {
-                              final idx = spot.x.toInt();
-                              final m = (idx >= 0 && idx < points.length)
-                                  ? points[idx]['month']?.toString() ?? ''
-                                  : '';
-                              return LineTooltipItem(
-                                '$m\n${displayCurrencyAmount(spot.y, currency)}',
-                                TextStyle(
-                                  color: context.tooltipOnSurface,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              );
-                            }).toList();
-                          },
-                        ),
+                      lineTouchData: standardLineTouch(
+                        context,
+                        items: (context, touchedSpots) {
+                          return touchedSpots.map((spot) {
+                            final idx = spot.x.toInt();
+                            final m = (idx >= 0 && idx < points.length)
+                                ? points[idx]['month']?.toString() ?? ''
+                                : '';
+                            return LineTooltipItem(
+                              '$m\n${displayCurrencyAmount(spot.y, currency)}',
+                              TextStyle(
+                                color: context.tooltipOnSurface,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          }).toList();
+                        },
                       ),
                     ),
                   ),
