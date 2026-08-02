@@ -837,6 +837,12 @@ abstract class AppLocalizations {
   /// **'Loading your full history so every option is available…'**
   String get txFilterLoadingHistory;
 
+  /// No description provided for @txLoadingFullHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading full history…'**
+  String get txLoadingFullHistory;
+
   /// No description provided for @txExitSelectionMode.
   ///
   /// In en, this message translates to:

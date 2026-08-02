@@ -14,6 +14,7 @@ import '../services/api_service.dart';
 import '../services/realtime_service.dart';
 import '../services/transaction_mutation_refresh.dart'
     show mergeRefetchedTransactions, txRefetchLimit;
+import '../services/tx_page.dart';
 import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/chart_touch.dart';
@@ -28,8 +29,10 @@ import '../widgets/transactions_tab.dart';
 
 /// Signature of one paged, newest-first fetch of an account's
 /// transactions (see [AccountTransactionsScreen.transactionsFetcher]).
+/// Returns a [TxPage] so the panel also sees the `X-Total-Count` header
+/// total when the backend provides it.
 typedef AccountTransactionsFetcher =
-    Future<List<dynamic>> Function({required int limit, required int offset});
+    Future<TxPage> Function({required int limit, required int offset});
 
 /// Signature of the single-row PATCH issued from the detail editors
 /// (see [AccountTransactionsScreen.transactionUpdater]).
@@ -154,6 +157,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   // True while the backend may hold rows older than the loaded pages —
   // drives TransactionsTab's "Load more" button + filter cascade.
   bool _hasMore = false;
+  // Whole-account transaction count from X-Total-Count. Stable "of N"
+  // denominator + exact hasMore when present; null on an older backend
+  // (heuristics keep working).
+  int? _totalCount;
   // Initial/Load-more page size. Small enough that opening the panel is
   // one cheap request (was a fixed 1,000-row download), large enough
   // that the bounded-host virtualised list has a screenful to show.
@@ -491,7 +498,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   /// One newest-first page from the backend (or the injected test
   /// fetcher). All transaction reads in this screen go through here so
   /// paging, the in-place refetch and the tests share one seam.
-  Future<List<dynamic>> _fetchPage({required int limit, required int offset}) {
+  Future<TxPage> _fetchPage({required int limit, required int offset}) {
     final fetcher = widget.transactionsFetcher;
     if (fetcher != null) return fetcher(limit: limit, offset: offset);
     return _apiService.getAccountTransactions(
@@ -499,6 +506,17 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       limit: limit,
       offset: offset,
     );
+  }
+
+  /// Fold one fetched page's header total into [_totalCount] and return
+  /// the hasMore verdict for [loadedCount] rows on screen: exact
+  /// (loaded < total) when the header is present, the "full page ⇒ maybe
+  /// more" heuristic otherwise.
+  bool _hasMoreAfterPage(TxPage page, int loadedCount, int requested) {
+    if (page.totalCount != null) _totalCount = page.totalCount;
+    final total = _totalCount;
+    if (total != null) return loadedCount < total;
+    return page.rows.length >= requested;
   }
 
   /// Initial load (and the error-state Retry). This is the ONLY path
@@ -513,11 +531,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     });
 
     try {
-      final txs = await _fetchPage(limit: _pageSize, offset: 0);
+      final page = await _fetchPage(limit: _pageSize, offset: 0);
       if (!mounted) return;
       setState(() {
-        _transactions = txs;
-        _hasMore = txs.length >= _pageSize;
+        _transactions = page.rows;
+        _hasMore = _hasMoreAfterPage(page, page.rows.length, _pageSize);
         _isLoading = false;
       });
     } catch (e) {
@@ -536,12 +554,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   Future<void> _loadMoreTransactions({int? limit}) async {
     final pageSize = limit ?? _pageSize;
     final offset = _transactions?.length ?? 0;
-    final more = await _fetchPage(limit: pageSize, offset: offset);
+    final page = await _fetchPage(limit: pageSize, offset: offset);
     if (!mounted) return;
     setState(() {
-      _transactions = [...(_transactions ?? const []), ...more];
-      // Fewer rows than asked for = we reached the tail of the account.
-      _hasMore = more.length >= pageSize;
+      _transactions = [...(_transactions ?? const []), ...page.rows];
+      // Exact when the header total is known; otherwise fewer rows than
+      // asked for = we reached the tail of the account.
+      _hasMore = _hasMoreAfterPage(page, _transactions!.length, pageSize);
     });
   }
 
@@ -577,17 +596,23 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       pageSize: _pageSize,
     );
     try {
-      final refetched = await _fetchPage(limit: limit, offset: 0);
+      final page = await _fetchPage(limit: limit, offset: 0);
       if (!mounted) return;
       setState(() {
         _transactions = mergeRefetchedTransactions(
           previous: previous,
-          refetched: refetched,
+          refetched: page.rows,
           requestedLimit: limit,
         );
-        // A short page proves we now hold the account's whole history; a
-        // full page tells us nothing new, so leave the flag as-is.
-        if (refetched.length < limit) _hasMore = false;
+        if (page.totalCount != null) {
+          // Header present: recompute exactly in both directions.
+          _totalCount = page.totalCount;
+          _hasMore = _transactions!.length < _totalCount!;
+        } else if (page.rows.length < limit) {
+          // A short page proves we now hold the account's whole history; a
+          // full page tells us nothing new, so leave the flag as-is.
+          _hasMore = false;
+        }
       });
     } catch (e) {
       debugPrint('Account panel post-mutation refresh error: $e');
@@ -1657,6 +1682,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   },
                   onLoadMore: _loadMoreTransactions,
                   hasMore: _hasMore,
+                  // Stable "of N" denominator from X-Total-Count; null on
+                  // an older backend → loaded-count fallback.
+                  totalCount: _totalCount,
                   onUpdate:
                       (
                         id, {

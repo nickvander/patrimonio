@@ -5124,7 +5124,9 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final txs = await widget.apiService.getTransactions(
+      // .rows: the picker only needs the candidate list, never the
+      // X-Total-Count total that rides on the TxPage.
+      final txs = (await widget.apiService.getTransactions(
         limit: 200,
         currency: widget.currency,
         sign: _isRepayment ? 'inflow' : 'outflow',
@@ -5132,7 +5134,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
         // Don't offer a tx already reconciled to a loan — picking it would
         // only bounce with "already linked".
         excludeLinked: true,
-      );
+      )).rows;
       if (!mounted) return;
       setState(() {
         _txs = txs;

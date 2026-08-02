@@ -10,6 +10,7 @@ import '../utils/projection_seed.dart';
 import 'api_platform.dart';
 import 'auth_service.dart';
 import 'response_cache.dart';
+import 'tx_page.dart';
 
 /// Pick the English or es-MX variant of a user-facing message based on the
 /// app's active locale. Lives at top level so the (BuildContext-free) service
@@ -1438,7 +1439,7 @@ class ApiService {
   /// filters are applied server-side over the WHOLE table — the loan
   /// payment picker uses them so it can find a match that's older than one
   /// page and never surfaces a foreign-currency inflow.
-  Future<List<dynamic>> getTransactions({
+  Future<TxPage> getTransactions({
     int limit = 50,
     int offset = 0,
     String? currency,
@@ -1460,7 +1461,13 @@ class ApiService {
       Uri.parse('$_baseUrl/dashboard/transactions?${params.join('&')}'),
     );
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      // Rows decode exactly as before; the whole-table match count rides
+      // in the X-Total-Count header (absent on older backends → null,
+      // callers keep their heuristics). See TxPage.
+      return TxPage(
+        rows: json.decode(response.body),
+        totalCount: TxPage.totalFromHeaders(response.headers),
+      );
     }
     throw Exception(
       _t(
@@ -1475,7 +1482,7 @@ class ApiService {
   /// 1,000 rows); an explicit limit is clamped server-side to ≤500 per
   /// request (same cap as `/dashboard/transactions`, see
   /// [kTxBackendMaxPageSize] in transaction_mutation_refresh.dart).
-  Future<List<dynamic>> getAccountTransactions(
+  Future<TxPage> getAccountTransactions(
     String accountId, {
     int? limit,
     int? offset,
@@ -1489,7 +1496,10 @@ class ApiService {
       Uri.parse('$_baseUrl/accounts/$accountId/transactions$query'),
     );
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      return TxPage(
+        rows: json.decode(response.body),
+        totalCount: TxPage.totalFromHeaders(response.headers),
+      );
     }
     throw Exception(
       _t(

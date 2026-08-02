@@ -1,7 +1,42 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-01 (bell drill-down P0 + P1 shipped)
+> **Last updated:** 2026-08-02 (filter editor restyle + stable tx total)
 > **Branch:** `main`.
+
+## 2026-08-02 — Filter & sort restyle + stable transaction totals
+
+Two phone reports, same subagent pipeline (evaluators → PM → dev →
+adversarial verify), this time with a **live headless-browser rig** (web
+build + same-origin proxy + seeded claude_dev account) so the design audit
+and the verification worked from real screenshots, not just code.
+
+* **Filter & sort editor restyle** (purely presentational — the
+  (TxFilters, TxSort) contract and every behavior test are untouched):
+  both shells on `BrandPalette.cardSurface`; the three FilterChip groups
+  now use the house tonal recipe (no checkmark, StadiumBorder no side,
+  `tileSurface` fill, `accentSoft(positive)` selected, jade-bold labels —
+  same as the cash-flow period selector); the two `SegmentedButton`s
+  replaced by a new shared **`ConnectedSegments<T>`** widget extracted
+  from the theme picker (which now uses it too); filled rounded amount
+  inputs; sheet action bar = hairline + full-bleed `FilledButton` Apply;
+  unified `titleLarge` headers; 8dp chip gaps, LayoutBuilder gutters.
+  Parity test pins that both shells pop identical records.
+* **"Showing X of Y" no longer counts up.** The denominator was
+  loaded-pages length while the filter cascade streamed history. Both
+  list endpoints now return **`X-Total-Count`** via `COUNT(*) OVER ()`
+  (identical WHERE, zero clause duplication; header not envelope so the
+  shipped APK's bare-array decode keeps working; CORS exposes it).
+  `ApiService` returns a `TxPage {rows, totalCount}`; `hasMore` is exact
+  (`loaded < total`) with the old short-page heuristic kept as the
+  older-server fallback; the count line renders the stable server total
+  plus an inline "Loading full history…" note while the cascade runs.
+* Tests: frontend 829→844, backend +4 (`tx_total_count.rs` on the real
+  middleware stack: page-stable totals, filter parity, tenant scoping,
+  no-header-on-empty). Verified live: header identical across pages,
+  before/after rig screenshots phone+desktop, light+dark.
+* Known cosmetic edge (accepted): deleting the very last transactions
+  mid-session leaves the stale total until reload (header absent on an
+  empty page by design).
 
 ## 2026-08-01 — P1: insight sheet, comparison banner, account-scoped moves
 

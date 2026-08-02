@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/transaction_mutation_refresh.dart'
     show kTxBackendMaxPageSize;
+import '../theme/palette.dart';
 import '../theme/typography.dart';
 import '../utils/category.dart';
 import '../utils/category_style.dart';
@@ -222,6 +223,14 @@ class TransactionsTab extends StatefulWidget {
   /// When false the "Load more" button is hidden.
   final bool hasMore;
 
+  /// Whole-table transaction count from the backend's X-Total-Count
+  /// header, when the host has one. Used as the "of N" denominator in the
+  /// count line so it stays STABLE while the whole-history cascade streams
+  /// pages in (only the numerator moves). Null (older backend / host
+  /// without the header) falls back to the loaded count — byte-identical
+  /// to the pre-header behavior.
+  final int? totalCount;
+
   /// Cmd-K deep-link seed. When this changes the tab's search query is
   /// pre-populated so the row the user picked from the palette is
   /// surfaced immediately.
@@ -368,6 +377,7 @@ class TransactionsTab extends StatefulWidget {
     this.onTransactionAdded,
     this.onLoadMore,
     this.hasMore = false,
+    this.totalCount,
     this.searchOverride,
     this.highlightedTxId,
     this.dateSeed,
@@ -911,6 +921,10 @@ class TransactionsTabState extends State<TransactionsTab> {
         isScrollControlled: true,
         useSafeArea: true,
         showDragHandle: true,
+        // Same tone main.dart's cardTheme uses — kills the pale-sage
+        // seeded container in light mode and lands the dark sheet on the
+        // same surface as the wide-layout dialog shell.
+        backgroundColor: BrandPalette.cardSurface(Theme.of(context).brightness),
         builder: (sheetContext) => ConstrainedBox(
           // Cap the sheet below full height so it still reads as a sheet;
           // the panel's inner scroll view handles longer content.
@@ -1320,12 +1334,44 @@ class TransactionsTabState extends State<TransactionsTab> {
                   _spikeBannerLine(isNarrow),
                   const SizedBox(height: 8),
                   Text(
+                    // With X-Total-Count the denominator is the true server
+                    // total from the very first page and never moves while
+                    // the whole-history cascade streams rows in — only the
+                    // numerator (and the filtered summary) legitimately
+                    // grow as matching pages land. Without it, the loaded
+                    // count keeps today's behavior.
                     l.txShowingCount(
                       filtered.length,
-                      widget.transactions.length,
+                      widget.totalCount ?? widget.transactions.length,
                     ),
                     style: TextStyle(color: context.textSubtle, fontSize: 12),
                   ),
+                  // While the cascade is pulling pages, say so — otherwise
+                  // a growing numerator under a fixed denominator (and a
+                  // moving money summary) reads as glitching. Mirrors the
+                  // filter editor's _loadingHistory affordance.
+                  if (_autoLoading) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l.txLoadingFullHistory,
+                            style: TextStyle(
+                              color: context.textSubtle,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   // With any filter/search active, summarise the FULL filtered
                   // (cascade-loaded) set — net + outflow + inflow in the
                   // reporting currency — so the user doesn't have to do CSV math.

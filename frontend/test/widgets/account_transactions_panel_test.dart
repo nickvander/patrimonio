@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/screens/account_transactions_screen.dart';
 import 'package:patrimonio/services/realtime_service.dart';
+import 'package:patrimonio/services/tx_page.dart';
 import 'package:patrimonio/widgets/transactions_tab.dart';
 
 // The panel host (AccountTransactionsScreen) takes test seams for its
@@ -50,12 +51,16 @@ class _FakeBackend {
   final List<Map<String, dynamic>> table;
   final List<({int limit, int offset})> calls = [];
 
-  Future<List<dynamic>> fetch({required int limit, required int offset}) async {
+  // totalCount stays null: these tests pin the pre-header (old-backend)
+  // heuristics, which must keep working when X-Total-Count is absent.
+  Future<TxPage> fetch({required int limit, required int offset}) async {
     calls.add((limit: limit, offset: offset));
-    return [
-      for (final t in table.skip(offset).take(limit))
-        Map<String, dynamic>.of(t),
-    ];
+    return TxPage(
+      rows: [
+        for (final t in table.skip(offset).take(limit))
+          Map<String, dynamic>.of(t),
+      ],
+    );
   }
 }
 
@@ -198,15 +203,17 @@ void main() {
       _setViewSize(tester, const Size(1000, 900));
       final table = _makeTable(5);
       final gate = Completer<void>();
-      Future<List<dynamic>> gatedFetch({
+      Future<TxPage> gatedFetch({
         required int limit,
         required int offset,
       }) async {
         await gate.future;
-        return [
-          for (final t in table.skip(offset).take(limit))
-            Map<String, dynamic>.of(t),
-        ];
+        return TxPage(
+          rows: [
+            for (final t in table.skip(offset).take(limit))
+              Map<String, dynamic>.of(t),
+          ],
+        );
       }
 
       await tester.pumpWidget(_host(_panel(fetcher: gatedFetch)));

@@ -9,6 +9,8 @@ library;
 
 import 'dart:async';
 
+import 'tx_page.dart';
+
 /// Hard cap the backend applies to the `limit` query param of
 /// GET /dashboard/transactions — `q.limit.unwrap_or(50).clamp(1, 500)` in
 /// `backend/src/api/dashboard.rs`. Bulk loaders (the filter cascade in
@@ -68,12 +70,18 @@ class TransactionMutationRefreshData {
     required this.transactions,
     required this.overview,
     required this.trends,
+    this.transactionsTotal,
     this.fxTransfers,
   });
 
   final List<dynamic> transactions;
   final Map<String, dynamic> overview;
   final List<Map<String, dynamic>> trends;
+
+  /// Whole-table transaction count from the refetch's `X-Total-Count`
+  /// header ([TxPage.totalCount]). Null when the header is absent (older
+  /// backend) — the caller then keeps its short-page hasMore fallback.
+  final int? transactionsTotal;
 
   /// Null when the FX-transfer list wasn't requested (the mutation could
   /// not have touched transfer links, so the caller keeps its current list).
@@ -98,7 +106,7 @@ class TransactionMutationRefreshData {
 /// instead of always snapping back to the default first page. This changes
 /// a query param only — the request SET stays at 3 (4 with FX transfers).
 Future<TransactionMutationRefreshData> fetchAfterTransactionMutation({
-  required Future<List<dynamic>> Function(int limit) getTransactions,
+  required Future<TxPage> Function(int limit) getTransactions,
   required Future<Map<String, dynamic>> Function() getOverview,
   required Future<List<dynamic>> Function() getTrends,
   Future<List<dynamic>> Function()? getFxTransfers,
@@ -125,8 +133,10 @@ Future<TransactionMutationRefreshData> fetchAfterTransactionMutation({
     getTrends(),
     if (getFxTransfers != null) bestEffort(getFxTransfers),
   ]);
+  final page = results[0] as TxPage;
   return TransactionMutationRefreshData(
-    transactions: results[0] as List<dynamic>,
+    transactions: page.rows,
+    transactionsTotal: page.totalCount,
     overview: results[1] as Map<String, dynamic>,
     trends: (results[2] as List<dynamic>)
         .map((e) => e as Map<String, dynamic>)

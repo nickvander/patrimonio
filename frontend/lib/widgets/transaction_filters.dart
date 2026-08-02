@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/palette.dart';
 import '../utils/category.dart';
 import '../utils/theme_colors.dart';
+import 'connected_segments.dart';
 
 enum TxFlow { all, income, expense }
 
@@ -410,9 +412,17 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
     return widget.asSheet ? _sheetShell(l) : _dialogShell(l);
   }
 
-  /// Wide-layout shell — the AlertDialog presentation.
+  /// Wide-layout shell — the AlertDialog presentation. Right-aligned
+  /// compact actions are correct here (pointer surface); only the sheet
+  /// gets the full-bleed Apply.
   Widget _dialogShell(AppLocalizations l) {
     return AlertDialog(
+      // Same tone main.dart's cardTheme uses, so the dialog matches the
+      // sheet shell (and drops the pale-sage seeded container in light).
+      backgroundColor: BrandPalette.cardSurface(Theme.of(context).brightness),
+      // titleLarge, matching the sheet header — the AlertDialog default
+      // (headlineSmall) made the two shells disagree on title size.
+      titleTextStyle: Theme.of(context).textTheme.titleLarge,
       title: _titleRow(l),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
@@ -427,36 +437,69 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
   /// viewInsets padding keeps Apply clear of the soft keyboard while the
   /// amount fields are being edited.
   Widget _sheetShell(AppLocalizations l) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        bottom: 16 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DefaultTextStyle(
-            style:
-                Theme.of(context).textTheme.titleLarge ??
-                const TextStyle(fontSize: 22),
-            child: _titleRow(l),
+    // Gutters off the sheet's INNER constraint (house rule — never
+    // MediaQuery): 16 on phones, 24 once the sheet is wide.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final hPad = constraints.maxWidth < 420 ? 16.0 : 24.0;
+        return Padding(
+          padding: EdgeInsets.only(
+            left: hPad,
+            right: hPad,
+            bottom: 16 + MediaQuery.viewInsetsOf(context).bottom,
           ),
-          const SizedBox(height: 8),
-          Flexible(child: SingleChildScrollView(child: _body(l))),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final b in _actionButtons(l)) ...[
-                const SizedBox(width: 8),
-                b,
-              ],
+              DefaultTextStyle(
+                // Explicit titleLarge, matching the dialog shell's
+                // titleTextStyle so both presentations share one header
+                // size.
+                style: Theme.of(context).textTheme.titleLarge!,
+                child: _titleRow(l),
+              ),
+              const SizedBox(height: 8),
+              // Hairline between the fixed header and the scrollable body
+              // (notifications-panel idiom): gives the scrolling content a
+              // visible edge to slide under.
+              Divider(height: 1, color: context.hairline),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: _body(l),
+                  ),
+                ),
+              ),
+              // Same hairline above the pinned action bar, separating it
+              // from the content scrolling beneath.
+              Divider(height: 1, color: context.hairline),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l.actionCancel),
+                  ),
+                  const SizedBox(width: 8),
+                  // Full-bleed primary on the touch surface, per the
+                  // theme/buttons.dart touch-width rule (≥48dp tall).
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      onPressed: _apply,
+                      child: Text(l.actionApply),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -484,6 +527,33 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
     );
   }
 
+  /// House tonal chip recipe — same look as the dashboard cash-flow
+  /// ChoiceChips and DateRangeSelector: no checkmark (so chip width never
+  /// jumps on selection and the Wrap doesn't reflow), no outline, quiet
+  /// tileSurface fill, selected state in brand jade via accentSoft (whose
+  /// light-mode alpha boost keeps it visible on white;
+  /// palette_contrast_test polices the label contrast). Multi-select
+  /// FilterChip semantics are untouched — this is presentation only.
+  FilterChip _tonalChip({
+    required String label,
+    required bool selected,
+    required ValueChanged<bool> onSelected,
+  }) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      shape: const StadiumBorder(side: BorderSide.none),
+      backgroundColor: context.tileSurface,
+      selectedColor: context.accentSoft(context.positive),
+      labelStyle: TextStyle(
+        color: selected ? context.positive : context.textMuted,
+        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+      ),
+      onSelected: onSelected,
+    );
+  }
+
   List<Widget> _actionButtons(AppLocalizations l) => [
     TextButton(
       onPressed: () => Navigator.pop(context),
@@ -504,12 +574,12 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
         _sectionLabel(l.txDateRange),
         const SizedBox(height: 6),
         Wrap(
-          spacing: 6,
-          runSpacing: 6,
+          spacing: 8,
+          runSpacing: 8,
           children: TxDateRange.values.map((r) {
             final selected = _draft.dateRange == r;
-            return FilterChip(
-              label: Text(r.labelFor(context)),
+            return _tonalChip(
+              label: r.labelFor(context),
               selected: selected,
               onSelected: (_) async {
                 if (r == TxDateRange.custom) {
@@ -559,34 +629,30 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
         const SizedBox(height: 18),
         _sectionLabel(l.txFlow),
         const SizedBox(height: 6),
-        SegmentedButton<TxFlow>(
+        // House connected button group (shared with the dashboard theme
+        // picker) instead of SegmentedButton — same single-select
+        // semantics, same copyWith updates.
+        ConnectedSegments<TxFlow>(
           segments: [
-            ButtonSegment(value: TxFlow.all, label: Text(l.txFlowAll)),
-            ButtonSegment(value: TxFlow.expense, label: Text(l.txFlowExpense)),
-            ButtonSegment(value: TxFlow.income, label: Text(l.txFlowIncome)),
+            ConnectedSegment(value: TxFlow.all, label: l.txFlowAll),
+            ConnectedSegment(value: TxFlow.expense, label: l.txFlowExpense),
+            ConnectedSegment(value: TxFlow.income, label: l.txFlowIncome),
           ],
-          selected: {_draft.flow},
-          onSelectionChanged: (s) =>
-              setState(() => _draft = _draft.copyWith(flow: s.first)),
+          selected: _draft.flow,
+          onSelected: (v) => setState(() => _draft = _draft.copyWith(flow: v)),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         _sectionLabel(l.txStatus),
         const SizedBox(height: 6),
-        SegmentedButton<TxStatus>(
+        ConnectedSegments<TxStatus>(
           segments: [
-            ButtonSegment(value: TxStatus.all, label: Text(l.txStatusAll)),
-            ButtonSegment(
-              value: TxStatus.settled,
-              label: Text(l.txStatusSettled),
-            ),
-            ButtonSegment(
-              value: TxStatus.pending,
-              label: Text(l.txStatusPending),
-            ),
+            ConnectedSegment(value: TxStatus.all, label: l.txStatusAll),
+            ConnectedSegment(value: TxStatus.settled, label: l.txStatusSettled),
+            ConnectedSegment(value: TxStatus.pending, label: l.txStatusPending),
           ],
-          selected: {_draft.status},
-          onSelectionChanged: (s) =>
-              setState(() => _draft = _draft.copyWith(status: s.first)),
+          selected: _draft.status,
+          onSelected: (v) =>
+              setState(() => _draft = _draft.copyWith(status: v)),
         ),
         const SizedBox(height: 18),
         _sectionLabel(l.txAmount),
@@ -602,10 +668,18 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[\d.,$]')),
                 ],
+                // Filled rounded field (house input recipe) — labelText
+                // and isDense are load-bearing for the widget tests that
+                // find these fields by their label.
                 decoration: InputDecoration(
                   labelText: l.txAmountMin,
                   isDense: true,
-                  border: const OutlineInputBorder(),
+                  filled: true,
+                  fillColor: context.tileSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 // setState so the Reset button's visibility tracks
                 // the amount fields, not just the chip draft.
@@ -628,7 +702,12 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                 decoration: InputDecoration(
                   labelText: l.txAmountMax,
                   isDense: true,
-                  border: const OutlineInputBorder(),
+                  filled: true,
+                  fillColor: context.tileSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
@@ -645,12 +724,12 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
           _sectionLabel(l.txAccounts),
           const SizedBox(height: 6),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: 8,
+            runSpacing: 8,
             children: accountOptions.map((e) {
               final selected = _draft.accountIds.contains(e.key);
-              return FilterChip(
-                label: Text(e.value),
+              return _tonalChip(
+                label: e.value,
                 selected: selected,
                 onSelected: (v) {
                   final next = {..._draft.accountIds};
@@ -670,12 +749,12 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
           _sectionLabel(l.txCategories),
           const SizedBox(height: 6),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: 8,
+            runSpacing: 8,
             children: categoryOptions.map((c) {
               final selected = _draft.categories.contains(c);
-              return FilterChip(
-                label: Text(c),
+              return _tonalChip(
+                label: c,
                 selected: selected,
                 onSelected: (v) {
                   final next = {..._draft.categories};
@@ -734,13 +813,15 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
     );
   }
 
+  // House overline (matches spending_insight_sheet's section titles and
+  // the phone card-overline idiom): 12/w700 subtle caps, gentle tracking.
   Widget _sectionLabel(String text) => Text(
     text.toUpperCase(),
     style: TextStyle(
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: FontWeight.w700,
       color: context.textSubtle,
-      letterSpacing: 0.8,
+      letterSpacing: 0.4,
     ),
   );
 }

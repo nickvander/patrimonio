@@ -50,6 +50,7 @@ import '../widgets/add_transaction_dialog.dart';
 import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/command_palette.dart';
+import '../widgets/connected_segments.dart';
 import '../widgets/credit_utilization_card.dart';
 import '../widgets/cross_currency_transfers_card.dart';
 import '../widgets/debt_payoff_card.dart';
@@ -337,6 +338,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   // and call _loadMoreTransactions() to append the next slice.
   static const int _txPageSize = 50;
   bool _transactionsHasMore = true;
+  // Whole-table transaction count from the list endpoint's X-Total-Count
+  // header. Feeds the tab's stable "Showing X of N" denominator and makes
+  // hasMore exact (loaded < total) instead of the "full page ⇒ maybe more"
+  // heuristic. Null until a page carrying the header lands (older backend
+  // never sets it — every consumer keeps its heuristic fallback).
+  int? _txTotal;
 
   /// Realtime push channel. Connected at boot, disposed on screen
   /// teardown. Self-reconnects on drop; coarse server-pushed
@@ -3362,11 +3369,17 @@ class _DashboardScreenState extends State<DashboardScreen>
           refetched: data.transactions,
           requestedLimit: refetchLimit,
         );
-        // A short page proves we now hold the tail of the table; a full
-        // page tells us nothing new, so keep the flag as-is (recomputing
-        // `length >= limit` here flipped hasMore back to true on a fully
-        // loaded list and re-ran the filter cascade after every edit).
-        if (data.transactions.length < refetchLimit) {
+        if (data.transactionsTotal != null) {
+          // Header present: hasMore is exact (loaded < total) — safe to
+          // recompute in both directions, unlike the length heuristic.
+          _txTotal = data.transactionsTotal;
+          _transactionsHasMore = _transactions!.length < _txTotal!;
+        } else if (data.transactions.length < refetchLimit) {
+          // Header absent (older backend). A short page proves we now hold
+          // the tail of the table; a full page tells us nothing new, so
+          // keep the flag as-is (recomputing `length >= limit` here flipped
+          // hasMore back to true on a fully loaded list and re-ran the
+          // filter cascade after every edit).
           _transactionsHasMore = false;
         }
         _overview = data.overview;
@@ -3603,16 +3616,26 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _loadMoreTransactions({int? limit}) async {
     final pageSize = limit ?? _txPageSize;
     final offset = _transactions?.length ?? 0;
-    final more = await _apiService.getTransactions(
+    final page = await _apiService.getTransactions(
       limit: pageSize,
       offset: offset,
     );
     if (!mounted) return;
     setState(() {
-      _transactions = [...(_transactions ?? const []), ...more];
-      // If the server returned fewer rows than we asked for, we hit the
-      // tail of the table — no point offering Load more again.
-      _transactionsHasMore = more.length >= pageSize;
+      _transactions = [...(_transactions ?? const []), ...page.rows];
+      if (page.totalCount != null) {
+        // Exact: the header total covers the whole table, so hasMore is
+        // simply "loaded < total" — which also kills the one extra empty
+        // round-trip the heuristic cost when history is an exact multiple
+        // of the page size.
+        _txTotal = page.totalCount;
+        _transactionsHasMore = _transactions!.length < _txTotal!;
+      } else {
+        // Header absent (older backend): if the server returned fewer rows
+        // than we asked for, we hit the tail of the table — no point
+        // offering Load more again.
+        _transactionsHasMore = page.rows.length >= pageSize;
+      }
     });
   }
 
@@ -3943,6 +3966,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     // "did the page come back short?" pagination decision below, which is
     // meaningless when the page IS the previous list.
     var txReadFailed = false;
+    // X-Total-Count from the transactions read, captured outside the
+    // Future.wait so the keepPreviousOnError wrapper can keep dealing in
+    // plain row lists. Null on failure or an older backend.
+    int? txPageTotal;
     void noteDegraded(Object e) {
       // A 401 already triggered the global sign-out; retrying would just
       // race the auth gate's teardown.
@@ -3981,7 +4008,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         soft(_apiService.getSetupStatus(), _setupStatus),
         soft(_apiService.getExchangeRate('USD', 'MXN'), _fxRate),
         keepPreviousOnError(
-          _apiService.getTransactions(limit: txLimit),
+          // Unwrap the TxPage here so the soft-failure wrapper stays a
+          // plain List (its `previous` IS the current list); the header
+          // total is captured on the side before the rows are handed on.
+          _apiService.getTransactions(limit: txLimit).then((page) {
+            txPageTotal = page.totalCount;
+            return page.rows;
+          }),
           previous: _transactions,
           silent: silent,
           onError: (e) {
@@ -4092,10 +4125,15 @@ class _DashboardScreenState extends State<DashboardScreen>
             refetched: refetchedTxs,
             requestedLimit: txLimit,
           );
-          // If the page came back smaller than what we asked for, the server
-          // ran out of rows — there can't be more pages. A full page on a
-          // depth-preserving reload tells us nothing new, so keep the flag.
-          if (refetchedTxs.length < txLimit) {
+          if (txPageTotal != null) {
+            // Header present: hasMore is exact (loaded < total).
+            _txTotal = txPageTotal;
+            _transactionsHasMore = _transactions!.length < _txTotal!;
+          } else if (refetchedTxs.length < txLimit) {
+            // Header absent (older backend): if the page came back smaller
+            // than what we asked for, the server ran out of rows — there
+            // can't be more pages. A full page on a depth-preserving reload
+            // tells us nothing new, so keep the flag.
             _transactionsHasMore = false;
           }
         }
@@ -5727,6 +5765,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTransactionAdded: () => _refreshAfterTransactionMutation(),
         onLoadMore: _loadMoreTransactions,
         hasMore: _transactionsHasMore,
+        // This call site is filter-free, so the header total is the true
+        // unfiltered table count — exactly what the "of N" denominator
+        // wants. Null (older backend) keeps today's loaded-count fallback.
+        totalCount: _txTotal,
         searchOverride: _transactionsSearchOverride,
         highlightedTxId: _highlightedTxId,
         dateSeed: _txDateSeed,
@@ -7425,108 +7467,39 @@ class SettingsPreferencesCard extends StatelessWidget {
                   final picker = ValueListenableBuilder<ThemeMode>(
                     valueListenable: themeModeNotifier,
                     builder: (pickerCtx, mode, _) {
-                      final scheme = Theme.of(pickerCtx).colorScheme;
-                      Widget seg(
-                        ThemeMode value,
-                        IconData icon,
-                        String text, {
-                        bool first = false,
-                        bool last = false,
-                      }) {
-                        final selected = mode == value;
-                        // Outer ends stay pill-round; inner corners sit at 8
-                        // until selection morphs the segment fully round.
-                        final radius = BorderRadius.horizontal(
-                          left: Radius.circular(selected || first ? 22 : 8),
-                          right: Radius.circular(selected || last ? 22 : 8),
-                        );
-                        return Expanded(
-                          child: Semantics(
-                            selected: selected,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOut,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: selected
-                                    ? scheme.secondaryContainer
-                                    : pickerCtx.tint(0.05),
-                                borderRadius: radius,
-                              ),
-                              child: Material(
-                                type: MaterialType.transparency,
-                                child: InkWell(
-                                  borderRadius: radius,
-                                  onTap: () {
-                                    themeModeNotifier.value = value;
-                                    // Same persist mapping as the AppBar
-                                    // theme controls.
-                                    Preferences.setThemeMode(switch (value) {
-                                      ThemeMode.system => 'system',
-                                      ThemeMode.light => 'light',
-                                      ThemeMode.dark => 'dark',
-                                    });
-                                  },
-                                  child: Center(
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          icon,
-                                          size: 18,
-                                          color: selected
-                                              ? scheme.onSecondaryContainer
-                                              : pickerCtx.textSubtle,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Flexible(
-                                          child: Text(
-                                            text,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 13.5,
-                                              fontWeight: selected
-                                                  ? FontWeight.w700
-                                                  : FontWeight.w600,
-                                              color: selected
-                                                  ? scheme.onSecondaryContainer
-                                                  : pickerCtx.textSubtle,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                      // The group's look lives in the shared
+                      // ConnectedSegments widget (extracted from the
+                      // inline builder that used to be here); only the
+                      // persist logic stays local.
+                      return ConnectedSegments<ThemeMode>(
+                        segments: [
+                          ConnectedSegment(
+                            value: ThemeMode.system,
+                            icon: Icons.brightness_auto,
+                            label: l.dashThemeSystemShort,
                           ),
-                        );
-                      }
-
-                      return Row(
-                        children: [
-                          seg(
-                            ThemeMode.system,
-                            Icons.brightness_auto,
-                            l.dashThemeSystemShort,
-                            first: true,
+                          ConnectedSegment(
+                            value: ThemeMode.light,
+                            icon: Icons.light_mode_outlined,
+                            label: l.dashThemeLightShort,
                           ),
-                          const SizedBox(width: 2),
-                          seg(
-                            ThemeMode.light,
-                            Icons.light_mode_outlined,
-                            l.dashThemeLightShort,
-                          ),
-                          const SizedBox(width: 2),
-                          seg(
-                            ThemeMode.dark,
-                            Icons.dark_mode_outlined,
-                            l.dashThemeDarkShort,
-                            last: true,
+                          ConnectedSegment(
+                            value: ThemeMode.dark,
+                            icon: Icons.dark_mode_outlined,
+                            label: l.dashThemeDarkShort,
                           ),
                         ],
+                        selected: mode,
+                        onSelected: (value) {
+                          themeModeNotifier.value = value;
+                          // Same persist mapping as the AppBar theme
+                          // controls.
+                          Preferences.setThemeMode(switch (value) {
+                            ThemeMode.system => 'system',
+                            ThemeMode.light => 'light',
+                            ThemeMode.dark => 'dark',
+                          });
+                        },
                       );
                     },
                   );

@@ -438,6 +438,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Loading your full history so every option is available…';
 
   @override
+  String get txLoadingFullHistory => 'Loading full history…';
+
+  @override
   String get txExitSelectionMode => 'Exit selection mode';
 
   @override

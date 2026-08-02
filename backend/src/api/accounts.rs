@@ -616,7 +616,7 @@ async fn get_account_transactions(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Query(q): Query<AccountTransactionsQuery>,
-) -> Json<Vec<TransactionResponse>> {
+) -> impl IntoResponse {
     const MAX_ACCOUNT_TRANSACTIONS: i64 = 1000;
     let limit = q
         .limit
@@ -628,7 +628,15 @@ async fn get_account_transactions(
     // for a brand-new empty account.
     let rows = sqlx::query(
         r#"
-        SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
+        SELECT t.id,
+               -- Total matching rows BEFORE LIMIT/OFFSET — the window
+               -- function shares the identical WHERE (account + user scope,
+               -- split-parent exclusion), so the X-Total-Count header can't
+               -- drift from the list and is stable across offset pages.
+               -- See dashboard::total_count_headers for why it's a header,
+               -- not a body envelope.
+               COUNT(*) OVER () AS total_count,
+               t.date, t.description, t.amount, t.currency, t.category,
                t.category_detailed, t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_category, t.user_notes, t.user_description, t.source,
@@ -652,7 +660,14 @@ async fn get_account_transactions(
     .await
     .unwrap_or_default();
 
-    let txs = rows
+    // Same window total on every row; read it off the first. Best-effort
+    // read semantics unchanged: a DB error above still yields an empty 200
+    // array, and with no rows there is no X-Total-Count header.
+    let total = rows
+        .first()
+        .and_then(|r| r.try_get::<i64, _>("total_count").ok());
+
+    let txs: Vec<TransactionResponse> = rows
         .iter()
         .map(|row| TransactionResponse {
             id: row.get::<uuid::Uuid, _>("id").to_string(),
@@ -726,7 +741,7 @@ async fn get_account_transactions(
         })
         .collect();
 
-    Json(txs)
+    (crate::api::dashboard::total_count_headers(total), Json(txs))
 }
 
 #[derive(Deserialize)]

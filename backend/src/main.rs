@@ -470,7 +470,15 @@ fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
             // because it's a non-simple header.
             axum::http::header::HeaderName::from_static("x-requested-with"),
         ])
-        .expose_headers([SET_COOKIE])
+        // X-Total-Count rides on the transaction list endpoints. CORS
+        // only lets browser JS *read* explicitly exposed response headers
+        // — without this line a cross-origin frontend would receive the
+        // header but never see it, and silently fall back to its
+        // loaded-count heuristic forever.
+        .expose_headers([
+            SET_COOKIE,
+            axum::http::header::HeaderName::from_static("x-total-count"),
+        ])
         .allow_credentials(true)
 }
 

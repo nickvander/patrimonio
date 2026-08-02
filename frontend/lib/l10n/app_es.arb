@@ -137,6 +137,7 @@
   "txFilterTransactions": "Filtrar movimientos",
   "txFilterSort": "Filtrar y ordenar",
   "txFilterLoadingHistory": "Cargando todo tu historial para que todas las opciones estén disponibles…",
+  "txLoadingFullHistory": "Cargando el historial completo…",
   "txExitSelectionMode": "Salir del modo de selección",
   "txSelectMultiple": "Seleccionar varios",
   "txAddTransaction": "Agregar movimiento",

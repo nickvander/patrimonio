@@ -1,6 +1,6 @@
 use axum::{
     extract::{Extension, Query, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
@@ -1260,11 +1260,31 @@ struct TransactionsQuery {
     exclude_linked: Option<bool>,
 }
 
+/// Build the `X-Total-Count` response header from the window-function total
+/// carried on every row of a transactions page.
+///
+/// Why a header and not a response envelope: shipped Android APKs decode
+/// these endpoints' bodies as a bare JSON array — wrapping the body in
+/// `{rows, total}` would break every one of them, while an extra header is
+/// invisible to old clients and lets new ones show a stable "of N"
+/// denominator instead of a total that visibly counts up while pages
+/// stream in. Empty page (or a failed best-effort read) → no header; the
+/// client falls back to its loaded-count heuristic.
+pub(crate) fn total_count_headers(total: Option<i64>) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    if let Some(total) = total {
+        if let Ok(value) = HeaderValue::from_str(&total.to_string()) {
+            headers.insert(HeaderName::from_static("x-total-count"), value);
+        }
+    }
+    headers
+}
+
 async fn recent_transactions(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TransactionsQuery>,
-) -> Json<Vec<TransactionEntry>> {
+) -> impl IntoResponse {
     let limit = query.limit.unwrap_or(50).clamp(1, 500);
     let offset = query.offset.unwrap_or(0).max(0);
     // Empty strings arrive from `?currency=&q=` — treat them as absent so
@@ -1276,6 +1296,13 @@ async fn recent_transactions(
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.account_id,
+               -- Total matching rows BEFORE LIMIT/OFFSET. The window
+               -- function runs over the identical WHERE (user scope,
+               -- split-parent exclusion, currency/sign/q/exclude_linked)
+               -- with zero clause duplication, so the X-Total-Count header
+               -- can never drift from the list contract and is identical
+               -- on every page.
+               COUNT(*) OVER () AS total_count,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name,
                t.amount, t.currency,
@@ -1325,79 +1352,87 @@ async fn recent_transactions(
     .await
     .unwrap_or_default();
 
-    Json(
-        rows.iter()
-            .map(|r| {
-                let amount: f64 = r
-                    .try_get::<rust_decimal::Decimal, _>("amount")
+    // The window total is the same on every row; read it off the first.
+    // Best-effort read semantics unchanged: a DB error above still yields
+    // an empty 200 array — and with no rows there is no header either.
+    let total = rows
+        .first()
+        .and_then(|r| r.try_get::<i64, _>("total_count").ok());
+
+    let entries: Vec<TransactionEntry> = rows
+        .iter()
+        .map(|r| {
+            let amount: f64 = r
+                .try_get::<rust_decimal::Decimal, _>("amount")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
+            TransactionEntry {
+                id: r.get::<uuid::Uuid, _>("id").to_string(),
+                account_id: r.get::<uuid::Uuid, _>("account_id").to_string(),
+                account_name: r.get("account_name"),
+                institution_name: r
+                    .try_get::<Option<String>, _>("institution_name")
                     .ok()
-                    .map(|d| d.to_string().parse().unwrap_or(0.0))
-                    .unwrap_or(0.0);
-                TransactionEntry {
-                    id: r.get::<uuid::Uuid, _>("id").to_string(),
-                    account_id: r.get::<uuid::Uuid, _>("account_id").to_string(),
-                    account_name: r.get("account_name"),
-                    institution_name: r
-                        .try_get::<Option<String>, _>("institution_name")
-                        .ok()
-                        .flatten(),
-                    amount,
-                    currency: r.get("currency"),
-                    date: r.get::<chrono::NaiveDate, _>("date").to_string(),
-                    description: r.get("description"),
-                    category: r.get("category"),
-                    category_detailed: r
-                        .try_get::<Option<String>, _>("category_detailed")
-                        .ok()
-                        .flatten(),
-                    payment_channel: r
-                        .try_get::<Option<String>, _>("payment_channel")
-                        .ok()
-                        .flatten(),
-                    merchant_name: r
-                        .try_get::<Option<String>, _>("merchant_name")
-                        .ok()
-                        .flatten(),
-                    original_description: r
-                        .try_get::<Option<String>, _>("original_description")
-                        .ok()
-                        .flatten(),
-                    counterparty_name: r
-                        .try_get::<Option<String>, _>("counterparty_name")
-                        .ok()
-                        .flatten(),
-                    counterparty_logo_url: r
-                        .try_get::<Option<String>, _>("counterparty_logo_url")
-                        .ok()
-                        .flatten(),
-                    user_description: r
-                        .try_get::<Option<String>, _>("user_description")
-                        .ok()
-                        .flatten(),
-                    user_category: r
-                        .try_get::<Option<String>, _>("user_category")
-                        .ok()
-                        .flatten(),
-                    user_notes: r.try_get::<Option<String>, _>("user_notes").ok().flatten(),
-                    payment_payee: r
-                        .try_get::<Option<String>, _>("payment_payee")
-                        .ok()
-                        .flatten(),
-                    payment_payer: r
-                        .try_get::<Option<String>, _>("payment_payer")
-                        .ok()
-                        .flatten(),
-                    parent_id: r
-                        .try_get::<Option<uuid::Uuid>, _>("parent_id")
-                        .ok()
-                        .flatten()
-                        .map(|u| u.to_string()),
-                    pending: r.get("pending"),
-                    source: r.try_get::<Option<String>, _>("source").ok().flatten(),
-                }
-            })
-            .collect(),
-    )
+                    .flatten(),
+                amount,
+                currency: r.get("currency"),
+                date: r.get::<chrono::NaiveDate, _>("date").to_string(),
+                description: r.get("description"),
+                category: r.get("category"),
+                category_detailed: r
+                    .try_get::<Option<String>, _>("category_detailed")
+                    .ok()
+                    .flatten(),
+                payment_channel: r
+                    .try_get::<Option<String>, _>("payment_channel")
+                    .ok()
+                    .flatten(),
+                merchant_name: r
+                    .try_get::<Option<String>, _>("merchant_name")
+                    .ok()
+                    .flatten(),
+                original_description: r
+                    .try_get::<Option<String>, _>("original_description")
+                    .ok()
+                    .flatten(),
+                counterparty_name: r
+                    .try_get::<Option<String>, _>("counterparty_name")
+                    .ok()
+                    .flatten(),
+                counterparty_logo_url: r
+                    .try_get::<Option<String>, _>("counterparty_logo_url")
+                    .ok()
+                    .flatten(),
+                user_description: r
+                    .try_get::<Option<String>, _>("user_description")
+                    .ok()
+                    .flatten(),
+                user_category: r
+                    .try_get::<Option<String>, _>("user_category")
+                    .ok()
+                    .flatten(),
+                user_notes: r.try_get::<Option<String>, _>("user_notes").ok().flatten(),
+                payment_payee: r
+                    .try_get::<Option<String>, _>("payment_payee")
+                    .ok()
+                    .flatten(),
+                payment_payer: r
+                    .try_get::<Option<String>, _>("payment_payer")
+                    .ok()
+                    .flatten(),
+                parent_id: r
+                    .try_get::<Option<uuid::Uuid>, _>("parent_id")
+                    .ok()
+                    .flatten()
+                    .map(|u| u.to_string()),
+                pending: r.get("pending"),
+                source: r.try_get::<Option<String>, _>("source").ok().flatten(),
+            }
+        })
+        .collect();
+
+    (total_count_headers(total), Json(entries))
 }
 
 /// CSV export of every transaction across all accounts. Streams the

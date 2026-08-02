@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/services/transaction_mutation_refresh.dart';
+import 'package:patrimonio/services/tx_page.dart';
 
 /// These tests run on the plain Dart VM — the refresh orchestration takes
 /// plain fetcher closures, so we can pin down the EXACT request set that
@@ -21,9 +22,12 @@ void main() {
         final data = await fetchAfterTransactionMutation(
           getTransactions: (limit) async {
             called.add('transactions');
-            return [
-              {'id': 't1'},
-            ];
+            return const TxPage(
+              rows: [
+                {'id': 't1'},
+              ],
+              totalCount: 2502,
+            );
           },
           getOverview: () async {
             called.add('overview');
@@ -43,6 +47,9 @@ void main() {
         expect(called, hasLength(3));
 
         expect(data.transactions, hasLength(1));
+        // The X-Total-Count total rides through so the caller can keep its
+        // hasMore/denominator exact after a mutation refresh.
+        expect(data.transactionsTotal, 2502);
         expect(data.overview['net_worth'], 100);
         expect(data.trends, isA<List<Map<String, dynamic>>>());
         expect(data.trends.single['month'], '2026-06');
@@ -58,7 +65,8 @@ void main() {
       final data = await fetchAfterTransactionMutation(
         getTransactions: (limit) async {
           called.add('transactions');
-          return const [];
+          // Header absent (older backend) → null total.
+          return const TxPage(rows: []);
         },
         getOverview: () async {
           called.add('overview');
@@ -80,13 +88,15 @@ void main() {
         called,
         unorderedEquals(['transactions', 'overview', 'trends', 'fx-transfers']),
       );
+      // No header on the page → null, so the caller keeps its heuristic.
+      expect(data.transactionsTotal, isNull);
       expect(data.fxTransfers, hasLength(1));
     });
 
     test('FX-transfer fetch is best-effort: a failure yields an empty list '
         'instead of failing the whole refresh', () async {
       final data = await fetchAfterTransactionMutation(
-        getTransactions: (limit) async => const [],
+        getTransactions: (limit) async => const TxPage(rows: []),
         getOverview: () async => const {},
         getTrends: () async => const [],
         getFxTransfers: () async => throw Exception('transfer listing down'),
@@ -114,7 +124,7 @@ void main() {
       await fetchAfterTransactionMutation(
         getTransactions: (limit) async {
           receivedLimits.add(limit);
-          return const [];
+          return const TxPage(rows: []);
         },
         getOverview: () async => const {},
         getTrends: () async => const [],
@@ -128,7 +138,7 @@ void main() {
       await fetchAfterTransactionMutation(
         getTransactions: (limit) async {
           receivedLimits.add(limit);
-          return const [];
+          return const TxPage(rows: []);
         },
         getOverview: () async => const {},
         getTrends: () async => const [],

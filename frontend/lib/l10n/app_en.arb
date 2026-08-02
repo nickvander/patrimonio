@@ -168,6 +168,7 @@
   "txFilterTransactions": "Filter transactions",
   "txFilterSort": "Filter & sort",
   "txFilterLoadingHistory": "Loading your full history so every option is available…",
+  "txLoadingFullHistory": "Loading full history…",
   "txExitSelectionMode": "Exit selection mode",
   "txSelectMultiple": "Select multiple",
   "txAddTransaction": "Add transaction",
