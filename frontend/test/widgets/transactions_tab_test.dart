@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/utils/theme_colors.dart';
+import 'package:patrimonio/utils/transactions_tab_logic.dart';
 import 'package:patrimonio/widgets/transactions_tab.dart';
 
 // TransactionsTab takes plain data + callbacks, so no ApiService is needed

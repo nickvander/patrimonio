@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/transaction_mutation_refresh.dart'
     show kTxBackendMaxPageSize;
+import 'package:patrimonio/utils/transactions_tab_logic.dart';
 import 'package:patrimonio/widgets/transaction_filters.dart';
 import 'package:patrimonio/widgets/transactions_tab.dart';
 
