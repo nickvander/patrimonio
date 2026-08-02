@@ -1,19 +1,17 @@
 # Handoff — start here
 
-> **Last updated:** 2026-08-02 (transactions drill-down/claim-banner batch + menu chrome)
+> **Last updated:** 2026-08-02 (multi-agent quality sweep; deployed + APK cut)
 > **Purpose:** The one-screen "where are we, what's next" doc to pick up cold.
 > Detail lives in [work/CURRENT.md](CURRENT.md) — this file deliberately stays short.
 
 ## TL;DR — current state
 
-**As of 2026-08-02:** `main` @ `38df064`, tree clean, pushed. **Prod runs on
-the homelab host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
-`/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — deployed through
-`4f29a8b` (2026-07-31 notification-reconciliation + visit-anchor batch), which
-is also the latest APK cut. Everything after it (`9add804`…`38df064`: the
-2026-08-01/02 transactions totals/drill-downs/restyle work + the
-formatter-sweep CI gates) is on `main` and pushed but **not yet recorded as
-deployed** — check thelab before assuming.
+**As of 2026-08-02 (late):** `main` @ `842de84`, tree clean, pushed. **Prod
+runs on the homelab host `thelab`** (`ssh nickvander@thelab`; docker compose
+stack at `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed
+through `842de84`** (the multi-agent quality-sweep batch; images rebuilt +
+containers recreated 2026-08-02 19:43 UTC, health 200 verified). The latest
+APK is also cut from `842de84` (emulator smoke-test passed).
 
 **Dev on this VM is native (no docker):** Postgres `:5442` + Redis `:6380`
 with data dirs inside the repo, cargo + `~/flutter` toolchains. All run/test/
@@ -22,6 +20,13 @@ build commands live in the repo-root [AGENTS.md](../AGENTS.md) (and the
 
 ## Shipped recently (newest first — detail in CURRENT.md)
 
+- **2026-08-02 (night):** multi-agent quality sweep — backend tests 527→558
+  (invites/imports/FX/TWR/encryption + sqlx-macro ban), frontend 912→952
+  (l10n order invariants, convention tests, bell a11y); depository/Cash-tile
+  bug fixed; `api/error.rs`+`middleware.rs`+`services/fx.rs` extracted;
+  `api/dashboard.rs` split into 12 modules; 37 handlers → ApiError envelope;
+  agent infra (`.agent/agents/`, quality-sweep workflow, walkthrough rig).
+  Deployed to thelab + APK cut.
 - **2026-08-02:** `ConnectedSegments` cash-flow period selector + centralized
   menu chrome (`theme/menus.dart`); drill-downs carry their claim + programmatic
   Transactions-tab jumps reset to a fresh context (DEC-026); add-transaction
