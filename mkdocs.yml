@@ -51,6 +51,7 @@ nav:
   - Overview: index.md
   - Architecture: architecture.md
   - Adding Accounts: adding-accounts.md
+  - Multi-currency: multi-currency.md
   - Backend: backend.md
   - Frontend: frontend.md
   - Database: database.md

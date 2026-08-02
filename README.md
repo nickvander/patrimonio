@@ -39,7 +39,7 @@ CSV exports plus a printable promissory-note agreement.
 | Frontend | Flutter — web (served by nginx in Docker) + native Android APK |
 | Financial Data | Plaid, Coinbase OAuth, Bitso API, CSV/PDF import |
 | Exchange Rates | ExchangeRate-API with Redis caching |
-| Deployment | Docker Compose locally; static hosting + API container for production |
+| Deployment | Docker Compose, locally and in production (nginx-served Flutter web + API + Postgres + Redis in one stack) |
 
 ## Quick Start
 
@@ -276,7 +276,7 @@ patrimonio/
 - [x] Tax planning: US/Mexico estimates and taxable exports
 - [x] Personal lending (opt-in): loans, reconciliation, schedules, interest-income reporting
 - [x] Local launch hardening: Dockerized frontend and smoke tests
-- [ ] Production deployment: hosted frontend/API, backups, monitoring, real credentials
+- [x] Production deployment: self-hosted docker-compose stack on the homelab, encrypted backups, real Plaid credentials (see [docs/deployment.md](docs/deployment.md))
 
 ## Cost
 

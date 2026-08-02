@@ -26,7 +26,7 @@ Coinbase uses OAuth 2.0 and token refresh. Bitso uses read-only API keys and sig
 
 ### Import Parsers
 
-Mexico import services parse Nu, Banamex, and Cetesdirecto CSV/PDF statements. Parsed data is written into the same transaction and balance model used by Plaid.
+Statement import services parse CSV/PDF statements from Mexican institutions (Nu, Banamex, BBVA, Santander, Banorte, HSBC, Scotiabank, CetesDirecto, Revolut) and US sources (HealthEquity HSA, Fidelity Stock Plan), with a preview-time duplicate check against already-imported transactions. Parsed data is written into the same transaction and balance model used by Plaid.
 
 ### Encryption Service
 
@@ -34,17 +34,32 @@ Sensitive Plaid access tokens, Coinbase tokens, and Bitso API credentials are en
 
 ### Tax Engine
 
-Tax routes estimate US federal and Mexico ISR outcomes, use holding cost-basis data where available, and export taxable transaction history as CSV/PDF.
+Tax routes estimate US federal and Mexico ISR outcomes, track realized gains lot-by-lot (FIFO disposals), and export filing documents: an FBAR/FinCEN 114 worksheet, a Form-8949-shaped CSV, a Schedule B CSV, and an MX summary CSV.
+
+### Lending
+
+Loan routes track money lent to named borrowers: disbursements and repayments reconcile against real bank transactions (with an auto-suggest matcher), and schedules support amortized, simple flat-interest, and fully custom repayment shapes.
+
+### Notifications and Detection
+
+A unified notifications inbox aggregates FX alert crossings, import-staleness reminders, and loan payment due reminders. Related detection services find recurring charges (subscriptions) in transaction history and link cross-currency cash transfers with their implied FX rate.
 
 ## API Areas
 
 - `/api/accounts`: Account management and summaries.
-- `/api/dashboard`: Aggregated dashboard data.
-- `/api/fx`: Currency conversion and history.
-- `/api/imports`: File upload and statement parsing.
-- `/api/institutions`: Plaid link, sync, reconnect, and webhook routes.
+- `/api/auth`: Sessions, passkeys (WebAuthn), TOTP, recovery codes, and invitation-based registration (`/api/auth/invites`).
 - `/api/auth/coinbase`: Coinbase OAuth routes.
-- `/api/tax`: Tax estimates and exports.
+- `/api/dashboard`: Aggregated dashboard data.
+- `/api/fx`: Currency conversion, history, and FX alerts.
+- `/api/imports`: File upload, statement parsing, and duplicate checks.
+- `/api/institutions`: Plaid link, sync, reconnect, and webhook routes.
+- `/api/loans`: Personal lending — borrowers, schedules, and repayment reconciliation.
+- `/api/notifications`: The notifications inbox (bell panel).
+- `/api/projections`: FIRE / wealth projection calculations and defaults.
+- `/api/realtime`: WebSocket for live data-invalidation pushes.
+- `/api/recurring`: Recurring & scheduled transaction rules.
+- `/api/setup`: Launch-readiness status.
+- `/api/tax`: Tax estimates and filing exports.
 
 ## Development Workflows
 
@@ -65,11 +80,12 @@ cargo run
 
 ### Integration tests (requires a Postgres)
 
-The HTTP-level integration tests in `backend/tests/auth_endpoints.rs`,
-`tests/auth_recovery_totp.rs`, and `tests/dashboard_endpoints.rs`
-need a real Postgres reachable via `PATRIMONIO_TEST_DATABASE_URL`.
-They also share a single DB and TRUNCATE on setup, so they MUST
-run serially.
+The HTTP-level integration tests in `backend/tests/` (auth, passkeys,
+invites, dashboard, imports, FX, loans, notifications, projections,
+recurring, tax, and more) need a real Postgres reachable via
+`PATRIMONIO_TEST_DATABASE_URL` (some also use Redis via
+`PATRIMONIO_TEST_REDIS_URL`). They share a single DB and TRUNCATE on
+setup, so they MUST run serially.
 
 The easiest invocation is the wrapper script at the repo root:
 
@@ -90,7 +106,7 @@ The wrapper:
   `--test-threads=1`.
 
 When the env var is unset (e.g. the script's preflight skipped DB
-creation), every integration test prints a skip note and returns
+creation), every integration test prints a loud skip note and returns
 Ok so `cargo test` stays green for contributors without a DB on
-hand — the suite never silently passes through an unconfigured
-machine.
+hand. But a **configured-yet-unreachable** database panics — the
+harness refuses to let a broken setup masquerade as a passing suite.

@@ -56,3 +56,6 @@ work/revolut-samples/
 
 # Local-only golden/screenshot test artifacts (generated PNGs + harness)
 frontend/test/screenshots/
+
+# mkdocs local build output (the site is published by CI via gh-deploy)
+/site/

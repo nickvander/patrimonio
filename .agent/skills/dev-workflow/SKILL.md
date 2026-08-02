@@ -7,9 +7,10 @@ description: How to run, build, and test the Patrimonio development environment
 
 **Docker is NOT available on this dev VM.** Postgres and Redis run natively with
 data dirs inside the repo (`pgdata/`, `redisdata/` — gitignored), and the backend
-is a native cargo binary. `docker compose` / `scripts/dev-up.sh` are the **prod**
-path (homelab host `thelab`) — don't reach for them here. `backend/.env` expects
-Postgres on **5442** and Redis on **6380**.
+is a native cargo binary. `docker compose` / `scripts/dev-up.sh` /
+`scripts/test.sh` are the **docker/prod** path (CI, homelab host `thelab`) —
+don't reach for them here; the native equivalents are below and in AGENTS.md.
+`backend/.env` expects Postgres on **5442** and Redis on **6380**.
 
 ## Starting the environment
 
@@ -93,6 +94,10 @@ cd ~/dev/patrimonio/frontend && ~/flutter/bin/flutter analyze && ~/flutter/bin/f
 
 The integration harness **panics** on a configured-but-unreachable test DB/Redis
 (it does not silently skip) — keep Postgres/Redis up.
+
+CI runs the same suites as `cargo test -- --test-threads=1` and
+`flutter test --exclude-tags golden` — golden screenshot tests are
+local-only (tag any new one `golden` so CI skips it).
 
 ## Database access
 

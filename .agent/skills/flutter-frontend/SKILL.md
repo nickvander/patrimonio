@@ -150,6 +150,20 @@ conditional imports.
   strip); `brandSectionTitleStyle(...)` for labels above heroes. JetBrainsMono maxes at w700.
 - **Card idiom:** `Card(elevation: 4, shape: RoundedRectangleBorder(borderRadius:
   BorderRadius.circular(20)))` with inner `Padding`.
+- **Menu chrome is centralized in `theme/menus.dart`** — `buildPopupMenuTheme` /
+  `buildMenuTheme` are installed in BOTH themes in `main.dart`, so `PopupMenuButton` /
+  `showMenu` / `MenuAnchor` get the house chrome (cardSurface, 12px radius, no M3 tint,
+  house type at height 1.35) for free. The legacy dropdown route has **no theme hook**:
+  every `DropdownButton` / `DropdownButtonFormField` site must pass
+  `dropdownColor: houseDropdownColor(context)` + `borderRadius: kMenuRadius` — never
+  inline a color or radius at a dropdown site.
+- **Standalone action buttons follow `theme/buttons.dart`:** touch-width layouts (inner
+  card width < `kActionButtonStackBelow` = 520) go full-bleed and stacked;
+  pointer-width layouts size to the label, bounded by
+  `kActionButtonMinWidth`/`MaxWidth` (180–320) at `kActionButtonHeight` (40dp, the M3
+  Expressive Small step) — use `actionButtonWidth` / `actionButtonConstraints`. Full-bleed
+  carried to a 1440px window turns a button into a banner; that's the bug the file exists
+  to prevent.
 - **Responsiveness is width-driven — off the INNER `LayoutBuilder` constraint, not the
   screen.** The trends mobile-overflow fix reads `outer.maxWidth`, not `MediaQuery`. Established
   breakpoints: **~420** (phone), **~520** (Row→Column header stack), **~720** (outer padding
@@ -161,9 +175,16 @@ conditional imports.
   nav already names the surface); gate every phone-only change on the inner `LayoutBuilder`
   width so wide layouts don't regress. Forced-visible `Scrollbar` thumbs are a **pointer**
   affordance — touch platforms get the transient auto-hiding thumb (`thumbVisibility:
-  !isTouch`, see `transactions_tab.dart`). Small fixed option sets use the M3 Expressive
-  **connected button group** (equal-flex tonal segments, 2px gaps, selected segment morphs
-  to a filled pill — theme picker in `dashboard_screen.dart`), not `SegmentedButton`. The
+  !isTouch`, see `transactions_tab.dart`). Small fixed option sets use
+  **`ConnectedSegments<T>`** (`widgets/connected_segments.dart`) — the house M3 Expressive
+  connected button group, extracted from the theme picker's inline recipe and now on 9+
+  call sites (theme picker, Filter & sort editor, cash-flow period selector, lending, tax
+  filing status, add-transaction Expense/Income, …). Don't use `SegmentedButton` and don't
+  fork the recipe inline. API: a list of `ConnectedSegment(value, label, icon?)` +
+  `selected` + `onSelected` (fires on re-taps too — callers that persist on change
+  short-circuit no-ops) + an additive `enabled` flag that renders SegmentedButton-style
+  disabled tones. Equal-flex 44dp segments, 2px gaps, selected segment morphs into a
+  filled `secondaryContainer` pill; selection is mirrored into semantics. The
   compact app bar scrolls away via `utils/bar_scroll.dart` (`barVisibleAfter` — pure,
   unit-tested; `pixels <= 0` forces the bar visible so pull-to-refresh never fights it).
 - **StatelessWidget when there's no local state.**
@@ -286,8 +307,10 @@ io impl under `if (dart.library.io)`).
 
 ## Anti-patterns to avoid
 
-- Adding to god files (`dashboard_screen.dart`, `api_service.dart`, `net_worth_card.dart`) —
-  extract to `utils/` and split cards instead.
+- Adding to god files — `dashboard_screen.dart` (7,746 lines), `lending_tab.dart` (5,427),
+  `transactions_tab.dart` (5,290), `portfolio_card.dart` (4,355), `api_service.dart`
+  (3,560) — extract to `utils/` / new widgets and split cards instead (the
+  `CashFlowPeriodSelector` and `ConnectedSegments` extractions are the pattern).
 - Forking another copy of `chart_time_axis` / `chart_touch` — use the shared helpers.
 - `Colors.white70` / hex colors — use the `context` extension or fail light-mode contrast.
 - Raw `_client` calls bypassing the verb wrappers (lose CSRF / 401 / cache handling).

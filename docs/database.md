@@ -102,6 +102,17 @@ Stores USD/MXN rates for current and historical conversion.
 
 The schema also tracks provider sync cursors, including Plaid transaction cursors, so incremental sync can resume without replaying full histories.
 
+### Beyond the core ledger
+
+The full schema (see `backend/migrations/`) adds several domains around the core tables above:
+
+- **Auth**: `users`, `user_sessions`, `passkey_credentials`, `recovery_codes`, `invite_tokens`, and an `auth_audit` trail.
+- **Investment lots**: `holding_lots` and `lot_disposals` record each acquisition at its trade-date FX rate and FIFO disposals — the basis for FX-aware cost basis and realized-gain reporting.
+- **Lending**: `people`, `loans`, and `loan_payments` for personal lending, including custom repayment schedules.
+- **Cross-currency transfers**: `cash_fx_transfers` links USD/MXN transaction pairs with their implied rate; `dismissed_fx_pairs` remembers rejected matches.
+- **Notifications and recurring activity**: `user_notifications` (the bell inbox), `user_fx_alerts`, `recurring_rules`, and `ignored_subscription_merchants`.
+- **Reference data**: `benchmark_prices` (index benchmark context) and `app_settings`.
+
 ## Migrations
 
 Migration files live in `backend/migrations/`. Start the API or run the Compose stack to apply pending migrations.

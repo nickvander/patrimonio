@@ -19,6 +19,23 @@ description: How to track project progress, make decisions, and transition betwe
    summarizing what shipped and why; update the "Last updated" line
 3. Commit with a conventional-commit `docs:` message
 
+## Keeping the routing docs true (maintenance rules)
+
+A cold-start agent trusts HANDOFF/NEXT before it reads anything else, so a
+stale entry there is actively misleading — worse than no entry:
+
+- **When something ships or prod state changes, update the doc that claims
+  otherwise in the same sitting:** delete the item from `work/NEXT.md`,
+  refresh `work/HANDOFF.md`'s TL;DR (HEAD, deployed-through commit, APK cut),
+  and record any significant technical choice in `work/DECISIONS.md` (the
+  2026-07-24 → 2026-08-02 gap where four decisions lived only in CURRENT.md
+  prose is the failure mode).
+- **Rotate `work/CURRENT.md`** when it stops being readable in one sitting
+  (~1,000+ lines): move entries older than the current/previous month into
+  `work/archive/CURRENT-YYYY-MM.md` **verbatim** (no summarizing, no edits)
+  and leave a one-line pointer at the bottom of CURRENT.md. Precedent:
+  `work/archive/CURRENT-2026-06.md`.
+
 ## Making architectural decisions
 When making a significant technical choice:
 1. Open `work/DECISIONS.md`

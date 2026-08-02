@@ -12,9 +12,10 @@ makes the dashboard a lot less mysterious.
   rate. Your MXN profit / loss is genuinely computed, not just a
   current-FX conversion of the USD number.
 * **Cash transfers between currencies** (US bank → Wise → Nu Bank, or
-  similar) are **not linked yet**. They show up as two unrelated
-  transactions and the implicit Wise FX rate isn't stored anywhere.
-  That's tracked as a future enhancement.
+  similar) are **linked automatically**. The detector pairs the USD
+  outflow with the MXN inflow, backs out the implied FX rate the
+  service actually gave you, and shows it next to the day's spot rate.
+  Confirmed pairs are treated as internal transfers, not spending.
 
 ## Pipeline 1: investment lots (shipped)
 
@@ -75,7 +76,7 @@ bought when USDMXN was 17.5 and held until USDMXN is 19.0 shows a
   the trailing 12 months. Older lots aren't backfilled. (Bumping the
   window is a one-line change if it ever matters.)
 
-## Pipeline 2: cross-currency cash transfers (not shipped)
+## Pipeline 2: cross-currency cash transfers (shipped)
 
 Your real-life flow:
 
@@ -87,32 +88,43 @@ This is **not** the same as buying an investment. There's no
 security, no lot, no brokerage. Wise just converts dollars to pesos
 at whatever rate it offers that day.
 
-### What the app sees today
+### How a pair is detected
 
-Two completely separate `transactions` rows:
+The auto-linker runs during every Plaid sync (and on demand via the
+**Scan for cross-currency transfers** action on the Transactions tab).
+It links a USD outflow to an MXN inflow (or the reverse) when:
 
-* US bank: a USD outflow.
-* Nu Bank: an MXN inflow.
+* they land within **5 days** of each other,
+* the amount ratio backs out to an implied USD/MXN rate within **10%**
+  of that day's reference rate, and
+* either side's description contains a remittance keyword (Wise,
+  Remitly, Xoom, Western Union, MoneyGram, Revolut, …) — **or**, for
+  keyword-less wires and direct deposits, the pair is within **2 days**
+  and the implied rate within **3%** of the reference rate.
 
-They aren't linked. The implicit Wise FX rate isn't stored. Patrimonio
-treats this as "USD disappeared and MXN appeared", which is
-technically true but not useful.
+Transfers below ~$50 USD equivalent are ignored (FX rounding noise
+would flood small purchases with false matches). Each pair carries a
+confidence, so clear matches auto-confirm and borderline ones ask for
+review.
 
-### What "tracking it properly" would mean
+### Where it shows up
 
-The future-work item (see `work/FUTURE.md` 2b) is the auto-linker:
+* The **transaction detail panel** shows "Linked cross-currency
+  transfer": source → destination amounts and the implied rate
+  ("$1,000 USD → MX$19,500 at 19.50").
+* The **Cash flow tab** has a "Cross-currency transfers" card listing
+  each pair's implied rate next to the day's spot rate — so you can
+  see whether Wise gave you a good deal that day — with a Confirm
+  action for pairs that need review.
+* **Confirmed pairs count as internal transfers**, so the money
+  doesn't show up as spending in cash-flow figures.
 
-1. Notice that a USD outflow + MXN inflow happened within a few days
-   and that the amounts back-out to a plausible FX rate.
-2. Bonus: the description contains a remittance keyword (`WISE`,
-   `REMITLY`, `XOOM`, `WESTERN UNION`).
-3. Create a link row recording the pair + the back-computed rate.
-4. Surface the link in the transaction detail modal so you can see
-   "this $1,000 USD outflow corresponds to this MX$19,500 inflow at
-   an implied rate of 19.50".
-5. Cash-flow tab gets a "Cross-currency transfers" line showing each
-   transfer's implied rate next to the day's spot rate — so you can
-   see whether Wise gave you a good deal that day.
+### If it links the wrong pair
+
+Unlink it from the transaction detail panel. Dismissed pairs are
+remembered (Settings → Hidden items → "FX-transfer pairs") so the
+detector won't re-propose them, and user-confirmed pairs are never
+re-evaluated.
 
 ### What's deliberately NOT in scope
 

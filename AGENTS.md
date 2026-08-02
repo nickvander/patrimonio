@@ -13,7 +13,9 @@ FIRE projections. Backend **Rust + axum**, frontend **Flutter/Dart**, **Postgres
 
 Detailed, enforced conventions live in **`.agent/skills/`** (a directory of
 `SKILL.md` guides, shared across agent tools; Claude Code also discovers them via
-the `.claude/skills` symlink). **Before writing or reviewing code in an area,
+the `.claude/skills` symlink — which is **machine-local**, since `.claude/` is
+gitignored; on a fresh checkout recreate it from the repo root with
+`ln -s ../.agent/skills .claude/skills`). **Before writing or reviewing code in an area,
 read its skill** — each is grounded in this codebase's real patterns and the bug
 classes it has actually hit, and ends with a "Definition of done" checklist:
 
@@ -79,7 +81,11 @@ cd frontend && ~/flutter/bin/flutter analyze && ~/flutter/bin/flutter test
 ```
 
 The integration harness **panics** on a configured-but-unreachable test DB/Redis
-(it no longer silently skips) — keep Postgres/Redis up.
+(it no longer silently skips) — keep Postgres/Redis up. CI runs the same suites
+as `cargo test -- --test-threads=1` and `flutter test --exclude-tags golden` —
+golden screenshot tests are local-only, so tag any new one `golden`.
+(`scripts/test.sh` is the docker-only wrapper for CI/prod hosts; it won't run
+on the dev VM.)
 
 ### Android APK — build + launch smoke test
 
@@ -134,6 +140,10 @@ regresses silently:
   build-breaking **errors** (undisposed stream/sink fails the build).
 - **Regression tests** pin the specific bugs we've fixed (l10n transpositions,
   cross-currency sums, DoS clamps, FX conversion).
+- **Docs publish publicly:** `.github/workflows/docs.yml` runs `mkdocs
+  gh-deploy` on every push to `main` touching `docs/**` or `mkdocs.yml` —
+  anything committed under `docs/` ends up on the public GitHub Pages site,
+  so never put secrets or private operational detail there.
 
 ## Conventions (quick pointers — details in the skills)
 

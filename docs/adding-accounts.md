@@ -58,17 +58,18 @@ For users in Mexico or LATAM using Bitso, you need to provide API keys.
 
 ---
 
-## 3. Importing Mexican Accounts (CSV & PDF)
+## 3. Importing Statements (CSV & PDF)
 
-Many Mexican institutions do not support standard API aggregators. For these, Patrimonio provides robust local, manual importers.
+Many institutions — especially Mexican banks — do not support standard API aggregators. For these, Patrimonio provides robust local, manual importers.
 
-- Supported Banks: **Banamex**, **Nu Mexico**, **CetesDirecto**.
+- Supported Mexican institutions: **Nu Mexico**, **Banamex**, **BBVA**, **Santander**, **Banorte**, **HSBC México**, **Scotiabank**, **CetesDirecto**, **Revolut**.
+- Supported US statement sources: **HealthEquity** (HSA), **Fidelity Stock Plan Services** (NetBenefits).
 
 ### How to Import
 1. Download your monthly account statement (PDF) or transaction history (CSV) directly from your institution's portal.
 2. In Patrimonio's **Settings** tab, click **Import a statement (CSV or PDF)**.
 3. Select the target account and upload the file. (If your PDF is password-protected, the UI will prompt you to enter the password to decrypt it locally).
-4. Review the parsed transactions visually in the screen and confirm the import.
+4. Review the parsed transactions visually in the screen and confirm the import. Transactions already in the account are flagged as duplicates at preview time, so re-uploading an overlapping statement won't double-count.
 
 ---
 

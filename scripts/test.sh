@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# DOCKER-ONLY (CI / prod-path): this wrapper requires a Docker daemon and the
+# compose Postgres container, so it does NOT run on the dev VM (Docker is
+# unavailable there). On the dev VM run `cargo test` natively against the
+# local :5442 Postgres — the exact commands are in AGENTS.md "Testing".
+#
 # Run the backend cargo test suite inside a docker container, against
 # a Postgres database created on the running `patrimonio-postgres-1`.
 #

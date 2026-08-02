@@ -1,6 +1,6 @@
 # Deployment & Infrastructure
 
-Patrimonio is designed to run locally with Docker Compose and to deploy as a static Flutter web frontend plus a stateless Rust API.
+Patrimonio runs as a Docker Compose stack — an nginx-served Flutter web frontend, the Rust API, PostgreSQL 17, and Redis 7 — both locally and in production. The supported production shape is that same stack on a host you control, behind a reverse proxy with TLS (see [VPS deployment](#vps-deployment-single-host)).
 
 ## Local Development
 
@@ -28,7 +28,7 @@ This starts:
 | Frontend | Flutter web build served by nginx | `http://127.0.0.1:3000` |
 | API | Rust/Axum server | `http://127.0.0.1:8080` |
 | PostgreSQL | Primary database | `127.0.0.1:5433` |
-| Redis | Cache for FX and short-lived data | `127.0.0.1:6380` |
+| Redis | FX cache, sessions, and short-lived auth state | `127.0.0.1:6380` |
 
 The non-default Postgres and Redis host ports reduce conflicts with other local services.
 
@@ -244,14 +244,20 @@ the assetlinks file: unreachable (CF bypass missing), wrong fingerprint
 
 ## Production Shape
 
-A production deployment should keep the same service boundaries:
+Production is the same Docker Compose stack as local development, run on a
+host you control behind a reverse proxy that terminates TLS. The
+[VPS deployment](#vps-deployment-single-host) section below is the primary,
+supported path — it is what the backup/restore runbook
+([operations.md](operations.md)) and the [migration runbook](migration.md)
+assume.
 
-- **Frontend**: Flutter web build hosted by Firebase Hosting, Cloud Storage/CDN, or any static container host.
-- **API**: Rust container on Cloud Run or another stateless container platform.
-- **Database**: Managed PostgreSQL such as Cloud SQL.
-- **Cache**: Managed Redis such as Memorystore.
-- **Secrets**: Store Plaid, Coinbase, Bitso, FX, and encryption settings in the platform secret manager.
-- **Backups**: Enable scheduled database backups before connecting real financial data.
+If you'd rather split the services across managed cloud offerings, the
+boundaries hold (Rust API as a stateless container, managed PostgreSQL,
+managed Redis, secrets in the platform secret manager) — with one caveat:
+the web frontend expects the API **same-origin** at `/api` (the nginx
+container proxies it), so a static host for the Flutter web build only works
+if that host can rewrite `/api/*` to the API service. Whatever the shape,
+enable scheduled database backups before connecting real financial data.
 
 ## VPS deployment (single-host)
 
@@ -421,9 +427,10 @@ the stack after changing it.)
 `docs/operations.md` documents the encrypted nightly backup +
 restore drill. The TL;DR for a new VPS:
 
-- Make sure `BACKUP_S3_BUCKET` (or an equivalent off-host target)
-  is reachable from the host. Local-disk-only backups don't survive
-  a host loss.
+- Arrange an off-host copy of the backup directory (rsync/syncthing
+  to another machine, object storage, or a periodic USB copy — see
+  "Off-machine copies" in the runbook). Local-disk-only backups
+  don't survive a host loss.
 - Run the bootstrap restore drill on day one; the runbook walks
   through verifying encryption, restoring into a fresh database,
   and rotating the encryption key.
@@ -438,17 +445,22 @@ rather than via "the app feels slow."
 
 ## Continuous Integration
 
-Recommended CI checks:
+CI (`.github/workflows/test.yml`) runs on every push and PR:
 
-1. `./scripts/test.sh` for backend logic — runs the full integration
-   suite (`auth_endpoints`, `auth_recovery_totp`, `dashboard_endpoints`)
-   inside a docker-pinned Rust toolchain against a transient
-   Postgres database, with `--test-threads=1` so the shared-DB
-   tests don't race.
-2. `flutter analyze` and `flutter build web` for frontend health.
-3. `docker compose build` to catch container packaging issues.
-4. `mkdocs build` for documentation.
-5. `scripts/smoke.cjs` in an environment with browser dependencies.
+1. **Backend**: `cargo fmt --check`, `cargo clippy --all-targets -- -D
+   warnings`, and `cargo test -- --test-threads=1` — the full unit +
+   integration suite against real Postgres 17 and Redis 7 service
+   containers. The integration harness panics on a
+   configured-but-unreachable database, so a green run means the suite
+   genuinely ran rather than silently skipping.
+2. **Frontend**: `dart format --set-exit-if-changed`, `flutter analyze`,
+   `flutter test`, and `flutter build apk --release` as an Android build
+   gate (build config only — launch crashes need a real device/emulator).
+
+Locally, `./scripts/test.sh` runs the same backend integration suite inside
+a docker-pinned Rust toolchain against a transient Postgres database, and
+`scripts/smoke.cjs` covers the browser smoke test. Docs pushes to `main`
+build and deploy via `mkdocs gh-deploy` (`.github/workflows/docs.yml`).
 
 ### Documentation Build
 

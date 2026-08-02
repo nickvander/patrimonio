@@ -30,8 +30,8 @@ One dashboard to see banking, credit cards, brokerages, retirement, HSA, crypto,
 ## Tech Stack
 
 - **Backend:** Rust + axum + SQLx + PostgreSQL + Redis
-- **Frontend:** Flutter web, served by nginx in Docker
-- **Deployment:** Docker Compose locally; static frontend hosting plus API container for production
+- **Frontend:** Flutter — web (served by nginx in Docker) + native Android APK
+- **Deployment:** Docker Compose, locally and in production (nginx-served Flutter web + API + Postgres + Redis in one stack; prod runs it on the homelab)
 - **Data:** Plaid, Coinbase, Bitso, CSV/PDF import, ExchangeRate-API
 
 ## Architecture
@@ -41,6 +41,18 @@ Browser -> nginx/Flutter Web -> Rust API (axum) -> PostgreSQL + Redis
                                       |
                                       +-> Plaid / Coinbase / Bitso / CSV-PDF / FX APIs
 ```
+
+## Platforms
+
+- **Web** — the primary surface: the Flutter web build served by nginx, which
+  proxies `/api` same-origin to the Rust API.
+- **Android APK** (shipped 2026-07-13) — the same Flutter codebase, with
+  web-only code isolated behind conditional-import seams. On first launch a
+  Settings screen asks for the self-hosted backend URL (HTTPS-only; a
+  Cloudflare Access service token is supported for fronted deployments) and
+  remembers it. CI gates `flutter build apk --release`; the universal APK
+  (~70 MB) is the emulator/CI build, phone installs use `--split-per-abi`
+  (~25 MB arm64). Native passkeys and persistent sessions work.
 
 ## Local Launch
 
