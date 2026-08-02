@@ -20,6 +20,8 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use tracing::error;
@@ -29,34 +31,25 @@ use crate::api::middleware::AuthContext;
 use crate::services::loan_match;
 use crate::AppState;
 
-/// A money amount quantised to cents, ready to bind.
+/// Half a cent, as a Decimal. This tolerance survives the f64 → Decimal
+/// migration deliberately: it now guards against LEGACY STORED DUST, not
+/// in-process float error. Two shipped bugs live in its history:
 ///
-/// `Decimal::from_f64_retain` keeps the FULL binary expansion — it does not
-/// round — so `from_f64_retain(1033.33)` is
-/// `1033.3299999999999272404238578`. Binding that unrounded is what made an
-/// exact payoff read as a partial payment: the allocation loop compares
-/// `COALESCE(paid_amount, 0) + $2 >= scheduled_amount` in SQL, where
-/// `scheduled_amount` is the stored `NUMERIC(20,6)` cents (`1033.330000`) and
-/// `$2` still carries the full expansion — so the row stayed `'partial'`
-/// while `paid_amount` (rounded on store by the column's scale) was written
-/// as exactly `scheduled_amount`. A self-contradicting row, and
-/// `list_reminders` filters on `status NOT IN ('paid','skipped')`, so the
-/// installment reminded forever.
+///   * f64-era binds carried the full binary expansion of amounts
+///     (`1033.3299999999999272404238578` for 1033.33), so an exact payoff
+///     read as a partial payment and reminded forever — fixed then by
+///     quantising binds to cents, today by `.round_dp(2)` at the
+///     allocation loop's bind sites (schedules are generated at 2dp,
+///     `services::loan_schedule::round2`, so cents is the right quantum).
+///   * Residual dust (`533.33 - 533.32999999999992724 = 1.1e-13`) compared
+///     against a bare `0.0` appended a phantom 0.00 installment.
 ///
-/// Schedules are generated at 2dp (`services::loan_schedule::round2`), so
-/// cents is the right quantum here. Rates and non-money values must NOT go
-/// through this.
-fn cents(x: f64) -> rust_decimal::Decimal {
-    rust_decimal::Decimal::from_f64_retain(x)
-        .unwrap_or_default()
-        .round_dp(2)
-}
-
-/// Half a cent. Residual f64 arithmetic in the allocation loop leaves dust
-/// (`533.33 - 533.32999999999992724 = 1.1e-13`); comparing that against a
-/// bare `0.0` appended a phantom 0.00 installment to the schedule — visible
-/// in the plan table and both exports. Anything under half a cent is zero.
-const MONEY_EPSILON: f64 = 0.005;
+/// The in-process math is exact Decimal now, but the DB may still hold
+/// f64-era rows whose `NUMERIC(20,6)` values carry that expansion's dust
+/// (e.g. `1033.329999`), so comparisons against STORED amounts must keep
+/// the half-cent tolerance rather than switch to exact zero. Anything
+/// under half a cent is zero.
+const MONEY_EPSILON: Decimal = dec!(0.005);
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -111,9 +104,9 @@ struct LoanView {
     #[serde(skip_serializing_if = "Option::is_none")]
     person_id: Option<String>,
     borrower_name: String,
-    principal: f64,
+    principal: Decimal,
     currency: String,
-    interest_rate: f64,
+    interest_rate: Decimal,
     interest_type: String,
     /// 'annual' or 'monthly' — the period interest_rate is expressed in.
     rate_period: String,
@@ -131,20 +124,20 @@ struct LoanView {
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<String>,
     /// Sum of reconciled repayments (paid_amount) in loan currency.
-    total_repaid: f64,
+    total_repaid: Decimal,
     /// Derived, never stored. For a loan WITH a generated schedule:
     /// principal − Σ scheduled_principal of fully-paid installments.
     /// For a schedule-less loan: principal + simple interest accrued
     /// to today − repaid. Forced to 0 for written_off / cancelled /
     /// paid_off.
-    outstanding: f64,
+    outstanding: Decimal,
     /// What the borrower still owes IN TOTAL — principal + unpaid scheduled
     /// interest (Σ scheduled payments − repaid). Equals `outstanding` for a
     /// 0%/no-schedule loan. The figure the lending UI shows as "owed"; net
     /// worth still uses the interest-excluded `outstanding`.
-    total_owed: f64,
+    total_owed: Decimal,
     /// Sum of every installment's scheduled_amount (0 when no schedule).
-    total_scheduled: f64,
+    total_scheduled: Decimal,
     /// True once a payment schedule has been generated.
     has_schedule: bool,
     /// Earliest unpaid installment due date (YYYY-MM-DD), if any.
@@ -156,12 +149,12 @@ struct LoanView {
     paid_ahead: bool,
     /// Cumulative interest income realized on this loan (Σ
     /// interest_portion of reconciled repayments). Cash basis.
-    interest_earned: f64,
+    interest_earned: Decimal,
     /// Simple interest accrued on the current outstanding balance from
     /// origination to today, MINUS interest already received. A
     /// non-income, informational "interest owed so far" figure (cash
     /// basis means it isn't income until paid). 0 for none/0% loans.
-    interest_accrued: f64,
+    interest_accrued: Decimal,
 }
 
 #[derive(Serialize)]
@@ -172,7 +165,7 @@ struct PersonView {
     note: Option<String>,
     /// Number of loans to this person + total still outstanding.
     loan_count: i64,
-    total_outstanding: f64,
+    total_outstanding: Decimal,
 }
 
 #[derive(Serialize)]
@@ -181,13 +174,13 @@ struct PaymentView {
     installment_number: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     due_date: Option<String>,
-    scheduled_amount: f64,
-    scheduled_principal: f64,
-    scheduled_interest: f64,
+    scheduled_amount: Decimal,
+    scheduled_principal: Decimal,
+    scheduled_interest: Decimal,
     #[serde(skip_serializing_if = "Option::is_none")]
     actual_tx_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    paid_amount: Option<f64>,
+    paid_amount: Option<Decimal>,
     #[serde(skip_serializing_if = "Option::is_none")]
     paid_date: Option<String>,
     status: String,
@@ -202,7 +195,7 @@ struct PaymentView {
     #[serde(skip_serializing_if = "Option::is_none")]
     account_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tx_amount: Option<f64>,
+    tx_amount: Option<Decimal>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tx_currency: Option<String>,
 }
@@ -213,10 +206,10 @@ struct CreateLoanRequest {
     #[serde(default)]
     person_id: Option<uuid::Uuid>,
     borrower_name: String,
-    principal: f64,
+    principal: Decimal,
     currency: String,
     #[serde(default)]
-    interest_rate: f64,
+    interest_rate: Decimal,
     #[serde(default = "default_interest_type")]
     interest_type: String,
     /// 'annual' (default) or 'monthly' — the period the interest_rate
@@ -255,7 +248,7 @@ fn valid_interest_type(t: &str) -> bool {
 #[derive(Deserialize)]
 struct CustomRow {
     due_date: chrono::NaiveDate,
-    amount: f64,
+    amount: Decimal,
 }
 
 /// The "first N at first_amount, then amount monthly on day-of-month
@@ -271,8 +264,8 @@ struct CustomPattern {
     day_of_month: Option<u32>,
     /// How many leading installments use `first_amount`.
     first_count: usize,
-    first_amount: f64,
-    amount: f64,
+    first_amount: Decimal,
+    amount: Decimal,
 }
 
 /// POST /{id}/schedule/custom body: EITHER explicit `rows` OR a
@@ -290,9 +283,9 @@ struct UpdateLoanRequest {
     #[serde(default)]
     borrower_name: Option<String>,
     #[serde(default)]
-    principal: Option<f64>,
+    principal: Option<Decimal>,
     #[serde(default)]
-    interest_rate: Option<f64>,
+    interest_rate: Option<Decimal>,
     #[serde(default)]
     interest_type: Option<String>,
     #[serde(default)]
@@ -318,22 +311,31 @@ struct RecordPaymentRequest {
     /// Amount applied to the loan. Defaults to the tx's amount when a
     /// transaction is linked; required for a cash payment.
     #[serde(default)]
-    amount: Option<f64>,
+    amount: Option<Decimal>,
     #[serde(default)]
     paid_date: Option<chrono::NaiveDate>,
 }
 
 // ---------- helpers ----------
 
-fn dec_to_f64(d: Option<rust_decimal::Decimal>) -> f64 {
-    d.and_then(|v| v.to_string().parse().ok()).unwrap_or(0.0)
+/// Decimal → f64 via string parse, never `as` (house rule). Money stays
+/// Decimal end-to-end; this exists only for the boundaries that still
+/// speak f64 — the `services::loan_match` scoring API (fuzzy-match
+/// tolerances, not money arithmetic) and the below-market USD-threshold
+/// check against the f64 FX rate.
+fn dec_to_f64(d: Decimal) -> f64 {
+    d.to_string().parse().unwrap_or(0.0)
 }
 
-/// Money with thousands separators, e.g. `fmt_money("MX$", 16000.0)` ->
-/// "MX$16,000.00". Comma grouping + dot decimal reads correctly for both
-/// English and Mexican Spanish (MXN uses the same convention).
-fn fmt_money(sym: &str, x: f64) -> String {
-    let neg = x < 0.0;
+/// Money with thousands separators, e.g. `fmt_money("MX$", dec!(16000))`
+/// -> "MX$16,000.00". Comma grouping + dot decimal reads correctly for
+/// both English and Mexican Spanish (MXN uses the same convention).
+fn fmt_money(sym: &str, x: Decimal) -> String {
+    // Round to cents BEFORE formatting: Decimal's `{:.2}` TRUNCATES
+    // rather than rounds, which would render legacy stored dust
+    // (1033.329999) as "1033.32" instead of "1033.33".
+    let x = x.round_dp(2);
+    let neg = x < Decimal::ZERO;
     let s = format!("{:.2}", x.abs());
     let (int_part, dec) = s.split_once('.').unwrap_or((s.as_str(), "00"));
     let len = int_part.len();
@@ -351,17 +353,17 @@ fn fmt_money(sym: &str, x: f64) -> String {
 /// Used for the informational `interest_accrued` ("interest owed so
 /// far") figure — NOT for `outstanding`, which is the running principal.
 fn accrued_interest(
-    principal: f64,
-    rate: f64,
+    principal: Decimal,
+    rate: Decimal,
     interest_type: &str,
     origination: chrono::NaiveDate,
     today: chrono::NaiveDate,
-) -> f64 {
-    if interest_type == "none" || rate <= 0.0 {
-        return 0.0;
+) -> Decimal {
+    if interest_type == "none" || rate <= Decimal::ZERO {
+        return Decimal::ZERO;
     }
-    let days = (today - origination).num_days().max(0) as f64;
-    let years = days / 365.0;
+    let days = Decimal::from((today - origination).num_days().max(0));
+    let years = days / dec!(365);
     principal * rate * years
 }
 
@@ -378,34 +380,34 @@ fn accrued_interest(
 ///     last payment, then allocate interest-first. 'none' / 0% → 0.
 #[allow(clippy::too_many_arguments)]
 fn split_interest_portion(
-    amount: f64,
-    balance_before: f64,
-    scheduled_interest: Option<f64>,
-    rate: f64,
+    amount: Decimal,
+    balance_before: Decimal,
+    scheduled_interest: Option<Decimal>,
+    rate: Decimal,
     rate_period: &str,
     interest_type: &str,
     last_date: chrono::NaiveDate,
     paid_date: chrono::NaiveDate,
-) -> f64 {
+) -> Decimal {
     if let Some(si) = scheduled_interest {
         // Interest-first cap: never attribute more interest than was
         // scheduled, nor more than the amount actually paid.
-        return si.min(amount).max(0.0);
+        return si.min(amount).max(Decimal::ZERO);
     }
-    if interest_type == "none" || rate <= 0.0 {
-        return 0.0;
+    if interest_type == "none" || rate <= Decimal::ZERO {
+        return Decimal::ZERO;
     }
     // Open-ended accrual: convert to an effective annual rate, accrue
     // simple interest over elapsed days on the outstanding balance.
     let annual = if rate_period == "monthly" {
-        rate * 12.0
+        rate * dec!(12)
     } else {
         rate
     };
-    let days = (paid_date - last_date).num_days().max(0) as f64;
-    let accrued = balance_before * annual * (days / 365.0);
+    let days = Decimal::from((paid_date - last_date).num_days().max(0));
+    let accrued = balance_before * annual * (days / dec!(365));
     // Allocate interest-first, capped at the payment.
-    accrued.min(amount).max(0.0)
+    accrued.min(amount).max(Decimal::ZERO)
 }
 
 // ---------- loans CRUD ----------
@@ -485,8 +487,8 @@ async fn list_loans(
 }
 
 fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
-    let principal = dec_to_f64(r.try_get("principal").ok());
-    let rate = dec_to_f64(r.try_get("interest_rate").ok());
+    let principal: Decimal = r.try_get("principal").unwrap_or_default();
+    let rate: Decimal = r.try_get("interest_rate").unwrap_or_default();
     let interest_type: String = r
         .try_get("interest_type")
         .unwrap_or_else(|_| "none".to_string());
@@ -496,17 +498,17 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     // Effective annual rate for the schedule-less simple-interest
     // approximation — a stored monthly rate is ×12.
     let effective_annual = if rate_period == "monthly" {
-        rate * 12.0
+        rate * dec!(12)
     } else {
         rate
     };
     let origination: chrono::NaiveDate = r.try_get("origination_date").unwrap_or(today);
     let status: String = r.try_get("status").unwrap_or_else(|_| "active".to_string());
-    let total_repaid = dec_to_f64(r.try_get("total_repaid").ok());
-    let total_scheduled = dec_to_f64(r.try_get("total_scheduled").ok());
+    let total_repaid: Decimal = r.try_get("total_repaid").unwrap_or_default();
+    let total_scheduled: Decimal = r.try_get("total_scheduled").unwrap_or_default();
     let has_schedule: bool = r.try_get("has_schedule").unwrap_or(false);
-    let principal_paid = dec_to_f64(r.try_get("principal_paid").ok());
-    let cumulative_due = dec_to_f64(r.try_get("cumulative_due").ok());
+    let principal_paid: Decimal = r.try_get("principal_paid").unwrap_or_default();
+    let cumulative_due: Decimal = r.try_get("cumulative_due").unwrap_or_default();
     let next_due: Option<chrono::NaiveDate> = r.try_get("next_due").ok().flatten();
     let overdue: bool = r.try_get("overdue").unwrap_or(false);
 
@@ -518,30 +520,31 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     // not part of the principal owed and (cash basis) isn't income
     // until received. It's surfaced separately as `interest_accrued`.
     let outstanding = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
-        0.0
+        Decimal::ZERO
     } else {
-        (principal - principal_paid).max(0.0)
+        (principal - principal_paid).max(Decimal::ZERO)
     };
     // Total still owed = scheduled payments (principal + interest) minus what
     // was repaid, when a schedule exists; else the principal-based
     // outstanding (a no-schedule loan has no scheduled interest).
     let total_owed = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
-        0.0
+        Decimal::ZERO
     } else if has_schedule {
-        (total_scheduled - total_repaid).max(0.0)
+        (total_scheduled - total_repaid).max(Decimal::ZERO)
     } else {
         outstanding
     };
     // Paid-ahead: borrower has repaid more than what's been billed so
     // far (only meaningful with a schedule + something billed).
-    let paid_ahead = has_schedule && cumulative_due > 0.0 && total_repaid >= cumulative_due;
+    let paid_ahead =
+        has_schedule && cumulative_due > Decimal::ZERO && total_repaid >= cumulative_due;
 
     // Accrued-but-unpaid interest (informational, non-income). Simple
     // accrual on the current outstanding balance from origination to
     // today, net of interest already received. Settled loans owe none.
-    let interest_earned = dec_to_f64(r.try_get("interest_earned").ok());
+    let interest_earned: Decimal = r.try_get("interest_earned").unwrap_or_default();
     let interest_accrued = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
-        0.0
+        Decimal::ZERO
     } else {
         let gross = accrued_interest(
             outstanding,
@@ -550,7 +553,7 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
             origination,
             today,
         );
-        (gross - interest_earned).max(0.0)
+        (gross - interest_earned).max(Decimal::ZERO)
     };
 
     LoanView {
@@ -623,7 +626,7 @@ async fn create_loan(
             "borrower_name required",
         ));
     }
-    if payload.principal <= 0.0 {
+    if payload.principal <= Decimal::ZERO {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "principal must be positive",
@@ -697,9 +700,9 @@ async fn create_loan(
     .bind(ctx.user_id)
     .bind(person_id)
     .bind(payload.borrower_name.trim())
-    .bind(rust_decimal::Decimal::from_f64_retain(payload.principal).unwrap_or_default())
+    .bind(payload.principal)
     .bind(&payload.currency)
-    .bind(rust_decimal::Decimal::from_f64_retain(payload.interest_rate).unwrap_or_default())
+    .bind(payload.interest_rate)
     .bind(&payload.interest_type)
     .bind(&payload.rate_period)
     .bind(payload.origination_date)
@@ -743,7 +746,7 @@ async fn update_loan(
     // returns a clean 400 instead of surfacing the DB CHECK as a 500
     // (mirrors create_loan).
     if let Some(p) = payload.principal {
-        if p <= 0.0 {
+        if p <= Decimal::ZERO {
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "principal must be positive",
@@ -771,7 +774,7 @@ async fn update_loan(
     // the Σprincipal == principal invariant intact. The user unreconciles
     // first, edits terms, then re-reconciles. Non-schedule fields
     // (borrower_name, status, notes) are unaffected and always editable.
-    let current: Option<(rust_decimal::Decimal, rust_decimal::Decimal, String)> = sqlx::query_as(
+    let current: Option<(Decimal, Decimal, String)> = sqlx::query_as(
         "SELECT principal, interest_rate, interest_type FROM loans \
              WHERE id = $1 AND user_id = $2",
     )
@@ -783,17 +786,13 @@ async fn update_loan(
     let Some((cur_principal, cur_rate, cur_type)) = current else {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
-    // Decimal equality is by numeric value (scale-insensitive), and both
-    // create_loan and the value below go through from_f64_retain on the
-    // same f64, so an unchanged resend compares equal.
-    let principal_changed = payload
-        .principal
-        .and_then(rust_decimal::Decimal::from_f64_retain)
-        .is_some_and(|p| p != cur_principal);
-    let rate_changed = payload
-        .interest_rate
-        .and_then(rust_decimal::Decimal::from_f64_retain)
-        .is_some_and(|r| r != cur_rate);
+    // Decimal equality is by numeric value (scale-insensitive). The
+    // payload deserializes the same JSON number the GET view serialized
+    // from the stored NUMERIC, so an unchanged resend from the edit
+    // dialog compares equal — including legacy float-era rows, whose
+    // stored dust round-trips through the wire untouched.
+    let principal_changed = payload.principal.is_some_and(|p| p != cur_principal);
+    let rate_changed = payload.interest_rate.is_some_and(|r| r != cur_rate);
     let type_changed = payload
         .interest_type
         .as_deref()
@@ -845,16 +844,8 @@ async fn update_loan(
         "#,
     )
     .bind(payload.borrower_name)
-    .bind(
-        payload
-            .principal
-            .and_then(rust_decimal::Decimal::from_f64_retain),
-    )
-    .bind(
-        payload
-            .interest_rate
-            .and_then(rust_decimal::Decimal::from_f64_retain),
-    )
+    .bind(payload.principal)
+    .bind(payload.interest_rate)
     .bind(payload.interest_type)
     .bind(payload.status)
     .bind(payload.notes)
@@ -951,21 +942,23 @@ async fn loans_summary(
         .unwrap_or_default();
 
     let today = chrono::Utc::now().date_naive();
-    let mut total_lent = 0.0;
-    let mut total_outstanding = 0.0;
+    let mut total_lent = Decimal::ZERO;
+    let mut total_outstanding = Decimal::ZERO;
     let mut active = 0i64;
     // Per-currency breakdown: summing USD + MXN principal into one number is
     // meaningless (the ~18x-overstatement bug class). Keep the flat totals
     // for backward compat but label them, and expose a per-currency map plus
     // a single `totals_currency` when every loan shares one — mirrors the
     // interest_income response so the UI can convert/label safely.
-    let mut by_currency: std::collections::BTreeMap<String, (f64, f64)> =
+    let mut by_currency: std::collections::BTreeMap<String, (Decimal, Decimal)> =
         std::collections::BTreeMap::new();
     for r in &rows {
         let v = loan_view(r, today);
         total_lent += v.principal;
         total_outstanding += v.outstanding;
-        let entry = by_currency.entry(v.currency.clone()).or_insert((0.0, 0.0));
+        let entry = by_currency
+            .entry(v.currency.clone())
+            .or_insert((Decimal::ZERO, Decimal::ZERO));
         entry.0 += v.principal;
         entry.1 += v.outstanding;
         if v.status == "active" {
@@ -1035,7 +1028,7 @@ async fn list_people(
                 name: r.try_get("name").unwrap_or_default(),
                 note: r.try_get("note").ok().flatten(),
                 loan_count: r.try_get("loan_count").unwrap_or(0),
-                total_outstanding: dec_to_f64(r.try_get("total_outstanding").ok()),
+                total_outstanding: r.try_get("total_outstanding").unwrap_or_default(),
             })
             .collect(),
     )
@@ -1049,7 +1042,7 @@ async fn owned_tx(
     state: &AppState,
     user_id: uuid::Uuid,
     tx_id: uuid::Uuid,
-) -> Option<(String, chrono::NaiveDate, f64)> {
+) -> Option<(String, chrono::NaiveDate, Decimal)> {
     let row = sqlx::query(
         "SELECT currency, date, amount FROM transactions WHERE id = $1 AND user_id = $2",
     )
@@ -1061,7 +1054,7 @@ async fn owned_tx(
     .flatten()?;
     let currency: String = row.try_get("currency").ok()?;
     let date: chrono::NaiveDate = row.try_get("date").ok()?;
-    let amount = dec_to_f64(row.try_get("amount").ok());
+    let amount: Decimal = row.try_get("amount").unwrap_or_default();
     Some((currency, date, amount))
 }
 
@@ -1199,19 +1192,18 @@ async fn list_payments(
                     .ok()
                     .flatten()
                     .map(|d| d.to_string()),
-                scheduled_amount: dec_to_f64(r.try_get("scheduled_amount").ok()),
-                scheduled_principal: dec_to_f64(r.try_get("scheduled_principal").ok()),
-                scheduled_interest: dec_to_f64(r.try_get("scheduled_interest").ok()),
+                scheduled_amount: r.try_get("scheduled_amount").unwrap_or_default(),
+                scheduled_principal: r.try_get("scheduled_principal").unwrap_or_default(),
+                scheduled_interest: r.try_get("scheduled_interest").unwrap_or_default(),
                 actual_tx_id: r
                     .try_get::<Option<uuid::Uuid>, _>("actual_tx_id")
                     .ok()
                     .flatten()
                     .map(|u| u.to_string()),
                 paid_amount: r
-                    .try_get::<Option<rust_decimal::Decimal>, _>("paid_amount")
+                    .try_get::<Option<Decimal>, _>("paid_amount")
                     .ok()
-                    .flatten()
-                    .and_then(|d| d.to_string().parse().ok()),
+                    .flatten(),
                 paid_date: r
                     .try_get::<Option<chrono::NaiveDate>, _>("paid_date")
                     .ok()
@@ -1230,11 +1222,7 @@ async fn list_payments(
                     .try_get::<Option<String>, _>("tx_account_name")
                     .ok()
                     .flatten(),
-                tx_amount: r
-                    .try_get::<Option<rust_decimal::Decimal>, _>("tx_amount")
-                    .ok()
-                    .flatten()
-                    .and_then(|d| d.to_string().parse().ok()),
+                tx_amount: r.try_get::<Option<Decimal>, _>("tx_amount").ok().flatten(),
                 tx_currency: r.try_get::<Option<String>, _>("tx_currency").ok().flatten(),
             })
             .collect::<Vec<_>>(),
@@ -1289,7 +1277,7 @@ async fn record_payment(
             )
         }
         None => {
-            let Some(amt) = payload.amount.filter(|a| *a > 0.0) else {
+            let Some(amt) = payload.amount.filter(|a| *a > Decimal::ZERO) else {
                 return Err(ApiError::new(
                     StatusCode::BAD_REQUEST,
                     "a cash payment requires a positive amount",
@@ -1318,8 +1306,8 @@ async fn record_payment(
     .fetch_one(&state.db)
     .await;
     let loan = loan.map_err(internal)?;
-    let principal = dec_to_f64(loan.try_get("principal").ok());
-    let rate = dec_to_f64(loan.try_get("interest_rate").ok());
+    let principal: Decimal = loan.try_get("principal").unwrap_or_default();
+    let rate: Decimal = loan.try_get("interest_rate").unwrap_or_default();
     let interest_type: String = loan
         .try_get("interest_type")
         .unwrap_or_else(|_| "none".to_string());
@@ -1327,9 +1315,9 @@ async fn record_payment(
         .try_get("rate_period")
         .unwrap_or_else(|_| "annual".to_string());
     let origination: chrono::NaiveDate = loan.try_get("origination_date").unwrap_or(paid_date);
-    let principal_paid = dec_to_f64(loan.try_get("principal_paid").ok());
+    let principal_paid: Decimal = loan.try_get("principal_paid").unwrap_or_default();
     let last_paid: Option<chrono::NaiveDate> = loan.try_get("last_paid").ok().flatten();
-    let balance_before = (principal - principal_paid).max(0.0);
+    let balance_before = (principal - principal_paid).max(Decimal::ZERO);
 
     // If a GENERATED schedule exists (rows with scheduled_principal > 0),
     // fill the earliest NOT-YET-FULLY-PAID scheduled installment rather
@@ -1373,7 +1361,7 @@ async fn record_payment(
     // Every not-fully-paid scheduled installment, earliest first. We walk
     // this list spilling the payment across rows. (Same predicate as the
     // old single-row selector, just without LIMIT 1.)
-    let scheduled_rows: Vec<(uuid::Uuid, f64, f64, f64, f64, bool)> = sqlx::query(
+    let scheduled_rows: Vec<(uuid::Uuid, Decimal, Decimal, Decimal, Decimal, bool)> = sqlx::query(
         "SELECT id, scheduled_amount, scheduled_interest, \
                 COALESCE(paid_amount, 0) AS paid_so_far, \
                 COALESCE(interest_portion, 0) AS interest_so_far, \
@@ -1392,10 +1380,10 @@ async fn record_payment(
             .map(|r| {
                 (
                     r.get::<uuid::Uuid, _>("id"),
-                    dec_to_f64(r.try_get("scheduled_amount").ok()),
-                    dec_to_f64(r.try_get("scheduled_interest").ok()),
-                    dec_to_f64(r.try_get("paid_so_far").ok()),
-                    dec_to_f64(r.try_get("interest_so_far").ok()),
+                    r.try_get("scheduled_amount").unwrap_or_default(),
+                    r.try_get("scheduled_interest").unwrap_or_default(),
+                    r.try_get("paid_so_far").unwrap_or_default(),
+                    r.try_get("interest_so_far").unwrap_or_default(),
                     r.try_get::<Option<uuid::Uuid>, _>("actual_tx_id")
                         .ok()
                         .flatten()
@@ -1427,7 +1415,7 @@ async fn record_payment(
             }
             // How much of THIS installment is still owed, and the slice of
             // the payment we apply to it.
-            let row_remaining = (sched_amount - paid_so_far).max(0.0);
+            let row_remaining = (sched_amount - paid_so_far).max(Decimal::ZERO);
             if row_remaining <= MONEY_EPSILON {
                 continue;
             }
@@ -1436,7 +1424,7 @@ async fn record_payment(
             // Interest-first split against THIS row's REMAINING scheduled
             // interest (scheduled_interest already realized on prior
             // top-ups of the same row), then ADD to its existing portions.
-            let row_scheduled_interest = (sched_interest - interest_so_far).max(0.0);
+            let row_scheduled_interest = (sched_interest - interest_so_far).max(Decimal::ZERO);
             let interest_portion = split_interest_portion(
                 slice,
                 running_balance,
@@ -1447,8 +1435,8 @@ async fn record_payment(
                 last_interest_date,
                 paid_date,
             );
-            let principal_portion = (slice - interest_portion).max(0.0);
-            running_balance = (running_balance - principal_portion).max(0.0);
+            let principal_portion = (slice - interest_portion).max(Decimal::ZERO);
+            running_balance = (running_balance - principal_portion).max(Decimal::ZERO);
 
             // The bank tx attaches to the FIRST row only; later (spilled)
             // rows that don't already carry a tx stay NULL (cash-style).
@@ -1475,12 +1463,16 @@ async fn record_payment(
                 WHERE id = $7 AND user_id = $8
                 "#,
             )
+            // Quantise every money bind to cents: schedules are generated
+            // at 2dp (`services::loan_schedule::round2`), and binding an
+            // unquantised amount is what once made an exact payoff read as
+            // a partial payment (see MONEY_EPSILON's doc).
             .bind(tx_for_row)
-            .bind(cents(slice))
+            .bind(slice.round_dp(2))
             .bind(paid_date)
-            .bind(cents(principal_portion))
-            .bind(cents(interest_portion))
-            .bind(cents(running_balance))
+            .bind(principal_portion.round_dp(2))
+            .bind(interest_portion.round_dp(2))
+            .bind(running_balance.round_dp(2))
             .bind(row_id)
             .bind(ctx.user_id)
             .execute(&mut *tx_conn)
@@ -1506,8 +1498,8 @@ async fn record_payment(
                 last_interest_date,
                 paid_date,
             );
-            let principal_portion = (remaining - interest_portion).max(0.0);
-            running_balance = (running_balance - principal_portion).max(0.0);
+            let principal_portion = (remaining - interest_portion).max(Decimal::ZERO);
+            running_balance = (running_balance - principal_portion).max(Decimal::ZERO);
             let tx_for_row = if tx_used { None } else { payload.transaction_id };
 
             let next: i32 = sqlx::query_scalar(
@@ -1529,13 +1521,13 @@ async fn record_payment(
             .bind(ctx.user_id)
             .bind(id)
             .bind(next)
-            .bind(cents(remaining))
+            .bind(remaining.round_dp(2))
             .bind(tx_for_row)
-            .bind(cents(remaining))
+            .bind(remaining.round_dp(2))
             .bind(paid_date)
-            .bind(cents(principal_portion))
-            .bind(cents(interest_portion))
-            .bind(cents(running_balance))
+            .bind(principal_portion.round_dp(2))
+            .bind(interest_portion.round_dp(2))
+            .bind(running_balance.round_dp(2))
             .execute(&mut *tx_conn)
             .await?;
         }
@@ -1735,8 +1727,12 @@ async fn unreconcile_payment(
     .await;
     let is_schedule_row = match row {
         Ok(Some(r)) => {
-            dec_to_f64(r.try_get("scheduled_principal").ok()) > 0.0
-                || dec_to_f64(r.try_get("scheduled_interest").ok()) > 0.0
+            r.try_get::<Decimal, _>("scheduled_principal")
+                .unwrap_or_default()
+                > Decimal::ZERO
+                || r.try_get::<Decimal, _>("scheduled_interest")
+                    .unwrap_or_default()
+                    > Decimal::ZERO
         }
         Ok(None) => return Err(ApiError::new(StatusCode::NOT_FOUND, "payment not found")),
         Err(e) => return Err(internal(e)),
@@ -1795,18 +1791,19 @@ async fn suggest_disbursement(
     let Ok(Some(l)) = loan else {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
-    let principal = dec_to_f64(l.try_get("principal").ok());
+    let principal: Decimal = l.try_get("principal").unwrap_or_default();
     let currency: String = l.try_get("currency").unwrap_or_default();
     let origination: chrono::NaiveDate = l
         .try_get("origination_date")
         .unwrap_or(chrono::Utc::now().date_naive());
     let borrower: String = l.try_get("borrower_name").unwrap_or_default();
 
+    // loan_match's scoring API is f64 (tolerance bands, not money math).
     match loan_match::suggest_disbursements(
         &state.db,
         ctx.user_id,
         &currency,
-        principal,
+        dec_to_f64(principal),
         origination,
         &borrower,
     )
@@ -1839,7 +1836,7 @@ async fn suggest_repayment(
     let Ok(Some(l)) = loan else {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
-    let principal = dec_to_f64(l.try_get("principal").ok());
+    let principal: Decimal = l.try_get("principal").unwrap_or_default();
     let currency: String = l.try_get("currency").unwrap_or_default();
     let origination: chrono::NaiveDate = l
         .try_get("origination_date")
@@ -1869,7 +1866,7 @@ async fn suggest_repayment(
     // against what's left on IT, not the next installment's full amount. Falls
     // back to principal/term when no schedule exists, and to None (no-schedule
     // matcher mode) when there's no term either.
-    let next_scheduled: Option<rust_decimal::Decimal> = sqlx::query_scalar(
+    let next_scheduled: Option<Decimal> = sqlx::query_scalar(
         "SELECT scheduled_amount - COALESCE(paid_amount, 0) FROM loan_payments \
          WHERE loan_id = $1 AND scheduled_amount > 0 \
          AND COALESCE(paid_amount, 0) < scheduled_amount \
@@ -1880,15 +1877,21 @@ async fn suggest_repayment(
     .await
     .ok()
     .flatten();
+    // loan_match's scoring API is f64 (tolerance bands, not money math) —
+    // convert at this boundary only.
     let installment = next_scheduled
-        .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0))
-        .filter(|a| *a > 0.0)
-        .or_else(|| term_months.filter(|t| *t > 0).map(|t| principal / t as f64));
+        .filter(|a| *a > Decimal::ZERO)
+        .map(dec_to_f64)
+        .or_else(|| {
+            term_months
+                .filter(|t| *t > 0)
+                .map(|t| dec_to_f64(principal / Decimal::from(t)))
+        });
 
     // Outstanding balance = principal minus everything already reconciled.
     // In no-schedule mode this lets a single lump-sum payoff be suggested
     // even with a terse, nameless bank description (a common IOU shape).
-    let paid_so_far: Option<rust_decimal::Decimal> = sqlx::query_scalar(
+    let paid_so_far: Option<Decimal> = sqlx::query_scalar(
         "SELECT COALESCE(SUM(paid_amount), 0) FROM loan_payments WHERE loan_id = $1",
     )
     .bind(id)
@@ -1896,8 +1899,10 @@ async fn suggest_repayment(
     .await
     .ok()
     .flatten();
-    let outstanding = principal - dec_to_f64(paid_so_far);
-    let lump_sum_target = Some(outstanding).filter(|a| *a > 0.0);
+    let outstanding = principal - paid_so_far.unwrap_or_default();
+    let lump_sum_target = Some(outstanding)
+        .filter(|a| *a > Decimal::ZERO)
+        .map(dec_to_f64);
 
     match loan_match::suggest_repayments(
         &state.db,
@@ -2193,8 +2198,6 @@ async fn set_custom_schedule(
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<CustomScheduleRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    use rust_decimal::Decimal;
-
     // Exactly one of rows / pattern.
     if payload.rows.is_some() == payload.pattern.is_some() {
         return Err(ApiError::new(
@@ -2231,10 +2234,9 @@ async fn set_custom_schedule(
     }
 
     // Expand to ScheduleRows (from explicit rows or the pattern shorthand).
-    let f = |x: f64| Decimal::from_f64_retain(x).unwrap_or_default();
     let rows = if let Some(rs) = &payload.rows {
         let pairs: Vec<(chrono::NaiveDate, Decimal)> =
-            rs.iter().map(|r| (r.due_date, f(r.amount))).collect();
+            rs.iter().map(|r| (r.due_date, r.amount)).collect();
         crate::services::loan_schedule::expand_rows(&pairs, principal)
     } else {
         let p = payload.pattern.as_ref().unwrap();
@@ -2244,8 +2246,8 @@ async fn set_custom_schedule(
             p.end_date,
             p.day_of_month,
             p.first_count,
-            f(p.first_amount),
-            f(p.amount),
+            p.first_amount,
+            p.amount,
         )
     };
 
@@ -2371,7 +2373,7 @@ struct ReminderView {
     loan_id: String,
     payment_id: String,
     borrower_name: String,
-    amount: f64,
+    amount: Decimal,
     currency: String,
     due_date: String,
     installment_number: i32,
@@ -2452,7 +2454,7 @@ async fn list_reminders(
                 loan_id: r.get::<uuid::Uuid, _>("loan_id").to_string(),
                 payment_id: r.get::<uuid::Uuid, _>("payment_id").to_string(),
                 borrower_name: r.try_get("borrower_name").unwrap_or_default(),
-                amount: dec_to_f64(r.try_get("amount").ok()),
+                amount: r.try_get("amount").unwrap_or_default(),
                 currency: r.try_get("currency").unwrap_or_default(),
                 due_date: r
                     .try_get::<chrono::NaiveDate, _>("due_date")
@@ -2481,8 +2483,8 @@ struct InterestByLoan {
     loan_id: String,
     borrower_name: String,
     currency: String,
-    interest_received: f64,
-    principal_received: f64,
+    interest_received: Decimal,
+    principal_received: Decimal,
     payments_count: i64,
 }
 
@@ -2490,7 +2492,7 @@ struct InterestByLoan {
 struct InterestByMonth {
     /// YYYY-MM.
     month: String,
-    interest_received: f64,
+    interest_received: Decimal,
 }
 
 /// Interest-income report. Cash basis — interest is recognized in the
@@ -2554,8 +2556,8 @@ async fn interest_income(
             loan_id: r.get::<uuid::Uuid, _>("loan_id").to_string(),
             borrower_name: r.try_get("borrower_name").unwrap_or_default(),
             currency: r.try_get("currency").unwrap_or_default(),
-            interest_received: dec_to_f64(r.try_get("interest_received").ok()),
-            principal_received: dec_to_f64(r.try_get("principal_received").ok()),
+            interest_received: r.try_get("interest_received").unwrap_or_default(),
+            principal_received: r.try_get("principal_received").unwrap_or_default(),
             payments_count: r.try_get("payments_count").unwrap_or(0),
         })
         .collect();
@@ -2563,7 +2565,7 @@ async fn interest_income(
         .iter()
         .map(|r| InterestByMonth {
             month: r.try_get("month").unwrap_or_default(),
-            interest_received: dec_to_f64(r.try_get("interest_received").ok()),
+            interest_received: r.try_get("interest_received").unwrap_or_default(),
         })
         .collect();
     // Legacy flat totals: a NAÏVE sum across all loans regardless of currency.
@@ -2571,17 +2573,17 @@ async fn interest_income(
     // mean something when every loan shares one currency. The per-currency
     // breakdown below is the correct figure to display when currencies mix —
     // MXN interest and USD interest must never be added unlabeled.
-    let total_interest: f64 = loans.iter().map(|l| l.interest_received).sum();
-    let total_principal: f64 = loans.iter().map(|l| l.principal_received).sum();
+    let total_interest: Decimal = loans.iter().map(|l| l.interest_received).sum();
+    let total_principal: Decimal = loans.iter().map(|l| l.principal_received).sum();
 
     // Per-currency totals so mixed-currency portfolios aren't summed across an
     // FX boundary. Additive field — does not change the legacy totals.
-    let mut by_currency: std::collections::BTreeMap<String, (f64, f64, i64)> =
+    let mut by_currency: std::collections::BTreeMap<String, (Decimal, Decimal, i64)> =
         std::collections::BTreeMap::new();
     for l in &loans {
         let e = by_currency
             .entry(l.currency.clone())
-            .or_insert((0.0, 0.0, 0));
+            .or_insert((Decimal::ZERO, Decimal::ZERO, 0));
         e.0 += l.interest_received;
         e.1 += l.principal_received;
         e.2 += l.payments_count;
@@ -2634,12 +2636,14 @@ async fn interest_income(
     let below_market: Vec<serde_json::Value> = below_market_rows
         .iter()
         .filter_map(|r| {
-            let principal = dec_to_f64(r.try_get("principal").ok());
+            let principal: Decimal = r.try_get("principal").unwrap_or_default();
             let currency = r.try_get::<String, _>("currency").unwrap_or_default();
+            // Threshold check only (not wire output), against the f64 FX
+            // rate — convert at this boundary.
             let usd_principal = if currency.eq_ignore_ascii_case("MXN") && usd_mxn > 0.0 {
-                principal / usd_mxn
+                dec_to_f64(principal) / usd_mxn
             } else {
-                principal
+                dec_to_f64(principal)
             };
             if usd_principal <= 10_000.0 {
                 return None;
@@ -2717,10 +2721,24 @@ async fn export_interest_income(
             .unwrap_or_default();
         let borrower: String = r.try_get("borrower_name").unwrap_or_default();
         let currency: String = r.try_get("currency").unwrap_or_default();
-        let pay = dec_to_f64(r.try_get("paid_amount").ok());
-        let principal = dec_to_f64(r.try_get("principal_portion").ok());
-        let interest = dec_to_f64(r.try_get("interest_portion").ok());
-        let bal = dec_to_f64(r.try_get("balance_after").ok());
+        // round_dp(2) before `{:.2}`: Decimal's precision formatting
+        // truncates, and stored legacy dust must still print as cents.
+        let pay = r
+            .try_get::<Decimal, _>("paid_amount")
+            .unwrap_or_default()
+            .round_dp(2);
+        let principal = r
+            .try_get::<Decimal, _>("principal_portion")
+            .unwrap_or_default()
+            .round_dp(2);
+        let interest = r
+            .try_get::<Decimal, _>("interest_portion")
+            .unwrap_or_default()
+            .round_dp(2);
+        let bal = r
+            .try_get::<Decimal, _>("balance_after")
+            .unwrap_or_default()
+            .round_dp(2);
         csv.push_str(&format!(
             "{},{currency},{date},{pay:.2},{principal:.2},{interest:.2},{bal:.2}\n",
             esc(&borrower)
@@ -2781,8 +2799,15 @@ async fn export_interest_summary(
         let year: i32 = r.try_get("year").unwrap_or(0);
         let borrower: String = r.try_get("borrower_name").unwrap_or_default();
         let currency: String = r.try_get("currency").unwrap_or_default();
-        let interest = dec_to_f64(r.try_get("interest_total").ok());
-        let principal = dec_to_f64(r.try_get("principal_total").ok());
+        // round_dp(2) before `{:.2}` — Decimal precision formatting truncates.
+        let interest = r
+            .try_get::<Decimal, _>("interest_total")
+            .unwrap_or_default()
+            .round_dp(2);
+        let principal = r
+            .try_get::<Decimal, _>("principal_total")
+            .unwrap_or_default()
+            .round_dp(2);
         csv.push_str(&format!(
             "{},{currency},{year},{interest:.2},{principal:.2}\n",
             esc(&borrower)
@@ -2884,26 +2909,33 @@ async fn loan_agreement(
             .replace('>', "&gt;")
     }
     let sym = if v.currency == "MXN" { "MX$" } else { "$" };
-    let money = |x: f64| fmt_money(sym, x);
+    let money = |x: Decimal| fmt_money(sym, x);
     let per = if v.rate_period == "monthly" {
         t("month", "mes")
     } else {
         t("year", "año")
     };
-    let pct = v.interest_rate * 100.0;
-    let total_sched_interest: f64 = payments
+    // Pre-round: Decimal's `{:.3}` formatting truncates, it doesn't round.
+    let pct = (v.interest_rate * dec!(100)).round_dp(3);
+    let total_sched_interest: Decimal = payments
         .iter()
-        .map(|p| dec_to_f64(p.try_get("scheduled_interest").ok()))
+        .map(|p| {
+            p.try_get::<Decimal, _>("scheduled_interest")
+                .unwrap_or_default()
+        })
         .sum();
     // A custom schedule carries no rate but can still charge interest; a
     // 0%/none loan charges none. Drives both the terms line and the clause.
-    let has_interest = v.interest_rate > 0.0 || total_sched_interest > 0.0;
+    let has_interest = v.interest_rate > Decimal::ZERO || total_sched_interest > Decimal::ZERO;
     // Total the borrower owes = Σ scheduled payments (principal + interest)
     // when a schedule exists, else the principal. Makes "owes 16,000, not
     // 14,000" explicit throughout the document.
-    let total_sched_payment: f64 = payments
+    let total_sched_payment: Decimal = payments
         .iter()
-        .map(|p| dec_to_f64(p.try_get("scheduled_amount").ok()))
+        .map(|p| {
+            p.try_get::<Decimal, _>("scheduled_amount")
+                .unwrap_or_default()
+        })
         .sum();
     let total_to_repay = if payments.is_empty() {
         v.principal
@@ -2917,7 +2949,7 @@ async fn loan_agreement(
     // Keep these figures identical to the loan view's total_repaid /
     // total_owed so the document handed to the borrower matches the app.
     let total_paid = v.total_repaid;
-    let remaining_owed = (total_to_repay - total_paid).max(0.0);
+    let remaining_owed = (total_to_repay - total_paid).max(Decimal::ZERO);
     let interest_desc = if !has_interest {
         t("no interest", "sin intereses").to_string()
     } else {
@@ -2981,9 +3013,9 @@ async fn loan_agreement(
                 .try_get::<chrono::NaiveDate, _>("due_date")
                 .map(|d| d.to_string())
                 .unwrap_or_default();
-            let amt = dec_to_f64(p.try_get("scheduled_amount").ok());
-            let prin = dec_to_f64(p.try_get("scheduled_principal").ok());
-            let int = dec_to_f64(p.try_get("scheduled_interest").ok());
+            let amt: Decimal = p.try_get("scheduled_amount").unwrap_or_default();
+            let prin: Decimal = p.try_get("scheduled_principal").unwrap_or_default();
+            let int: Decimal = p.try_get("scheduled_interest").unwrap_or_default();
             let paid = p.try_get::<String, _>("status").ok().as_deref() == Some("paid");
             let (row_cls, status_cell) = if paid {
                 (
@@ -3035,16 +3067,20 @@ async fn loan_agreement(
         )
         .to_string(),
     };
-    let paid_pct = if total_to_repay > 0.0 {
-        (total_paid / total_to_repay * 100.0).clamp(0.0, 100.0)
+    let paid_pct = if total_to_repay > Decimal::ZERO {
+        (total_paid / total_to_repay * dec!(100)).clamp(Decimal::ZERO, dec!(100))
     } else {
-        0.0
+        Decimal::ZERO
     };
+    // Two render precisions (`{:.1}` bar width, `{:.0}` label) — pre-round
+    // each separately, since Decimal precision formatting truncates.
+    let paid_pct_bar = paid_pct.round_dp(1);
+    let paid_pct_label = paid_pct.round_dp(0);
     let total_repay_disp = money(total_to_repay);
     let total_paid_disp = money(total_paid);
     let remaining_disp = money(remaining_owed);
     // Show the principal + interest composition so the total reads clearly.
-    let breakdown = if !payments.is_empty() && total_sched_interest > 0.0 {
+    let breakdown = if !payments.is_empty() && total_sched_interest > Decimal::ZERO {
         if es {
             format!(
                 "<div class=\"sub\">Capital {} + interés {}</div>",
@@ -3062,7 +3098,8 @@ async fn loan_agreement(
         String::new()
     };
 
-    let principal_str = format!("{:.2}", v.principal);
+    // round_dp(2) before `{:.2}` — Decimal precision formatting truncates.
+    let principal_str = format!("{:.2}", v.principal.round_dp(2));
     let currency_esc = esc_html(&v.currency);
     let interest_esc = esc_html(&interest_desc);
     // "…with the interest…" vs "…without interest" so a 0% loan doesn't read
@@ -3146,8 +3183,8 @@ async fn loan_agreement(
   <div class="card"><div class="k">{paid_lbl}</div><div class="val">{total_paid_disp}</div></div>
   <div class="card accent"><div class="k">{remaining_lbl}</div><div class="val">{remaining_disp}</div></div>
 </div>
-<div class="bar"><span style="width:{paid_pct:.1}%"></span></div>
-<div class="barlabel">{total_paid_disp} {of_word} {total_repay_disp} {paid_word} · {paid_pct:.0}%</div>
+<div class="bar"><span style="width:{paid_pct_bar:.1}%"></span></div>
+<div class="barlabel">{total_paid_disp} {of_word} {total_repay_disp} {paid_word} · {paid_pct_label:.0}%</div>
 
 <h2>{parties_hdr}</h2>
 <div class="dl">
@@ -3208,7 +3245,8 @@ async fn loan_agreement(
         interest_desc = interest_esc,
         term_line_val = esc_html(&term_line),
         value_para = value_para,
-        paid_pct = paid_pct,
+        paid_pct_bar = paid_pct_bar,
+        paid_pct_label = paid_pct_label,
         schedule_html = schedule_html,
     );
 
@@ -3228,10 +3266,10 @@ async fn loan_agreement(
 struct PlanRow {
     installment_number: i32,
     due_date: Option<chrono::NaiveDate>,
-    amount: rust_decimal::Decimal,
-    principal: rust_decimal::Decimal,
-    interest: rust_decimal::Decimal,
-    balance_remaining: rust_decimal::Decimal,
+    amount: Decimal,
+    principal: Decimal,
+    interest: Decimal,
+    balance_remaining: Decimal,
     status: String,
 }
 
@@ -3240,11 +3278,7 @@ struct PlanRow {
 /// the schedule's tail-absorbs-residual invariant it closes to EXACTLY 0
 /// on the final row. Tiny negative drift (defensive) is clamped to 0.
 /// Pure + DB-free so it's unit-testable against `loan_schedule::generate`.
-fn running_balances(
-    principal: rust_decimal::Decimal,
-    principals: &[rust_decimal::Decimal],
-) -> Vec<rust_decimal::Decimal> {
-    use rust_decimal::Decimal;
+fn running_balances(principal: Decimal, principals: &[Decimal]) -> Vec<Decimal> {
     let mut balance = principal;
     let mut out = Vec::with_capacity(principals.len());
     for p in principals {
@@ -3269,16 +3303,14 @@ fn running_balances(
 async fn build_plan_rows(
     db: &sqlx::PgPool,
     loan_id: uuid::Uuid,
-    principal: rust_decimal::Decimal,
-    rate: rust_decimal::Decimal,
+    principal: Decimal,
+    rate: Decimal,
     rate_period: &str,
     interest_type: &str,
     origination: chrono::NaiveDate,
     term_months: Option<i32>,
     payment_frequency: Option<&str>,
 ) -> Result<Vec<PlanRow>, crate::services::loan_schedule::ScheduleError> {
-    use rust_decimal::Decimal;
-
     let persisted = sqlx::query(
         "SELECT installment_number, due_date, scheduled_amount, scheduled_principal, \
                 scheduled_interest, status \
@@ -3383,8 +3415,8 @@ async fn loan_plan_context(
         }
     };
 
-    let principal: rust_decimal::Decimal = r.try_get("principal").unwrap_or_default();
-    let rate: rust_decimal::Decimal = r.try_get("interest_rate").unwrap_or_default();
+    let principal: Decimal = r.try_get("principal").unwrap_or_default();
+    let rate: Decimal = r.try_get("interest_rate").unwrap_or_default();
     let interest_type: String = r.try_get("interest_type").unwrap_or_else(|_| "none".into());
     let rate_period: String = r.try_get("rate_period").unwrap_or_else(|_| "annual".into());
     let origination: chrono::NaiveDate = match r.try_get("origination_date") {
@@ -3439,9 +3471,7 @@ async fn export_schedule_csv(
     // A 0% / custom-with-no-markup schedule carries no interest, so drop
     // the Principal + Interest columns — they'd just be a redundant copy of
     // Payment and a wall of 0.00. Show them only when interest is real.
-    let has_interest = rows
-        .iter()
-        .any(|p| p.interest > rust_decimal::Decimal::ZERO);
+    let has_interest = rows.iter().any(|p| p.interest > Decimal::ZERO);
     let mut csv = if has_interest {
         String::from("#,Due date,Payment,Principal,Interest,Balance remaining,Status\n")
     } else {
@@ -3449,15 +3479,16 @@ async fn export_schedule_csv(
     };
     for p in &rows {
         let due = p.due_date.map(|d| d.to_string()).unwrap_or_default();
+        // round_dp(2) before `{:.2}` — Decimal precision formatting truncates.
         if has_interest {
             csv.push_str(&format!(
                 "{},{},{:.2},{:.2},{:.2},{:.2},{}\n",
                 p.installment_number,
                 due,
-                dec_to_f64(Some(p.amount)),
-                dec_to_f64(Some(p.principal)),
-                dec_to_f64(Some(p.interest)),
-                dec_to_f64(Some(p.balance_remaining)),
+                p.amount.round_dp(2),
+                p.principal.round_dp(2),
+                p.interest.round_dp(2),
+                p.balance_remaining.round_dp(2),
                 esc(&p.status),
             ));
         } else {
@@ -3465,8 +3496,8 @@ async fn export_schedule_csv(
                 "{},{},{:.2},{:.2},{}\n",
                 p.installment_number,
                 due,
-                dec_to_f64(Some(p.amount)),
-                dec_to_f64(Some(p.balance_remaining)),
+                p.amount.round_dp(2),
+                p.balance_remaining.round_dp(2),
                 esc(&p.status),
             ));
         }
@@ -3529,7 +3560,7 @@ async fn loan_payment_plan(
             .replace('>', "&gt;")
     }
     let sym = if v.currency == "MXN" { "MX$" } else { "$" };
-    let money = |x: f64| fmt_money(sym, x);
+    let money = |x: Decimal| fmt_money(sym, x);
 
     // Plain-language interest description (mirrors loan_agreement's).
     let per = if v.rate_period == "monthly" {
@@ -3537,39 +3568,37 @@ async fn loan_payment_plan(
     } else {
         "year"
     };
+    // Pre-round: Decimal's `{:.3}` formatting truncates, it doesn't round.
+    let pct = (v.interest_rate * dec!(100)).round_dp(3);
     let interest_desc = match v.interest_type.as_str() {
         "none" => "no interest — you pay back exactly what you borrowed".to_string(),
-        "simple" => format!(
-            "simple interest at {:.3}% per {per}, figured once and split evenly",
-            v.interest_rate * 100.0
-        ),
-        "amortized" => format!(
-            "{:.3}% per {per}; each payment covers the interest plus a little principal",
-            v.interest_rate * 100.0
-        ),
+        "simple" => {
+            format!("simple interest at {pct:.3}% per {per}, figured once and split evenly")
+        }
+        "amortized" => {
+            format!("{pct:.3}% per {per}; each payment covers the interest plus a little principal")
+        }
         "interest_only" => format!(
-            "interest-only at {:.3}% per {per}; the full amount is due with the final payment",
-            v.interest_rate * 100.0
+            "interest-only at {pct:.3}% per {per}; the full amount is due with the final payment"
         ),
-        "compound" => format!(
-            "compound interest at {:.3}% per {per}; nothing is due until the end",
-            v.interest_rate * 100.0
-        ),
-        _ => format!("{:.3}% per {per}", v.interest_rate * 100.0),
+        "compound" => {
+            format!("compound interest at {pct:.3}% per {per}; nothing is due until the end")
+        }
+        _ => format!("{pct:.3}% per {per}"),
     };
 
     // Schedule table with the balance-remaining column + a paid marker,
     // plus a totals footer.
-    let mut total_amount = 0.0;
-    let mut total_principal = 0.0;
-    let mut total_interest = 0.0;
+    let mut total_amount = Decimal::ZERO;
+    let mut total_principal = Decimal::ZERO;
+    let mut total_interest = Decimal::ZERO;
     let mut body = String::new();
     for p in &rows {
         let due = p.due_date.map(|d| d.to_string()).unwrap_or_default();
-        let amt = dec_to_f64(Some(p.amount));
-        let prin = dec_to_f64(Some(p.principal));
-        let int = dec_to_f64(Some(p.interest));
-        let bal = dec_to_f64(Some(p.balance_remaining));
+        let amt = p.amount;
+        let prin = p.principal;
+        let int = p.interest;
+        let bal = p.balance_remaining;
         total_amount += amt;
         total_principal += prin;
         total_interest += int;
@@ -3636,7 +3665,8 @@ Figures are computed from the loan's terms; minor rounding lands on the final pa
 </body></html>"#,
         borrower = esc_html(&v.borrower_name),
         lender = esc_html(&lender),
-        principal = v.principal,
+        // round_dp(2) before `{:.2}` — Decimal precision formatting truncates.
+        principal = v.principal.round_dp(2),
         currency = esc_html(&v.currency),
         origination = v.origination_date,
         interest_desc = esc_html(&interest_desc),
@@ -3654,17 +3684,19 @@ Figures are computed from the loan's terms; minor rounding lands on the final pa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rust_decimal::Decimal;
     use std::str::FromStr;
 
     #[test]
     fn fmt_money_groups_thousands() {
-        assert_eq!(fmt_money("MX$", 16000.0), "MX$16,000.00");
-        assert_eq!(fmt_money("$", 1234567.5), "$1,234,567.50");
-        assert_eq!(fmt_money("MX$", 500.0), "MX$500.00");
-        assert_eq!(fmt_money("MX$", 0.0), "MX$0.00");
-        assert_eq!(fmt_money("$", -4200.25), "-$4,200.25");
-        assert_eq!(fmt_money("$", 999.99), "$999.99");
+        assert_eq!(fmt_money("MX$", dec!(16000)), "MX$16,000.00");
+        assert_eq!(fmt_money("$", dec!(1234567.5)), "$1,234,567.50");
+        assert_eq!(fmt_money("MX$", dec!(500)), "MX$500.00");
+        assert_eq!(fmt_money("MX$", Decimal::ZERO), "MX$0.00");
+        assert_eq!(fmt_money("$", dec!(-4200.25)), "-$4,200.25");
+        assert_eq!(fmt_money("$", dec!(999.99)), "$999.99");
+        // Legacy stored dust (NUMERIC(20,6) from the f64 era) must render
+        // rounded to cents, not truncated.
+        assert_eq!(fmt_money("$", dec!(1033.329999)), "$1,033.33");
     }
 
     fn d(s: &str) -> Decimal {
