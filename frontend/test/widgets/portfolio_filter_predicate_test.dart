@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:patrimonio/widgets/portfolio_card.dart';
+import 'package:patrimonio/utils/portfolio_filter.dart';
 
 // Dimension-scoped filter parsing (contract C3): the allocation heatmap
 // emits "asset:<canonical class>" / "account_type:<raw>" /

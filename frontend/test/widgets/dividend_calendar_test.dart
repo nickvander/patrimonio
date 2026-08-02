@@ -9,7 +9,7 @@ import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/utils/app_locale.dart';
 import 'package:patrimonio/widgets/dividend_calendar.dart';
-import 'package:patrimonio/widgets/portfolio_card.dart';
+import 'package:patrimonio/widgets/dividend_income_card.dart';
 
 // WS3 round 4 (redesigned): the 12-month income calendar (contract C4-B)
 // as a bar-list with inline tap-to-expand payer breakdown, plus its hook

@@ -7,6 +7,7 @@ import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/widgets/accounts_list_widget.dart';
 import 'package:patrimonio/widgets/connected_segments.dart';
 import 'package:patrimonio/widgets/instrument_detail_sheet.dart';
+import 'package:patrimonio/widgets/lot_breakdown_sheet.dart';
 import 'package:patrimonio/widgets/portfolio_card.dart';
 import 'package:patrimonio/widgets/realized_gains_card.dart';
 
