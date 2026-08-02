@@ -99,6 +99,29 @@ CI runs the same suites as `cargo test -- --test-threads=1` and
 `flutter test --exclude-tags golden` — golden screenshot tests are
 local-only (tag any new one `golden` so CI skips it).
 
+### Quick gate vs full gate
+
+Two tiers, so you don't pay 10 minutes per iteration:
+
+- **Quick gate — while iterating:**
+  - Backend: `cargo fmt --check` + `cargo clippy --all-targets -- -D warnings`
+    + `cargo test --lib`. The `--lib` unit tests need **no DB/Redis and no env
+    vars** (verified 2026-08-02: 291 tests pass with neither test URL set);
+    the run itself is ~6 s — total time is dominated by however much
+    recompiling your change triggers (up to ~1 min).
+  - Frontend: `~/flutter/bin/dart format --set-exit-if-changed lib test` +
+    `~/flutter/bin/flutter analyze` (~10 s warm).
+- **Full gate — before declaring done or committing:** both complete suites as
+  above (backend `cargo test` with the test-DB env vars, frontend
+  `flutter test`). The backend suite takes **≈10 min**, dominated by
+  `dashboard_endpoints` — give the Bash call a ≥600000 ms timeout.
+
+The quick gate is for iteration speed only — integration tests are where the
+DB-shaped bugs (FX, carry-forward, auth scoping) actually fail, so **"done"
+means the full gate ran and passed**. Run verification in the **foreground**
+and don't end your turn while a gate is still running; report only results you
+actually captured.
+
 ## Database access
 
 // turbo

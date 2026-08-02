@@ -14,8 +14,13 @@ FIRE projections. Backend **Rust + axum**, frontend **Flutter/Dart**, **Postgres
 Detailed, enforced conventions live in **`.agent/skills/`** (a directory of
 `SKILL.md` guides, shared across agent tools; Claude Code also discovers them via
 the `.claude/skills` symlink — which is **machine-local**, since `.claude/` is
-gitignored; on a fresh checkout recreate it from the repo root with
-`ln -s ../.agent/skills .claude/skills`). **Before writing or reviewing code in an area,
+gitignored; on a fresh checkout recreate the symlinks from the repo root with
+`ln -s ../.agent/skills .claude/skills`, `ln -s ../.agent/agents .claude/agents`,
+`ln -s ../.agent/workflows .claude/workflows`). Alongside the skills,
+**`.agent/agents/`** holds reusable subagent definitions (backend/frontend
+verifiers, a read-only auditor, a fixer template — each frontmatter description
+says when to use it) and **`.agent/workflows/`** holds the saved read-only
+quality-sweep audit. **Before writing or reviewing code in an area,
 read its skill** — each is grounded in this codebase's real patterns and the bug
 classes it has actually hit, and ends with a "Definition of done" checklist:
 
@@ -140,6 +145,10 @@ regresses silently:
   build-breaking **errors** (undisposed stream/sink fails the build).
 - **Regression tests** pin the specific bugs we've fixed (l10n transpositions,
   cross-currency sums, DoS clamps, FX conversion).
+- **Skills are part of the diff:** if your change extracts a shared helper,
+  moves a convention-bearing file, or changes an architecture fact, update the
+  affected `SKILL.md` in the same commit — stale skills actively cause the bug
+  classes they exist to prevent.
 - **Docs publish publicly:** `.github/workflows/docs.yml` runs `mkdocs
   gh-deploy` on every push to `main` touching `docs/**` or `mkdocs.yml` —
   anything committed under `docs/` ends up on the public GitHub Pages site,
@@ -156,6 +165,23 @@ regresses silently:
   in `utils/theme_colors.dart`). Add l10n strings to BOTH `app_en.arb` and
   `app_es.arb`, matching the **alphabetical** generated signature.
 - **Secrets:** Plaid tokens are AES-GCM encrypted; never commit `.env`.
+
+## Concurrent agents (shared checkout)
+
+Several agents may work in this checkout at once. The rules that keep them from
+trampling each other:
+
+- **Declare your file territory up front** (in your plan / first report) and
+  stay inside it.
+- **Take a `git status --porcelain` snapshot at session start** so you can
+  attribute later changes to yourself vs. someone else.
+- **Before each edit to an existing file, check `git status --porcelain`:** if
+  the file is already modified and the diff isn't yours, **stop and report**
+  the conflict instead of overwriting — another agent owns it.
+- **Never `git commit` / `add` / `push` unless the user asked.** Leave the
+  tree dirty for review.
+- **Run verification in the foreground** and don't end your turn while a
+  verification command is still running — report captured results only.
 
 ## Project tracking
 
