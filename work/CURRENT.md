@@ -1,7 +1,62 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-02 (period selector + menu chrome consistency)
+> **Last updated:** 2026-08-02 (multi-agent quality sweep)
 > **Branch:** `main`.
+
+## 2026-08-02 (night) — Multi-agent quality sweep: tests, refactors, agent infra
+
+An 20+-agent audit→fix→verify pipeline over the whole repo. Regression
+baseline verified green FIRST (backend 527, frontend 912), every change landed
+against it, final gates green on the exact shipped tree.
+
+* **Backend tests 527→558**: new invite/registration lifecycle suite (the only
+  path users arrive by — expiry, atomic one-time consumption, role
+  inheritance); destructive-import isolation suite; FX manual-rate +
+  fallback-ladder tests; TWR share-reconstruction inline unit tests (pure
+  functions extracted from the DB shell); encryption roundtrip/tamper tests +
+  `decrypt` wrong-length-key panic fixed + module docs; `tests/conventions.rs`
+  bans compile-time sqlx macros in `src/`.
+* **Frontend tests 912→952**: placeholder-order regression tests for all
+  at-risk l10n keys + a systemic declaration-order invariant (7 deliberate
+  legacy orders frozen); `test/conventions/` invariants — chart-touch
+  byte-equivalence (caught + fixed the projections tooltip 12px-radius drift),
+  no hand-rolled percents (ships with an EMPTY allowlist), no raw `Colors.*`;
+  bell/notification-row real semantics (`lwNotifBellUnread`, +9 tests); first
+  coverage for budgets_card and import_cleanup_screen.
+* **Bug fixed (found by live walkthrough)**: `depository`-typed accounts now
+  classify as cash — one root cause behind both the Overview Cash tile showing
+  $0.00 and the literal "Unknown subtype: depository" leaking into the
+  accounts list (truly-unknown types now get a localized generic subtitle).
+* **Refactors, all behavior-preserving (suites exactly conserved)**:
+  `api/error.rs` + `api/middleware.rs` extracted from session.rs;
+  `services/fx.rs` now owns the USD/MXN SQL + the one fallback (absorbed
+  SEVEN hand-synced copies); `api/dashboard.rs` (6,986 lines) → 12-file
+  directory module; 37 legacy handlers → the `ApiError` envelope (status
+  codes unchanged; OAuth redirects deliberately left); 10.5k-line
+  `dashboard_endpoints.rs` split by surface (139 tests conserved, fixtures →
+  `tests/common/fixtures.rs`); dashboard_screen 7,748→7,037 via five widget
+  extractions; tax_planning_logic → `utils/`.
+* **Convention fixes**: percents routed through `percent_format` helpers
+  (incl. new `formatSignedPercent`); hardcoded colors → `context` extension;
+  four stale ApiService-testability comments corrected; `kCompactLayoutBelow`
+  names the 560px breakpoint.
+* **Docs**: HANDOFF/NEXT rebuilt, DEC-023…026 appended, this file rotated
+  (pre-July → `work/archive/`); public `docs/` site synced (deployment.md on
+  the real compose stack; multi-currency.md's FX auto-linker documented as
+  shipped + added to nav); skills updated with enforcement pointers.
+* **Agent infrastructure (new)**: `.agent/agents/` (backend-verifier,
+  frontend-verifier, repo-auditor, fixer — the house working agreement as
+  reusable subagent definitions), `.agent/workflows/quality-sweep.js`
+  (repeatable read-only audit sweep), `scripts/walkthrough/` headless UI rig
+  (WebSocket-capable proxy + session mint, live-tested) + `ui-walkthrough`
+  skill, AGENTS.md "Concurrent agents" protocol + "skills are part of the
+  diff" rule, quick-gate (`cargo test --lib`, ~6 s, no DB) vs full-gate
+  documented.
+* **End-to-end proof**: headless walkthrough of the real app passed — all 8
+  tabs, en + es-MX, both themes, interactions on every touched surface, zero
+  console errors / failed requests.
+* Final gates: backend **558/558** (fmt + clippy clean), frontend **952/952**
+  (format clean, analyze at the 18-info baseline).
 
 ## 2026-08-02 (evening) — Period selector + every menu on the house chrome
 
