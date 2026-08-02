@@ -106,7 +106,8 @@ Use `utils/percent_format.dart`. It deliberately avoids `NumberFormat.decimalPer
 - `localizePercentString(context, "85")` — variable-precision strings that don't fit fixed digits.
 - `localizeNumberString(context, "+3.6")` — localize the decimal separator only, no `%`.
 
-Never write `'$v%'` by hand.
+Never write `'$v%'` by hand. Enforced: `test/conventions/no_handrolled_percent_test.dart`
+fails any hand-rolled `…}%`-style percent outside `lib/utils/`.
 
 ## 3. Networking — the ApiService layer
 
@@ -145,6 +146,8 @@ conditional imports.
   - Chart series: `context.chartSeries(i)`. Tooltips: `context.tooltipSurface` /
     `tooltipOnSurface*` (these use `inverseSurface`; they exist specifically to prevent the
     light-on-light tooltip-text bug — use them, don't reach for `onSurface`).
+  - Enforced: `test/conventions/no_raw_colors_test.dart` fails any raw `Colors.*` (except
+    `transparent`) outside the theme layer and its frozen per-usage allowlist.
 - **Typography (`theme/typography.dart`):** Inter for all UI. `brandDisplayStyle(...)`
   (JetBrainsMono, tabular figures) ONLY for signature big numbers (net-worth hero, stat
   strip); `brandSectionTitleStyle(...)` for labels above heroes. JetBrainsMono maxes at w700.
@@ -200,7 +203,9 @@ conditional imports.
   `context.tooltipSurface`, `fitInsideHorizontally/Vertically: true`). The three "headline"
   charts (net worth, projections, instrument sheet) keep their own inline `LineTouchData`
   copies that must stay byte-equivalent — **do not refactor those**, and don't fork a new copy
-  either; use the helper.
+  either; use the helper. The copy↔helper equivalence is enforced by
+  `test/conventions/chart_touch_equivalence_test.dart` (frozen variances documented there);
+  new inline `LineTouchData`/`touchSpotThreshold` forks fail it.
 - **Date-x charts use `utils/chart_time_axis.dart`** — never index-as-x (it hides gaps):
   - `dedupeDailyCloses(points)` — last close per calendar day, normalized to
     `DateTime.utc(y,m,d)` (avoids DST day-slip), sorted ascending.

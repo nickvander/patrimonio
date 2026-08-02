@@ -51,7 +51,8 @@ bool _kindCanHover(PointerDeviceKind kind) =>
 /// The three headline charts (net worth, projections, instrument sheet)
 /// predate this helper and deliberately keep their own inline copies this
 /// round — do not refactor them here; the contract is that this function
-/// stays byte-equivalent in behavior to net_worth_card.dart:570-612.
+/// stays byte-equivalent in behavior to the inline `LineTouchData` in
+/// net_worth_card.dart's `_renderLineChart`.
 LineTouchData standardLineTouch(
   BuildContext context, {
   required List<LineTooltipItem?> Function(BuildContext, List<LineBarSpot>)

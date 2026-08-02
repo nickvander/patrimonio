@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/currency.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
 /// Detected recurring outflows ("subscriptions") pinned to the Cash
@@ -403,6 +404,17 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
     );
   }
 
+  /// The chip's share label: whole-percent for shares ≥ 1% (`"12%"`),
+  /// `"<1%"` below — variable precision, so it routes through
+  /// [localizePercentString] rather than [formatPercent]'s fixed digits.
+  String _shareLabel(BuildContext context, Map<String, dynamic> slice) {
+    final pct = ((slice['share'] as num?)?.toDouble() ?? 0.0) * 100;
+    return localizePercentString(
+      context,
+      pct >= 1 ? pct.round().toString() : '<1',
+    );
+  }
+
   /// Render the per-account distribution as compact chips. Each chip is
   /// `AccountName · NN%`. Caps at 3 chips + "+N more" so a pathological
   /// cluster (e.g. a refund detected across many cards) doesn't blow
@@ -431,7 +443,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
             ),
             child: Text(
               '${slice['account_name'] ?? '—'} · '
-              '${((slice['share'] as num?)?.toDouble() ?? 0.0) * 100 >= 1 ? (((slice['share'] as num?)?.toDouble() ?? 0.0) * 100).round() : '<1'}%',
+              '${_shareLabel(context, slice)}',
               style: TextStyle(
                 fontSize: 11,
                 color: accent,

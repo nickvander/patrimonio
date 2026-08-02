@@ -2847,6 +2847,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   },
                   touchTooltipData: LineTouchTooltipData(
                     getTooltipColor: (_) => context.tooltipSurface,
+                    // House tooltip chrome (chart_touch.dart §5): 12px corners —
+                    // this copy had silently fallen back to fl_chart's default 4.
+                    tooltipRoundedRadius: 12,
                     // Only the bold expected line carries a meaningful tooltip; the
                     // invisible band bars would otherwise emit blank rows.
                     getTooltipItems: (touchedSpots) {
