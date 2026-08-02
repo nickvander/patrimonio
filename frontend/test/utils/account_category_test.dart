@@ -16,6 +16,12 @@ void main() {
         'Cash management',
         'CD',
         'Cash',
+        // Plaid's broad TYPE (subtypes: checking/savings/CD/…) — written by
+        // the bootstrap/test path and importers; must bucket as cash, not
+        // fall through to Other (that leak zeroed the Cash tile and
+        // produced an "Other" group for depository accounts).
+        'depository',
+        'Depository',
       ]) {
         test('"$t" → cash', () {
           expect(categorizeAccount(t), AccountCategory.cash);

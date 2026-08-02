@@ -6571,11 +6571,11 @@ abstract class AppLocalizations {
   /// **'Other'**
   String get pfGroupOther;
 
-  /// No description provided for @pfUnknownSubtypes.
+  /// No description provided for @pfUnrecognizedTypes.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{Unknown subtype: {list}} other{Unknown subtypes: {list}}}'**
-  String pfUnknownSubtypes(int count, Object list);
+  /// **'{count, plural, =1{Includes an account type we don\'t recognize yet} other{Includes account types we don\'t recognize yet}}'**
+  String pfUnrecognizedTypes(int count);
 
   /// No description provided for @pfVaults.
   ///

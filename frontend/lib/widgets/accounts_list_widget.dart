@@ -368,15 +368,12 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                       Icons.category_outlined,
                       false,
                       context.neutralAccent,
-                      // Surface the raw subtypes that fell through so they
-                      // can't sit hidden in Other indefinitely — the UI now
-                      // self-reports its own classifier gaps.
+                      // Honest, generic note that something fell through the
+                      // classifier — never the raw type token (that's debug
+                      // data; it goes to debugPrint above, not the UI).
                       subtitle: unknownTypes.isEmpty
                           ? null
-                          : l.pfUnknownSubtypes(
-                              unknownTypes.length,
-                              (unknownTypes.toList()..sort()).join(", "),
-                            ),
+                          : l.pfUnrecognizedTypes(unknownTypes.length),
                     ),
                 ],
               ),

@@ -4068,12 +4068,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get pfGroupOther => 'Otros';
 
   @override
-  String pfUnknownSubtypes(int count, Object list) {
+  String pfUnrecognizedTypes(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Subtipos desconocidos: $list',
-      one: 'Subtipo desconocido: $list',
+      other: 'Incluye tipos de cuenta que aún no reconocemos',
+      one: 'Incluye un tipo de cuenta que aún no reconocemos',
     );
     return '$_temp0';
   }

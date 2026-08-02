@@ -1731,14 +1731,11 @@
   "pfGroupLoans": "Loans & mortgages",
   "pfGroupRealAssets": "Real assets",
   "pfGroupOther": "Other",
-  "pfUnknownSubtypes": "{count, plural, =1{Unknown subtype: {list}} other{Unknown subtypes: {list}}}",
-  "@pfUnknownSubtypes": {
+  "pfUnrecognizedTypes": "{count, plural, =1{Includes an account type we don't recognize yet} other{Includes account types we don't recognize yet}}",
+  "@pfUnrecognizedTypes": {
     "placeholders": {
       "count": {
         "type": "int"
-      },
-      "list": {
-        "type": "Object"
       }
     }
   },

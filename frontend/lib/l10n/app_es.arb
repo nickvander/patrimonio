@@ -1322,7 +1322,7 @@
   "pfGroupLoans": "Préstamos e hipotecas",
   "pfGroupRealAssets": "Activos reales",
   "pfGroupOther": "Otros",
-  "pfUnknownSubtypes": "{count, plural, =1{Subtipo desconocido: {list}} other{Subtipos desconocidos: {list}}}",
+  "pfUnrecognizedTypes": "{count, plural, =1{Incluye un tipo de cuenta que aún no reconocemos} other{Incluye tipos de cuenta que aún no reconocemos}}",
   "pfVaults": "Apartados",
   "pfCards": "Tarjetas",
   "pfBase": "base",

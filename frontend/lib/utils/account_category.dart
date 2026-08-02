@@ -82,6 +82,11 @@ AccountCategory categorizeAccount(String? rawType) {
       t.contains('money market') ||
       t.contains('cash management') ||
       t == 'cd' ||
+      // Plaid's broad TYPE (its subtypes are checking/savings/CD/money
+      // market/…). Sync stores the subtype, but the bootstrap/test path
+      // and imports can store the bare type — the backend's loan-match
+      // DEPOSITORY_TYPES already treats it as cash-like; mirror that.
+      t.contains('depository') ||
       t.contains('cash')) {
     return AccountCategory.cash;
   }
