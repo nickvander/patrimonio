@@ -2151,6 +2151,17 @@ async fn since_last_login_largest_move_carries_account_id() {
         (delta - 2612.87).abs() < 0.01,
         "delta_usd unchanged by the additive field: {delta}"
     );
+    // FIX-2: the additive institution_name disambiguates generic account
+    // nicknames on the client ("Cards · SoFi"). seed_account files the
+    // account under the "Test Bank" institution.
+    assert_eq!(
+        mv["institution_name"], "Test Bank",
+        "largest_move carries the account's institution name: {mv}"
+    );
+    // The omission contract for accounts without an institution (None →
+    // key absent, not null) can't be seeded through the DB — accounts.
+    // institution_id is NOT NULL — so it's pinned by the serde unit test
+    // `balance_move_omits_absent_institution_name` in api/dashboard.rs.
 }
 
 // =====================================================================

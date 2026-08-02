@@ -16,6 +16,12 @@ import 'package:patrimonio/widgets/transactions_tab.dart';
 /// 50 → 550 → 1050 → ... while the cascade ran, reading as a glitch.
 /// Without the header (totalCount null) behavior must stay byte-identical
 /// to the old loaded-count fallback.
+///
+/// FIX-1 (count-line clarity): with a search or filter ACTIVE the line
+/// renders the txShowingMatches key (ICU-plural "N matching · {total}
+/// total" / "N coincidencia(s) · {total} en total") instead of txShowingCount —
+/// "Showing 3 of 2503" read as pagination, not as a filter result. The
+/// stable-denominator contract is identical in both states.
 
 /// Normalize non-breaking space codepoints so es-MX strings can be
 /// asserted without pinning the exact whitespace codepoint.
@@ -125,6 +131,17 @@ String? _countLine(WidgetTester tester, String prefix) {
   return texts.isEmpty ? null : texts.single;
 }
 
+/// Rendered filtered-count line (txShowingMatches has no fixed prefix —
+/// it starts with the numerator), matched by pattern instead.
+String? _matchesLine(WidgetTester tester, RegExp pattern) {
+  final texts = tester
+      .widgetList<Text>(find.byType(Text))
+      .map((t) => _normSpace(t.data ?? ''))
+      .where(pattern.hasMatch)
+      .toList();
+  return texts.isEmpty ? null : texts.single;
+}
+
 TransactionsTab _staticTab(
   List<dynamic> txs, {
   int? totalCount,
@@ -171,15 +188,16 @@ void main() {
       expect(_countLine(tester, 'Showing '), 'Showing 27 of 27');
     });
 
-    testWidgets('totalCount 0 renders "Showing 0 of 0" — a PROVEN-empty '
-        'total must not collapse into the loaded-count fallback', (
+    testWidgets('totalCount 0 renders "0 matching · 0 total" — a PROVEN-'
+        'empty total must not collapse into the loaded-count fallback', (
       tester,
     ) async {
       _setViewSize(tester, const Size(1200, 900));
       // A filter that matches nothing keeps the toolbar/count line on
       // screen with a zero numerator (the tab's whole-list empty state
       // only takes over when the loaded list itself is empty). The host
-      // reports the Fix-B proven-empty total: 0, not null.
+      // reports the Fix-B proven-empty total: 0, not null. The seed is
+      // an ACTIVE filter, so the line takes the txShowingMatches form.
       await tester.pumpWidget(
         _localizedApp(
           _staticTab(_rows(1), totalCount: 0, categorySeed: 'Utilities'),
@@ -187,7 +205,63 @@ void main() {
       );
       await tester.pump(); // post-frame seed application
       await tester.pump();
-      expect(_countLine(tester, 'Showing '), 'Showing 0 of 0');
+      expect(
+        _matchesLine(tester, RegExp(r'matching · \d+ total$')),
+        '0 matching · 0 total',
+      );
+    });
+  });
+
+  group('FIX-1: filtered count line uses txShowingMatches — bilingual', () {
+    testWidgets('en: an active filter renders "1 matching · 2503 total", '
+        'not the pagination-voiced txShowingCount', (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      // One loaded row matching the seeded category filter; the server
+      // total (2503) stays the stable denominator exactly as it does for
+      // the unfiltered key.
+      await tester.pumpWidget(
+        _localizedApp(
+          _staticTab(_rows(1), totalCount: 2503, categorySeed: 'Food & drink'),
+        ),
+      );
+      await tester.pump(); // post-frame seed application
+      await tester.pump();
+      expect(
+        _matchesLine(tester, RegExp(r'matching · \d+ total$')),
+        '1 matching · 2503 total',
+      );
+      expect(_countLine(tester, 'Showing '), isNull);
+    });
+
+    testWidgets('es: "1 coincidencia · 2503 en total" (ICU singular)', (
+      tester,
+    ) async {
+      _setViewSize(tester, const Size(1200, 900));
+      await tester.pumpWidget(
+        _localizedApp(
+          _staticTab(_rows(1), totalCount: 2503, categorySeed: 'Food & drink'),
+          locale: const Locale('es'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        _matchesLine(tester, RegExp(r'coincidencias? · \d+ en total$')),
+        '1 coincidencia · 2503 en total',
+      );
+      expect(_countLine(tester, 'Mostrando '), isNull);
+    });
+
+    testWidgets('inactive filters keep txShowingCount unchanged', (
+      tester,
+    ) async {
+      _setViewSize(tester, const Size(1200, 900));
+      await tester.pumpWidget(
+        _localizedApp(_staticTab(_rows(27), totalCount: 2502)),
+      );
+      await tester.pump();
+      expect(_countLine(tester, 'Showing '), 'Showing 27 of 2502');
+      expect(_matchesLine(tester, RegExp(r'matching · \d+ total$')), isNull);
     });
   });
 
@@ -220,9 +294,12 @@ void main() {
       var sawLoadingNote = false;
       for (var i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 10));
-        final line = _countLine(tester, 'Showing ');
+        // Active filter → the FIX-1 txShowingMatches form.
+        final line = _matchesLine(tester, RegExp(r'matching · \d+ total$'));
         if (line != null) {
-          final match = RegExp(r'^Showing (\d+) of (\d+)$').firstMatch(line);
+          final match = RegExp(
+            r'^(\d+) matching · (\d+) total$',
+          ).firstMatch(line);
           expect(match, isNotNull, reason: 'unparsable count line: $line');
           numerators.add(match!.group(1)!);
           denominators.add(match.group(2)!);
@@ -263,9 +340,15 @@ void main() {
       var sawLoadingNote = false;
       for (var i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 10));
-        final line = _countLine(tester, 'Mostrando ');
+        // Active filter → the FIX-1 es txShowingMatches form.
+        final line = _matchesLine(
+          tester,
+          RegExp(r'coincidencias · \d+ en total$'),
+        );
         if (line != null) {
-          denominators.add(line.split(' de ').last);
+          denominators.add(
+            RegExp(r'· (\d+) en total$').firstMatch(line)!.group(1)!,
+          );
         }
         sawLoadingNote =
             sawLoadingNote ||

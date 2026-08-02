@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/palette.dart';
 import '../utils/theme_colors.dart';
 
 /// Per-exchange copy for the credential dialog. Keyed by the integration
@@ -159,6 +160,21 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
     }
   }
 
+  /// House input recipe (same as AddTransactionDialog): filled rounded
+  /// borderless, keeping labelText + isDense.
+  InputDecoration _fieldDecoration({required String labelText}) {
+    return InputDecoration(
+      labelText: labelText,
+      isDense: true,
+      filled: true,
+      fillColor: context.tileSurface,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -169,6 +185,10 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
     final accentColor = isCoinbase ? context.info : context.positive;
 
     return AlertDialog(
+      // House dialog shell: card tone + titleLarge title, matching the
+      // other add dialogs.
+      backgroundColor: BrandPalette.cardSurface(Theme.of(context).brightness),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge,
       title: Row(
         children: [
           Icon(
@@ -204,28 +224,21 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: InputDecoration(
+                decoration: _fieldDecoration(
                   labelText: l.dlgCryptoDisplayName(_info.exampleName),
-                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) => v!.isEmpty ? l.commonRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _apiKeyController,
-                decoration: InputDecoration(
-                  labelText: l.dlgCryptoApiKey,
-                  border: const OutlineInputBorder(),
-                ),
+                decoration: _fieldDecoration(labelText: l.dlgCryptoApiKey),
                 validator: (v) => v!.isEmpty ? l.commonRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _apiSecretController,
-                decoration: InputDecoration(
-                  labelText: l.dlgCryptoApiSecret,
-                  border: const OutlineInputBorder(),
-                ),
+                decoration: _fieldDecoration(labelText: l.dlgCryptoApiSecret),
                 obscureText: true,
                 validator: (v) => v!.isEmpty ? l.commonRequired : null,
               ),
@@ -238,20 +251,15 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
           onPressed: _isLoading ? null : () => Navigator.pop(context),
           child: Text(l.actionCancel),
         ),
-        ElevatedButton(
+        // Plain FilledButton primary — the old saturated accentColor fill
+        // + textPrimary foreground was an AA risk in light mode.
+        FilledButton(
           onPressed: _isLoading ? null : _submit,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: accentColor,
-            foregroundColor: context.textPrimary,
-          ),
           child: _isLoading
-              ? SizedBox(
+              ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: context.textPrimary,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Text(l.dlgCryptoLinkAccount),
         ),

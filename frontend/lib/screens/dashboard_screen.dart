@@ -3325,16 +3325,14 @@ class _DashboardScreenState extends State<DashboardScreen>
       txTab.openAddDialog();
       return;
     }
-    showDialog(
-      context: context,
-      builder: (_) => AddTransactionDialog(
-        accounts: (_overview?['accounts'] as List?) ?? const [],
-        apiService: _apiService,
-        onCreated: () => _refreshAfterTransactionMutation(),
-        categorySuggestions: distinctPrettyCategories(
-          _transactions ?? const [],
-        ),
-      ),
+    // Sheet-on-narrow / dialog-on-wide via the shared helper — the same
+    // split the mounted tab's openAddDialog takes.
+    openAddTransactionPanel(
+      context,
+      accounts: (_overview?['accounts'] as List?) ?? const [],
+      apiService: _apiService,
+      onCreated: () => _refreshAfterTransactionMutation(),
+      categorySuggestions: distinctPrettyCategories(_transactions ?? const []),
     );
   }
 
@@ -3538,36 +3536,39 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     return Align(
       alignment: Alignment.centerLeft,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SegmentedButton<CashFlowPeriod>(
+      // House connected button group. ConnectedSegments is built of
+      // Expandeds, so it gets a width cap instead of the old horizontal
+      // scroll guard (its Flexible labels ellipsize rather than
+      // overflow).
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: ConnectedSegments<CashFlowPeriod>(
           segments: [
-            ButtonSegment(
+            ConnectedSegment(
               value: CashFlowPeriod.thisMonth,
-              label: Text(l.cfPeriodThisMonth),
+              label: l.cfPeriodThisMonth,
             ),
-            ButtonSegment(
+            ConnectedSegment(
               value: CashFlowPeriod.lastMonth,
-              label: Text(l.cfPeriodLastMonth),
+              label: l.cfPeriodLastMonth,
             ),
-            ButtonSegment(
+            ConnectedSegment(
               value: CashFlowPeriod.threeMonths,
-              label: Text(l.cfPeriod3Months),
+              label: l.cfPeriod3Months,
             ),
-            ButtonSegment(
-              value: CashFlowPeriod.ytd,
-              label: Text(l.cfPeriodYtd),
-            ),
+            ConnectedSegment(value: CashFlowPeriod.ytd, label: l.cfPeriodYtd),
           ],
-          selected: {_cashFlowPeriod},
-          showSelectedIcon: false,
-          onSelectionChanged: _cashFlowLoading
-              ? null
-              : (s) => _onCashFlowPeriodChanged(s.first),
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12)),
-          ),
+          selected: _cashFlowPeriod,
+          // Disabled while a period fetch is in flight — the same
+          // non-interactive window the old null onSelectionChanged (and
+          // the chip branch's null onSelected) provided.
+          enabled: !_cashFlowLoading,
+          onSelected: (value) {
+            // Same re-tap guard the chip branch uses: re-selecting the
+            // current period must not refetch.
+            if (value == _cashFlowPeriod) return;
+            _onCashFlowPeriodChanged(value);
+          },
         ),
       ),
     );

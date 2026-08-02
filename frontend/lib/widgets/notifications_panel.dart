@@ -475,8 +475,16 @@ List<AppNotification> deriveNotifications({
     final move = sinceLastLogin?['largest_move'];
     if (move is Map) {
       final deltaUsd = (move['delta_usd'] as num?)?.toDouble() ?? 0.0;
-      final account = (move['account_name'] ?? l.lwNotifAccountFallback)
+      final accountName = (move['account_name'] ?? l.lwNotifAccountFallback)
           .toString();
+      // Disambiguate generic nicknames ("Cards") with the institution
+      // when the payload carries one (additive backend field): the
+      // headline reads "Cards · SoFi". Absent or empty (older server /
+      // manual account) falls back to the account alone.
+      final institution = (move['institution_name'] ?? '').toString().trim();
+      final account = institution.isEmpty
+          ? accountName
+          : '$accountName · $institution';
       if (deltaUsd != 0) {
         final up = deltaUsd >= 0;
         final signed =

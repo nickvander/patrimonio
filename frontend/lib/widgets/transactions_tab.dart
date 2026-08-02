@@ -1392,10 +1392,21 @@ class TransactionsTabState extends State<TransactionsTab> {
                     // numerator (and the filtered summary) legitimately
                     // grow as matching pages land. Without it, the loaded
                     // count keeps today's behavior.
-                    l.txShowingCount(
-                      filtered.length,
-                      widget.totalCount ?? widget.transactions.length,
-                    ),
+                    //
+                    // With a search/filter active the copy switches to
+                    // "{shown} matching · {total} total" — "Showing 3 of
+                    // 2503" read as a pagination statement, not a filter
+                    // result. Both keys share the (shown, total)
+                    // alphabetical placeholder order.
+                    (_searchQuery.isNotEmpty || _filters.isActive)
+                        ? l.txShowingMatches(
+                            filtered.length,
+                            widget.totalCount ?? widget.transactions.length,
+                          )
+                        : l.txShowingCount(
+                            filtered.length,
+                            widget.totalCount ?? widget.transactions.length,
+                          ),
                     style: TextStyle(color: context.textSubtle, fontSize: 12),
                   ),
                   // While the cascade is pulling pages, say so — otherwise
@@ -2573,15 +2584,15 @@ class TransactionsTabState extends State<TransactionsTab> {
   /// `GlobalKey<TransactionsTabState>`) can trigger the exact same flow.
   void openAddDialog() {
     if (widget.apiService == null) return;
-    showDialog(
-      context: context,
-      builder: (_) => AddTransactionDialog(
-        accounts: widget.accounts,
-        apiService: widget.apiService!,
-        onCreated: () => widget.onTransactionAdded?.call(),
-        categorySuggestions: _distinctCategories(),
-        initialAccountId: widget.addTransactionAccountId,
-      ),
+    // Sheet-on-narrow / dialog-on-wide, same split as _openFilters —
+    // the helper owns the width decision so every host agrees.
+    openAddTransactionPanel(
+      context,
+      accounts: widget.accounts,
+      apiService: widget.apiService!,
+      onCreated: () => widget.onTransactionAdded?.call(),
+      categorySuggestions: _distinctCategories(),
+      initialAccountId: widget.addTransactionAccountId,
     );
   }
 
@@ -2593,18 +2604,16 @@ class TransactionsTabState extends State<TransactionsTab> {
   /// server enforces this too with a 403).
   void _openEditManualDialog(dynamic tx) {
     if (widget.apiService == null) return;
-    showDialog(
-      context: context,
-      builder: (_) => AddTransactionDialog(
-        accounts: widget.accounts,
-        apiService: widget.apiService!,
-        onCreated: () => widget.onTransactionAdded?.call(),
-        categorySuggestions: _distinctCategories(),
-        // Account-scoped payloads omit account_id — the host's own
-        // account preselect covers that case, same as the add flow.
-        initialAccountId: widget.addTransactionAccountId,
-        editTransaction: Map<String, dynamic>.from(tx as Map),
-      ),
+    openAddTransactionPanel(
+      context,
+      accounts: widget.accounts,
+      apiService: widget.apiService!,
+      onCreated: () => widget.onTransactionAdded?.call(),
+      categorySuggestions: _distinctCategories(),
+      // Account-scoped payloads omit account_id — the host's own
+      // account preselect covers that case, same as the add flow.
+      initialAccountId: widget.addTransactionAccountId,
+      editTransaction: Map<String, dynamic>.from(tx as Map),
     );
   }
 

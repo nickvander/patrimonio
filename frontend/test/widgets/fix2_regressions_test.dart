@@ -5,6 +5,7 @@ import 'package:patrimonio/components/allocation_heatmap.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/widgets/accounts_list_widget.dart';
+import 'package:patrimonio/widgets/connected_segments.dart';
 import 'package:patrimonio/widgets/instrument_detail_sheet.dart';
 import 'package:patrimonio/widgets/portfolio_card.dart';
 import 'package:patrimonio/widgets/realized_gains_card.dart';
@@ -490,10 +491,11 @@ void main() {
 
     // No RenderFlex overflow at 390px…
     expect(tester.takeException(), isNull);
-    // …both toggle segments visible and inside the viewport…
+    // …both toggle segments visible and inside the viewport… (the
+    // toggle is the house ConnectedSegments since the restyle)
     expect(find.text('Flat'), findsOneWidget);
     expect(find.text('By account'), findsOneWidget);
-    final toggleRect = tester.getRect(find.byType(SegmentedButton<bool>));
+    final toggleRect = tester.getRect(find.byType(ConnectedSegments<bool>));
     expect(toggleRect.right, lessThanOrEqualTo(390));
     expect(toggleRect.left, greaterThanOrEqualTo(0));
     // …and the search field sits on its own row above the toggle.
@@ -528,7 +530,7 @@ void main() {
 
     // Search field and toggle share one baseline row on desktop.
     final searchRect = tester.getRect(find.byType(TextField).first);
-    final toggleRect = tester.getRect(find.byType(SegmentedButton<bool>));
+    final toggleRect = tester.getRect(find.byType(ConnectedSegments<bool>));
     expect(searchRect.center.dy, closeTo(toggleRect.center.dy, 8));
     expect(tester.takeException(), isNull);
   });

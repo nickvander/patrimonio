@@ -11,6 +11,7 @@ import '../utils/movers.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
+import 'connected_segments.dart';
 import 'dividend_calendar.dart';
 import 'dividend_detail_sheet.dart';
 import 'instrument_detail_sheet.dart';
@@ -1846,39 +1847,26 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 overflow: narrow ? TextOverflow.ellipsis : null,
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
               );
-              final segmented = SegmentedButton<bool>(
-                segments: [
-                  ButtonSegment(
-                    value: false,
-                    // Narrow: the label alone is the affordance — dropping
-                    // the leading icons (plus tighter padding below) is what
-                    // keeps both segments fully on-screen at 320–390px.
-                    icon: narrow ? null : const Icon(Icons.list_alt, size: 14),
-                    label: Text(l.pfFlat),
-                  ),
-                  ButtonSegment(
-                    value: true,
-                    icon: narrow
-                        ? null
-                        : const Icon(Icons.account_tree_outlined, size: 14),
-                    label: Text(l.pfByAccount),
-                  ),
-                ],
-                selected: {_groupByAccount},
-                onSelectionChanged: (s) {
-                  setState(() => _groupByAccount = s.first);
-                  Preferences.setGroupByAccount(s.first);
-                },
-                style: ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  padding: narrow
-                      ? WidgetStateProperty.all(
-                          const EdgeInsets.symmetric(horizontal: 8),
-                        )
-                      : null,
-                  textStyle: WidgetStateProperty.all(
-                    const TextStyle(fontSize: 12),
-                  ),
+              // House connected button group. ConnectedSegments is built
+              // of Expandeds and would otherwise fill the whole Row, so
+              // it gets a bounded width; its Flexible labels make the old
+              // narrow icon-dropping / compact-density hacks unnecessary.
+              final segmented = SizedBox(
+                width: 200,
+                child: ConnectedSegments<bool>(
+                  segments: [
+                    ConnectedSegment(value: false, label: l.pfFlat),
+                    ConnectedSegment(value: true, label: l.pfByAccount),
+                  ],
+                  selected: _groupByAccount,
+                  onSelected: (v) {
+                    // ConnectedSegments re-fires on a re-tap of the
+                    // current selection; short-circuit so the preference
+                    // write only happens on a real change.
+                    if (v == _groupByAccount) return;
+                    setState(() => _groupByAccount = v);
+                    Preferences.setGroupByAccount(v);
+                  },
                 ),
               );
               // CSV export (contract C-E): browser-native downloads through

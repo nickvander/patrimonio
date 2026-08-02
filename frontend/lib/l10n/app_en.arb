@@ -125,6 +125,7 @@
   "txNoMatchesBody": "Try adjusting your search or filters.",
   "txClearFiltersSearch": "Clear filters & search",
   "txShowingCount": "Showing {shown} of {total}",
+  "txShowingMatches": "{shown, plural, =1{1 matching} other{{shown} matching}} · {total} total",
   "txLoadMore": "Load more",
   "txSelectAll": "Select all",
   "txDeselectAll": "Deselect all",

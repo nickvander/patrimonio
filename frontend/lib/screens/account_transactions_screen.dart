@@ -575,17 +575,17 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   /// zero-transactions empty state; the populated list reaches the same
   /// dialog through TransactionsTab's toolbar "+" (same preselect).
   void _openAddTransactionDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (_) => AddTransactionDialog(
-        accounts: widget.allAccounts,
-        apiService: _apiService,
-        initialAccountId: _accountId,
-        onCreated: () {
-          _refetchTransactionsInPlace();
-          _fetchBalanceHistory();
-        },
-      ),
+    // Sheet-on-narrow / dialog-on-wide via the shared helper, so this
+    // host can never diverge from the transactions tab's presentation.
+    openAddTransactionPanel(
+      context,
+      accounts: widget.allAccounts,
+      apiService: _apiService,
+      initialAccountId: _accountId,
+      onCreated: () {
+        _refetchTransactionsInPlace();
+        _fetchBalanceHistory();
+      },
     );
   }
 

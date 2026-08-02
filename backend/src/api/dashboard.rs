@@ -3580,6 +3580,13 @@ struct BalanceMove {
     /// client can scope its "show me the transactions" drill-down to the
     /// account, not just the date window; older clients simply ignore it.
     account_id: String,
+    /// The moved account's institution name, when it has one. Additive:
+    /// generic nicknames ("Cards", "Checking") recur across banks, so
+    /// the client disambiguates the headline as "Cards · SoFi". Omitted
+    /// (not null) for accounts without an institution so older clients
+    /// and institution-less accounts see the payload they always did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    institution_name: Option<String>,
 }
 
 /// "What changed since your last visit." Anchors on the end of the previous
@@ -3683,6 +3690,9 @@ async fn since_last_login(
             COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
             -- uuid as text so the row decodes without a Uuid column type
             after.account_id::text AS account_id,
+            -- LEFT JOIN: manual accounts can have no institution; the
+            -- client falls back to the account name alone.
+            i.name AS institution_name,
             CASE WHEN is_liability_account_type(a.account_type)
                  THEN -(after.balance_usd - before.balance_usd)
                  ELSE (after.balance_usd - before.balance_usd)
@@ -3690,6 +3700,7 @@ async fn since_last_login(
         FROM after
         JOIN before ON before.account_id = after.account_id
         JOIN accounts a ON a.id = after.account_id
+        LEFT JOIN institutions i ON a.institution_id = i.id
         WHERE a.user_id = $1 AND a.archived_at IS NULL
         "#,
     )
@@ -3704,12 +3715,19 @@ async fn since_last_login(
         .filter_map(|r| {
             let name: String = r.try_get("account_name").ok()?;
             let account_id: String = r.try_get("account_id").ok()?;
+            // NULL (no institution) decodes to None → the key is
+            // omitted from the JSON (skip_serializing_if).
+            let institution_name: Option<String> = r
+                .try_get::<Option<String>, _>("institution_name")
+                .ok()
+                .flatten();
             let delta: rust_decimal::Decimal = r.try_get("delta_usd").ok()?;
             let delta_f: f64 = delta.to_string().parse().ok()?;
             Some(BalanceMove {
                 account_name: name,
                 delta_usd: delta_f,
                 account_id,
+                institution_name,
             })
         })
         .max_by(|a, b| {
@@ -6087,6 +6105,38 @@ async fn set_asset_class_override(
 mod tests {
     use super::*;
     use crate::services::dividends::{DividendEvent, DividendInfo};
+
+    /// FIX-2 serialization contract: `institution_name` is additive with
+    /// `skip_serializing_if = "Option::is_none"` — an account without an
+    /// institution (None) omits the key entirely rather than sending
+    /// null, so older clients see the payload they always did. The
+    /// present-and-correct half is covered end-to-end by the
+    /// `since_last_login_largest_move_carries_account_id` integration
+    /// test; the omission half lives here because accounts.institution_id
+    /// is NOT NULL and the None branch can't be seeded through the DB.
+    #[test]
+    fn balance_move_omits_absent_institution_name() {
+        let without = serde_json::to_value(BalanceMove {
+            account_name: "Cards".to_string(),
+            delta_usd: 2612.87,
+            account_id: "6e9c1a4e-0000-0000-0000-000000000001".to_string(),
+            institution_name: None,
+        })
+        .expect("serialize");
+        assert!(
+            without.get("institution_name").is_none(),
+            "None must omit the key, not serialize null: {without}"
+        );
+
+        let with = serde_json::to_value(BalanceMove {
+            account_name: "Cards".to_string(),
+            delta_usd: 2612.87,
+            account_id: "6e9c1a4e-0000-0000-0000-000000000001".to_string(),
+            institution_name: Some("SoFi".to_string()),
+        })
+        .expect("serialize");
+        assert_eq!(with["institution_name"], "SoFi");
+    }
 
     /// The C1 contract shape, field for field, for a quarterly payer. The
     /// frontend sheet is built against exactly this JSON.

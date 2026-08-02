@@ -454,6 +454,55 @@ void main() {
       expect(dateOnly, isNull, reason: 'the scoped jump supersedes date-only');
     });
 
+    // FIX-2: institution disambiguation. Generic nicknames ("Cards")
+    // recur across banks, so a payload carrying the additive
+    // institution_name composes the title as "Cards · SoFi"; absent or
+    // empty the account renders alone — exactly the old string.
+    Map<String, dynamic> moveDigest(Map<String, dynamic> move) => {
+      'previous_login_at': '2026-07-20T10:00:00Z',
+      'new_transactions': 0,
+      'largest_move': move,
+      'sync_errors': <String>[],
+    };
+
+    test('largest move with institution_name renders "Cards · SoFi"', () {
+      final out = deriveDigest(
+        l,
+        since: moveDigest({
+          'account_name': 'Cards',
+          'delta_usd': 2612.87,
+          'institution_name': 'SoFi',
+        }),
+      );
+      final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
+      expect(mover.title, contains('Cards · SoFi'));
+    });
+
+    test('largest move without institution_name renders the account alone', () {
+      final out = deriveDigest(
+        l,
+        since: moveDigest({'account_name': 'Cards', 'delta_usd': 2612.87}),
+      );
+      final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
+      expect(mover.title, contains('Cards'));
+      expect(mover.title, isNot(contains('·  ')));
+      expect(mover.title, isNot(contains('Cards ·')));
+    });
+
+    test('an empty institution_name also renders the account alone', () {
+      final out = deriveDigest(
+        l,
+        since: moveDigest({
+          'account_name': 'Cards',
+          'delta_usd': 2612.87,
+          'institution_name': '',
+        }),
+      );
+      final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
+      expect(mover.title, contains('Cards'));
+      expect(mover.title, isNot(contains('Cards ·')));
+    });
+
     test('largest move without account_id (older server) falls back to the '
         'date-only jump', () {
       (DateTime, String)? scoped;

@@ -12,6 +12,7 @@ import '../utils/mask_aware_name.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
+import '../widgets/connected_segments.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/tax_exports_card.dart';
 import 'tax_planning_logic.dart';
@@ -709,11 +710,6 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   }
 
   Widget _buildControls(AppLocalizations l) {
-    // Mirrors _buildContent's stackControls signal (width < 720). On wide
-    // layouts the segmented toggle stays compact so the control row fits on
-    // one line; on phones it keeps the default 48dp touch target instead of
-    // shrinkWrap's ~32dp strip (research rubric principle 1).
-    final wide = MediaQuery.sizeOf(context).width >= 720;
     final years = deriveTaxYears(
       _taxTransactions,
       _taxDisposals,
@@ -737,26 +733,29 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           l.taxFilingStatusLabel,
           // A one-tap segmented toggle (was a dropdown) so switching between
           // Single and Married — which re-runs the bracket math — is obvious.
-          SegmentedButton<String>(
-            segments: _filingStatuses
-                .map(
-                  (value) => ButtonSegment<String>(
-                    value: value,
-                    label: Text(_filingStatusLabel(l, value)),
-                  ),
-                )
-                .toList(),
-            selected: {_filingStatus},
-            showSelectedIcon: false,
-            onSelectionChanged: (sel) {
-              if (sel.isNotEmpty) _onFilingStatusChanged(sel.first);
-            },
-            style: wide
-                ? const ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          // House connected button group; ConnectedSegments is built of
+          // Expandeds, so it needs a width bound inside the Wrap (which
+          // otherwise hands it the whole row width).
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: ConnectedSegments<String>(
+              segments: _filingStatuses
+                  .map(
+                    (value) => ConnectedSegment<String>(
+                      value: value,
+                      label: _filingStatusLabel(l, value),
+                    ),
                   )
-                : null,
+                  .toList(),
+              selected: _filingStatus,
+              onSelected: (value) {
+                // ConnectedSegments re-fires on a re-tap of the current
+                // selection; short-circuit so the bracket math never
+                // re-runs for a no-op.
+                if (value == _filingStatus) return;
+                _onFilingStatusChanged(value);
+              },
+            ),
           ),
         ),
         _labeledControl(

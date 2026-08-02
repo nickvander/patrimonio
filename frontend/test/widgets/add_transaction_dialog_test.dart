@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/widgets/add_transaction_dialog.dart';
+import 'package:patrimonio/widgets/connected_segments.dart';
 
 // We construct AddTransactionDialog directly. It takes an ApiService (built
 // here via the default constructor, which is VM-safe via the conditional
@@ -177,11 +178,12 @@ void main() {
     expect(find.widgetWithText(TextField, 'Dining'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'reimbursed'), findsOneWidget);
 
-    // Negative stored amount → the Expense segment is preselected.
-    final seg = tester.widget<SegmentedButton<bool>>(
-      find.byType(SegmentedButton<bool>),
+    // Negative stored amount → the Expense segment is preselected (the
+    // restyle swapped SegmentedButton for the house ConnectedSegments).
+    final seg = tester.widget<ConnectedSegments<bool>>(
+      find.byType(ConnectedSegments<bool>),
     );
-    expect(seg.selected, {true});
+    expect(seg.selected, true);
   });
 
   testWidgets('edit mode filters the "Uncategorized" backend sentinel', (
@@ -334,5 +336,46 @@ void main() {
         .width;
     expect(amountWidth, greaterThan(dateWidth));
     expect(prefixOpacity(tester, 'MXN '), 1.0);
+  });
+
+  // ---- Sheet shell (narrow hosts) --------------------------------------
+
+  testWidgets('sheet variant at 390px pins a full-bleed 48dp Add action', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _host(
+        AddTransactionDialog(
+          accounts: const [
+            {'id': 'acct-1', 'nickname': 'Checking', 'currency': 'USD'},
+          ],
+          apiService: ApiService(),
+          onCreated: () {},
+          asSheet: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The pinned primary action renders as the sheet's full-bleed
+    // FilledButton with the 48dp touch-height floor — the whole point of
+    // the sheet shell is that this button never scrolls out of reach.
+    final addButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Add'),
+    );
+    final minSize = addButton.style?.minimumSize?.resolve(const {});
+    expect(minSize?.height, 48);
+    // Full-bleed: the button's row slot spans (nearly) the sheet width —
+    // it sits inside an Expanded next to the compact Cancel.
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
+    final buttonWidth = tester
+        .getSize(find.widgetWithText(FilledButton, 'Add'))
+        .width;
+    expect(buttonWidth, greaterThan(200));
   });
 }

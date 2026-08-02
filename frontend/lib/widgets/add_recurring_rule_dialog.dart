@@ -4,9 +4,11 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/palette.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/recurrence.dart';
 import '../utils/theme_colors.dart';
+import 'connected_segments.dart';
 
 /// Display label for a cadence value. Shared by this dialog and the
 /// recurring management sheet.
@@ -163,12 +165,35 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
     }
   }
 
+  /// House input recipe (same as AddTransactionDialog): filled rounded
+  /// borderless, keeping labelText + isDense.
+  InputDecoration _fieldDecoration({
+    required String labelText,
+    String? prefixText,
+  }) {
+    return InputDecoration(
+      labelText: labelText,
+      prefixText: prefixText,
+      isDense: true,
+      filled: true,
+      fillColor: context.tileSurface,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final currency = _currency();
 
     return AlertDialog(
+      // House dialog shell (TxFiltersDialog._dialogShell): card tone +
+      // titleLarge so this twin matches the add-transaction dialog.
+      backgroundColor: BrandPalette.cardSurface(Theme.of(context).brightness),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge,
       title: Text(l.recMakeRecurring),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -187,11 +212,7 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                 DropdownButtonFormField<String>(
                   initialValue: _accountId,
                   isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: l.dlgTxAccount,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
+                  decoration: _fieldDecoration(labelText: l.dlgTxAccount),
                   items: widget.accounts.map<DropdownMenuItem<String>>((a) {
                     final id = a['id']?.toString();
                     final nick = (a['nickname'] ?? '').toString();
@@ -207,22 +228,23 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                   onChanged: (v) => setState(() => _accountId = v),
                 ),
                 const SizedBox(height: 12),
-                SegmentedButton<bool>(
+                // House connected button group, matching the
+                // add-transaction dialog's Expense/Income toggle.
+                ConnectedSegments<bool>(
                   segments: [
-                    ButtonSegment(
+                    ConnectedSegment(
                       value: true,
-                      icon: const Icon(Icons.arrow_downward, size: 14),
-                      label: Text(l.dlgTxExpense),
+                      icon: Icons.arrow_downward,
+                      label: l.dlgTxExpense,
                     ),
-                    ButtonSegment(
+                    ConnectedSegment(
                       value: false,
-                      icon: const Icon(Icons.arrow_upward, size: 14),
-                      label: Text(l.dlgTxIncome),
+                      icon: Icons.arrow_upward,
+                      label: l.dlgTxIncome,
                     ),
                   ],
-                  selected: {_isExpense},
-                  onSelectionChanged: (s) =>
-                      setState(() => _isExpense = s.first),
+                  selected: _isExpense,
+                  onSelected: (v) => setState(() => _isExpense = v),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -235,13 +257,11 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                       RegExp(r'^[0-9]*\.?[0-9]{0,2}'),
                     ),
                   ],
-                  decoration: InputDecoration(
+                  // Always label the amount with its currency code —
+                  // USD vs MXN must never be ambiguous.
+                  decoration: _fieldDecoration(
                     labelText: l.dlgTxAmount,
-                    // Always label the amount with its currency code —
-                    // USD vs MXN must never be ambiguous.
                     prefixText: '$currency ',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
                   ),
                   validator: (v) {
                     final raw = double.tryParse((v ?? '').trim());
@@ -253,11 +273,7 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _descController,
-                  decoration: InputDecoration(
-                    labelText: l.dlgTxDescription,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
+                  decoration: _fieldDecoration(labelText: l.dlgTxDescription),
                   textCapitalization: TextCapitalization.sentences,
                   validator: (v) => (v ?? '').trim().isEmpty
                       ? l.dlgTxDescriptionRequired
@@ -266,11 +282,7 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _categoryController,
-                  decoration: InputDecoration(
-                    labelText: l.dlgTxCategory,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
+                  decoration: _fieldDecoration(labelText: l.dlgTxCategory),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -279,11 +291,7 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                       child: DropdownButtonFormField<String>(
                         initialValue: _cadence,
                         isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: l.recRepeats,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
+                        decoration: _fieldDecoration(labelText: l.recRepeats),
                         items: [
                           for (final c in kRecurringCadences)
                             DropdownMenuItem(
@@ -316,10 +324,8 @@ class _AddRecurringRuleDialogState extends State<AddRecurringRuleDialog> {
                           }
                         },
                         child: InputDecorator(
-                          decoration: InputDecoration(
+                          decoration: _fieldDecoration(
                             labelText: l.recNextDueDate,
-                            border: const OutlineInputBorder(),
-                            isDense: true,
                           ),
                           child: Text(DateFormat.yMMMd().format(_nextDue)),
                         ),

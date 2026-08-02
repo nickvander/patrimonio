@@ -1,7 +1,37 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-02 (since-visit drill-downs fixed; empty-page totals)
+> **Last updated:** 2026-08-02 (dialog consistency sweep; count-line + move-label clarity)
 > **Branch:** `main`.
+
+## 2026-08-02 (later still) — Add-transaction restyle + dialog sweep + clarity fixes
+
+Same pipeline (design audit w/ live rig screenshots → PM → dev →
+adversarial verify, 0 repairs; frontend 856→863, backend 139+278 green).
+
+* **Add transaction** now matches the Filter & sort vocabulary: sheet on
+  narrow / dialog on wide via a shared `openAddTransactionPanel` helper
+  (all four hosts route through it), cardSurface shells, titleLarge,
+  filled 12px borderless fields (labelText kept — tests find by label),
+  `ConnectedSegments` Expense/Income, pinned full-bleed 48dp Add above
+  the keyboard (`MediaQuery.viewInsetsOf` padding).
+* **Consistency sweep**: add_recurring_rule / add_crypto / add_account
+  dialogs restyled to the same recipe; stock `SegmentedButton`s replaced
+  with `ConnectedSegments` (new additive `enabled` flag) in
+  portfolio_card, lending_tab (3), tax_planning filing status, and the
+  dashboard's wide cash-flow period picker. Re-tap guards preserve
+  no-op semantics. Deferred (audit report): split_transaction_dialog
+  (custom two-pane layout), lending's own `_decoration` idiom, recurring
+  dialog sheet-on-narrow.
+* **Count line**: with any filter/search active the line reads
+  "N matching · M total" (`txShowingMatches`, ICU plural — "1
+  coincidencia") instead of the ambiguous "Showing N of M".
+* **Largest-move label**: `BalanceMove` carries additive
+  `institution_name`; the bell row now says "on Cards · SoFi", so a
+  user-named account can't read as a category of accounts.
+
+Queued next (user-approved): drill-down claim banners + largest-move →
+account panel reroute + journey fresh-context reset (see scratchpad spec
++ journey-stacking audit).
 
 ## 2026-08-02 (later) — Since-visit drill-downs filter by sync time
 

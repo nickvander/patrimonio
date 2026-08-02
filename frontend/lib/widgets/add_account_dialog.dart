@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/palette.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 class AddAccountDialog extends StatefulWidget {
@@ -199,15 +201,42 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   // Left as a note rather than re-added — the grouped form is the
   // current source of truth.)
 
+  /// House input recipe (same as AddTransactionDialog): filled rounded
+  /// borderless, keeping labelText (this dialog previously used the
+  /// default underline idiom — the third input style in the app).
+  InputDecoration _fieldDecoration({
+    required String labelText,
+    String? hintText,
+    String? prefixText,
+    String? suffixText,
+    String? helperText,
+    int? helperMaxLines,
+  }) {
+    return InputDecoration(
+      labelText: labelText,
+      hintText: hintText,
+      prefixText: prefixText,
+      suffixText: suffixText,
+      helperText: helperText,
+      helperMaxLines: helperMaxLines,
+      filled: true,
+      fillColor: context.tileSurface,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return AlertDialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      title: Text(
-        l.dlgAccountTitle,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
+      // House dialog shell: card tone (matching every other add dialog)
+      // + the theme's titleLarge instead of a bold override.
+      backgroundColor: BrandPalette.cardSurface(Theme.of(context).brightness),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge,
+      title: Text(l.dlgAccountTitle),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -218,7 +247,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                 controller: _nameController,
                 style: TextStyle(color: context.textPrimary),
                 autofocus: true,
-                decoration: InputDecoration(
+                decoration: _fieldDecoration(
                   labelText: l.dlgAccountName,
                   hintText: l.dlgAccountNameHint,
                 ),
@@ -228,7 +257,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _type,
                 dropdownColor: Theme.of(context).colorScheme.surface,
-                decoration: InputDecoration(labelText: l.dlgAccountType),
+                decoration: _fieldDecoration(labelText: l.dlgAccountType),
                 items: [
                   for (final (groupKey, types) in _typeGroups) ...[
                     // Group header — disabled so it can't be picked but
@@ -267,7 +296,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _currency,
                 dropdownColor: Theme.of(context).colorScheme.surface,
-                decoration: InputDecoration(labelText: l.dlgAccountCurrency),
+                decoration: _fieldDecoration(labelText: l.dlgAccountCurrency),
                 items: ['USD', 'MXN']
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
@@ -281,11 +310,12 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   decimal: true,
                   signed: true,
                 ),
-                decoration: InputDecoration(
+                decoration: _fieldDecoration(
                   labelText: l.dlgAccountInitialBalance,
-                  // Currency-aware prefix: don't hardcode `$` regardless of
-                  // the selected currency.
-                  prefixText: _currency == 'MXN' ? 'MXN ' : r'$ ',
+                  // Currency-aware prefix via the house symbol table —
+                  // no hand-rolled `$`/`MXN ` branch (display-only; the
+                  // popped values are unchanged).
+                  prefixText: currencySymbol(_currency),
                   suffixText: _currency,
                   helperText: l.dlgAccountBalanceHelper,
                   helperMaxLines: 2,
@@ -303,14 +333,14 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                 TextFormField(
                   controller: _holderController,
                   style: TextStyle(color: context.textPrimary),
-                  decoration: InputDecoration(labelText: l.dlgAccountHolder),
+                  decoration: _fieldDecoration(labelText: l.dlgAccountHolder),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _clabeController,
                   style: TextStyle(color: context.textPrimary),
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(labelText: l.dlgAccountClabe),
+                  decoration: _fieldDecoration(labelText: l.dlgAccountClabe),
                   validator: (v) {
                     final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
                     // Optional, but if present must be a full 18-digit CLABE.
@@ -328,7 +358,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
           onPressed: _isSubmitting ? null : () => Navigator.pop(context),
           child: Text(l.actionCancel),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: _isSubmitting ? null : _submit,
           child: _isSubmitting
               ? const SizedBox(

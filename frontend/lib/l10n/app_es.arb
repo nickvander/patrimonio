@@ -94,6 +94,7 @@
   "txNoMatchesBody": "Prueba ajustar tu búsqueda o los filtros.",
   "txClearFiltersSearch": "Limpiar filtros y búsqueda",
   "txShowingCount": "Mostrando {shown} de {total}",
+  "txShowingMatches": "{shown, plural, =1{1 coincidencia} other{{shown} coincidencias}} · {total} en total",
   "txLoadMore": "Cargar más",
   "txSelectAll": "Seleccionar todo",
   "txDeselectAll": "Quitar selección",

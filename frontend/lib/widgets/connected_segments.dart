@@ -37,11 +37,21 @@ class ConnectedSegments<T> extends StatelessWidget {
     required this.segments,
     required this.selected,
     required this.onSelected,
+    this.enabled = true,
   });
 
   final List<ConnectedSegment<T>> segments;
   final T selected;
   final ValueChanged<T> onSelected;
+
+  /// When false the group renders non-interactive, mirroring
+  /// SegmentedButton's disabled affordance (labels/icons at the M3
+  /// 38%-onSurface disabled tone, selected fill collapsed to the 12%
+  /// disabled container) — callers that null their change handler while
+  /// a fetch is in flight (the dashboard cash-flow picker) pass
+  /// `enabled: false` instead. Additive: the default keeps every
+  /// existing adopter byte-identical.
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -74,34 +84,39 @@ class ConnectedSegments<T> extends StatelessWidget {
       left: Radius.circular(isSelected || first ? 22 : 8),
       right: Radius.circular(isSelected || last ? 22 : 8),
     );
+    // Disabled tones follow SegmentedButton: content at 38% onSurface,
+    // the selected fill at the 12% disabled container (theme colors only,
+    // no hardcoded shades).
+    final contentColor = !enabled
+        ? scheme.onSurface.withValues(alpha: 0.38)
+        : isSelected
+        ? scheme.onSecondaryContainer
+        : context.textSubtle;
+    final fillColor = isSelected
+        ? (enabled
+              ? scheme.secondaryContainer
+              : scheme.onSurface.withValues(alpha: 0.12))
+        : context.tint(0.05);
     return Expanded(
       child: Semantics(
         selected: isSelected,
+        enabled: enabled,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
           height: 44,
-          decoration: BoxDecoration(
-            color: isSelected ? scheme.secondaryContainer : context.tint(0.05),
-            borderRadius: radius,
-          ),
+          decoration: BoxDecoration(color: fillColor, borderRadius: radius),
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
               borderRadius: radius,
-              onTap: () => onSelected(segment.value),
+              onTap: enabled ? () => onSelected(segment.value) : null,
               child: Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (segment.icon != null) ...[
-                      Icon(
-                        segment.icon,
-                        size: 18,
-                        color: isSelected
-                            ? scheme.onSecondaryContainer
-                            : context.textSubtle,
-                      ),
+                      Icon(segment.icon, size: 18, color: contentColor),
                       const SizedBox(width: 6),
                     ],
                     Flexible(
@@ -114,9 +129,7 @@ class ConnectedSegments<T> extends StatelessWidget {
                           fontWeight: isSelected
                               ? FontWeight.w700
                               : FontWeight.w600,
-                          color: isSelected
-                              ? scheme.onSecondaryContainer
-                              : context.textSubtle,
+                          color: contentColor,
                         ),
                       ),
                     ),

@@ -274,6 +274,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String txShowingMatches(num shown, Object total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      shown,
+      locale: localeName,
+      other: '$shown matching',
+      one: '1 matching',
+    );
+    return '$_temp0 · $total total';
+  }
+
+  @override
   String get txLoadMore => 'Load more';
 
   @override

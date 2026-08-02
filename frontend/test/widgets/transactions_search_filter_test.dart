@@ -471,7 +471,9 @@ void main() {
 
         expect(find.text('No transactions match'), findsOneWidget);
         expect(find.text('Clear filters & search'), findsOneWidget);
-        expect(find.text('Showing 0 of 3'), findsOneWidget);
+        // FIX-1: with search/filters active the count line takes the
+        // txShowingMatches form instead of "Showing X of N".
+        expect(find.text('0 matching · 3 total'), findsOneWidget);
         expect(find.text('Row 0'), findsNothing);
 
         await tester.tap(find.text('Clear filters & search'));
@@ -570,7 +572,8 @@ void main() {
         kTxBackendMaxPageSize,
         kTxBackendMaxPageSize,
       ]);
-      expect(find.text('Showing 0 of 1100'), findsOneWidget);
+      // FIX-1: active search → the txShowingMatches count-line form.
+      expect(find.text('0 matching · 1100 total'), findsOneWidget);
     });
 
     testWidgets('opening the filter dialog loads full history exactly once and '

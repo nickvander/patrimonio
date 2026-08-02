@@ -11,6 +11,7 @@ import '../utils/flat_schedule.dart';
 import '../utils/lending_summary.dart';
 import '../utils/loan_dates.dart';
 import '../utils/theme_colors.dart';
+import 'connected_segments.dart';
 import 'interest_income_sheet.dart';
 
 /// Personal lending tab — only mounted when the user enables the
@@ -1778,26 +1779,20 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SegmentedButton<bool>(
+        // House connected button group (shared single-select control).
+        ConnectedSegments<bool>(
           segments: [
-            ButtonSegment(
+            ConnectedSegment(
               value: false,
-              label: Text(AppLocalizations.of(context).lendSegSetTheTerm),
+              label: AppLocalizations.of(context).lendSegSetTheTerm,
             ),
-            ButtonSegment(
+            ConnectedSegment(
               value: true,
-              label: Text(AppLocalizations.of(context).lendSegSetThePayment),
+              label: AppLocalizations.of(context).lendSegSetThePayment,
             ),
           ],
-          selected: {_setByPayment},
-          showSelectedIcon: false,
-          style: ButtonStyle(
-            textStyle: WidgetStatePropertyAll(
-              Theme.of(context).textTheme.bodySmall,
-            ),
-            visualDensity: VisualDensity.compact,
-          ),
-          onSelectionChanged: (s) => setState(() => _setByPayment = s.first),
+          selected: _setByPayment,
+          onSelected: (v) => setState(() => _setByPayment = v),
         ),
         const SizedBox(height: 12),
         if (_setByPayment)
@@ -1848,20 +1843,14 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   /// schedule — this keeps them one concept, not two rival tiles.
   Widget _flatModeToggle() {
     final l10n = AppLocalizations.of(context);
-    return SegmentedButton<String>(
+    // House connected button group (shared single-select control).
+    return ConnectedSegments<String>(
       segments: [
-        ButtonSegment(value: 'amount', label: Text(l10n.lendFlatModeAmount)),
-        ButtonSegment(value: 'rate', label: Text(l10n.lendFlatModeRate)),
+        ConnectedSegment(value: 'amount', label: l10n.lendFlatModeAmount),
+        ConnectedSegment(value: 'rate', label: l10n.lendFlatModeRate),
       ],
-      selected: {_flatMode},
-      showSelectedIcon: false,
-      style: ButtonStyle(
-        textStyle: WidgetStatePropertyAll(
-          Theme.of(context).textTheme.bodySmall,
-        ),
-        visualDensity: VisualDensity.compact,
-      ),
-      onSelectionChanged: (s) => setState(() => _flatMode = s.first),
+      selected: _flatMode,
+      onSelected: (v) => setState(() => _flatMode = v),
     );
   }
 
@@ -5202,21 +5191,23 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
             if (_isRepayment)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: SegmentedButton<int>(
+                // House connected button group (shared single-select
+                // control).
+                child: ConnectedSegments<int>(
                   segments: [
-                    ButtonSegment(
+                    ConnectedSegment(
                       value: 0,
-                      label: Text(
-                        AppLocalizations.of(context).lendSegBankTransaction,
-                      ),
+                      label: AppLocalizations.of(
+                        context,
+                      ).lendSegBankTransaction,
                     ),
-                    ButtonSegment(
+                    ConnectedSegment(
                       value: 1,
-                      label: Text(AppLocalizations.of(context).lendSegCash),
+                      label: AppLocalizations.of(context).lendSegCash,
                     ),
                   ],
-                  selected: {_tab},
-                  onSelectionChanged: (s) => setState(() => _tab = s.first),
+                  selected: _tab,
+                  onSelected: (v) => setState(() => _tab = v),
                 ),
               ),
             const SizedBox(height: 8),

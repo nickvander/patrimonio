@@ -579,6 +579,12 @@ abstract class AppLocalizations {
   /// **'Showing {shown} of {total}'**
   String txShowingCount(Object shown, Object total);
 
+  /// No description provided for @txShowingMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'{shown, plural, =1{1 matching} other{{shown} matching}} · {total} total'**
+  String txShowingMatches(num shown, Object total);
+
   /// No description provided for @txLoadMore.
   ///
   /// In en, this message translates to:
