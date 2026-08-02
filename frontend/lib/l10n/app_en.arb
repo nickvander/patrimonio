@@ -118,6 +118,56 @@
       }
     }
   },
+  "txClaimNewSince": "{count, plural, =1{1 new transaction since {date}} other{{count} new transactions since {date}}}",
+  "@txClaimNewSince": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "txClaimNetWorthMove": "Net worth {amount} ({percent}) since {date}",
+  "@txClaimNetWorthMove": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "String"
+      }
+    }
+  },
+  "txClaimAccountMove": "{account} moved {amount} since {date}",
+  "@txClaimAccountMove": {
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "txClaimReconciliation": "{count, plural, =1{1 synced transaction accounts for {amount} of this move; the rest changed without synced activity (transfers or pending).} other{{count} synced transactions account for {amount} of this move; the rest changed without synced activity (transfers or pending).}}",
+  "@txClaimReconciliation": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "txEmptyTitle": "No transactions yet",
   "txEmptyBody": "Link a bank, import a statement, or add an account manually\nto start seeing activity here.",
   "txAddAccount": "Add an account",

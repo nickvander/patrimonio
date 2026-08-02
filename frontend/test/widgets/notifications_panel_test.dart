@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/utils/app_locale.dart';
+import 'package:patrimonio/utils/drill_down_claim.dart';
 import 'package:patrimonio/utils/spending_insight.dart';
 import 'package:patrimonio/widgets/notifications_panel.dart';
 
@@ -325,7 +326,7 @@ void main() {
     List<AppNotification> deriveDigest(
       AppLocalizations loc, {
       Map<String, dynamic>? since,
-      void Function(DateTime)? onJump,
+      void Function(DateTime, [DrillDownClaim?])? onJump,
     }) {
       return deriveNotifications(
         l: loc,
@@ -333,7 +334,7 @@ void main() {
         netWorthHistory: const [],
         onJumpToManagement: () {},
         sinceLastLogin: since,
-        onJumpToTransactions: onJump ?? (_) {},
+        onJumpToTransactions: onJump ?? (_, [_]) {},
       );
     }
 
@@ -389,7 +390,11 @@ void main() {
 
     test('tapping a digest row deep-links with the previous-login anchor', () {
       DateTime? received;
-      final out = deriveDigest(l, since: digest, onJump: (a) => received = a);
+      final out = deriveDigest(
+        l,
+        since: digest,
+        onJump: (a, [c]) => received = a,
+      );
       out.firstWhere((n) => n.id.startsWith('since_tx:')).onTap!();
       expect(received, DateTime.parse('2026-07-20T10:00:00Z'));
     });
@@ -404,7 +409,7 @@ void main() {
         netWorthHistory: const [],
         onJumpToManagement: () {},
         sinceLastLogin: digest,
-        onJumpToTransactions: (_) {},
+        onJumpToTransactions: (_, [_]) {},
         targetCurrency: 'MXN',
         conversionFactor: 17.0,
       );
@@ -446,8 +451,8 @@ void main() {
           },
           'sync_errors': <String>[],
         },
-        onJumpToTransactions: (a) => dateOnly = a,
-        onJumpToAccountTransactions: (a, id) => scoped = (a, id),
+        onJumpToTransactions: (a, [c]) => dateOnly = a,
+        onJumpToAccountTransactions: (a, id, [c]) => scoped = (a, id),
       );
       out.firstWhere((n) => n.id.startsWith('since_move:')).onTap!();
       expect(scoped, (DateTime.parse('2026-07-20T10:00:00Z'), 'acc-uuid-1'));
@@ -513,8 +518,8 @@ void main() {
         netWorthHistory: const [],
         onJumpToManagement: () {},
         sinceLastLogin: digest,
-        onJumpToTransactions: (a) => dateOnly = a,
-        onJumpToAccountTransactions: (a, id) => scoped = (a, id),
+        onJumpToTransactions: (a, [c]) => dateOnly = a,
+        onJumpToAccountTransactions: (a, id, [c]) => scoped = (a, id),
       );
       out.firstWhere((n) => n.id.startsWith('since_move:')).onTap!();
       expect(dateOnly, DateTime.parse('2026-07-20T10:00:00Z'));
@@ -537,7 +542,7 @@ void main() {
         syncData: const [],
         netWorthHistory: history,
         onJumpToManagement: () {},
-        onJumpToTransactions: (a) => received = a,
+        onJumpToTransactions: (a, [c]) => received = a,
       );
       final row = out.firstWhere(
         (n) => n.id.startsWith('net_worth_since_sync:'),
@@ -556,7 +561,7 @@ void main() {
           {'date': '2026-07-25', 'net_worth': 101000.0},
         ],
         onJumpToManagement: () {},
-        onJumpToTransactions: (_) => fail('must not fire'),
+        onJumpToTransactions: (_, [_]) => fail('must not fire'),
       );
       final row = out.firstWhere(
         (n) => n.id.startsWith('net_worth_since_sync:'),
@@ -753,6 +758,98 @@ void main() {
       }, reason: 'ALL shown ids are reported, read and unread alike');
       // The panel itself renders below the app bar with the rows visible.
       expect(find.text('title srv:b'), findsOneWidget);
+    });
+  });
+
+  group('drill-down claims carried by the bell rows', () {
+    final digest = <String, dynamic>{
+      'previous_login_at': '2026-07-20T10:00:00Z',
+      'new_transactions': 5,
+      'largest_move': {
+        'account_name': 'Cards',
+        'institution_name': 'SoFi',
+        'delta_usd': 2612.87,
+        'account_id': 'acc-uuid-1',
+      },
+      'sync_errors': <String>[],
+    };
+    final anchor = DateTime.parse('2026-07-20T10:00:00Z');
+
+    test('the since-visit digest row carries a NewSinceCountClaim '
+        'restating its own count + anchor', () {
+      DrillDownClaim? claim;
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [],
+        onJumpToManagement: () {},
+        sinceLastLogin: digest,
+        onJumpToTransactions: (a, [c]) => claim = c,
+      );
+      out.firstWhere((n) => n.id.startsWith('since_tx:')).onTap!();
+      final count = claim as NewSinceCountClaim;
+      expect(count.count, 5);
+      expect(count.anchor, anchor);
+    });
+
+    test('the largest-move row carries a BalanceMoveClaim (USD delta, '
+        'anchor, disambiguated account name) on the scoped jump', () {
+      DrillDownClaim? claim;
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [],
+        onJumpToManagement: () {},
+        sinceLastLogin: digest,
+        onJumpToTransactions: (_, [_]) => fail('scoped jump must win'),
+        onJumpToAccountTransactions: (a, id, [c]) => claim = c,
+      );
+      out.firstWhere((n) => n.id.startsWith('since_move:')).onTap!();
+      final move = claim as BalanceMoveClaim;
+      expect(move.deltaUsd, 2612.87);
+      expect(move.anchor, anchor);
+      expect(move.accountName, 'Cards · SoFi');
+      expect(move.pct, isNull);
+    });
+
+    test('the largest-move fallback (no account_id) carries the SAME '
+        'claim on the date-only jump', () {
+      DrillDownClaim? claim;
+      final noId = Map<String, dynamic>.from(digest);
+      noId['largest_move'] = {'account_name': 'Cards', 'delta_usd': -500.0};
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [],
+        onJumpToManagement: () {},
+        sinceLastLogin: noId,
+        onJumpToTransactions: (a, [c]) => claim = c,
+      );
+      out.firstWhere((n) => n.id.startsWith('since_move:')).onTap!();
+      final move = claim as BalanceMoveClaim;
+      expect(move.deltaUsd, -500.0);
+      expect(move.accountName, 'Cards');
+    });
+
+    test('the net-worth row carries a whole-net-worth BalanceMoveClaim '
+        '(signed USD delta + signed pct, anchored on the PRIOR date)', () {
+      DrillDownClaim? claim;
+      final out = deriveNotifications(
+        l: l,
+        syncData: const [],
+        netWorthHistory: const [
+          {'date': '2026-07-24', 'net_worth': 100000.0},
+          {'date': '2026-07-25', 'net_worth': 101000.0},
+        ],
+        onJumpToManagement: () {},
+        onJumpToTransactions: (a, [c]) => claim = c,
+      );
+      out.firstWhere((n) => n.id.startsWith('net_worth_since_sync:')).onTap!();
+      final move = claim as BalanceMoveClaim;
+      expect(move.deltaUsd, 1000.0);
+      expect(move.pct, closeTo(1.0, 1e-9));
+      expect(move.anchor, DateTime.parse('2026-07-24'));
+      expect(move.accountName, isNull, reason: 'whole-net-worth claim');
     });
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 
 import 'package:patrimonio/l10n/app_localizations.dart';
+import 'package:patrimonio/utils/drill_down_claim.dart';
 import 'package:patrimonio/utils/spending_insight.dart';
 import 'package:patrimonio/widgets/transactions_tab.dart';
 
@@ -62,8 +63,10 @@ Widget _host(
         targetCurrency: 'USD',
         usdMxnRate: 17.0,
         categorySeed: categorySeed,
-        spikeBanner: banner,
-        onSpikeBannerDismissed: onDismissed,
+        // The spike banner is now one constructor of the generalized
+        // drill-down claim banner; same gate + dismiss semantics.
+        claimBanner: banner == null ? null : SpikeClaim(banner),
+        onClaimBannerDismissed: onDismissed,
       ),
     ),
   ),

@@ -1,7 +1,37 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-02 (dialog consistency sweep; count-line + move-label clarity)
+> **Last updated:** 2026-08-02 (claim banners; fresh-context jumps; move → account panel)
 > **Branch:** `main`.
+
+## 2026-08-02 (final batch) — Drill-downs carry their claim; jumps get a clean slate
+
+A read-only audit workflow mapped every programmatic jump into the
+Transactions tab: 10 of 14 journeys could stack stale filters from a
+prior journey into a silent zero-result list (live-reproduced: search
+"FasTrak" ∧ stale account chip ∧ stale "New since" = "0 matching"; a
+stale July insight banner surviving over a June month drill). Fixes,
+per the audit's design, verified live on the rig (all failing pairs now
+pass; frontend 863→901, backend untouched):
+
+* **Fresh-context rule** — `_maybeApplySeeds` → `_applyJumpContext`:
+  any programmatic jump (any of the four seeds OR searchOverride)
+  resets `TxFilters.empty` + search + selection mode FIRST inside the
+  one post-frame setState, then applies its own payload. Manual edits
+  still compose. New `onSearchOverrideConsumed` fixes the never-cleared
+  dashboard copy (repeat-tapping the same merchant works again).
+  Dashboard companion: one `_jumpToTransactions(...)` helper assigns
+  ALL jump fields every call; the 8 jump sites are one-liners.
+* **Claim banners** — sealed `DrillDownClaim` (spike / new-since-count /
+  balance-move) replaces the spike-only banner; every bell drill-down
+  restates its claim at the destination. Balance claims add an honest
+  reconciliation line ("N synced transactions account for +$X of this
+  move; the rest changed without synced activity") past a
+  max($1, 5%-of-claim) gap threshold — never fabricated rows.
+* **Largest-move rows open the account panel** (balance chart = the
+  evidence for a balance claim) with the "New since" seed + banner
+  threaded into its embedded TransactionsTab; graceful fallback to the
+  tab jump when the account id doesn't resolve.
+* Sort mode and scroll deliberately survive jumps.
 
 ## 2026-08-02 (later still) — Add-transaction restyle + dialog sweep + clarity fixes
 

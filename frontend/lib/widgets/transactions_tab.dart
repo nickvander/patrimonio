@@ -13,6 +13,7 @@ import '../theme/typography.dart';
 import '../utils/category.dart';
 import '../utils/category_style.dart';
 import '../utils/currency.dart';
+import '../utils/drill_down_claim.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/merchant_total.dart';
 import '../utils/month_window.dart';
@@ -233,8 +234,16 @@ class TransactionsTab extends StatefulWidget {
 
   /// Cmd-K deep-link seed. When this changes the tab's search query is
   /// pre-populated so the row the user picked from the palette is
-  /// surfaced immediately.
+  /// surfaced immediately. Applied through [_applyJumpContext] with the
+  /// same one-shot semantics as the filter seeds below.
   final String? searchOverride;
+
+  /// Fires after the widget has consumed [searchOverride] so the host can
+  /// null its own copy — which both stops rebuilds re-seeding over user
+  /// edits AND makes a repeat identical jump a null→value transition that
+  /// [didUpdateWidget] can detect (the repeat-tap no-op fix). Additive:
+  /// hosts that don't wire it keep the old keep-until-changed behavior.
+  final VoidCallback? onSearchOverrideConsumed;
 
   /// Cmd-K row-highlight target. When non-null the matching tx renders
   /// with a transient accent fill so the exact row the user picked is
@@ -290,18 +299,21 @@ class TransactionsTab extends StatefulWidget {
   /// a partial-seed caller must not half-clear state.
   final VoidCallback? onCreatedSinceSeedConsumed;
 
-  /// Spike-comparison banner payload (the insight the user drilled down
-  /// from). DISPLAY state, not a one-shot seed: the dashboard owns and
-  /// clears it (via [onSpikeBannerDismissed] or replacement by a newer
-  /// spike). The banner renders only while the seeded category filter is
-  /// still active, so removing the category chip / Clear all hides it
-  /// with zero extra state.
-  final SpendingSpikeInsight? spikeBanner;
+  /// Drill-down claim banner payload (the claim the jump the user took
+  /// was making — a spike comparison, a "N new since" count, a balance
+  /// move). DISPLAY state, not a one-shot seed: the host owns and clears
+  /// it (via [onClaimBannerDismissed] or replacement by a newer jump).
+  /// Each claim kind renders only while its seeded filter is still active
+  /// (spike → category, count/balance → createdSince), so removing the
+  /// chip / Clear all hides it with zero extra state. Balance claims
+  /// additionally reconcile against the visible rows' net sum — see
+  /// [balanceClaimHasGap].
+  final DrillDownClaim? claimBanner;
 
-  /// The banner's × was tapped — the dashboard clears its copy. Filters
+  /// The banner's × was tapped — the host clears its copy. Filters
   /// are deliberately untouched: dismissing the context line must not
   /// also unfilter the list out from under the user.
-  final VoidCallback? onSpikeBannerDismissed;
+  final VoidCallback? onClaimBannerDismissed;
 
   /// Detected cross-currency cash transfers — indexed by source/dest
   /// transaction id in the detail modal to show "Linked to <leg>".
@@ -394,6 +406,7 @@ class TransactionsTab extends StatefulWidget {
     this.hasMore = false,
     this.totalCount,
     this.searchOverride,
+    this.onSearchOverrideConsumed,
     this.highlightedTxId,
     this.dateSeed,
     this.onDateSeedConsumed,
@@ -403,8 +416,8 @@ class TransactionsTab extends StatefulWidget {
     this.onAccountSeedConsumed,
     this.createdSinceSeed,
     this.onCreatedSinceSeedConsumed,
-    this.spikeBanner,
-    this.onSpikeBannerDismissed,
+    this.claimBanner,
+    this.onClaimBannerDismissed,
     this.fxTransfers = const [],
     this.onDetectFxTransfers,
     this.onConfirmFxTransfer,
@@ -429,9 +442,6 @@ class TransactionsTab extends StatefulWidget {
 class TransactionsTabState extends State<TransactionsTab> {
   String _searchQuery = '';
   TxFilters _filters = TxFilters.empty;
-  // Tracks the most recent searchOverride we applied so future rebuilds
-  // don't keep re-seeding the input over user edits.
-  String? _appliedOverride;
   final TextEditingController _searchController = TextEditingController();
   // Bulk-edit selection state. When _selectionMode is on, rows render a
   // checkbox and tapping a row toggles selection instead of opening the
@@ -537,13 +547,11 @@ class TransactionsTabState extends State<TransactionsTab> {
   @override
   void initState() {
     super.initState();
-    final seed = widget.searchOverride;
-    if (seed != null && seed.isNotEmpty) {
-      _searchQuery = seed;
-      _searchController.text = seed;
-      _appliedOverride = seed;
-    }
-    _maybeApplySeeds(
+    final override = widget.searchOverride;
+    _applyJumpContext(
+      searchOverride: (override != null && override.isNotEmpty)
+          ? override
+          : null,
       dateSeed: widget.dateSeed,
       categorySeed: widget.categorySeed,
       accountIdSeed: widget.accountIdSeed,
@@ -554,17 +562,15 @@ class TransactionsTabState extends State<TransactionsTab> {
   @override
   void didUpdateWidget(TransactionsTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final seed = widget.searchOverride;
-    if (seed != null && seed.isNotEmpty && seed != _appliedOverride) {
-      setState(() {
-        _searchQuery = seed;
-        _searchController.text = seed;
-        _appliedOverride = seed;
-      });
-    }
-    // One-shot: each seed re-applies only when it CHANGED from the
-    // previous widget — a dashboard rebuild carrying the same value
-    // (or a value the user has since edited away) is ignored.
+    // One-shot: each jump channel re-applies only when it CHANGED from
+    // the previous widget — a dashboard rebuild carrying the same value
+    // (or a value the user has since edited away) is ignored. The
+    // consumed callbacks null the host copies right after apply, so a
+    // repeat identical jump arrives as a null→value transition.
+    final overrideChanged =
+        widget.searchOverride != null &&
+        widget.searchOverride!.isNotEmpty &&
+        widget.searchOverride != oldWidget.searchOverride;
     final dateChanged =
         widget.dateSeed != null && widget.dateSeed != oldWidget.dateSeed;
     final categoryChanged =
@@ -576,11 +582,13 @@ class TransactionsTabState extends State<TransactionsTab> {
     final createdSinceChanged =
         widget.createdSinceSeed != null &&
         widget.createdSinceSeed != oldWidget.createdSinceSeed;
-    if (dateChanged ||
+    if (overrideChanged ||
+        dateChanged ||
         categoryChanged ||
         accountChanged ||
         createdSinceChanged) {
-      _maybeApplySeeds(
+      _applyJumpContext(
+        searchOverride: overrideChanged ? widget.searchOverride : null,
         dateSeed: dateChanged ? widget.dateSeed : null,
         categorySeed: categoryChanged ? widget.categorySeed : null,
         accountIdSeed: accountChanged ? widget.accountIdSeed : null,
@@ -589,19 +597,35 @@ class TransactionsTabState extends State<TransactionsTab> {
     }
   }
 
-  /// Drop drill-down seeds (a chart-tap date window, a bell-tap category
-  /// label and/or a largest-move account id) into the active filters, all
-  /// in ONE setState so a dependent fetch can never observe half-applied
-  /// filters. Pushes the per-seed consumed callbacks so the dashboard
-  /// clears its copies and manual filter edits aren't overwritten on the
-  /// next rebuild.
-  void _maybeApplySeeds({
+  /// Apply one programmatic jump's payload (any subset of: a search
+  /// override, a chart-tap date window, a bell-tap category label, a
+  /// largest-move account id, a since-visit anchor) — after FIRST
+  /// resetting the drill-down context to a clean slate.
+  ///
+  /// The rule: a programmatic jump REPLACES drill-down context. Whatever
+  /// filters/search survived a previous journey (or manual edits) would
+  /// otherwise intersect with this jump's payload and can silently zero
+  /// the list (the FasTrak "0 matching" repro). Manual edits made AFTER
+  /// landing keep composing exactly as before — nothing here runs again
+  /// until the next real jump (the change-detection in [didUpdateWidget]
+  /// plus the consumed callbacks guarantee that). Sort mode and scroll
+  /// offset are deliberately NOT reset: neither can zero the list, and
+  /// snapping them back would fight the user.
+  ///
+  /// Everything lands in ONE post-frame setState so a dependent fetch can
+  /// never observe half-applied filters, and travel-together payloads
+  /// (category+date from a spike, account+createdSince from a largest
+  /// move) get exactly one reset. The per-channel consumed callbacks fire
+  /// afterwards so the host clears its copies.
+  void _applyJumpContext({
+    String? searchOverride,
     ({DateTime start, DateTime end})? dateSeed,
     String? categorySeed,
     String? accountIdSeed,
     DateTime? createdSinceSeed,
   }) {
-    if (dateSeed == null &&
+    if (searchOverride == null &&
+        dateSeed == null &&
         categorySeed == null &&
         accountIdSeed == null &&
         createdSinceSeed == null) {
@@ -612,6 +636,21 @@ class TransactionsTabState extends State<TransactionsTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
+        // Fresh-context reset FIRST (flushing any pending search
+        // debounce so a stale keystroke can't resurrect the old query),
+        // then this jump's own payload on the clean slate. Selection
+        // mode is also dropped — landing a drill-down inside a stale
+        // bulk-select UI is never what the tap meant.
+        _searchDebounce?.cancel();
+        _searchQuery = '';
+        _searchController.clear();
+        _filters = TxFilters.empty;
+        _selectionMode = false;
+        _selectedIds.clear();
+        if (searchOverride != null) {
+          _searchQuery = searchOverride;
+          _searchController.text = searchOverride;
+        }
         if (dateSeed != null) {
           _filters = _filters.copyWith(
             dateRange: TxDateRange.custom,
@@ -629,6 +668,7 @@ class TransactionsTabState extends State<TransactionsTab> {
           _filters = _filters.copyWith(createdSince: createdSinceSeed);
         }
       });
+      if (searchOverride != null) widget.onSearchOverrideConsumed?.call();
       if (dateSeed != null) widget.onDateSeedConsumed?.call();
       if (categorySeed != null) widget.onCategorySeedConsumed?.call();
       if (accountIdSeed != null) widget.onAccountSeedConsumed?.call();
@@ -1156,32 +1196,36 @@ class TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  /// One-line spike-comparison banner ("Groceries in Mar 2026: $612.00
-  /// spent — 45% above your 6-month average of $420.00") shown right
-  /// under the filter-chip strip after a bell/sheet drill-down.
+  /// Drill-down claim banner shown right under the filter-chip strip
+  /// after a programmatic jump: restates the claim the tapped row made
+  /// ("Groceries in Mar 2026: …", "15 new since Jul 31", "Net worth +$X
+  /// (+Y%) since Jul 30") against the evidence now on screen.
   ///
-  /// Visibility IS the "while the category seed is active" rule: it
-  /// renders only while the insight's category is still in the active
-  /// category filter (and its month parses), so removing the category
-  /// chip, Clear all, or _clearFiltersAndSearch hides it automatically —
-  /// no extra state to reconcile. The × reports up via
-  /// [TransactionsTab.onSpikeBannerDismissed] without touching filters.
-  Widget _spikeBannerLine(bool isNarrow) {
-    final insight = widget.spikeBanner;
-    if (insight == null) return const SizedBox.shrink();
-    if (!_filters.categories.contains(insight.categoryLabel)) {
-      return const SizedBox.shrink();
-    }
-    final window = monthWindow(insight.recentMonth);
-    if (window == null) return const SizedBox.shrink();
+  /// Visibility IS the "while the seeded filter is active" rule: a spike
+  /// claim renders only while its category is still in the active
+  /// category filter, a count/balance claim only while `createdSince`
+  /// still equals its anchor — so removing the chip, Clear all, or
+  /// _clearFiltersAndSearch hides the banner automatically, with no extra
+  /// state to reconcile. The × reports up via
+  /// [TransactionsTab.onClaimBannerDismissed] without touching filters.
+  Widget _claimBannerLine(bool isNarrow, List<dynamic> filtered) {
+    final claim = widget.claimBanner;
+    return switch (claim) {
+      null => const SizedBox.shrink(),
+      SpikeClaim() => _spikeBannerLine(claim.insight, isNarrow),
+      NewSinceCountClaim() => _newSinceBannerLine(claim, isNarrow),
+      BalanceMoveClaim() => _balanceMoveBannerLine(claim, isNarrow, filtered),
+    };
+  }
+
+  /// Shared claim-banner chrome: tinted hairline container, leading icon,
+  /// the claim line(s), and the dismiss ×.
+  Widget _claimBannerShell({
+    required IconData icon,
+    required Color iconColor,
+    required List<Widget> lines,
+  }) {
     final l = AppLocalizations.of(context);
-    final monthLabel = DateFormat.yMMM(
-      Localizations.localeOf(context).toString(),
-    ).format(window.start);
-    // The insight's figures are USD-stored (same payload the bell rows
-    // format), so they scale through the injected conversion factor.
-    String money(double usd) =>
-        widget.currencyFormat.format(usd * widget.conversionFactor);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Container(
@@ -1193,34 +1237,168 @@ class TransactionsTabState extends State<TransactionsTab> {
         ),
         child: Row(
           children: [
-            Icon(Icons.trending_up, color: context.warning, size: 18),
+            Icon(icon, color: iconColor, size: 18),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                // gen-l10n orders these alphabetically →
-                // (average, category, monthLabel, months, percent, recent).
-                l.txSpikeBanner(
-                  money(insight.previousAvgUsd),
-                  insight.categoryLabel,
-                  monthLabel,
-                  insight.lookbackMonths,
-                  formatPercent(context, insight.pctIncrease, digits: 0),
-                  money(insight.recentUsd),
-                ),
-                maxLines: isNarrow ? 2 : 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12.5, color: context.textPrimary),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: lines,
               ),
             ),
             // Default IconButton constraints = the 48dp touch floor.
             IconButton(
               icon: const Icon(Icons.close, size: 18),
               tooltip: l.txDismiss,
-              onPressed: widget.onSpikeBannerDismissed,
+              onPressed: widget.onClaimBannerDismissed,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// USD-stored claim figures scale through the injected conversion
+  /// factor — the same payload handling as the bell rows that made the
+  /// claim, so banner and bell can never disagree on the number.
+  String _claimMoney(double usd) =>
+      widget.currencyFormat.format(usd * widget.conversionFactor);
+
+  /// Signed variant ("+$1,850.00" / "−$1,850.00") for move deltas.
+  String _claimMoneySigned(double usd) =>
+      '${usd < 0 ? '−' : '+'}${_claimMoney(usd.abs())}';
+
+  /// One-line spike-comparison banner ("Groceries in Mar 2026: $612.00
+  /// spent — 45% above your 6-month average of $420.00").
+  Widget _spikeBannerLine(SpendingSpikeInsight insight, bool isNarrow) {
+    if (!_filters.categories.contains(insight.categoryLabel)) {
+      return const SizedBox.shrink();
+    }
+    final window = monthWindow(insight.recentMonth);
+    if (window == null) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
+    final monthLabel = DateFormat.yMMM(
+      Localizations.localeOf(context).toString(),
+    ).format(window.start);
+    return _claimBannerShell(
+      icon: Icons.trending_up,
+      iconColor: context.warning,
+      lines: [
+        Text(
+          // gen-l10n orders these alphabetically →
+          // (average, category, monthLabel, months, percent, recent).
+          l.txSpikeBanner(
+            _claimMoney(insight.previousAvgUsd),
+            insight.categoryLabel,
+            monthLabel,
+            insight.lookbackMonths,
+            formatPercent(context, insight.pctIncrease, digits: 0),
+            _claimMoney(insight.recentUsd),
+          ),
+          maxLines: isNarrow ? 2 : 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12.5, color: context.textPrimary),
+        ),
+      ],
+    );
+  }
+
+  /// Count-claim banner for the since-visit digest drill-down ("15 new
+  /// since Jul 31"). No reconciliation line: the visible list count is
+  /// the same measurement the claim restates.
+  Widget _newSinceBannerLine(NewSinceCountClaim claim, bool isNarrow) {
+    if (_filters.createdSince != claim.anchor) {
+      return const SizedBox.shrink();
+    }
+    final l = AppLocalizations.of(context);
+    // The anchor's LOCAL day — the same rendering the bell row and the
+    // "New since" chip use, so all three name the same date.
+    final dateStr = DateFormat.MMMd(
+      l.localeName,
+    ).format(claim.anchor.toLocal());
+    return _claimBannerShell(
+      icon: Icons.receipt_long,
+      iconColor: context.info,
+      lines: [
+        Text(
+          // gen-l10n orders these alphabetically → (count, date).
+          l.txClaimNewSince(claim.count, dateStr),
+          maxLines: isNarrow ? 2 : 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12.5, color: context.textPrimary),
+        ),
+      ],
+    );
+  }
+
+  /// Balance-move claim banner ("Net worth +$X (+Y%) since Jul 30" /
+  /// "Cards · SoFi moved +$X since Jul 31") plus, when the visible rows
+  /// genuinely fail to explain the move, the balance-vs-transactions
+  /// reconciliation line. The reconciliation is computed at render time
+  /// from the VISIBLE filtered rows through [_filteredTotals] — the same
+  /// per-row FX conversion and transfer-leg exclusion as the filtered
+  /// summary line — and NEVER fabricates rows to close the gap; it only
+  /// names the gap honestly (transfers or pending activity).
+  Widget _balanceMoveBannerLine(
+    BalanceMoveClaim claim,
+    bool isNarrow,
+    List<dynamic> filtered,
+  ) {
+    if (_filters.createdSince != claim.anchor) {
+      return const SizedBox.shrink();
+    }
+    final l = AppLocalizations.of(context);
+    final dateStr = DateFormat.MMMd(
+      l.localeName,
+    ).format(claim.anchor.toLocal());
+    final signed = _claimMoneySigned(claim.deltaUsd);
+    final account = claim.accountName;
+    final String title;
+    if (account != null) {
+      // gen-l10n orders these alphabetically → (account, amount, date).
+      title = l.txClaimAccountMove(account, signed, dateStr);
+    } else {
+      final pct = claim.pct ?? 0;
+      final pctStr =
+          '${pct < 0 ? '−' : '+'}${formatPercent(context, pct.abs(), digits: 1)}';
+      // gen-l10n orders these alphabetically → (amount, date, percent).
+      title = l.txClaimNetWorthMove(signed, dateStr, pctStr);
+    }
+    // Reconcile the claim against the VISIBLE rows, both in the
+    // reporting currency (claim figures are USD-stored; the rows go
+    // through the same conversion the filtered summary uses). Shown only
+    // past the max($1, 5% of claim) threshold — below it the line would
+    // restate FX/rounding noise as a discrepancy.
+    final totals = _filteredTotals(filtered);
+    final showReconciliation = balanceClaimHasGap(
+      claimAmount: claim.deltaUsd * widget.conversionFactor,
+      shownSum: totals.net,
+    );
+    final up = claim.deltaUsd >= 0;
+    return _claimBannerShell(
+      icon: up ? Icons.trending_up : Icons.trending_down,
+      iconColor: up ? context.tealAccent : context.warning,
+      lines: [
+        Text(
+          title,
+          maxLines: isNarrow ? 2 : 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12.5, color: context.textPrimary),
+        ),
+        if (showReconciliation)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              // gen-l10n orders these alphabetically → (amount, count).
+              l.txClaimReconciliation(
+                '${totals.net < 0 ? '−' : '+'}${widget.currencyFormat.format(totals.net.abs())}',
+                filtered.length,
+              ),
+              maxLines: isNarrow ? 3 : 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11.5, color: context.textSubtle),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1383,7 +1561,7 @@ class TransactionsTabState extends State<TransactionsTab> {
                     SizedBox(height: 40, child: _searchField()),
                   ],
                   _activeFilterChips(isNarrow),
-                  _spikeBannerLine(isNarrow),
+                  _claimBannerLine(isNarrow, filtered),
                   const SizedBox(height: 8),
                   Text(
                     // With X-Total-Count the denominator is the true server

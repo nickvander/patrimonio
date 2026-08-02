@@ -537,6 +537,30 @@ abstract class AppLocalizations {
     String recent,
   );
 
+  /// No description provided for @txClaimNewSince.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 new transaction since {date}} other{{count} new transactions since {date}}}'**
+  String txClaimNewSince(int count, String date);
+
+  /// No description provided for @txClaimNetWorthMove.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth {amount} ({percent}) since {date}'**
+  String txClaimNetWorthMove(String amount, String date, String percent);
+
+  /// No description provided for @txClaimAccountMove.
+  ///
+  /// In en, this message translates to:
+  /// **'{account} moved {amount} since {date}'**
+  String txClaimAccountMove(String account, String amount, String date);
+
+  /// No description provided for @txClaimReconciliation.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 synced transaction accounts for {amount} of this move; the rest changed without synced activity (transfers or pending).} other{{count} synced transactions account for {amount} of this move; the rest changed without synced activity (transfers or pending).}}'**
+  String txClaimReconciliation(String amount, int count);
+
   /// No description provided for @txEmptyTitle.
   ///
   /// In en, this message translates to:

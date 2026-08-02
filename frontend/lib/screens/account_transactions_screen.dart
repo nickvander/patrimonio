@@ -19,6 +19,7 @@ import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
+import '../utils/drill_down_claim.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../widgets/account_balance_chart.dart';
@@ -90,6 +91,19 @@ class AccountTransactionsScreen extends StatefulWidget {
   /// tab, another tab/device) no longer leaves the open panel stale.
   final Stream<RealtimeEvent>? realtimeEvents;
 
+  /// Sync-time drill-down seed (the bell's largest-move reroute): passed
+  /// through to the embedded [TransactionsTab], which pre-filters to rows
+  /// created after this anchor exactly as the dashboard tab would. The
+  /// panel is a fresh route per open, so the seed applies once in the
+  /// tab's initState and user edits stick — inherently stacking-free.
+  final DateTime? createdSinceSeed;
+
+  /// Drill-down claim banner for the embedded [TransactionsTab] (the
+  /// largest-move row's balance claim). The panel's balance chart above
+  /// the list is the PRIMARY evidence for a balance claim; the banner
+  /// restates the claim and reconciles it against the visible rows.
+  final DrillDownClaim? claimBanner;
+
   /// Test seam: one paged, newest-first fetch of this account's
   /// transactions. Production leaves it null and the panel uses
   /// `ApiService.getAccountTransactions` — widget tests inject a fake
@@ -126,6 +140,8 @@ class AccountTransactionsScreen extends StatefulWidget {
     this.onRenameAccount,
     this.onAlertsChanged,
     this.realtimeEvents,
+    this.createdSinceSeed,
+    this.claimBanner,
     this.transactionsFetcher,
     this.transactionUpdater,
     this.holdingsFetcher,
@@ -190,9 +206,15 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   late double _currentBalance;
   late String _nickname;
 
+  /// Panel-local copy of the opener's claim banner — DISPLAY state the ×
+  /// clears. Fresh per open (the panel dies with its route), so no
+  /// consumed-callback plumbing back to the opener is needed.
+  DrillDownClaim? _claimBanner;
+
   @override
   void initState() {
     super.initState();
+    _claimBanner = widget.claimBanner;
     _currentBalance =
         ((widget.account['current_balance'] as num?)?.toDouble()) ?? 0.0;
     _nickname = (widget.account['nickname'] ?? '').toString();
@@ -1687,6 +1709,15 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   // currency balance, so estimates and header always agree.
                   singleAccountContext: true,
                   runningBalanceAnchor: _currentBalance,
+                  // Largest-move reroute payload: the sync-time seed
+                  // applies once in the tab's initState (fresh State per
+                  // panel open — no one-shot bookkeeping needed) and the
+                  // claim banner restates the bell row's claim above the
+                  // pre-filtered rows.
+                  createdSinceSeed: widget.createdSinceSeed,
+                  claimBanner: _claimBanner,
+                  onClaimBannerDismissed: () =>
+                      setState(() => _claimBanner = null),
                   onTransactionAdded: () {
                     _refetchTransactionsInPlace();
                     _fetchBalanceHistory();
@@ -1866,6 +1897,8 @@ Future<void> showAccountTransactionsPanel(
   Future<void> Function(String, String)? onRenameAccount,
   VoidCallback? onAlertsChanged,
   Stream<RealtimeEvent>? realtimeEvents,
+  DateTime? createdSinceSeed,
+  DrillDownClaim? claimBanner,
 }) {
   final size = MediaQuery.sizeOf(context);
   final isNarrow = size.width < 700;
@@ -1883,6 +1916,8 @@ Future<void> showAccountTransactionsPanel(
       onRenameAccount: onRenameAccount,
       onAlertsChanged: onAlertsChanged,
       realtimeEvents: realtimeEvents,
+      createdSinceSeed: createdSinceSeed,
+      claimBanner: claimBanner,
     ),
   );
 

@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../theme/palette.dart';
 import '../utils/account_category.dart';
 import '../utils/category.dart';
+import '../utils/drill_down_claim.dart';
 import '../utils/percent_format.dart';
 import '../utils/spending_insight.dart';
 import '../utils/theme_colors.dart';
@@ -181,15 +182,20 @@ List<AppNotification> deriveNotifications({
   Map<String, dynamic>? sinceLastLogin,
 
   /// Jump to the Transactions tab pre-filtered to "since [anchor]" when a
-  /// digest row is tapped. Receives the previous-login anchor.
-  void Function(DateTime anchor)? onJumpToTransactions,
+  /// digest row is tapped. Receives the previous-login anchor plus the
+  /// [DrillDownClaim] the row was making ("15 new since Jul 31" / "Net
+  /// worth +$X (+Y%) since `date`") so the destination can restate and
+  /// reconcile it. The claim is optional-positional so a claim-less
+  /// caller (the Overview banner's tear-off) stays assignable.
+  void Function(DateTime anchor, [DrillDownClaim? claim])? onJumpToTransactions,
 
-  /// Account-scoped variant for the digest's largest-move row: jump to the
-  /// Transactions tab filtered to "since [anchor]" AND to the account that
-  /// moved, so the list shows exactly the rows behind the move. Only used
-  /// when the payload carries `account_id`; older-server payloads (no
-  /// account_id) fall back to the date-only [onJumpToTransactions] jump.
-  void Function(DateTime anchor, String accountId)? onJumpToAccountTransactions,
+  /// Account-scoped variant for the digest's largest-move row: drill into
+  /// the account that moved, scoped to "since [anchor]", carrying the
+  /// balance-move claim. Only used when the payload carries `account_id`;
+  /// older-server payloads (no account_id) fall back to the date-only
+  /// [onJumpToTransactions] jump.
+  void Function(DateTime anchor, String accountId, [DrillDownClaim? claim])?
+  onJumpToAccountTransactions,
 
   /// The user's reporting currency, and the factor that takes a USD-stored
   /// figure into it (1.0 for USD, the USD/MXN rate for MXN) — same pair the
@@ -418,6 +424,9 @@ List<AppNotification> deriveNotifications({
           // then" slice this row is describing, immune to bank-posted
           // dates that predate the anchor. A row whose prior date doesn't
           // parse stays non-tappable rather than jumping to a wrong slice.
+          // The jump carries this row's CLAIM (the USD delta + pct, anchor
+          // = the prior snapshot) so the destination restates it and
+          // reconciles it against the rows actually shown.
           final priorDt = DateTime.tryParse(prior['date']?.toString() ?? '');
           out.add(
             AppNotification(
@@ -434,7 +443,14 @@ List<AppNotification> deriveNotifications({
               detail: detail,
               onTap: (onJumpToTransactions == null || priorDt == null)
                   ? null
-                  : () => onJumpToTransactions(priorDt),
+                  : () => onJumpToTransactions(
+                      priorDt,
+                      BalanceMoveClaim(
+                        deltaUsd: delta,
+                        pct: pct,
+                        anchor: priorDt,
+                      ),
+                    ),
             ),
           );
         }
@@ -466,9 +482,14 @@ List<AppNotification> deriveNotifications({
           accent: BrandPalette.info(brightness),
           title: l.lwSinceNewTransactions(newTx),
           detail: l.lwNotifSinceVisitDetail(anchorStr),
+          // Carries the count claim ("N new since <date>") so the landing
+          // tab restates exactly what this row promised.
           onTap: onJumpToTransactions == null
               ? null
-              : () => onJumpToTransactions(sinceAnchor),
+              : () => onJumpToTransactions(
+                  sinceAnchor,
+                  NewSinceCountClaim(count: newTx, anchor: sinceAnchor),
+                ),
         ),
       );
     }
@@ -490,11 +511,17 @@ List<AppNotification> deriveNotifications({
         final signed =
             '${up ? '+' : '−'}${money(deltaUsd.abs() * conversionFactor, targetCurrency)}';
         // Account-scoped drill-down when the payload carries account_id
-        // (additive field): the tap filters to the moved account AND the
-        // since-anchor sync-time slice. An older server's payload has no
-        // account_id, so the row degrades to the unscoped since-jump
-        // rather than losing its tap.
+        // (additive field): the tap drills into the moved account scoped
+        // to the since-anchor sync-time slice, carrying this row's
+        // balance-move claim so the destination reconciles it. An older
+        // server's payload has no account_id, so the row degrades to the
+        // unscoped since-jump (same claim) rather than losing its tap.
         final accountId = (move['account_id'] ?? '').toString();
+        final claim = BalanceMoveClaim(
+          deltaUsd: deltaUsd,
+          anchor: sinceAnchor,
+          accountName: account,
+        );
         out.add(
           AppNotification(
             id: 'since_move:$sinceAnchorIso',
@@ -506,10 +533,11 @@ List<AppNotification> deriveNotifications({
             title: l.lwSinceLargestMove(account, signed),
             detail: l.lwNotifSinceVisitDetail(anchorStr),
             onTap: (accountId.isNotEmpty && onJumpToAccountTransactions != null)
-                ? () => onJumpToAccountTransactions(sinceAnchor, accountId)
+                ? () =>
+                      onJumpToAccountTransactions(sinceAnchor, accountId, claim)
                 : (onJumpToTransactions == null
                       ? null
-                      : () => onJumpToTransactions(sinceAnchor)),
+                      : () => onJumpToTransactions(sinceAnchor, claim)),
           ),
         );
       }

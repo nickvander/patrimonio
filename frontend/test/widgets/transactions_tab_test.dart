@@ -904,10 +904,34 @@ void main() {
     );
 
     testWidgets(
-      'a date-only seed (chart month tap) leaves category state untouched',
+      'a date-only jump (chart month tap) starts from a clean context: no '
+      'category chip materializes, and a PRE-EXISTING category filter from '
+      'an earlier journey is reset',
       (tester) async {
         _setViewSize(tester, const Size(1200, 900));
         var dateConsumed = 0, catConsumed = 0;
+        // Journey 1: a category-seeded drill-down lands (apply + consume).
+        await tester.pumpWidget(
+          _unboundedHost(
+            _tab(
+              fixture(),
+              categorySeed: 'Gas & electric',
+              onCategorySeedConsumed: () => catConsumed++,
+              onDateSeedConsumed: () => dateConsumed++,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.widgetWithText(InputChip, 'Gas & electric'),
+          findsOneWidget,
+        );
+        expect((dateConsumed, catConsumed), (0, 1));
+
+        // Journey 2: a date-only jump arrives (the dashboard helper has
+        // nulled the consumed category copy and set only the window).
+        // Fresh-context rule: the stale category chip is GONE — only the
+        // month window is active, so both July rows show.
         await tester.pumpWidget(
           _unboundedHost(
             _tab(
@@ -919,14 +943,12 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-
-        // Date window applied; no category filter materialized.
         expect(find.text('Row gas-jul'), findsOneWidget);
         expect(find.text('Row food-jul'), findsOneWidget);
         expect(find.text('Row gas-jun'), findsNothing);
         expect(find.widgetWithText(InputChip, 'Jul 1–Jul 31'), findsOneWidget);
         expect(find.widgetWithText(InputChip, 'Gas & electric'), findsNothing);
-        expect((dateConsumed, catConsumed), (1, 0));
+        expect((dateConsumed, catConsumed), (1, 1));
       },
     );
   });

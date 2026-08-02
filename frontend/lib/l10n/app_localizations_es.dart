@@ -250,6 +250,40 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String txClaimNewSince(int count, String date) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count movimientos nuevos desde $date',
+      one: '1 movimiento nuevo desde $date',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String txClaimNetWorthMove(String amount, String date, String percent) {
+    return 'El patrimonio cambió $amount ($percent) desde $date';
+  }
+
+  @override
+  String txClaimAccountMove(String account, String amount, String date) {
+    return '$account cambió $amount desde $date';
+  }
+
+  @override
+  String txClaimReconciliation(String amount, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count movimientos sincronizados explican $amount de este cambio; el resto se movió sin actividad sincronizada (transferencias o pendientes).',
+      one:
+          '1 movimiento sincronizado explica $amount de este cambio; el resto se movió sin actividad sincronizada (transferencias o pendientes).',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get txEmptyTitle => 'Aún no hay movimientos';
 
   @override

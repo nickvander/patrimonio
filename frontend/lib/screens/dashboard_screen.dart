@@ -24,10 +24,12 @@ import '../theme/buttons.dart';
 import '../theme/palette.dart';
 import '../theme/typography.dart';
 import '../utils/account_category.dart';
+import '../utils/account_lookup.dart';
 import '../utils/app_locale.dart';
 import '../utils/bar_scroll.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
+import '../utils/drill_down_claim.dart';
 import '../utils/import_staleness.dart';
 import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
@@ -269,19 +271,23 @@ class _DashboardScreenState extends State<DashboardScreen>
   Map<String, ImportStaleSnooze> _importStaleSnoozes = {};
   Set<String> _importStaleMuted = {};
   List<dynamic>? _fxTransfers;
-  // Pending date-window seed from a chart-bar tap. When non-null, the
-  // TransactionsTab seeds its filters with a custom date range covering
-  // the picked month, then clears the override so manual filter edits
-  // aren't overwritten on the next dashboard rebuild.
+  // Pending jump payload for the Transactions tab. Every field below is
+  // assigned on EVERY programmatic jump by the single _jumpToTransactions
+  // helper (unnamed dimensions become null), so no journey can inherit a
+  // stale seed from a previous one; the tab consumes each channel once
+  // (per-channel consumed callbacks null the copies here) and resets its
+  // own context on arrival.
+  //
+  // Date-window seed from a chart-bar tap: the TransactionsTab seeds its
+  // filters with a custom date range covering the picked month.
   ({DateTime start, DateTime end})? _txDateSeed;
-  // Pending category seed from a bell spending-spike tap — the PRETTIFIED
-  // category label the row displayed. Same one-shot contract as
-  // _txDateSeed; the two travel together so the spike drill-down lands on
-  // "that category, that month" in a single filter application.
+  // Category seed from a bell spending-spike tap — the PRETTIFIED
+  // category label the row displayed. Travels with _txDateSeed so the
+  // spike drill-down lands on "that category, that month" in a single
+  // filter application.
   String? _txCategorySeed;
-  // Pending account seed from the bell's largest-move tap. One-shot,
-  // mirrors _txCategorySeed; travels with _txDateSeed so the drill-down
-  // lands on "that account, that window" in one filter application.
+  // Account seed for the Transactions-tab FALLBACK of the largest-move
+  // drill-down (the primary path opens the account panel instead).
   String? _txAccountSeed;
   // Pending sync-time seed from a bell since-visit row. The RAW anchor
   // instant (previous_login_at / prior snapshot) — never date-truncated:
@@ -290,12 +296,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   // TxFilters.createdSince, filtering by when the sync PRODUCED each row
   // rather than the bank-posted date (which can precede the anchor).
   DateTime? _txCreatedSinceSeed;
-  // Spike-comparison banner payload for the Transactions tab. DISPLAY
-  // state, not a one-shot seed: cleared only on user dismiss or when a
-  // newer spike drill-down replaces it. Visibility is gated inside the
-  // tab by the seeded category filter still being active, so leaving it
-  // set after the user clears filters is inert.
-  SpendingSpikeInsight? _txSpikeBanner;
+  // Drill-down claim banner payload for the Transactions tab. DISPLAY
+  // state, not a one-shot seed: cleared on user dismiss and REPLACED
+  // (with the new claim, or null) by every _jumpToTransactions call, so a
+  // stale claim can never resurrect on a later journey. Visibility is
+  // additionally gated inside the tab by the jump's seeded filter still
+  // being active, so leaving it set after the user clears filters is
+  // inert.
+  DrillDownClaim? _txClaimBanner;
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
   // Active section: an index into [_destinations]. Replaces the old
@@ -333,8 +341,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   // (failure) or zero income simply hides the Overview dividends tile.
   Map<String, dynamic>? _portfolioDividends;
   // Cmd-K deep-link search overrides — set by the palette callbacks so
-  // the target tab pre-filters to the picked row. They're cleared on
-  // any user-driven search change in the target widget.
+  // the target tab pre-filters to the picked row. The transactions copy
+  // is nulled by the tab's onSearchOverrideConsumed once applied (so a
+  // repeat identical jump is a detectable null→value transition); the
+  // portfolio copy is cleared on user-driven search changes in its
+  // target widget.
   String? _portfolioSearchOverride;
   String? _transactionsSearchOverride;
   // Cmd-K row highlight target. Cleared automatically ~2s after being
@@ -959,25 +970,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           icon: Icons.receipt_outlined,
           accent: context.warning,
-          onSelected: () {
-            setState(() {
-              _transactionsSearchOverride = desc;
-              _highlightedTxId = id;
-            });
-            _goToNav(NavId.transactions);
-            // Clear the pulse after ~2.4s so the row holds for ~1.3s after
-            // the 550ms fade-in completes, then takes 550ms to fade back
-            // out. Subsequent palette picks can pulse fresh because we
-            // gate on the id being the one we just set.
-            if (id != null) {
-              Future.delayed(const Duration(milliseconds: 2400), () {
-                if (!mounted) return;
-                if (_highlightedTxId == id) {
-                  setState(() => _highlightedTxId = null);
-                }
-              });
-            }
-          },
+          onSelected: () =>
+              _jumpToTransactions(search: desc, highlightTxId: id),
         ),
       );
     }
@@ -2812,6 +2806,47 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  /// The ONE programmatic jump to the Transactions tab. Every call site
+  /// (palette row, spike sheet CTA, bell rows, chart month tap,
+  /// subscription/merchant taps, loan payment tap) goes through here,
+  /// naming only its own dimensions — and every field is assigned on
+  /// every call (unnamed ⇒ null) in a single setState, so no journey can
+  /// inherit a stale seed, search override, highlight, or claim banner
+  /// from a previous one. The tab pairs this with its own fresh-context
+  /// reset on jump arrival.
+  void _jumpToTransactions({
+    String? search,
+    String? highlightTxId,
+    ({DateTime start, DateTime end})? window,
+    String? category,
+    String? accountId,
+    DateTime? createdSince,
+    DrillDownClaim? claim,
+  }) {
+    setState(() {
+      _transactionsSearchOverride = search;
+      _highlightedTxId = highlightTxId;
+      _txDateSeed = window;
+      _txCategorySeed = category;
+      _txAccountSeed = accountId;
+      _txCreatedSinceSeed = createdSince;
+      _txClaimBanner = claim;
+    });
+    _goToNav(NavId.transactions);
+    // Cmd-K-style highlight pulse: self-clears after ~2.4s so the row
+    // holds for ~1.3s after the 550ms fade-in completes, then takes
+    // 550ms to fade back out. Gated on the id still being the one we
+    // just set so a newer pick can pulse fresh.
+    if (highlightTxId != null) {
+      Future.delayed(const Duration(milliseconds: 2400), () {
+        if (!mounted) return;
+        if (_highlightedTxId == highlightTxId) {
+          setState(() => _highlightedTxId = null);
+        }
+      });
+    }
+  }
+
   /// Seed the transactions sync-time filter with [anchor] and jump to the
   /// Transactions tab. Shared by the since-last-visit banner and the
   /// bell's digest rows, so both drill into exactly the rows they're
@@ -2825,20 +2860,66 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// timezones (7:59pm Jul 31 in Mexico City seeded Aug 1). Passing the
   /// raw instant through moots both.
   ///
-  /// [accountId] additionally scopes the jump to one account (the bell's
-  /// largest-move row, whose payload names the account that moved). The
-  /// optional positional keeps ONE method tear-off-compatible with both
-  /// callback shapes — `void Function(DateTime)` (banner + digest rows)
-  /// and `void Function(DateTime, String)` (the account-scoped row) — so
-  /// no adapter lambdas at the three call sites.
-  void _jumpToTransactionsSince(DateTime anchor, [String? accountId]) {
-    setState(() {
-      _txCreatedSinceSeed = anchor;
-      if (accountId != null && accountId.isNotEmpty) {
-        _txAccountSeed = accountId;
-      }
-    });
-    _goToNav(NavId.transactions);
+  /// The optional positional [claim] keeps ONE method tear-off-compatible
+  /// with both callback shapes — `void Function(DateTime)` (the Overview
+  /// banner) and `void Function(DateTime, [DrillDownClaim?])` (the bell's
+  /// net-worth + digest rows, which carry their claim) — so no adapter
+  /// lambdas at the call sites.
+  void _jumpToTransactionsSince(DateTime anchor, [DrillDownClaim? claim]) {
+    _jumpToTransactions(createdSince: anchor, claim: claim);
+  }
+
+  /// Bell largest-move tap → the moved account's own panel, seeded to the
+  /// since-anchor slice and carrying the row's balance-move claim. The
+  /// panel's balance chart is the primary evidence for a balance claim,
+  /// and a fresh TransactionsTab per panel open makes the journey
+  /// inherently stacking-free. When the account id can't be resolved from
+  /// the overview (e.g. archived since the payload was produced), degrade
+  /// to the previous behavior: the Transactions tab scoped to
+  /// account + since-anchor, same claim.
+  void _openAccountMovePanel(
+    DateTime anchor,
+    String accountId, [
+    DrillDownClaim? claim,
+  ]) {
+    routeAccountMoveJump(
+      accounts: (_overview?['accounts'] as List?) ?? const [],
+      accountId: accountId,
+      fallback: () => _jumpToTransactions(
+        accountId: accountId,
+        createdSince: anchor,
+        claim: claim,
+      ),
+      openPanel: (account) {
+        final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
+        final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
+        showAccountTransactionsPanel(
+          context,
+          account: account,
+          allAccounts: (_overview?['accounts'] as List?) ?? const [],
+          conversionFactor: conversionFactor,
+          currencyFormat: moneyFormat(_targetCurrency),
+          targetCurrency: _targetCurrency,
+          usdMxnRate: fxRate,
+          createdSinceSeed: anchor,
+          claimBanner: claim,
+          onBalanceUpdate: (id, bal) async {
+            try {
+              await _apiService.updateAccountBalance(id, bal);
+              _loadAllData(silent: true);
+            } catch (_) {}
+          },
+          onRenameAccount: (id, nickname) async {
+            try {
+              await _apiService.renameAccount(id, nickname);
+              _loadAllData(silent: true);
+            } catch (_) {}
+          },
+          onAlertsChanged: _reloadAccountAlerts,
+          realtimeEvents: _realtime.events,
+        );
+      },
+    );
   }
 
   /// Bell spending-spike tap → the insight detail sheet (context first;
@@ -2864,13 +2945,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         onSeeTransactions: () {
           // The P0 seeding verbatim — a malformed/missing recent_month
           // degrades to a category-only filter via monthWindow's null —
-          // plus the comparison-banner payload for the landing tab.
-          setState(() {
-            _txCategorySeed = insight.categoryLabel;
-            _txDateSeed = monthWindow(insight.recentMonth);
-            _txSpikeBanner = insight;
-          });
-          _goToNav(NavId.transactions);
+          // plus the spike-claim banner payload for the landing tab.
+          _jumpToTransactions(
+            category: insight.categoryLabel,
+            window: monthWindow(insight.recentMonth),
+            claim: SpikeClaim(insight),
+          );
         },
       );
     });
@@ -4513,16 +4593,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                 // first); its "See all transactions" CTA performs the
                 // category+month drill-down.
                 onSpendingSpikeTap: _openSpendingSpikeSheet,
-                // Largest-move rows carrying account_id scope the jump to
-                // the moved account; the optional-positional tear-off
-                // also serves the anchor-only sites below.
-                onJumpToAccountTransactions: _jumpToTransactionsSince,
+                // Largest-move rows carrying account_id open the moved
+                // account's own panel (seed + claim banner inside),
+                // falling back to the Transactions tab when the id can't
+                // be resolved (archived account).
+                onJumpToAccountTransactions: _openAccountMovePanel,
                 // Price-hike rows reuse the SubscriptionsCard merchant
                 // jump: search seeded so the charge history is adjacent.
-                onJumpToMerchant: (m) {
-                  setState(() => _transactionsSearchOverride = m);
-                  _goToNav(NavId.transactions);
-                },
+                onJumpToMerchant: (m) => _jumpToTransactions(search: m),
                 archivedAccounts: _archivedAccounts ?? const [],
                 onJumpToClosedAccounts: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const HiddenItemsScreen()),
@@ -5795,6 +5873,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         // wants. Null (older backend) keeps today's loaded-count fallback.
         totalCount: _txTotal,
         searchOverride: _transactionsSearchOverride,
+        // Nulling the copy here (not on user edits) makes a repeat
+        // identical merchant/palette jump a null→value transition the
+        // tab can detect — the repeat-tap no-op fix.
+        onSearchOverrideConsumed: () =>
+            setState(() => _transactionsSearchOverride = null),
         highlightedTxId: _highlightedTxId,
         dateSeed: _txDateSeed,
         onDateSeedConsumed: () => setState(() => _txDateSeed = null),
@@ -5805,8 +5888,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         createdSinceSeed: _txCreatedSinceSeed,
         onCreatedSinceSeedConsumed: () =>
             setState(() => _txCreatedSinceSeed = null),
-        spikeBanner: _txSpikeBanner,
-        onSpikeBannerDismissed: () => setState(() => _txSpikeBanner = null),
+        claimBanner: _txClaimBanner,
+        onClaimBannerDismissed: () => setState(() => _txClaimBanner = null),
         fxTransfers: _fxTransfers ?? const [],
         onConfirmFxTransfer: (id) async {
           try {
@@ -6006,8 +6089,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               onMonthSelected: (monthIso) {
                 final window = monthWindow(monthIso);
                 if (window == null) return;
-                setState(() => _txDateSeed = window);
-                _goToNav(NavId.transactions);
+                _jumpToTransactions(window: window);
               },
             ),
             SizedBox(height: gap),
@@ -6042,10 +6124,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               usdMxnRate: fxRate,
               currencyFormat: currencyFormat,
               targetCurrency: _targetCurrency,
-              onTapMerchant: (m) {
-                setState(() => _transactionsSearchOverride = m);
-                _goToNav(NavId.transactions);
-              },
+              onTapMerchant: (m) => _jumpToTransactions(search: m),
               onIgnoreMerchant: (m) async {
                 try {
                   await _apiService.ignoreSubscription(m);
@@ -6750,19 +6829,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         onChanged: () => _loadAllData(silent: true),
         // Tap a linked loan payment → jump to its bank transaction, reusing
         // the command-palette deep-link (search seed + highlight pulse).
-        onOpenTransaction: (txId, description) {
-          setState(() {
-            _transactionsSearchOverride = description;
-            _highlightedTxId = txId;
-          });
-          _goToNav(NavId.transactions);
-          Future.delayed(const Duration(milliseconds: 2400), () {
-            if (!mounted) return;
-            if (_highlightedTxId == txId) {
-              setState(() => _highlightedTxId = null);
-            }
-          });
-        },
+        onOpenTransaction: (txId, description) =>
+            _jumpToTransactions(search: description, highlightTxId: txId),
       ),
       // LendingTab owns its scrolling (RefreshIndicator → ListView), so it
       // must NOT be wrapped in the default SingleChildScrollView — a
