@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:http/http.dart' as http;
 import '../utils/app_locale.dart';
 import '../utils/projection_seed.dart';
@@ -97,7 +98,18 @@ class ApiService {
   /// Shared credentialed HTTP client. `withCredentials` is required for
   /// the browser to send (and accept) the session cookie on cross-origin
   /// XHRs in development, and is harmless in same-origin production.
-  static final http.Client _client = createApiClient();
+  static final http.Client _defaultClient = createApiClient();
+
+  /// Test seam — when non-null, every request goes through this client
+  /// instead of [_defaultClient], so the core plumbing (verb wrappers,
+  /// CSRF header injection, 401 handling, `_errorFromBody`, cache
+  /// interaction) can be unit-tested with a fake client and zero network
+  /// I/O. Null in production (the same override-not-DI pattern as the
+  /// screens' `fetch*Override` load seams); tests reset it in tearDown.
+  @visibleForTesting
+  static http.Client? debugHttpClientOverride;
+
+  static http.Client get _client => debugHttpClientOverride ?? _defaultClient;
 
   /// X-Requested-With sentinel. The backend's `require_csrf_header`
   /// middleware rejects mutating requests without this header — a
