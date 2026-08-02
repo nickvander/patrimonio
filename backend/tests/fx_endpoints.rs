@@ -545,3 +545,200 @@ async fn fx_history_days_window_filters_old_points() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
 }
+
+/// Insert an exchange_rates row with an explicit source (the plain
+/// `seed_rate` always writes 'api').
+async fn seed_rate_with_source(pool: &PgPool, rate: &str, days_ago: i64, source: &str) {
+    sqlx::query(
+        "INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at, source) \
+         VALUES ('USD', 'MXN', $1::numeric, NOW() - $2 * INTERVAL '1 day', $3)",
+    )
+    .bind(rate)
+    .bind(days_ago)
+    .bind(source)
+    .execute(pool)
+    .await
+    .expect("seed exchange rate with source");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fx_manual_rate_posts_and_rejects_bad_input() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, _uid) = bootstrap(&app, &pool).await;
+
+    // Unauthenticated POST is refused before it can touch the table.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/fx/manual",
+            Some(&serde_json::json!({"base": "USD", "target": "MXN", "rate": 16.5})),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // Owner posts a manual override → stored with source='manual'.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/fx/manual",
+            Some(&serde_json::json!({"base": "usd", "target": "mxn", "rate": 16.5})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "manual rate should store");
+    let json = body_json(res.into_body()).await;
+    assert_eq!(json["base"], "USD", "pair is normalized to uppercase");
+    assert_eq!(json["target"], "MXN");
+    assert_eq!(json["source"], "manual");
+    assert_eq!(json["rate"].as_f64(), Some(16.5));
+
+    let (stored_rate, stored_source): (rust_decimal::Decimal, String) =
+        sqlx::query_as("SELECT rate, source FROM exchange_rates")
+            .fetch_one(&pool)
+            .await
+            .expect("one stored rate row");
+    assert_eq!(stored_rate, dec!(16.5), "Decimal stored exactly");
+    assert_eq!(stored_source, "manual");
+
+    // Non-positive / non-finite rates must be rejected before they can
+    // poison the table (a stored 0 breaks every division downstream).
+    for bad in [0.0, -1.0] {
+        let res = app
+            .clone()
+            .oneshot(req(
+                Method::POST,
+                "/api/fx/manual",
+                Some(&serde_json::json!({"base": "USD", "target": "MXN", "rate": bad})),
+                Some(&cookie),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            res.status(),
+            StatusCode::BAD_REQUEST,
+            "rate {bad} must be rejected"
+        );
+    }
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM exchange_rates")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1, "rejected rates must not persist");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fx_latest_prefers_manual_over_fresher_api_row() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, _uid) = bootstrap(&app, &pool).await;
+
+    // A manual override posted through the real endpoint…
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/fx/manual",
+            Some(&serde_json::json!({"base": "USD", "target": "MXN", "rate": 16.5})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // …must outrank an 'api' row recorded LATER (a corrected rate wins even
+    // when an automated fetch stored something newer). NOW() + a bit via
+    // days_ago = 0 lands after the manual row's NOW().
+    seed_rate(&pool, "17.80", 0).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/fx/latest/USD/MXN",
+            None,
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = body_json(res.into_body()).await;
+    assert_eq!(
+        json["rate"].as_f64(),
+        Some(16.5),
+        "manual override must win over the fresher api row: {json}"
+    );
+    assert_eq!(json["source"], "manual", "source is reported as manual");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fx_conversion_ladder_prefers_manual_and_skips_zero_rows() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, _uid) = bootstrap(&app, &pool).await;
+
+    // `latest_usd_mxn_rate_for_write` runs LATEST_USD_MXN_RATE_SQL — the one
+    // ladder every MXN→USD `balance_usd` writer (imports, sync, snapshots)
+    // converts through — so asserting on it pins the conversion behavior for
+    // all of them at once.
+    use patrimonio::services::exchange_rate::latest_usd_mxn_rate_for_write;
+
+    // 1. Empty table → the hard fallback (20.0), never zero.
+    assert_eq!(
+        latest_usd_mxn_rate_for_write(&pool).await,
+        dec!(20.0),
+        "no stored rates falls back to the sentinel"
+    );
+
+    // 2. Only an api row → that rate.
+    seed_rate(&pool, "17.80", 0).await;
+    assert_eq!(latest_usd_mxn_rate_for_write(&pool).await, dec!(17.80));
+
+    // 3. A manual override recorded EARLIER than the api row still wins —
+    // rung 1 of the ladder is 'manual', not 'freshest'.
+    seed_rate_with_source(&pool, "16.50", 2, "manual").await;
+    assert_eq!(
+        latest_usd_mxn_rate_for_write(&pool).await,
+        dec!(16.5),
+        "older manual row must outrank the fresher api row"
+    );
+
+    // 4. A zero manual row must be SKIPPED (rate > 0 guard), not selected —
+    // a divide-by-zero-shaped rate falls through to the next rung.
+    sqlx::query("DELETE FROM exchange_rates WHERE source = 'manual'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    seed_rate_with_source(&pool, "0", 0, "manual").await;
+    assert_eq!(
+        latest_usd_mxn_rate_for_write(&pool).await,
+        dec!(17.80),
+        "zero manual row falls through to the api rate"
+    );
+
+    // And the endpoint-visible conversion agrees: posting a fresh manual
+    // rate re-points the ladder immediately.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/fx/manual",
+            Some(&serde_json::json!({"base": "USD", "target": "MXN", "rate": 16.0})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(latest_usd_mxn_rate_for_write(&pool).await, dec!(16.0));
+}
