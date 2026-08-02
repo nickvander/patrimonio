@@ -781,6 +781,14 @@ class NotificationsBell extends StatelessWidget {
     final tooltip = unseen.isEmpty
         ? l.lwNotifTooltipNone
         : l.lwNotifTooltipCount(unseen.length);
+    // Screen-reader name for the bell. Tooltip only fills the semantics
+    // `tooltip` attribute, so without an explicit label the button's
+    // accessible name was whatever text got absorbed from inside — the raw
+    // badge digit ("2"). Name the button properly, with the unread count
+    // when nonzero.
+    final semanticsLabel = unseen.isEmpty
+        ? l.lwNotifTooltipNone
+        : l.lwNotifBellUnread(unseen.length);
 
     // Phones open a full-width bottom sheet. A dropdown anchored to a
     // top-corner bell was cramped on a narrow screen — clipped rows and an
@@ -790,14 +798,14 @@ class NotificationsBell extends StatelessWidget {
     if (isNarrow) {
       return IconButton(
         tooltip: tooltip,
-        icon: _bellIcon(context, unseen.length),
+        icon: _bellIcon(context, unseen.length, semanticsLabel),
         onPressed: () => _openSheet(context, l, unseen),
       );
     }
 
     return PopupMenuButton<void>(
       tooltip: tooltip,
-      icon: _bellIcon(context, unseen.length),
+      icon: _bellIcon(context, unseen.length, semanticsLabel),
       // Anchor the panel BELOW the bell (i.e. below the app bar). The
       // default `over` position opened the menu on top of the button,
       // covering the app bar and looking detached from the bell that
@@ -848,7 +856,22 @@ class NotificationsBell extends StatelessWidget {
   /// the desktop dropdown trigger. A numeric count (not just a dot) so
   /// "3 things need attention" is visible without opening the panel;
   /// capped at 9+ to keep the pill inside the 24dp icon box.
-  Widget _bellIcon(BuildContext context, int unseenCount) {
+  ///
+  /// [semanticsLabel] names the enclosing button for screen readers
+  /// (absorbed into the IconButton's own button node); the visual badge
+  /// digit is excluded so it can't leak in as the accessible name.
+  Widget _bellIcon(
+    BuildContext context,
+    int unseenCount,
+    String semanticsLabel,
+  ) {
+    return Semantics(
+      label: semanticsLabel,
+      child: ExcludeSemantics(child: _bellGlyph(context, unseenCount)),
+    );
+  }
+
+  Widget _bellGlyph(BuildContext context, int unseenCount) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -933,14 +956,25 @@ class NotificationsBell extends StatelessWidget {
                       itemBuilder: (_, i) {
                         final n = notifications[i];
                         final isUnseen = !dismissedIds.contains(n.id);
-                        return InkWell(
-                          onTap: n.onTap == null
-                              ? null
-                              : () {
-                                  Navigator.of(sheetCtx).pop();
-                                  n.onTap!();
-                                },
-                          child: _row(context, n, isUnseen),
+                        // MergeSemantics + Semantics(button) so each row
+                        // announces as ONE tappable "title, detail" node —
+                        // the same exposure the desktop popup gets for free
+                        // from PopupMenuItem (canonical row shape, see
+                        // accounts_list_widget.dart). A bare InkWell merged
+                        // the text but never claimed to be a button.
+                        return MergeSemantics(
+                          child: Semantics(
+                            button: true,
+                            child: InkWell(
+                              onTap: n.onTap == null
+                                  ? null
+                                  : () {
+                                      Navigator.of(sheetCtx).pop();
+                                      n.onTap!();
+                                    },
+                              child: _row(context, n, isUnseen),
+                            ),
+                          ),
                         );
                       },
                     ),

@@ -5016,6 +5016,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String lwNotifBellUnread(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Notifications, $count unread alerts',
+      one: 'Notifications, 1 unread alert',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get lwNotifAllClear => 'All clear';
 
   @override

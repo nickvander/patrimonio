@@ -8040,6 +8040,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, one{{count} alert} other{{count} alerts}}'**
   String lwNotifTooltipCount(int count);
 
+  /// Screen-reader label for the notifications bell button when there are unread alerts.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Notifications, 1 unread alert} other{Notifications, {count} unread alerts}}'**
+  String lwNotifBellUnread(int count);
+
   /// No description provided for @lwNotifAllClear.
   ///
   /// In en, this message translates to:

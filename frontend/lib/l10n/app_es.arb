@@ -1631,6 +1631,7 @@
   "lwNotifAccountArchivedDetail": "{account} ya no está en {institution} — se archivó. Toca para restaurar o eliminar.",
   "lwNotifTooltipNone": "Notificaciones",
   "lwNotifTooltipCount": "{count, plural, one{{count} alerta} other{{count} alertas}}",
+  "lwNotifBellUnread": "{count, plural, one{Notificaciones, 1 alerta sin leer} other{Notificaciones, {count} alertas sin leer}}",
   "lwNotifAllClear": "Todo en orden",
   "lwNotifNoAlerts": "No hay alertas por ahora.",
   "lwNotifHeader": "Notificaciones",

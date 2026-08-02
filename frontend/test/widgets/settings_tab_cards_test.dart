@@ -85,6 +85,75 @@ void main() {
       expect(find.text('Language'), findsOneWidget);
     });
 
+    testWidgets('a11y: language dialog options expose their labels and '
+        'selected state (en active)', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(_host(const SettingsPreferencesCard()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Language'));
+      await tester.pumpAndSettle();
+
+      // RadioListTile already merges the autonym title with the radio's
+      // checked state into one tappable node — pinned here so a refactor
+      // away from RadioListTile can't silently regress the exposure the
+      // Playwright walkthrough flagged. (`.last`: the card subtitle also
+      // says 'English' in en.)
+      expect(
+        tester.getSemantics(find.text('English').last),
+        isSemantics(
+          label: 'English',
+          hasTapAction: true,
+          hasCheckedState: true,
+          isChecked: true,
+          isInMutuallyExclusiveGroup: true,
+        ),
+      );
+      expect(
+        tester.getSemantics(find.text('Español (México)').last),
+        isSemantics(
+          label: 'Español (México)',
+          hasTapAction: true,
+          hasCheckedState: true,
+          isChecked: false,
+          isInMutuallyExclusiveGroup: true,
+        ),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a11y: language dialog selected state follows the active '
+        'locale (es active)', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(const SettingsPreferencesCard(), locale: const Locale('es')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Idioma'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(find.text('Español (México)').last),
+        isSemantics(
+          label: 'Español (México)',
+          hasCheckedState: true,
+          isChecked: true,
+          isInMutuallyExclusiveGroup: true,
+        ),
+      );
+      expect(
+        tester.getSemantics(find.text('English').last),
+        isSemantics(
+          label: 'English',
+          hasCheckedState: true,
+          isChecked: false,
+          isInMutuallyExclusiveGroup: true,
+        ),
+      );
+      handle.dispose();
+    });
+
     testWidgets('theme selector tracks themeModeNotifier (e.g. the wide '
         'AppBar cycle button)', (tester) async {
       final original = themeModeNotifier.value;
