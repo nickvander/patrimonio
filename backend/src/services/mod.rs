@@ -10,6 +10,7 @@ pub mod crypto_price;
 pub mod dividends;
 pub mod encryption;
 pub mod exchange_rate;
+pub mod fx;
 pub mod fx_transfer_link;
 pub mod holdings;
 pub mod loan_match;

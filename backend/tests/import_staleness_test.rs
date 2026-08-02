@@ -106,7 +106,7 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .nest("/api/settings", patrimonio::api::settings::router())
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_owner,
+            patrimonio::api::middleware::require_owner,
         ));
     // Notifications sit outside require_owner in main.rs (a read-only
     // member must be able to read their own inbox) — mirror that, since
@@ -121,10 +121,10 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         .merge(account_mgmt)
         .layer(from_fn_with_state(
             state.clone(),
-            patrimonio::api::session::require_auth,
+            patrimonio::api::middleware::require_auth,
         ))
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_csrf_header,
+            patrimonio::api::middleware::require_csrf_header,
         ));
 
     let app = public.merge(protected).with_state(state);

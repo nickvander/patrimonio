@@ -16,11 +16,11 @@ use axum::{
 };
 use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use crate::api::session::{internal, ApiError, AuthContext};
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -454,7 +454,7 @@ async fn upcoming(
     .fetch_optional(&state.db)
     .await
     .map_err(internal)?
-    .unwrap_or(dec!(20.0));
+    .unwrap_or(crate::services::fx::FX_FALLBACK_USD_MXN_DEC);
 
     let mut items = Vec::new();
     for r in &rows {

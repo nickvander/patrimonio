@@ -1,4 +1,4 @@
-use crate::api::session::AuthContext;
+use crate::api::middleware::AuthContext;
 use crate::services::encryption;
 use crate::AppState;
 use axum::{

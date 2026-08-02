@@ -1,4 +1,5 @@
-use crate::api::session::{ApiError, AuthContext};
+use crate::api::error::ApiError;
+use crate::api::middleware::AuthContext;
 use crate::{
     services::tax::{TaxEstimation, TaxService},
     AppState,

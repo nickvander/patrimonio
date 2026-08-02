@@ -11,59 +11,9 @@ use std::time::Duration;
 /// services/sync.rs::SYNC_HTTP_TIMEOUT).
 const FX_HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// Hard fallback when `exchange_rates` holds no usable USD/MXN row. Mirrors
-/// `api::dashboard::FX_FALLBACK_USD_MXN` and the tail of
-/// `services::tax::USD_MXN_ROW_RATE_SQL` — a wrong-ish magnitude beats the
-/// alternative (see [`LATEST_USD_MXN_RATE_SQL`]).
-pub const FX_FALLBACK_USD_MXN: &str = "20.0";
-
-/// SQL scalar: the USD→MXN rate to convert a *present-day* balance with.
-/// Always resolves to a positive number, so a caller can divide by it
-/// unconditionally.
-///
-/// Ladder, matching `api::dashboard::latest_usd_mxn_rate` (the reader every
-/// dashboard endpoint uses) so writes and reads can't disagree:
-///   1. a user-entered `manual` override — a corrected rate must outrank a
-///      bad upstream fetch;
-///   2. else the freshest stored rate;
-///   3. else the hard fallback.
-///
-/// `rate > 0` on both queries: a zero row must be skipped, not selected.
-///
-/// WHY this exists as a shared constant: every `balance_usd` writer used to
-/// inline its own `ORDER BY recorded_at DESC LIMIT 1` and then, when that
-/// came back NULL or zero, fall through to `ELSE <native balance>` — writing
-/// a raw MXN figure into the USD column. A 400,000 MXN account then lands in
-/// net worth as $400,000 instead of ~$22,900, and because the snapshot cron
-/// is `ON CONFLICT DO NOTHING` and the chart carries values forward, that
-/// spike sticks. The fallback rate is off by ~14%; the fallback it replaced
-/// was off by ~1750%.
-pub const LATEST_USD_MXN_RATE_SQL: &str = r#"COALESCE(
-    (SELECT rate FROM exchange_rates
-      WHERE base_currency = 'USD' AND target_currency = 'MXN'
-        AND rate > 0 AND source = 'manual'
-      ORDER BY recorded_at DESC LIMIT 1),
-    (SELECT rate FROM exchange_rates
-      WHERE base_currency = 'USD' AND target_currency = 'MXN'
-        AND rate > 0
-      ORDER BY recorded_at DESC LIMIT 1),
-    20.0
-)"#;
-
-/// Rust-side twin of [`LATEST_USD_MXN_RATE_SQL`], for writers that compute
-/// `balance_usd` in Rust rather than in the INSERT. Implemented by running
-/// the constant itself, so the two can never drift.
-///
-/// Guaranteed positive: callers divide by it without a zero check.
-pub async fn latest_usd_mxn_rate_for_write(db: &PgPool) -> Decimal {
-    let fallback = Decimal::from_str(FX_FALLBACK_USD_MXN).unwrap_or(Decimal::ONE);
-    sqlx::query_scalar::<_, Decimal>(&format!("SELECT {LATEST_USD_MXN_RATE_SQL}"))
-        .fetch_one(db)
-        .await
-        .ok()
-        .filter(|r| *r > Decimal::ZERO)
-        .unwrap_or(fallback)
-}
+// `FX_FALLBACK_USD_MXN`, `LATEST_USD_MXN_RATE_SQL` and
+// `latest_usd_mxn_rate_for_write` moved to `services::fx` — the single
+// owner of the USD↔MXN conversion rules. Import from there.
 
 /// Fetches the latest exchange rate from the free ExchangeRate-API
 /// and stores it in the database + Redis cache.

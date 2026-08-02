@@ -18,7 +18,7 @@ use axum::{
 use serde_json::Value;
 use sqlx::Row;
 
-use crate::api::session::AuthContext;
+use crate::api::middleware::AuthContext;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {

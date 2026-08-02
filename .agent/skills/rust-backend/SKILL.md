@@ -40,8 +40,9 @@ Read these first — they are the recurring, expensive mistakes:
 ## 1. Error handling
 
 - **API handlers: return `Result<T, ApiError>`.** `ApiError` is the hand-written
-  envelope in `src/api/session.rs` (`ApiError::new(status, msg)`, `impl IntoResponse`
+  envelope in `src/api/error.rs` (`ApiError::new(status, msg)`, `impl IntoResponse`
   serializing `{ "error": message }`). This is the one and only error `IntoResponse`.
+  `internal()` lives next to it in the same module.
 - **For 500s use the `internal(e)` helper** — it logs the real error via `tracing::error!`
   and returns a *generic* message. Never leak an internal error string on a 500.
   ```rust
@@ -149,15 +150,18 @@ that comment is in `main.rs`; keep it.
   only for chart display values cast in SQL. `Decimal` serializes as a JSON number
   (`serde-float` feature). Use `dec!(...)`, `.round_dp(2)` for presentation.
 - **USD conversion is a first-class invariant.** The canonical FX rule is the SQL-fragment
-  constants in `services/tax.rs`: `USD_MXN_ROW_RATE_SQL` (latest rate on-or-before the tx date,
+  constants in `services/fx.rs`: `USD_MXN_ROW_RATE_SQL` (latest rate on-or-before the tx date,
   else latest, else hard fallback `20.0`, with a `rate > 0` guard against divide-by-zero→NULL),
   and `AMOUNT_USD_SQL` (convert only when `currency = 'MXN'`; **treat every other currency as
   USD-equivalent, fx = 1** — "trust the native amount"). Applied via
   `CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx`.
 - **Never sum raw amounts across currencies** without the per-row FX conversion — historical
   ~18x error. If you're about to write `SUM(amount)` over mixed-currency rows, stop.
-- **FX rules are duplicated as SQL-string constants** across `tax.rs` and `sync.rs`. They must
-  stay in sync by hand. **Grep for `USD_MXN` before touching any FX code** and update all copies.
+- **`services/fx.rs` is the single owner of the FX rules** — the shared SQL fragments
+  (`USD_MXN_ROW_RATE_SQL`, `AMOUNT_USD_SQL`, `LATEST_USD_MXN_RATE_SQL`) and the hard-fallback
+  constant (`FX_FALLBACK_USD_MXN`, with its `Decimal` twin). Add new FX rules there and import
+  them; **never re-inline a copy at a call site** — the historical FX bugs all started as
+  hand-synced copies drifting apart.
 
 ## 5. Security (these are invariants, not suggestions)
 

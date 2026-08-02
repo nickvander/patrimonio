@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::api::session::AuthContext;
+use crate::api::middleware::AuthContext;
 use crate::AppState;
 
 const DEFAULT_EXPIRY_HOURS: i64 = 72;

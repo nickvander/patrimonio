@@ -115,7 +115,7 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         .nest("/api/accounts", patrimonio::api::accounts::router())
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_owner,
+            patrimonio::api::middleware::require_owner,
         ));
     let account_mgmt =
         Router::new().nest("/api/auth", patrimonio::api::session::protected_router());
@@ -123,10 +123,10 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         .merge(account_mgmt)
         .layer(from_fn_with_state(
             state.clone(),
-            patrimonio::api::session::require_auth,
+            patrimonio::api::middleware::require_auth,
         ))
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_csrf_header,
+            patrimonio::api::middleware::require_csrf_header,
         ));
 
     Some((public.merge(protected).with_state(state), pool, lock))

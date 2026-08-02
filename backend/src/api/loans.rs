@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use tracing::error;
 
-use crate::api::session::AuthContext;
+use crate::api::middleware::AuthContext;
 use crate::services::loan_match;
 use crate::AppState;
 

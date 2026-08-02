@@ -31,7 +31,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::api::session::{internal, ApiError, AuthContext};
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
 use crate::services::notifications::sync_loan_due_notifications;
 use crate::services::staleness::resolve_stale_import_notifications;
 use crate::AppState;

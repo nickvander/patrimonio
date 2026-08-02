@@ -144,7 +144,7 @@ async fn main() -> Result<()> {
                     CROSS JOIN LATERAL (SELECT {rate} AS rate) fx
                     ON CONFLICT (account_id, as_of_date) DO NOTHING
                     "#,
-                    rate = patrimonio::services::exchange_rate::LATEST_USD_MXN_RATE_SQL,
+                    rate = patrimonio::services::fx::LATEST_USD_MXN_RATE_SQL,
                 );
                 // Loud on failure: a silent miss here leaves the net-worth
                 // chart carry-forward-flat for a day with no trace anywhere.
@@ -236,7 +236,7 @@ async fn main() -> Result<()> {
     //     UI needs to render its login screen
     //   - the setup config status (used by the same screen)
     //
-    // Everything else is gated by `session::require_auth`, including
+    // Everything else is gated by `middleware::require_auth`, including
     // the existing Coinbase OAuth handlers — initiating an OAuth link
     // is a sensitive, account-binding operation and must be done by a
     // logged-in user.
@@ -309,7 +309,7 @@ async fn main() -> Result<()> {
         // populated; from_fn applies bottom-up, so this layer runs
         // AFTER the auth layer set up below at the merge point.
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_owner,
+            patrimonio::api::middleware::require_owner,
         ));
 
     let account_mgmt = Router::new()
@@ -359,10 +359,10 @@ async fn main() -> Result<()> {
         // .layer() is the OUTERMOST middleware.
         .layer(from_fn_with_state(
             state.clone(),
-            patrimonio::api::session::require_auth,
+            patrimonio::api::middleware::require_auth,
         ))
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_csrf_header,
+            patrimonio::api::middleware::require_csrf_header,
         ));
 
     let app = public

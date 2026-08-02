@@ -177,7 +177,7 @@ pub(crate) async fn recompute_holding_balance(
     // to the native total when no usable row existed, writing raw MXN into
     // balance_usd.
     let balance_usd = if currency == "MXN" {
-        let rate = crate::services::exchange_rate::latest_usd_mxn_rate_for_write(db).await;
+        let rate = crate::services::fx::latest_usd_mxn_rate_for_write(db).await;
         (total / rate).round_dp(2)
     } else {
         total

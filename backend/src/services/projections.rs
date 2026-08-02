@@ -74,7 +74,7 @@ pub struct ProjectionRequest {
     pub annual_expenses_mxn_portion: Option<f64>,
     /// Current USD→MXN rate. The handler fills this from the latest stored
     /// `exchange_rates` row when the client omits it; the hard fallback
-    /// mirrors `services::tax::USD_MXN_ROW_RATE_SQL`'s 20.0.
+    /// mirrors `services::fx::USD_MXN_ROW_RATE_SQL`'s 20.0.
     #[serde(default)]
     pub usd_mxn_rate: Option<f64>,
     /// Assumed long-run *real* drift of the USD/MXN rate, fraction per year
@@ -129,19 +129,16 @@ impl ProjectionRequest {
             0.0
         }
     }
-    /// Current USD→MXN rate with the house hard fallback (20.0 — the same
-    /// last-resort constant as `USD_MXN_ROW_RATE_SQL` in services::tax).
+    /// Current USD→MXN rate with the house hard fallback
+    /// (`services::fx::FX_FALLBACK_USD_MXN` — the same last-resort constant
+    /// as `USD_MXN_ROW_RATE_SQL`, so the two FX rules can't disagree).
     fn fx_rate_today(&self) -> f64 {
         match self.usd_mxn_rate {
             Some(r) if r.is_finite() && r > 0.0 => r,
-            _ => FALLBACK_USD_MXN_RATE,
+            _ => crate::services::fx::FX_FALLBACK_USD_MXN,
         }
     }
 }
-
-/// Last-resort USD→MXN rate, matching the SQL fallback in
-/// `services::tax::USD_MXN_ROW_RATE_SQL` so the two FX rules can't disagree.
-const FALLBACK_USD_MXN_RATE: f64 = 20.0;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectionPoint {

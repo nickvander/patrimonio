@@ -34,9 +34,11 @@ use csv::WriterBuilder;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::api::session::{internal, ApiError, AuthContext};
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
 use crate::api::tax::resolve_filing_status;
-use crate::services::tax::{TaxService, AMOUNT_USD_SQL, USD_MXN_ROW_RATE_SQL};
+use crate::services::fx::{AMOUNT_USD_SQL, USD_MXN_ROW_RATE_SQL};
+use crate::services::tax::TaxService;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {

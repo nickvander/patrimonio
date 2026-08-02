@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::str::FromStr;
 
-use crate::api::session::{internal, ApiError, AuthContext};
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {

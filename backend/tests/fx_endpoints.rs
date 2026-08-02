@@ -104,7 +104,7 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
     let business = Router::new()
         .nest("/api/fx", patrimonio::api::exchange_rates::router())
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_owner,
+            patrimonio::api::middleware::require_owner,
         ));
     let account_mgmt =
         Router::new().nest("/api/auth", patrimonio::api::session::protected_router());
@@ -112,10 +112,10 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         .merge(account_mgmt)
         .layer(from_fn_with_state(
             state.clone(),
-            patrimonio::api::session::require_auth,
+            patrimonio::api::middleware::require_auth,
         ))
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_csrf_header,
+            patrimonio::api::middleware::require_csrf_header,
         ));
 
     let app = public.merge(protected).with_state(state);
@@ -692,7 +692,7 @@ async fn fx_conversion_ladder_prefers_manual_and_skips_zero_rows() {
     // ladder every MXN→USD `balance_usd` writer (imports, sync, snapshots)
     // converts through — so asserting on it pins the conversion behavior for
     // all of them at once.
-    use patrimonio::services::exchange_rate::latest_usd_mxn_rate_for_write;
+    use patrimonio::services::fx::latest_usd_mxn_rate_for_write;
 
     // 1. Empty table → the hard fallback (20.0), never zero.
     assert_eq!(

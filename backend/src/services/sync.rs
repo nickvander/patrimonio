@@ -1826,5 +1826,5 @@ async fn lookup_usd_fx_rate(db: &PgPool, currency: &str, acquired_at: chrono::Na
     r.and_then(|r| r.try_get::<rust_decimal::Decimal, _>("rate").ok())
         .and_then(|d| d.to_string().parse::<f64>().ok())
         .filter(|v| *v > 0.0)
-        .unwrap_or(20.0) // hard fallback at the ballpark
+        .unwrap_or(crate::services::fx::FX_FALLBACK_USD_MXN) // hard fallback at the ballpark
 }

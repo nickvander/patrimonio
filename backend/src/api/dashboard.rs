@@ -10,8 +10,9 @@ use sqlx::Row;
 use std::collections::HashMap;
 use tracing::error;
 
-use crate::api::session::{internal, ApiError, AuthContext};
-use crate::services::tax::USD_MXN_ROW_RATE_SQL;
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
+use crate::services::fx::{FX_FALLBACK_USD_MXN, USD_MXN_ROW_RATE_SQL};
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -92,10 +93,6 @@ pub(crate) struct FxRateInfo {
     /// True when the rate is MISSING (fallback used) or older than 7 days.
     pub stale: bool,
 }
-
-/// Hard fallback used only when the `exchange_rates` table has no USD/MXN row.
-/// Deliberately flagged `stale` so it can never pass for a live rate.
-pub(crate) const FX_FALLBACK_USD_MXN: f64 = 20.0;
 
 /// Fetch the freshest USD->MXN rate and decide whether it's trustworthy.
 ///
@@ -2090,7 +2087,7 @@ async fn cash_flow_trends(
     //
     // FX is PER ROW: each MXN transaction is divided by the USD→MXN rate in
     // effect on its own date (the shared `USD_MXN_ROW_RATE_SQL` rule from
-    // services::tax — on-or-before-date rate, else latest, else 20.0). This
+    // services::fx — on-or-before-date rate, else latest, else 20.0). This
     // query previously converted up to 24 months of history at the single
     // LATEST rate; USD/MXN moves several percent over a year, so latest-rate
     // conversion systematically skews every historical month's income/spend
@@ -2703,7 +2700,7 @@ async fn emergency_fund(
     //
     // FX is PER ROW: each MXN transaction is divided by the USD→MXN rate in
     // effect on its own date (the shared `USD_MXN_ROW_RATE_SQL` rule from
-    // services::tax — on-or-before-date rate, else latest, else 20.0). This
+    // services::fx — on-or-before-date rate, else latest, else 20.0). This
     // trailing-12-month spend used to divide by the single LATEST rate, so a
     // peso trend skewed the runway's monthly-spend denominator. (The cash
     // numerator above correctly keeps the latest rate — it's a current value.)

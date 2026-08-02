@@ -101,15 +101,15 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
     let business = Router::new()
         .nest("/api/imports", patrimonio::api::imports::router())
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_owner,
+            patrimonio::api::middleware::require_owner,
         ));
     let protected = business
         .layer(from_fn_with_state(
             state.clone(),
-            patrimonio::api::session::require_auth,
+            patrimonio::api::middleware::require_auth,
         ))
         .layer(axum::middleware::from_fn(
-            patrimonio::api::session::require_csrf_header,
+            patrimonio::api::middleware::require_csrf_header,
         ));
 
     let app = public.merge(protected).with_state(state);

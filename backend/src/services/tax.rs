@@ -4,6 +4,8 @@ use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 
+use crate::services::fx::{AMOUNT_MXN_SQL, AMOUNT_USD_SQL, USD_MXN_ROW_RATE_SQL};
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaxBracket {
     #[serde(with = "rust_decimal::serde::float")]
@@ -298,41 +300,9 @@ const INCOME_PREDICATE_SQL: &str = r#"(
     END
 )"#;
 
-/// SQL scalar: the USD→MXN rate in effect on a transaction row's date.
-/// Requires the enclosing query to alias `transactions` as `t`; meant to be
-/// wrapped in `CROSS JOIN LATERAL (SELECT {..} AS rate) fx`.
-///
-/// Lookup rule (mirrors sync.rs `lookup_usd_fx_rate`, the same rule the lot
-/// FX columns were stamped with):
-///   1. the latest stored `exchange_rates` row dated on-or-before `t.date`
-///      (`recorded_at < t.date + 1 day` so same-day timestamps count);
-///   2. else the latest stored USD→MXN rate of any date (fresh FX history
-///      that starts after old imported statements);
-///   3. else a hard 20.0 ballpark — wrong-ish magnitude beats the old
-///      behavior of summing raw MXN and USD amounts together, which was off
-///      ~18x by construction. Zero/negative stored rates are skipped so a
-///      bad row can never divide-by-zero a sum into NULL.
-pub(crate) const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
-    (SELECT rate FROM exchange_rates
-      WHERE base_currency = 'USD' AND target_currency = 'MXN'
-        AND rate > 0
-        AND recorded_at < (t.date + INTERVAL '1 day')
-      ORDER BY recorded_at DESC LIMIT 1),
-    (SELECT rate FROM exchange_rates
-      WHERE base_currency = 'USD' AND target_currency = 'MXN'
-        AND rate > 0
-      ORDER BY recorded_at DESC LIMIT 1),
-    20.0
-)"#;
-
-/// SQL expressions converting `t.amount` to USD / MXN using `fx.rate` (the
-/// LATERAL-projected `USD_MXN_ROW_RATE_SQL`). Currencies other than MXN are
-/// treated as USD-equivalent (fx = 1) — the same "trust the native amount"
-/// stance sync.rs takes for unknown currencies.
-pub(crate) const AMOUNT_USD_SQL: &str =
-    "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount / fx.rate ELSE t.amount END)";
-const AMOUNT_MXN_SQL: &str =
-    "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount ELSE t.amount * fx.rate END)";
+// The shared FX SQL fragments (`USD_MXN_ROW_RATE_SQL`, `AMOUNT_USD_SQL`,
+// `AMOUNT_MXN_SQL`) moved to `services::fx` — the single owner of the
+// USD↔MXN conversion rules. Import from there; never re-inline a copy.
 
 /// Wash-sale window (T12). A realized LOSS on `holding_id` at sale date D is a
 /// wash sale if a BUY of the SAME `holding_id` exists in `holding_lots` with

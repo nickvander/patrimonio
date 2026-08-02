@@ -20,7 +20,7 @@ use rust_decimal::Decimal;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
-use patrimonio::services::exchange_rate::{latest_usd_mxn_rate_for_write, LATEST_USD_MXN_RATE_SQL};
+use patrimonio::services::fx::{latest_usd_mxn_rate_for_write, LATEST_USD_MXN_RATE_SQL};
 
 mod common;
 use common::TestLockGuard;

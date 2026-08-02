@@ -10,7 +10,8 @@ use sqlx::Row;
 use tracing::{error, info};
 
 use crate::api::dashboard::latest_usd_mxn_rate;
-use crate::api::session::{internal, ApiError, AuthContext};
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
 use crate::models::holding::Holding;
 use crate::AppState;
 
@@ -180,8 +181,7 @@ async fn update_account_balance(
         // column (~17x overstatement in net worth).
         let mut balance_usd = payload.current_balance;
         if currency == "MXN" {
-            let rate =
-                crate::services::exchange_rate::latest_usd_mxn_rate_for_write(&state.db).await;
+            let rate = crate::services::fx::latest_usd_mxn_rate_for_write(&state.db).await;
             balance_usd = (payload.current_balance / rate).round_dp(2);
         } else if currency != "USD" {
             // Default to 1:1 if not USD/MXN for now
@@ -485,7 +485,7 @@ async fn create_account(
     // update path: never fall back to the native balance for balance_usd.
     let mut balance_usd = payload.initial_balance;
     if payload.currency == "MXN" {
-        let rate = crate::services::exchange_rate::latest_usd_mxn_rate_for_write(&state.db).await;
+        let rate = crate::services::fx::latest_usd_mxn_rate_for_write(&state.db).await;
         balance_usd = (payload.initial_balance / rate).round_dp(2);
     }
 

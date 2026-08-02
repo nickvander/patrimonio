@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::api::session::AuthContext;
+use crate::api::middleware::AuthContext;
 use crate::services::parser;
 use crate::AppState;
 
@@ -729,7 +729,7 @@ async fn confirm_handler(
             ON CONFLICT (account_id, as_of_date) DO UPDATE
                 SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd
             "#,
-            rate = crate::services::exchange_rate::LATEST_USD_MXN_RATE_SQL,
+            rate = crate::services::fx::LATEST_USD_MXN_RATE_SQL,
         );
         if let Err(e) = sqlx::query(&today_snapshot_sql)
             .bind(payload.account_id)
@@ -771,7 +771,7 @@ async fn confirm_handler(
         CROSS JOIN rate r
         ON CONFLICT (account_id, as_of_date) DO NOTHING
         "#,
-        rate = crate::services::exchange_rate::LATEST_USD_MXN_RATE_SQL,
+        rate = crate::services::fx::LATEST_USD_MXN_RATE_SQL,
     );
     if let Err(e) = sqlx::query(&backfill_sql)
         .bind(payload.account_id)

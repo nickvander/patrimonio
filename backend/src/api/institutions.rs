@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use crate::api::session::AuthContext;
+use crate::api::middleware::AuthContext;
 use crate::services::encryption;
 use crate::AppState;
 use tracing::{error, info};

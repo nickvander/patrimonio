@@ -35,9 +35,10 @@ use webauthn_rs::prelude::{
     Uuid as WebauthnUuid, Webauthn, WebauthnBuilder,
 };
 
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
 use crate::api::session::{
-    build_session_cookie, client_ip, enforce_password_policy, internal, record_audit, user_agent,
-    ApiError, AuthContext,
+    build_session_cookie, client_ip, enforce_password_policy, record_audit, user_agent,
 };
 use crate::services::{password, sessions};
 use crate::AppState;

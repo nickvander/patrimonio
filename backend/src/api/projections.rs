@@ -10,9 +10,10 @@ use serde::Serialize;
 use sqlx::Row;
 
 use crate::api::dashboard::trailing_cashflow_exclusions_sql;
-use crate::api::session::{internal, ApiError, AuthContext};
+use crate::api::error::{internal, ApiError};
+use crate::api::middleware::AuthContext;
+use crate::services::fx::USD_MXN_ROW_RATE_SQL;
 use crate::services::projections::{self, ProjectionRequest, ProjectionResponse};
-use crate::services::tax::USD_MXN_ROW_RATE_SQL;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -84,7 +85,7 @@ async fn projection_defaults(
     //
     // FX is PER ROW: each MXN transaction is divided by the USD→MXN rate in
     // effect on its own date (the shared `USD_MXN_ROW_RATE_SQL` rule from
-    // services::tax — on-or-before-date rate, else latest, else 20.0). This
+    // services::fx — on-or-before-date rate, else latest, else 20.0). This
     // query previously converted all 12 months at the single LATEST rate;
     // USD/MXN moves several percent over a year, so latest-rate conversion
     // systematically skews the annualized income/spend (and therefore the

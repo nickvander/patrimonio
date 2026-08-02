@@ -125,7 +125,7 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         .nest("/api/auth", patrimonio::api::session::protected_router())
         .layer(from_fn_with_state(
             state.clone(),
-            patrimonio::api::session::require_auth,
+            patrimonio::api::middleware::require_auth,
         ));
 
     let app = public.merge(protected).with_state(state);
