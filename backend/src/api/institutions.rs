@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
+use crate::api::error::{internal, ApiError};
 use crate::api::middleware::AuthContext;
 use crate::services::encryption;
 use crate::AppState;
@@ -1001,7 +1002,7 @@ async fn delete_institution(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     info!("Deleting institution {} for user {}", id, ctx.user_id);
 
     // Ownership predicate keeps the delete scoped to the caller's
@@ -1013,20 +1014,16 @@ async fn delete_institution(
         .bind(id)
         .bind(ctx.user_id)
         .execute(&state.db)
-        .await;
+        .await
+        .map_err(internal)?;
 
-    match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => {
-            error!("Failed to delete institution: {}", e);
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to delete institution",
-                None,
-            )
-        }
+    if result.rows_affected() == 0 {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "Institution not found",
+        ));
     }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn json_error(status: StatusCode, error: &str, details: Option<&str>) -> Response {

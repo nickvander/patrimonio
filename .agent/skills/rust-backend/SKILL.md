@@ -94,7 +94,8 @@ Read these first — they are the recurring, expensive mistakes:
 - **Runtime sqlx only — never `query!` / `query_as!` macros.** This repo has no compile-time
   `DATABASE_URL` / no `.sqlx` offline cache to maintain. Use `sqlx::query(SQL).bind(...)`,
   read with `query_scalar` (single value), `query_as::<_, (T,)>` (tuple), or
-  `row.try_get::<T, _>("col")` (manual).
+  `row.try_get::<T, _>("col")` (manual). Enforced: `tests/conventions.rs` fails the build
+  on any compile-time sqlx macro invocation in `src/` (frozen exceptions documented there).
 - **Parameterize everything. Never interpolate request data into SQL.** The few
   `format!(...)`-into-SQL sites splice **static SQL constants** (e.g. `REALIZED_DISPOSALS_SQL`)
   and still `.bind()` every value. Composing static fragments is fine; user data is always a bind.

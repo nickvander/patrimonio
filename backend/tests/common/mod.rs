@@ -6,6 +6,14 @@
 //! test binary. Each test file declares `mod common;` to pull it
 //! in.
 
+// Shared harness + seed fixtures for the per-surface integration files that
+// were split out of the old all-in-one dashboard_endpoints.rs. Compiled into
+// every tests/*.rs binary (each declares `mod common;`), and each binary uses
+// only a subset of the helpers — allow(dead_code) keeps the unused remainder
+// from failing the clippy -D warnings gate in the binaries that don't.
+#[allow(dead_code)]
+pub mod fixtures;
+
 use sqlx::{Connection, PgConnection};
 
 /// Holds a Postgres advisory lock for the duration of one test.

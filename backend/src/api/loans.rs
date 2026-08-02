@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use tracing::error;
 
+use crate::api::error::{internal, ApiError};
 use crate::api::middleware::AuthContext;
 use crate::services::loan_match;
 use crate::AppState;
@@ -597,54 +598,58 @@ async fn get_loan(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<Json<LoanView>, ApiError> {
     let sql =
         format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2");
     let row = sqlx::query(&sql)
         .bind(id)
         .bind(ctx.user_id)
         .fetch_optional(&state.db)
-        .await;
-    match row {
-        Ok(Some(r)) => {
-            let today = chrono::Utc::now().date_naive();
-            Json(loan_view(&r, today)).into_response()
-        }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            error!("get_loan failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "loan not found"))?;
+    let today = chrono::Utc::now().date_naive();
+    Ok(Json(loan_view(&row, today)))
 }
 
 async fn create_loan(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<CreateLoanRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     if payload.borrower_name.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, "borrower_name required").into_response();
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "borrower_name required",
+        ));
     }
     if payload.principal <= 0.0 {
-        return (StatusCode::BAD_REQUEST, "principal must be positive").into_response();
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "principal must be positive",
+        ));
     }
     if !valid_interest_type(&payload.interest_type) {
-        return (StatusCode::BAD_REQUEST, "invalid interest_type").into_response();
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid interest_type",
+        ));
     }
     if !matches!(payload.rate_period.as_str(), "annual" | "monthly") {
-        return (StatusCode::BAD_REQUEST, "invalid rate_period").into_response();
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid rate_period",
+        ));
     }
     // Bound the term so schedule generation can't be asked to allocate a
     // runaway number of installment rows (a process-crash DoS). The DB
     // already enforces `> 0`; this adds the upper bound.
     if let Some(t) = payload.term_months {
         if t <= 0 || t > crate::services::loan_schedule::MAX_TERM_MONTHS {
-            return (
+            return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "term_months must be between 1 and 1200",
-            )
-                .into_response();
+            ));
         }
     }
 
@@ -658,7 +663,7 @@ async fn create_loan(
                 .fetch_optional(&state.db)
                 .await;
             if !matches!(owns, Ok(Some(_))) {
-                return StatusCode::NOT_FOUND.into_response();
+                return Err(ApiError::new(StatusCode::NOT_FOUND, "person not found"));
             }
             Some(pid)
         }
@@ -705,17 +710,11 @@ async fn create_loan(
     .fetch_one(&state.db)
     .await;
 
-    match id {
-        Ok(loan_id) => (
-            StatusCode::CREATED,
-            Json(serde_json::json!({"id": loan_id.to_string()})),
-        )
-            .into_response(),
-        Err(e) => {
-            error!("create_loan failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let loan_id = id.map_err(internal)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({"id": loan_id.to_string()})),
+    ))
 }
 
 async fn update_loan(
@@ -723,10 +722,13 @@ async fn update_loan(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateLoanRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     if let Some(it) = &payload.interest_type {
         if !valid_interest_type(it) {
-            return (StatusCode::BAD_REQUEST, "invalid interest_type").into_response();
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid interest_type",
+            ));
         }
     }
     if let Some(s) = &payload.status {
@@ -734,7 +736,7 @@ async fn update_loan(
             s.as_str(),
             "active" | "paid_off" | "written_off" | "cancelled" | "defaulted"
         ) {
-            return (StatusCode::BAD_REQUEST, "invalid status").into_response();
+            return Err(ApiError::new(StatusCode::BAD_REQUEST, "invalid status"));
         }
     }
     // B2(b): validate principal > 0 in Rust so a non-positive value
@@ -742,7 +744,10 @@ async fn update_loan(
     // (mirrors create_loan).
     if let Some(p) = payload.principal {
         if p <= 0.0 {
-            return (StatusCode::BAD_REQUEST, "principal must be positive").into_response();
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "principal must be positive",
+            ));
         }
     }
 
@@ -766,24 +771,17 @@ async fn update_loan(
     // the Σprincipal == principal invariant intact. The user unreconciles
     // first, edits terms, then re-reconciles. Non-schedule fields
     // (borrower_name, status, notes) are unaffected and always editable.
-    let current: Option<(rust_decimal::Decimal, rust_decimal::Decimal, String)> =
-        match sqlx::query_as(
-            "SELECT principal, interest_rate, interest_type FROM loans \
+    let current: Option<(rust_decimal::Decimal, rust_decimal::Decimal, String)> = sqlx::query_as(
+        "SELECT principal, interest_rate, interest_type FROM loans \
              WHERE id = $1 AND user_id = $2",
-        )
-        .bind(id)
-        .bind(ctx.user_id)
-        .fetch_optional(&state.db)
-        .await
-        {
-            Ok(c) => c,
-            Err(e) => {
-                error!("update_loan term load failed: {e}");
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal)?;
     let Some((cur_principal, cur_rate, cur_type)) = current else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
     // Decimal equality is by numeric value (scale-insensitive), and both
     // create_loan and the value below go through from_f64_retain on the
@@ -809,11 +807,10 @@ async fn update_loan(
     // stay editable. (Mirrors the reconciled-loan 409 guard just below.)
     let is_custom = cur_type == "custom" || payload.interest_type.as_deref() == Some("custom");
     if is_custom && schedule_affecting {
-        return (
+        return Err(ApiError::new(
             StatusCode::CONFLICT,
             "custom-schedule loan: re-upload the custom schedule to change terms",
-        )
-            .into_response();
+        ));
     }
     if schedule_affecting {
         let reconciled: i64 = sqlx::query_scalar(
@@ -826,11 +823,10 @@ async fn update_loan(
         .await
         .unwrap_or(0);
         if reconciled > 0 {
-            return (
+            return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 "cannot change loan terms after payments are reconciled — unreconcile them first",
-            )
-                .into_response();
+            ));
         }
     }
 
@@ -867,84 +863,76 @@ async fn update_loan(
     .bind(ctx.user_id)
     .execute(&state.db)
     .await;
-    match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => {
-            // Rebuild the schedule from the new terms IFF one already
-            // exists (require_existing=true: don't fabricate a schedule
-            // for an MVP loan that never had one). Reconciled loans were
-            // already rejected above, so this only ever rebuilds unpaid
-            // schedules.
-            if schedule_affecting {
-                match regenerate_schedule(&state.db, id, ctx.user_id, true).await {
-                    RegenOutcome::Regenerated(_) | RegenOutcome::NoSchedule => {}
-                    RegenOutcome::Reconciled => {
-                        // Guarded above; treat as a conflict if it races.
-                        return (
-                            StatusCode::CONFLICT,
-                            "cannot change loan terms after payments are reconciled — unreconcile them first",
-                        )
-                            .into_response();
-                    }
-                    // The UPDATE above already changed this loan's row, so
-                    // NotFound can't happen here; fold it in defensively.
-                    RegenOutcome::NotFound => return StatusCode::NOT_FOUND.into_response(),
-                    // The loan still has a schedule but the new terms make
-                    // it open-ended / invalid — shouldn't happen via this
-                    // path (term/frequency aren't editable here), so log
-                    // and report a server error rather than corrupt state.
-                    // Custom loans are guarded out above (is_custom &&
-                    // schedule_affecting → 409), so this is unreachable;
-                    // fold it into the defensive server-error arm.
-                    RegenOutcome::OpenEnded
-                    | RegenOutcome::BadFrequency
-                    | RegenOutcome::Custom
-                    | RegenOutcome::DbError => {
-                        error!("update_loan schedule regen failed for loan {id}");
-                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-                    }
-                }
+    let result = result.map_err(internal)?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
+    }
+    // Rebuild the schedule from the new terms IFF one already
+    // exists (require_existing=true: don't fabricate a schedule
+    // for an MVP loan that never had one). Reconciled loans were
+    // already rejected above, so this only ever rebuilds unpaid
+    // schedules.
+    if schedule_affecting {
+        match regenerate_schedule(&state.db, id, ctx.user_id, true).await {
+            RegenOutcome::Regenerated(_) | RegenOutcome::NoSchedule => {}
+            RegenOutcome::Reconciled => {
+                // Guarded above; treat as a conflict if it races.
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "cannot change loan terms after payments are reconciled — unreconcile them first",
+                ));
             }
-            StatusCode::OK.into_response()
-        }
-        Err(e) => {
-            error!("update_loan failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            // The UPDATE above already changed this loan's row, so
+            // NotFound can't happen here; fold it in defensively.
+            RegenOutcome::NotFound => {
+                return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"))
+            }
+            // The loan still has a schedule but the new terms make
+            // it open-ended / invalid — shouldn't happen via this
+            // path (term/frequency aren't editable here), so log
+            // and report a server error rather than corrupt state.
+            // Custom loans are guarded out above (is_custom &&
+            // schedule_affecting → 409), so this is unreachable;
+            // fold it into the defensive server-error arm.
+            RegenOutcome::OpenEnded
+            | RegenOutcome::BadFrequency
+            | RegenOutcome::Custom
+            | RegenOutcome::DbError => {
+                return Err(internal(format!(
+                    "update_loan schedule regen failed for loan {id}"
+                )));
+            }
         }
     }
+    Ok(StatusCode::OK)
 }
 
 async fn delete_loan(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     // loan_payments cascade via FK. The linked transactions are NOT
     // deleted (the loan links to them, it doesn't own them).
     let result = sqlx::query("DELETE FROM loans WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(ctx.user_id)
         .execute(&state.db)
-        .await;
-    match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => {
-            // Repayments/disbursement were excluded from cash flow; now
-            // that the loan is gone they re-enter, so refresh.
-            state
-                .realtime
-                .publish(
-                    ctx.user_id,
-                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
-                )
-                .await;
-            StatusCode::NO_CONTENT.into_response()
-        }
-        Err(e) => {
-            error!("delete_loan failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        .await
+        .map_err(internal)?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     }
+    // Repayments/disbursement were excluded from cash flow; now
+    // that the loan is gone they re-enter, so refresh.
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------- summary + people ----------
@@ -1082,11 +1070,14 @@ async fn link_disbursement(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<LinkTxRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     let Some((tx_currency, _tx_date, _tx_amount)) =
         owned_tx(&state, ctx.user_id, payload.transaction_id).await
     else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "transaction not found",
+        ));
     };
     // The funding tx must be in the loan's currency — lending out MXN
     // principal is an MXN outflow. A mismatched currency would link a tx
@@ -1100,14 +1091,13 @@ async fn link_disbursement(
             .ok()
             .flatten();
     let Some(loan_currency) = loan_currency else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
     if !loan_currency.is_empty() && !tx_currency.eq_ignore_ascii_case(&loan_currency) {
-        return (
+        return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "transaction currency does not match the loan currency",
-        )
-            .into_response();
+        ));
     }
     let result = sqlx::query(
         "UPDATE loans SET disbursement_tx_id = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
@@ -1118,7 +1108,9 @@ async fn link_disbursement(
     .execute(&state.db)
     .await;
     match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) if r.rows_affected() == 0 => {
+            Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"))
+        }
         Ok(_) => {
             state
                 .realtime
@@ -1127,18 +1119,14 @@ async fn link_disbursement(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            StatusCode::OK.into_response()
+            Ok(StatusCode::OK)
         }
         // Unique-violation = this tx already funds another loan.
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => (
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Err(ApiError::new(
             StatusCode::CONFLICT,
             "transaction already linked to another loan",
-        )
-            .into_response(),
-        Err(e) => {
-            error!("link_disbursement failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        )),
+        Err(e) => Err(internal(e)),
     }
 }
 
@@ -1146,31 +1134,26 @@ async fn unlink_disbursement(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     let result = sqlx::query(
         "UPDATE loans SET disbursement_tx_id = NULL, updated_at = NOW() WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(ctx.user_id)
     .execute(&state.db)
-    .await;
-    match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => {
-            state
-                .realtime
-                .publish(
-                    ctx.user_id,
-                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
-                )
-                .await;
-            StatusCode::NO_CONTENT.into_response()
-        }
-        Err(e) => {
-            error!("unlink_disbursement failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    .await
+    .map_err(internal)?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     }
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------- payments ----------
@@ -1179,7 +1162,7 @@ async fn list_payments(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<Json<Vec<PaymentView>>, ApiError> {
     // Confirm the loan belongs to the caller before listing.
     let owns = sqlx::query("SELECT 1 FROM loans WHERE id = $1 AND user_id = $2")
         .bind(id)
@@ -1187,7 +1170,7 @@ async fn list_payments(
         .fetch_optional(&state.db)
         .await;
     if !matches!(owns, Ok(Some(_))) {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     }
     let rows = sqlx::query(
         "SELECT p.*, \
@@ -1206,7 +1189,7 @@ async fn list_payments(
     .await
     .unwrap_or_default();
 
-    Json(
+    Ok(Json(
         rows.iter()
             .map(|r| PaymentView {
                 id: r.get::<uuid::Uuid, _>("id").to_string(),
@@ -1255,8 +1238,7 @@ async fn list_payments(
                 tx_currency: r.try_get::<Option<String>, _>("tx_currency").ok().flatten(),
             })
             .collect::<Vec<_>>(),
-    )
-    .into_response()
+    ))
 }
 
 /// Record (reconcile) a repayment: designate an inflow transaction as a
@@ -1268,14 +1250,14 @@ async fn record_payment(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<RecordPaymentRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     let owns = sqlx::query("SELECT currency FROM loans WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(ctx.user_id)
         .fetch_optional(&state.db)
         .await;
     let Ok(Some(loan_meta)) = owns else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
     let loan_currency: String = loan_meta.try_get("currency").unwrap_or_default();
     let today = chrono::Utc::now().date_naive();
@@ -1287,17 +1269,19 @@ async fn record_payment(
             let Some((tx_currency, tx_date, tx_amount)) =
                 owned_tx(&state, ctx.user_id, tx_id).await
             else {
-                return StatusCode::NOT_FOUND.into_response();
+                return Err(ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    "transaction not found",
+                ));
             };
             // A repayment must be in the loan's currency. Reconciling a
             // foreign-currency inflow would silently record the wrong
             // amount (e.g. a $500 USD inflow against an MXN loan).
             if !loan_currency.is_empty() && !tx_currency.eq_ignore_ascii_case(&loan_currency) {
-                return (
+                return Err(ApiError::new(
                     StatusCode::BAD_REQUEST,
                     "transaction currency does not match the loan currency",
-                )
-                    .into_response();
+                ));
             }
             (
                 payload.amount.unwrap_or(tx_amount.abs()),
@@ -1306,11 +1290,10 @@ async fn record_payment(
         }
         None => {
             let Some(amt) = payload.amount.filter(|a| *a > 0.0) else {
-                return (
+                return Err(ApiError::new(
                     StatusCode::BAD_REQUEST,
                     "a cash payment requires a positive amount",
-                )
-                    .into_response();
+                ));
             };
             (amt, payload.paid_date.unwrap_or(today))
         }
@@ -1334,9 +1317,7 @@ async fn record_payment(
     .bind(ctx.user_id)
     .fetch_one(&state.db)
     .await;
-    let Ok(loan) = loan else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    let loan = loan.map_err(internal)?;
     let principal = dec_to_f64(loan.try_get("principal").ok());
     let rate = dec_to_f64(loan.try_get("interest_rate").ok());
     let interest_type: String = loan
@@ -1431,13 +1412,7 @@ async fn record_payment(
     // principal_portion), threaded through each slice so balance_after on
     // every touched row is exact. `tx_used` tracks whether the bank tx has
     // already been attached — it lands on the FIRST row we touch only.
-    let mut tx_conn = match state.db.begin().await {
-        Ok(t) => t,
-        Err(e) => {
-            error!("record_payment begin failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+    let mut tx_conn = state.db.begin().await.map_err(internal)?;
     let mut remaining = amount;
     let mut running_balance = balance_before;
     let mut tx_used = false;
@@ -1577,45 +1552,42 @@ async fn record_payment(
     };
 
     match result {
-        Ok(_) => {
-            // Auto-mark the loan paid_off once the PRINCIPAL is fully repaid.
-            // Compare against summed principal_portion (return of capital), not
-            // paid_amount — otherwise interest payments push the total over
-            // principal and the loan is marked paid_off while capital is still
-            // outstanding.
-            let _ = sqlx::query(
-                r#"
-                UPDATE loans SET status = 'paid_off', updated_at = NOW()
-                WHERE id = $1 AND user_id = $2 AND status = 'active'
-                  AND principal <= COALESCE((
-                      SELECT SUM(COALESCE(principal_portion, paid_amount, 0))
-                      FROM loan_payments
-                      WHERE loan_id = $1 AND paid_amount IS NOT NULL), 0)
-                "#,
-            )
-            .bind(id)
-            .bind(ctx.user_id)
-            .execute(&state.db)
-            .await;
-            state
-                .realtime
-                .publish(
-                    ctx.user_id,
-                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
-                )
-                .await;
-            StatusCode::CREATED.into_response()
+        Ok(_) => {}
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "transaction already recorded as a repayment",
+            ));
         }
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => (
-            StatusCode::CONFLICT,
-            "transaction already recorded as a repayment",
-        )
-            .into_response(),
-        Err(e) => {
-            error!("record_payment failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => return Err(internal(e)),
     }
+    // Auto-mark the loan paid_off once the PRINCIPAL is fully repaid.
+    // Compare against summed principal_portion (return of capital), not
+    // paid_amount — otherwise interest payments push the total over
+    // principal and the loan is marked paid_off while capital is still
+    // outstanding.
+    let _ = sqlx::query(
+        r#"
+        UPDATE loans SET status = 'paid_off', updated_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND status = 'active'
+          AND principal <= COALESCE((
+              SELECT SUM(COALESCE(principal_portion, paid_amount, 0))
+              FROM loan_payments
+              WHERE loan_id = $1 AND paid_amount IS NOT NULL), 0)
+        "#,
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
+    Ok(StatusCode::CREATED)
 }
 
 /// POST /{id}/payments/{payment_id}/attach-tx — "upgrade" an off-bank
@@ -1636,7 +1608,7 @@ async fn attach_payment_tx(
     Extension(ctx): Extension<AuthContext>,
     Path((id, payment_id)): Path<(uuid::Uuid, uuid::Uuid)>,
     Json(payload): Json<LinkTxRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     // 1. Loan must belong to the caller; keep its currency for the guard.
     let loan_currency: Option<String> =
         sqlx::query_scalar("SELECT currency FROM loans WHERE id = $1 AND user_id = $2")
@@ -1647,7 +1619,7 @@ async fn attach_payment_tx(
             .ok()
             .flatten();
     let Some(loan_currency) = loan_currency else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
 
     // 2. Load the target installment (scoped to this loan + user).
@@ -1661,7 +1633,7 @@ async fn attach_payment_tx(
     .fetch_optional(&state.db)
     .await;
     let Ok(Some(payment)) = payment else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "payment not found"));
     };
 
     // 3. Only an OFF-BANK recorded payment can be upgraded: it must have a
@@ -1675,31 +1647,35 @@ async fn attach_payment_tx(
         .ok()
         .flatten();
     if paid_amount.is_none() {
-        return (StatusCode::CONFLICT, "payment has no recorded amount").into_response();
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "payment has no recorded amount",
+        ));
     }
     if already_linked.is_some() {
-        return (
+        return Err(ApiError::new(
             StatusCode::CONFLICT,
             "payment already linked to a transaction",
-        )
-            .into_response();
+        ));
     }
 
     // 4. The incoming tx must belong to the caller.
     let Some((tx_currency, tx_date, _tx_amount)) =
         owned_tx(&state, ctx.user_id, payload.transaction_id).await
     else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "transaction not found",
+        ));
     };
 
     // 5. Currency guard (mirrors record_payment): a foreign-currency inflow
     //    would misrepresent the loan's recorded repayment.
     if !loan_currency.is_empty() && !tx_currency.eq_ignore_ascii_case(&loan_currency) {
-        return (
+        return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "transaction currency does not match the loan currency",
-        )
-            .into_response();
+        ));
     }
 
     // 6. Attach the tx + adopt its date. Keep paid_amount and the split as
@@ -1716,7 +1692,9 @@ async fn attach_payment_tx(
     .execute(&state.db)
     .await;
     match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) if r.rows_affected() == 0 => {
+            Err(ApiError::new(StatusCode::NOT_FOUND, "payment not found"))
+        }
         Ok(_) => {
             // Re-exclude the newly-linked deposit from cash flow.
             state
@@ -1726,17 +1704,13 @@ async fn attach_payment_tx(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            StatusCode::OK.into_response()
+            Ok(StatusCode::OK)
         }
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => (
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => Err(ApiError::new(
             StatusCode::CONFLICT,
             "transaction already linked to another loan payment",
-        )
-            .into_response(),
-        Err(e) => {
-            error!("attach_payment_tx failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        )),
+        Err(e) => Err(internal(e)),
     }
 }
 
@@ -1744,7 +1718,7 @@ async fn unreconcile_payment(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(payment_id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     // A row that belongs to a generated schedule (scheduled_principal > 0,
     // OR scheduled_interest > 0 for an interest-only / custom 0-principal
     // row) must NOT be deleted — that would gap the schedule. Reverting it
@@ -1764,11 +1738,8 @@ async fn unreconcile_payment(
             dec_to_f64(r.try_get("scheduled_principal").ok()) > 0.0
                 || dec_to_f64(r.try_get("scheduled_interest").ok()) > 0.0
         }
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            error!("unreconcile_payment lookup failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Ok(None) => return Err(ApiError::new(StatusCode::NOT_FOUND, "payment not found")),
+        Err(e) => return Err(internal(e)),
     };
     let result = if is_schedule_row {
         sqlx::query(
@@ -1793,23 +1764,18 @@ async fn unreconcile_payment(
             .execute(&state.db)
             .await
     };
-    match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => {
-            state
-                .realtime
-                .publish(
-                    ctx.user_id,
-                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
-                )
-                .await;
-            StatusCode::NO_CONTENT.into_response()
-        }
-        Err(e) => {
-            error!("unreconcile_payment failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    let result = result.map_err(internal)?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "payment not found"));
     }
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------- auto-suggest ----------
@@ -1818,7 +1784,7 @@ async fn suggest_disbursement(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     let loan = sqlx::query(
         "SELECT principal, currency, origination_date, borrower_name FROM loans WHERE id = $1 AND user_id = $2",
     )
@@ -1827,7 +1793,7 @@ async fn suggest_disbursement(
     .fetch_optional(&state.db)
     .await;
     let Ok(Some(l)) = loan else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
     let principal = dec_to_f64(l.try_get("principal").ok());
     let currency: String = l.try_get("currency").unwrap_or_default();
@@ -1846,11 +1812,8 @@ async fn suggest_disbursement(
     )
     .await
     {
-        Ok(suggestions) => Json(suggestions).into_response(),
-        Err(e) => {
-            error!("suggest_disbursement failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Ok(suggestions) => Ok(Json(suggestions)),
+        Err(e) => Err(internal(e)),
     }
 }
 
@@ -1858,7 +1821,7 @@ async fn suggest_repayment(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     let loan = sqlx::query(
         r#"
         SELECT l.principal, l.currency, l.origination_date, l.borrower_name,
@@ -1874,7 +1837,7 @@ async fn suggest_repayment(
     .fetch_optional(&state.db)
     .await;
     let Ok(Some(l)) = loan else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"));
     };
     let principal = dec_to_f64(l.try_get("principal").ok());
     let currency: String = l.try_get("currency").unwrap_or_default();
@@ -1948,11 +1911,8 @@ async fn suggest_repayment(
     )
     .await
     {
-        Ok(suggestions) => Json(suggestions).into_response(),
-        Err(e) => {
-            error!("suggest_repayment failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Ok(suggestions) => Ok(Json(suggestions)),
+        Err(e) => Err(internal(e)),
     }
 }
 
@@ -2175,44 +2135,43 @@ async fn generate_schedule(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     match regenerate_schedule(&state.db, id, ctx.user_id, false).await {
-        RegenOutcome::Regenerated(n) => (
+        RegenOutcome::Regenerated(n) => Ok((
             StatusCode::CREATED,
             Json(serde_json::json!({"installments": n})),
-        )
-            .into_response(),
+        )),
         RegenOutcome::NoSchedule => {
             // require_existing=false above, so this is unreachable here;
             // an empty schedule still produces Regenerated(0).
-            (
+            Ok((
                 StatusCode::CREATED,
                 Json(serde_json::json!({"installments": 0})),
-            )
-                .into_response()
+            ))
         }
-        RegenOutcome::Reconciled => (
+        RegenOutcome::Reconciled => Err(ApiError::new(
             StatusCode::CONFLICT,
             "cannot regenerate schedule: payments already reconciled — unreconcile them first",
-        )
-            .into_response(),
-        RegenOutcome::OpenEnded => (
+        )),
+        RegenOutcome::OpenEnded => Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "loan has no term / payment frequency — set both to generate a schedule",
-        )
-            .into_response(),
-        RegenOutcome::BadFrequency => (
+        )),
+        RegenOutcome::BadFrequency => Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid payment frequency",
-        )
-            .into_response(),
-        RegenOutcome::Custom => (
+        )),
+        RegenOutcome::Custom => Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "custom-schedule loan: use POST /schedule/custom",
-        )
-            .into_response(),
-        RegenOutcome::NotFound => StatusCode::NOT_FOUND.into_response(),
-        RegenOutcome::DbError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        )),
+        RegenOutcome::NotFound => Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found")),
+        // regenerate_schedule already logged the underlying DB error; keep
+        // the client message identical to the internal() envelope.
+        RegenOutcome::DbError => Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error",
+        )),
     }
 }
 
@@ -2233,16 +2192,15 @@ async fn set_custom_schedule(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<CustomScheduleRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     use rust_decimal::Decimal;
 
     // Exactly one of rows / pattern.
     if payload.rows.is_some() == payload.pattern.is_some() {
-        return (
+        return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "provide exactly one of `rows` or `pattern`",
-        )
-            .into_response();
+        ));
     }
 
     // Verify ownership + load principal (needed for interest inference).
@@ -2253,11 +2211,8 @@ async fn set_custom_schedule(
         .await;
     let principal: Decimal = match loan {
         Ok(Some(r)) => r.try_get("principal").unwrap_or_default(),
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            error!("set_custom_schedule loan load failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Ok(None) => return Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found")),
+        Err(e) => return Err(internal(e)),
     };
 
     // Refuse if any payment is already reconciled (same guard as regen).
@@ -2269,11 +2224,10 @@ async fn set_custom_schedule(
     .await
     .unwrap_or(0);
     if reconciled > 0 {
-        return (
+        return Err(ApiError::new(
             StatusCode::CONFLICT,
             "cannot set custom schedule: payments already reconciled — unreconcile them first",
-        )
-            .into_response();
+        ));
     }
 
     // Expand to ScheduleRows (from explicit rows or the pattern shorthand).
@@ -2298,31 +2252,24 @@ async fn set_custom_schedule(
     // Validate: non-empty, and Σamount ≥ principal (else the inferred
     // interest would be negative).
     if rows.is_empty() {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "schedule has no installments",
-        )
-            .into_response();
+        ));
     }
     let total: Decimal = rows.iter().map(|r| r.amount).sum();
     if total < principal {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "payments sum to less than the principal",
-        )
-            .into_response();
+        ));
     }
 
     // One transaction: flip the loan to custom, clear formula terms, then
-    // replace the unpaid schedule rows.
-    let mut tx = match state.db.begin().await {
-        Ok(t) => t,
-        Err(e) => {
-            error!("set_custom_schedule begin failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-    if let Err(e) = sqlx::query(
+    // replace the unpaid schedule rows. (An early `?` drops `tx`, which
+    // rolls back — same behavior as the old early returns.)
+    let mut tx = state.db.begin().await.map_err(internal)?;
+    sqlx::query(
         "UPDATE loans SET interest_type = 'custom', term_months = NULL, \
                 payment_frequency = NULL, updated_at = NOW() \
          WHERE id = $1 AND user_id = $2",
@@ -2331,21 +2278,11 @@ async fn set_custom_schedule(
     .bind(ctx.user_id)
     .execute(&mut *tx)
     .await
-    {
-        error!("set_custom_schedule loan update failed: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-    let n = match persist_schedule_rows(&mut tx, id, ctx.user_id, &rows, principal).await {
-        Ok(n) => n,
-        Err(e) => {
-            error!("set_custom_schedule persist failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-    if let Err(e) = tx.commit().await {
-        error!("set_custom_schedule commit failed: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    .map_err(internal)?;
+    let n = persist_schedule_rows(&mut tx, id, ctx.user_id, &rows, principal)
+        .await
+        .map_err(internal)?;
+    tx.commit().await.map_err(internal)?;
 
     state
         .realtime
@@ -2354,11 +2291,10 @@ async fn set_custom_schedule(
             crate::services::realtime::RealtimeEvent::TransactionsChanged,
         )
         .await;
-    (
+    Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({"installments": n})),
-    )
-        .into_response()
+    ))
 }
 
 /// Administrative early/full payoff: close an active loan and void any
@@ -2376,7 +2312,7 @@ async fn payoff_loan(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     // Only an active loan can be paid off — written_off / cancelled /
     // already-paid_off are terminal and shouldn't be silently flipped.
     let result = sqlx::query(
@@ -2386,54 +2322,46 @@ async fn payoff_loan(
     .bind(id)
     .bind(ctx.user_id)
     .execute(&state.db)
-    .await;
-    match result {
-        Ok(r) if r.rows_affected() == 0 => {
-            // Either the loan doesn't belong to the caller, or it isn't
-            // active. Disambiguate so the client can message correctly.
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM loans WHERE id = $1 AND user_id = $2)",
-            )
-            .bind(id)
-            .bind(ctx.user_id)
-            .fetch_one(&state.db)
-            .await
-            .unwrap_or(false);
-            if exists {
-                (StatusCode::CONFLICT, "loan is not active").into_response()
-            } else {
-                StatusCode::NOT_FOUND.into_response()
-            }
-        }
-        Ok(_) => {
-            // Void the still-pending scheduled installments. Leave any
-            // reconciled rows (actual_tx_id IS NOT NULL) as the audit
-            // trail of what was actually paid.
-            let _ = sqlx::query(
-                "UPDATE loan_payments SET status = 'skipped' \
-                 WHERE loan_id = $1 AND user_id = $2 \
-                   AND actual_tx_id IS NULL \
-                   AND (scheduled_principal > 0 OR scheduled_interest > 0) \
-                   AND status NOT IN ('paid', 'skipped')",
-            )
-            .bind(id)
-            .bind(ctx.user_id)
-            .execute(&state.db)
-            .await;
-            state
-                .realtime
-                .publish(
-                    ctx.user_id,
-                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
-                )
-                .await;
-            StatusCode::OK.into_response()
-        }
-        Err(e) => {
-            error!("payoff_loan failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+    .await
+    .map_err(internal)?;
+    if result.rows_affected() == 0 {
+        // Either the loan doesn't belong to the caller, or it isn't
+        // active. Disambiguate so the client can message correctly.
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM loans WHERE id = $1 AND user_id = $2)")
+                .bind(id)
+                .bind(ctx.user_id)
+                .fetch_one(&state.db)
+                .await
+                .unwrap_or(false);
+        return if exists {
+            Err(ApiError::new(StatusCode::CONFLICT, "loan is not active"))
+        } else {
+            Err(ApiError::new(StatusCode::NOT_FOUND, "loan not found"))
+        };
     }
+    // Void the still-pending scheduled installments. Leave any
+    // reconciled rows (actual_tx_id IS NOT NULL) as the audit
+    // trail of what was actually paid.
+    let _ = sqlx::query(
+        "UPDATE loan_payments SET status = 'skipped' \
+         WHERE loan_id = $1 AND user_id = $2 \
+           AND actual_tx_id IS NULL \
+           AND (scheduled_principal > 0 OR scheduled_interest > 0) \
+           AND status NOT IN ('paid', 'skipped')",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
+    Ok(StatusCode::OK)
 }
 
 // ---------- reminders ----------

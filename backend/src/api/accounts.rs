@@ -84,7 +84,7 @@ async fn update_account_nickname(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateNicknameRequest>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     let trimmed = payload.nickname.trim();
     let value: Option<&str> = if trimmed.is_empty() {
         None
@@ -108,13 +108,10 @@ async fn update_account_nickname(
                     crate::services::realtime::RealtimeEvent::AccountsChanged,
                 )
                 .await;
-            StatusCode::OK.into_response()
+            Ok(StatusCode::OK)
         }
-        Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            error!("Failed to update account nickname: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Ok(_) => Err(ApiError::new(StatusCode::NOT_FOUND, "account not found")),
+        Err(e) => Err(internal(format!("update account nickname: {e}"))),
     }
 }
 
@@ -135,7 +132,7 @@ async fn update_account_balance(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateBalanceRequest>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     info!(
         "Updating balance for account {}: {}",
         id, payload.current_balance
@@ -153,11 +150,10 @@ async fn update_account_balance(
 
     match &update_acc {
         Err(e) => {
-            error!("Failed to update account balance: {}", e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return Err(internal(format!("update account balance: {e}")));
         }
         Ok(r) if r.rows_affected() == 0 => {
-            return StatusCode::NOT_FOUND.into_response();
+            return Err(ApiError::new(StatusCode::NOT_FOUND, "account not found"));
         }
         Ok(_) => {}
     }
@@ -224,7 +220,7 @@ async fn update_account_balance(
             crate::services::realtime::RealtimeEvent::AccountsChanged,
         )
         .await;
-    StatusCode::OK.into_response()
+    Ok(StatusCode::OK)
 }
 
 /// List all accounts the authenticated user owns.
@@ -368,7 +364,7 @@ async fn create_account(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<CreateAccountRequest>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     info!(
         "Creating manual account for user {}: {}",
         ctx.user_id, payload.name
@@ -386,10 +382,14 @@ async fn create_account(
             .await;
         match owns {
             Ok(Some(_)) => id,
-            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Ok(None) => {
+                return Err(ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    "institution not found",
+                ))
+            }
             Err(e) => {
-                error!("Failed to verify institution ownership: {}", e);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return Err(internal(format!("verify institution ownership: {e}")));
             }
         }
     } else {
@@ -422,17 +422,14 @@ async fn create_account(
                 .execute(&state.db)
                 .await;
                 if let Err(e) = created {
-                    error!(
-                        "Failed to create per-user institution '{}': {}",
-                        inst_name, e
-                    );
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    return Err(internal(format!(
+                        "create per-user institution '{inst_name}': {e}"
+                    )));
                 }
                 new_inst_id
             }
             Err(e) => {
-                error!("Database error finding institution '{}': {}", inst_name, e);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                return Err(internal(format!("find institution '{inst_name}': {e}")));
             }
         }
     };
@@ -477,8 +474,7 @@ async fn create_account(
     .await;
 
     if let Err(e) = result {
-        error!("Failed to create account: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Err(internal(format!("create account: {e}")));
     }
 
     // 3. Create initial balance snapshot. Same shared-ladder conversion as the
@@ -510,7 +506,7 @@ async fn create_account(
             crate::services::realtime::RealtimeEvent::AccountsChanged,
         )
         .await;
-    StatusCode::CREATED.into_response()
+    Ok(StatusCode::CREATED)
 }
 
 #[derive(Serialize)]
@@ -624,7 +620,7 @@ async fn get_account_transactions(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Query(q): Query<AccountTransactionsQuery>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     const MAX_ACCOUNT_TRANSACTIONS: i64 = 1000;
     let limit = q
         .limit
@@ -764,7 +760,7 @@ async fn get_account_transactions(
         })
         .collect();
 
-    (crate::api::dashboard::total_count_headers(total), Json(txs))
+    Ok((crate::api::dashboard::total_count_headers(total), Json(txs)))
 }
 
 #[derive(Deserialize)]
@@ -788,7 +784,7 @@ async fn update_transaction(
     Extension(ctx): Extension<AuthContext>,
     Path(tx_id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateTransactionRequest>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     info!(
         "Updating transaction {} for user {}: cat={:?}, notes={:?}, account_id={:?}",
         tx_id, ctx.user_id, payload.user_category, payload.user_notes, payload.account_id
@@ -804,7 +800,10 @@ async fn update_transaction(
             .fetch_optional(&state.db)
             .await;
         if !matches!(owns, Ok(Some(_))) {
-            return StatusCode::NOT_FOUND.into_response();
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "destination account not found",
+            ));
         }
     }
 
@@ -836,7 +835,10 @@ async fn update_transaction(
     .await;
 
     match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) if r.rows_affected() == 0 => Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "transaction not found",
+        )),
         Ok(_) => {
             state
                 .realtime
@@ -845,12 +847,9 @@ async fn update_transaction(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            StatusCode::OK.into_response()
+            Ok(StatusCode::OK)
         }
-        Err(e) => {
-            error!("Failed to update transaction: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => Err(internal(format!("update transaction: {e}"))),
     }
 }
 
@@ -1054,7 +1053,7 @@ async fn batch_update_transactions(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<BatchUpdateTransactionsRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     info!(
         "Batch-updating {} transactions for user {}: cat={:?}, account_id={:?}",
         payload.ids.len(),
@@ -1066,7 +1065,10 @@ async fn batch_update_transactions(
     // An empty selection is a client bug, not a no-op we should reward
     // with 200. Reject it.
     if payload.ids.is_empty() {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "no transaction ids supplied",
+        ));
     }
 
     // If moving transactions, the destination account must belong to the
@@ -1079,7 +1081,10 @@ async fn batch_update_transactions(
             .fetch_optional(&state.db)
             .await;
         if !matches!(owns, Ok(Some(_))) {
-            return StatusCode::NOT_FOUND.into_response();
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "destination account not found",
+            ));
         }
     }
 
@@ -1115,18 +1120,14 @@ async fn batch_update_transactions(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            (
+            Ok((
                 StatusCode::OK,
                 Json(BatchUpdateResponse {
                     updated: r.rows_affected(),
                 }),
-            )
-                .into_response()
+            ))
         }
-        Err(e) => {
-            error!("Failed to batch-update transactions: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => Err(internal(format!("batch-update transactions: {e}"))),
     }
 }
 
@@ -1158,7 +1159,7 @@ async fn batch_delete_transactions(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<BatchDeleteTransactionsRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     info!(
         "Batch-deleting {} transactions for user {}",
         payload.ids.len(),
@@ -1168,7 +1169,10 @@ async fn batch_delete_transactions(
     // An empty selection is a client bug, not a no-op we should reward
     // with 200. Reject it (matches batch_update_transactions).
     if payload.ids.is_empty() {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "no transaction ids supplied",
+        ));
     }
 
     let result = sqlx::query("DELETE FROM transactions WHERE id = ANY($1) AND user_id = $2")
@@ -1186,18 +1190,14 @@ async fn batch_delete_transactions(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            (
+            Ok((
                 StatusCode::OK,
                 Json(BatchDeleteResponse {
                     deleted: r.rows_affected(),
                 }),
-            )
-                .into_response()
+            ))
         }
-        Err(e) => {
-            error!("Failed to batch-delete transactions: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => Err(internal(format!("batch-delete transactions: {e}"))),
     }
 }
 
@@ -1206,7 +1206,7 @@ async fn delete_transaction(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(tx_id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     info!("Deleting transaction {} for user {}", tx_id, ctx.user_id);
     let result = sqlx::query("DELETE FROM transactions WHERE id = $1 AND user_id = $2")
         .bind(tx_id)
@@ -1214,7 +1214,10 @@ async fn delete_transaction(
         .execute(&state.db)
         .await;
     match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) if r.rows_affected() == 0 => Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "transaction not found",
+        )),
         Ok(_) => {
             state
                 .realtime
@@ -1223,12 +1226,9 @@ async fn delete_transaction(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            StatusCode::NO_CONTENT.into_response()
+            Ok(StatusCode::NO_CONTENT)
         }
-        Err(e) => {
-            error!("Failed to delete transaction: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => Err(internal(format!("delete transaction: {e}"))),
     }
 }
 
@@ -1238,7 +1238,7 @@ async fn delete_account(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     info!("Deleting account {} for user {}", id, ctx.user_id);
 
     let result = sqlx::query("DELETE FROM accounts WHERE id = $1 AND user_id = $2")
@@ -1248,7 +1248,9 @@ async fn delete_account(
         .await;
 
     match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) if r.rows_affected() == 0 => {
+            Err(ApiError::new(StatusCode::NOT_FOUND, "account not found"))
+        }
         Ok(_) => {
             state
                 .realtime
@@ -1257,12 +1259,9 @@ async fn delete_account(
                     crate::services::realtime::RealtimeEvent::AccountsChanged,
                 )
                 .await;
-            StatusCode::NO_CONTENT.into_response()
+            Ok(StatusCode::NO_CONTENT)
         }
-        Err(e) => {
-            error!("Failed to delete account: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => Err(internal(format!("delete account: {e}"))),
     }
 }
 
@@ -1339,7 +1338,7 @@ async fn restore_account(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     info!("Restoring account {} for user {}", id, ctx.user_id);
 
     let result = sqlx::query(
@@ -1352,7 +1351,9 @@ async fn restore_account(
     .await;
 
     match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) if r.rows_affected() == 0 => {
+            Err(ApiError::new(StatusCode::NOT_FOUND, "account not found"))
+        }
         Ok(_) => {
             state
                 .realtime
@@ -1361,12 +1362,9 @@ async fn restore_account(
                     crate::services::realtime::RealtimeEvent::AccountsChanged,
                 )
                 .await;
-            StatusCode::NO_CONTENT.into_response()
+            Ok(StatusCode::NO_CONTENT)
         }
-        Err(e) => {
-            error!("Failed to restore account: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => Err(internal(format!("restore account: {e}"))),
     }
 }
 
@@ -1408,14 +1406,13 @@ async fn split_transaction(
     Extension(ctx): Extension<AuthContext>,
     Path(tx_id): Path<uuid::Uuid>,
     Json(payload): Json<SplitRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     use rust_decimal::Decimal;
     if payload.splits.len() < 2 {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({"error": "Need at least two splits"})),
-        )
-            .into_response();
+            "Need at least two splits",
+        ));
     }
 
     let parent_row = sqlx::query(
@@ -1433,27 +1430,27 @@ async fn split_transaction(
     .await;
     let parent = match parent_row {
         Ok(Some(r)) => r,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            error!("split_transaction lookup failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        Ok(None) => {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "transaction not found",
+            ))
         }
+        Err(e) => return Err(internal(format!("split_transaction lookup: {e}"))),
     };
     let parent_parent_id: Option<uuid::Uuid> = parent.try_get("parent_id").ok();
     if parent_parent_id.is_some() {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({"error": "Cannot split a transaction that is already a split-child"})),
-        )
-            .into_response();
+            "Cannot split a transaction that is already a split-child",
+        ));
     }
     let has_children: Option<i32> = parent.try_get("has_children").ok();
     if has_children.is_some() {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({"error": "Transaction is already split — unsplit first"})),
-        )
-            .into_response();
+            "Transaction is already split — unsplit first",
+        ));
     }
 
     let parent_amount: Decimal = parent.get("amount");
@@ -1468,53 +1465,41 @@ async fn split_transaction(
     for child in &payload.splits {
         let trimmed = child.description.trim();
         if trimmed.is_empty() {
-            return (
+            return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(serde_json::json!({"error": "Every split needs a description"})),
-            )
-                .into_response();
+                "Every split needs a description",
+            ));
         }
         if child.amount.is_zero() {
-            return (
+            return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(serde_json::json!({"error": "Zero-amount splits are not allowed"})),
-            )
-                .into_response();
+                "Zero-amount splits are not allowed",
+            ));
         }
         if child.amount.is_sign_positive() != parent_is_positive {
-            return (
+            return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(serde_json::json!({
-                    "error": "Every split must share the parent's sign (all expense or all income)"
-                })),
-            )
-                .into_response();
+                "Every split must share the parent's sign (all expense or all income)",
+            ));
         }
         total += child.amount;
     }
     // 1¢ tolerance — split-three-ways rounding on a $33.34 charge.
     let diff = (total - parent_amount).abs();
     if diff > Decimal::new(1, 2) {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({
-                "error": format!(
-                    "Split total ({}) doesn't match parent ({}) — off by {}",
-                    total, parent_amount, diff
-                )
-            })),
-        )
-            .into_response();
+            &format!(
+                "Split total ({total}) doesn't match parent ({parent_amount}) — off by {diff}"
+            ),
+        ));
     }
 
     // Transactional insert so a mid-flight failure can't leave a
     // half-split row.
     let mut tx = match state.db.begin().await {
         Ok(t) => t,
-        Err(e) => {
-            error!("split begin failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(e) => return Err(internal(format!("split begin: {e}"))),
     };
 
     for child in &payload.splits {
@@ -1546,13 +1531,11 @@ async fn split_transaction(
         .execute(&mut *tx)
         .await;
         if let Err(e) = res {
-            error!("split child insert failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return Err(internal(format!("split child insert: {e}")));
         }
     }
     if let Err(e) = tx.commit().await {
-        error!("split commit failed: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Err(internal(format!("split commit: {e}")));
     }
 
     state
@@ -1562,14 +1545,13 @@ async fn split_transaction(
             crate::services::realtime::RealtimeEvent::TransactionsChanged,
         )
         .await;
-    (
+    Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({
             "parent_id": tx_id.to_string(),
             "splits": payload.splits.len()
         })),
-    )
-        .into_response()
+    ))
 }
 
 /// Un-split: delete every child of this parent. The parent itself
@@ -1580,7 +1562,7 @@ async fn unsplit_transaction(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(tx_id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     // Ownership predicate via JOIN to parent — without this an
     // attacker who knew a parent UUID could nuke another user's
     // splits. The DELETE only fires when the parent belongs to ctx.
@@ -1596,7 +1578,10 @@ async fn unsplit_transaction(
     .execute(&state.db)
     .await;
     match result {
-        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) if r.rows_affected() == 0 => Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not a split transaction owned by you",
+        )),
         Ok(r) => {
             state
                 .realtime
@@ -1605,12 +1590,9 @@ async fn unsplit_transaction(
                     crate::services::realtime::RealtimeEvent::TransactionsChanged,
                 )
                 .await;
-            Json(serde_json::json!({"removed": r.rows_affected()})).into_response()
+            Ok(Json(serde_json::json!({"removed": r.rows_affected()})))
         }
-        Err(e) => {
-            error!("unsplit_transaction failed: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Err(e) => Err(internal(format!("unsplit_transaction: {e}"))),
     }
 }
 
@@ -1629,14 +1611,13 @@ async fn replace_splits(
     Extension(ctx): Extension<AuthContext>,
     Path(tx_id): Path<uuid::Uuid>,
     Json(payload): Json<SplitRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     use rust_decimal::Decimal;
     if payload.splits.len() < 2 {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({"error": "Need at least two splits"})),
-        )
-            .into_response();
+            "Need at least two splits",
+        ));
     }
 
     let parent_row = sqlx::query(
@@ -1653,19 +1634,20 @@ async fn replace_splits(
     .await;
     let parent = match parent_row {
         Ok(Some(r)) => r,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            error!("replace_splits lookup failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        Ok(None) => {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                "transaction not found",
+            ))
         }
+        Err(e) => return Err(internal(format!("replace_splits lookup: {e}"))),
     };
     let parent_parent_id: Option<uuid::Uuid> = parent.try_get("parent_id").ok();
     if parent_parent_id.is_some() {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({"error": "Cannot split a transaction that is already a split-child"})),
-        )
-            .into_response();
+            "Cannot split a transaction that is already a split-child",
+        ));
     }
 
     let parent_amount: Decimal = parent.get("amount");
@@ -1680,52 +1662,40 @@ async fn replace_splits(
     for child in &payload.splits {
         let trimmed = child.description.trim();
         if trimmed.is_empty() {
-            return (
+            return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(serde_json::json!({"error": "Every split needs a description"})),
-            )
-                .into_response();
+                "Every split needs a description",
+            ));
         }
         if child.amount.is_zero() {
-            return (
+            return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(serde_json::json!({"error": "Zero-amount splits are not allowed"})),
-            )
-                .into_response();
+                "Zero-amount splits are not allowed",
+            ));
         }
         if child.amount.is_sign_positive() != parent_is_positive {
-            return (
+            return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(serde_json::json!({
-                    "error": "Every split must share the parent's sign (all expense or all income)"
-                })),
-            )
-                .into_response();
+                "Every split must share the parent's sign (all expense or all income)",
+            ));
         }
         total += child.amount;
     }
     let diff = (total - parent_amount).abs();
     if diff > Decimal::new(1, 2) {
-        return (
+        return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(serde_json::json!({
-                "error": format!(
-                    "Split total ({}) doesn't match parent ({}) — off by {}",
-                    total, parent_amount, diff
-                )
-            })),
-        )
-            .into_response();
+            &format!(
+                "Split total ({total}) doesn't match parent ({parent_amount}) — off by {diff}"
+            ),
+        ));
     }
 
     // Single DB transaction: DELETE existing children, then INSERT the
     // new set. No window in which the parent appears restored.
     let mut tx = match state.db.begin().await {
         Ok(t) => t,
-        Err(e) => {
-            error!("replace_splits begin failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(e) => return Err(internal(format!("replace_splits begin: {e}"))),
     };
 
     let removed = match sqlx::query("DELETE FROM transactions WHERE parent_id = $1")
@@ -1734,10 +1704,7 @@ async fn replace_splits(
         .await
     {
         Ok(r) => r.rows_affected(),
-        Err(e) => {
-            error!("replace_splits delete failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
+        Err(e) => return Err(internal(format!("replace_splits delete: {e}"))),
     };
 
     for child in &payload.splits {
@@ -1769,13 +1736,11 @@ async fn replace_splits(
         .execute(&mut *tx)
         .await;
         if let Err(e) = res {
-            error!("replace_splits child insert failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return Err(internal(format!("replace_splits child insert: {e}")));
         }
     }
     if let Err(e) = tx.commit().await {
-        error!("replace_splits commit failed: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Err(internal(format!("replace_splits commit: {e}")));
     }
 
     state
@@ -1785,15 +1750,14 @@ async fn replace_splits(
             crate::services::realtime::RealtimeEvent::TransactionsChanged,
         )
         .await;
-    (
+    Ok((
         StatusCode::OK,
         Json(serde_json::json!({
             "parent_id": tx_id.to_string(),
             "removed": removed,
             "inserted": payload.splits.len(),
         })),
-    )
-        .into_response()
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1872,18 +1836,17 @@ async fn create_holding(
     Extension(ctx): Extension<AuthContext>,
     Path(account_id): Path<uuid::Uuid>,
     Json(payload): Json<CreateHoldingRequest>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     if !account_is_manual(&state.db, account_id, ctx.user_id).await {
-        return (
+        return Err(ApiError::new(
             StatusCode::FORBIDDEN,
             "holdings can only be added to a manual account",
-        )
-            .into_response();
+        ));
     }
     sweep_expired_soft_deletes(&state.db, ctx.user_id).await;
     let symbol = payload.symbol.trim().to_uppercase();
     if symbol.is_empty() {
-        return (StatusCode::BAD_REQUEST, "symbol required").into_response();
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "symbol required"));
     }
     let name = payload
         .name
@@ -1926,8 +1889,7 @@ async fn create_holding(
     .execute(&state.db)
     .await;
     if let Err(e) = insert {
-        error!("Failed to insert holding: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Err(internal(format!("insert holding: {e}")));
     }
     if let Err(e) = recompute_holding_balance(&state.db, account_id, ctx.user_id).await {
         error!("Failed to recompute holding balance: {}", e);
@@ -1939,8 +1901,8 @@ async fn create_holding(
     .fetch_one(&state.db)
     .await
     {
-        Ok(h) => (StatusCode::CREATED, Json(h)).into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(h) => Ok((StatusCode::CREATED, Json(h))),
+        Err(e) => Err(internal(format!("holding readback: {e}"))),
     }
 }
 
@@ -1967,23 +1929,25 @@ async fn import_holdings(
     Extension(ctx): Extension<AuthContext>,
     Path(account_id): Path<uuid::Uuid>,
     Json(payload): Json<ImportHoldingsRequest>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     if !account_is_manual(&state.db, account_id, ctx.user_id).await {
-        return (
+        return Err(ApiError::new(
             StatusCode::FORBIDDEN,
             "holdings can only be added to a manual account",
-        )
-            .into_response();
+        ));
     }
+    // 500s here keep their specific, user-facing messages ("nothing was
+    // changed") instead of `internal()`'s generic one — the atomicity
+    // guarantee is part of the contract the client shows the user, so we
+    // log explicitly and build the ApiError by hand.
     let mut tx = match state.db.begin().await {
         Ok(t) => t,
         Err(e) => {
             error!("import_holdings begin failed: {e}");
-            return (
+            return Err(ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "could not start the holdings import",
-            )
-                .into_response();
+            ));
         }
     };
 
@@ -2007,11 +1971,10 @@ async fn import_holdings(
         .await
         {
             error!("Failed to clear prior holding rows for {symbol}: {e}");
-            return (
+            return Err(ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "holdings import failed; nothing was changed",
-            )
-                .into_response();
+            ));
         }
 
         let name = h
@@ -2069,21 +2032,19 @@ async fn import_holdings(
             // rollback this drop of the transaction performs, the position
             // would simply be gone.
             error!("Failed to insert imported holding {symbol}: {e}");
-            return (
+            return Err(ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "holdings import failed; nothing was changed",
-            )
-                .into_response();
+            ));
         }
     }
 
     if let Err(e) = tx.commit().await {
         error!("import_holdings commit failed: {e}");
-        return (
+        return Err(ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "holdings import failed; nothing was changed",
-        )
-            .into_response();
+        ));
     }
 
     // Balance is derived from the rows we just wrote, so a failure here leaves
@@ -2091,20 +2052,19 @@ async fn import_holdings(
     // rather than letting the client paint success over it.
     if let Err(e) = recompute_holding_balance(&state.db, account_id, ctx.user_id).await {
         error!("Failed to recompute balance after holdings import: {}", e);
-        return (
+        return Err(ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "holdings were imported but the account balance could not be recomputed",
-        )
-            .into_response();
+        ));
     }
-    StatusCode::OK.into_response()
+    Ok(StatusCode::OK)
 }
 
 async fn list_holdings(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(account_id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<Json<Vec<Holding>>, ApiError> {
     let rows = sqlx::query_as::<_, Holding>(&format!(
         "SELECT {HOLDING_COLS} FROM holdings WHERE account_id = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY value DESC NULLS LAST"
     ))
@@ -2113,7 +2073,7 @@ async fn list_holdings(
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
-    Json(rows).into_response()
+    Ok(Json(rows))
 }
 
 /// Round 3: delete is a SOFT delete (`deleted_at = now()`), reversible via
@@ -2124,9 +2084,12 @@ async fn delete_holding(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path((account_id, hid)): Path<(uuid::Uuid, uuid::Uuid)>,
-) -> impl IntoResponse {
+) -> Result<StatusCode, ApiError> {
     if !account_is_manual(&state.db, account_id, ctx.user_id).await {
-        return StatusCode::FORBIDDEN.into_response();
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "holdings can only be edited on a manual account",
+        ));
     }
     sweep_expired_soft_deletes(&state.db, ctx.user_id).await;
     let res = sqlx::query(
@@ -2140,13 +2103,10 @@ async fn delete_holding(
     match res {
         Ok(r) if r.rows_affected() > 0 => {
             let _ = recompute_holding_balance(&state.db, account_id, ctx.user_id).await;
-            StatusCode::NO_CONTENT.into_response()
+            Ok(StatusCode::NO_CONTENT)
         }
-        Ok(_) => StatusCode::NOT_FOUND.into_response(),
-        Err(e) => {
-            error!("Failed to delete holding: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Ok(_) => Err(ApiError::new(StatusCode::NOT_FOUND, "holding not found")),
+        Err(e) => Err(internal(format!("delete holding: {e}"))),
     }
 }
 
@@ -2159,7 +2119,7 @@ async fn restore_holding(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path((account_id, hid)): Path<(uuid::Uuid, uuid::Uuid)>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     let res = sqlx::query(
         "UPDATE holdings SET deleted_at = NULL WHERE id = $1 AND account_id = $2 AND user_id = $3 AND deleted_at IS NOT NULL",
     )
@@ -2179,22 +2139,12 @@ async fn restore_holding(
             .fetch_one(&state.db)
             .await
             {
-                Ok(h) => (StatusCode::OK, Json(h)).into_response(),
-                Err(e) => {
-                    error!("Failed to read back restored holding: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
-                }
+                Ok(h) => Ok((StatusCode::OK, Json(h))),
+                Err(e) => Err(internal(format!("read back restored holding: {e}"))),
             }
         }
-        Ok(_) => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "nothing to restore"})),
-        )
-            .into_response(),
-        Err(e) => {
-            error!("Failed to restore holding: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
+        Ok(_) => Err(ApiError::new(StatusCode::NOT_FOUND, "nothing to restore")),
+        Err(e) => Err(internal(format!("restore holding: {e}"))),
     }
 }
 
@@ -2205,9 +2155,12 @@ async fn refresh_holdings(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(account_id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<Json<Vec<Holding>>, ApiError> {
     if !account_is_manual(&state.db, account_id, ctx.user_id).await {
-        return StatusCode::FORBIDDEN.into_response();
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "holdings can only be refreshed on a manual account",
+        ));
     }
     let symbols: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2 AND deleted_at IS NULL",
@@ -2233,9 +2186,7 @@ async fn refresh_holdings(
     if let Err(e) = recompute_holding_balance(&state.db, account_id, ctx.user_id).await {
         error!("Failed to recompute after refresh: {}", e);
     }
-    list_holdings(State(state), Extension(ctx), Path(account_id))
-        .await
-        .into_response()
+    list_holdings(State(state), Extension(ctx), Path(account_id)).await
 }
 
 /// Per-holding dividend info (trailing annual rate, yield, estimated next
@@ -2245,9 +2196,9 @@ async fn holdings_dividends(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(account_id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
     if !account_owned(&state.db, account_id, ctx.user_id).await {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(ApiError::new(StatusCode::NOT_FOUND, "account not found"));
     }
     let rows = sqlx::query(
         // Skip cash-sleeve rows (mirrors the portfolio-wide endpoint) —
@@ -2288,7 +2239,7 @@ async fn holdings_dividends(
             "per_year": info.as_ref().map(|i| i.3).unwrap_or(0),
         }));
     }
-    Json(out).into_response()
+    Ok(Json(out))
 }
 
 /// Re-price every manual holding the user has (across all their manual
@@ -2297,7 +2248,7 @@ async fn holdings_dividends(
 async fn refresh_all_holdings(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let accounts: Vec<uuid::Uuid> = sqlx::query_scalar(
         r#"
         SELECT DISTINCT a.id
@@ -2341,11 +2292,10 @@ async fn refresh_all_holdings(
         }
         let _ = recompute_holding_balance(&state.db, *account_id, ctx.user_id).await;
     }
-    Json(serde_json::json!({
+    Ok(Json(serde_json::json!({
         "accounts_refreshed": accounts.len(),
         "symbols_priced": symbols_priced,
-    }))
-    .into_response()
+    })))
 }
 
 /// (annual_rate, last_ex_date, est_next_ex_date, per_year) for a symbol, or
