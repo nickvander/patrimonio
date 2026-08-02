@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/buttons.dart';
 import '../utils/import_staleness.dart';
 import '../utils/theme_colors.dart';
 
@@ -78,7 +79,7 @@ class ImportStalenessBanner extends StatelessWidget {
         builder: (ctx, c) {
           // Same breakpoint as SyncErrorBanner: below it the action drops to
           // its own line so the summary never fights the button for width.
-          final isNarrow = c.maxWidth < 560;
+          final isNarrow = c.maxWidth < kCompactLayoutBelow;
           final summaryText = Text(
             summary,
             style: TextStyle(color: accent, fontWeight: FontWeight.w700),

@@ -11,12 +11,12 @@ import '../theme/typography.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/percent_format.dart';
+import '../utils/tax_planning_logic.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
 import '../widgets/connected_segments.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/tax_exports_card.dart';
-import 'tax_planning_logic.dart';
 
 /// Test seams: the screen fetches through these typedefs so widget tests can
 /// inject fixtures without subclassing ApiService (which pulls package:web

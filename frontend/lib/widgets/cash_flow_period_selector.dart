@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/buttons.dart';
 import 'connected_segments.dart';
 
 /// Period the Cash Flow tab's headline cards summarize. Drives a
@@ -47,10 +48,11 @@ class CashFlowPeriodSelector extends StatelessWidget {
   /// Available width below which the compact labels are used, and the
   /// group's width cap above it. The longest full label ("En lo que va
   /// del año", ~130px at 13.5px w700) needs a ~136px segment; four
-  /// segments plus the 2px gaps ⇒ ~550px, rounded up to the next
-  /// breakpoint-ish value. The old 480px cap ellipsized that es-MX label
+  /// segments plus the 2px gaps ⇒ ~550px, rounded up to the shared
+  /// compact-layout threshold (this measurement is where that constant's
+  /// value comes from). The old 480px cap ellipsized that es-MX label
   /// even on desktop.
-  static const double _fullLabelMinWidth = 560;
+  static const double _fullLabelMinWidth = kCompactLayoutBelow;
 
   @override
   Widget build(BuildContext context) {

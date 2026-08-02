@@ -29,6 +29,12 @@ class BudgetsCard extends StatefulWidget {
   /// Without it the card falls back to localStorage-only.
   final ApiService? apiService;
 
+  /// Test seam (same pattern as RebalancingCard): replaces the backend
+  /// `getSetting('budgets')` read so widget tests can seed budgets without
+  /// network I/O (Preferences is inert under the test VM, so the
+  /// localStorage path can't seed them either). Production never sets it.
+  final Future<dynamic> Function()? loadBudgetsOverride;
+
   /// The single month to price budgets against (item #11). Budgets are MONTHLY
   /// targets, so a multi-month cash-flow window (3mo/YTD) is compared to its
   /// MOST RECENT single month — never a sum/average across months. Any day in
@@ -44,6 +50,7 @@ class BudgetsCard extends StatefulWidget {
     required this.currencyFormat,
     this.apiService,
     this.periodMonth,
+    this.loadBudgetsOverride,
   });
 
   @override
@@ -80,9 +87,12 @@ class _BudgetsCardState extends State<BudgetsCard> {
 
   Future<void> _hydrateFromBackend() async {
     final api = widget.apiService;
-    if (api == null) return;
+    final load =
+        widget.loadBudgetsOverride ??
+        (api == null ? null : () => api.getSetting('budgets'));
+    if (load == null) return;
     try {
-      final raw = await api.getSetting('budgets');
+      final raw = await load();
       if (!mounted || raw is! Map) return;
       final next = <String, double>{};
       raw.forEach((k, v) {

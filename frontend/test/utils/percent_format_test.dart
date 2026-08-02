@@ -84,4 +84,56 @@ void main() {
       expect(formatPercentLocale('en', 1234.5, digits: 1), '1234.5%');
     });
   });
+
+  group('formatSignedPercent', () {
+    testWidgets('non-negative gains a leading +, negative keeps its -', (
+      tester,
+    ) async {
+      const kPos = Key('s-pos'),
+          kZero = Key('s-zero'),
+          kNeg = Key('s-neg'),
+          kDigits = Key('s-digits');
+      await tester.pumpWidget(
+        _host(
+          const Locale('en'),
+          Builder(
+            builder: (context) => Column(
+              children: [
+                Text(formatSignedPercent(context, 12.5), key: kPos),
+                Text(formatSignedPercent(context, 0), key: kZero),
+                Text(formatSignedPercent(context, -5.0), key: kNeg),
+                Text(
+                  formatSignedPercent(context, 3.456, digits: 2),
+                  key: kDigits,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(tester.widget<Text>(find.byKey(kPos)).data, '+12.5%');
+      expect(tester.widget<Text>(find.byKey(kZero)).data, '+0.0%');
+      expect(tester.widget<Text>(find.byKey(kNeg)).data, '-5.0%');
+      expect(tester.widget<Text>(find.byKey(kDigits)).data, '+3.46%');
+    });
+
+    testWidgets('es (es-MX) matches en byte-for-byte', (tester) async {
+      const k1 = Key('s-es-1'), k2 = Key('s-es-2');
+      await tester.pumpWidget(
+        _host(
+          const Locale('es'),
+          Builder(
+            builder: (context) => Column(
+              children: [
+                Text(formatSignedPercent(context, 12.5), key: k1),
+                Text(formatSignedPercent(context, -5.0), key: k2),
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(_normSpace(tester.widget<Text>(find.byKey(k1)).data!), '+12.5%');
+      expect(_normSpace(tester.widget<Text>(find.byKey(k2)).data!), '-5.0%');
+    });
+  });
 }

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -11,7 +10,6 @@ import '../components/allocation_heatmap.dart';
 import '../components/date_range_selector.dart';
 import '../components/trends_chart.dart';
 import '../l10n/app_localizations.dart';
-import '../main.dart' show themeModeNotifier;
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/backend_config.dart';
@@ -52,10 +50,11 @@ import '../widgets/add_transaction_dialog.dart';
 import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/cash_flow_period_selector.dart';
+import '../widgets/collapsing_app_bar.dart';
 import '../widgets/command_palette.dart';
-import '../widgets/connected_segments.dart';
 import '../widgets/credit_utilization_card.dart';
 import '../widgets/cross_currency_transfers_card.dart';
+import '../widgets/currency_toggle_button.dart';
 import '../widgets/debt_payoff_card.dart';
 import '../widgets/emergency_fund_card.dart';
 import '../widgets/fx_center_sheet.dart';
@@ -72,13 +71,16 @@ import '../widgets/portfolio_card.dart';
 import '../widgets/realized_gains_card.dart';
 import '../widgets/rebalancing_card.dart';
 import '../widgets/recurring_card.dart';
+import '../widgets/settings_cards.dart';
 import '../widgets/since_last_login_banner.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/spending_by_category_card.dart';
 import '../widgets/spending_insight_sheet.dart';
+import '../widgets/stat_tile.dart';
 import '../widgets/subscriptions_card.dart';
 import '../widgets/sync_error_banner.dart';
 import '../widgets/sync_status_card.dart';
+import '../widgets/theme_cycle_button.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/upcoming_bills_card.dart';
 import 'account_transactions_screen.dart';
@@ -86,7 +88,6 @@ import 'connect_bank_screen.dart';
 import 'hidden_items_screen.dart';
 import 'import_cleanup_screen.dart';
 import 'import_screen.dart';
-import 'security_screen.dart';
 import 'wealth_projection_screen.dart';
 
 /// Stable identity for each top-level section. Navigation, persistence,
@@ -1462,8 +1463,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     // (_buildNetWorthHero) directly above this row, with the native-currency
     // composition bound to it. These tiles are the secondary stats that
     // decompose that total.
-    final tiles = <_StatTile>[
-      _StatTile(
+    final tiles = <StatTile>[
+      StatTile(
         label: l.statAssets,
         value: currencyFormat.displayMoney(assets),
         // Neutral grey — a calm lead-in to the colour-coded secondary
@@ -1482,7 +1483,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 usdMxnRate: usdMxnRate,
               ),
       ),
-      _StatTile(
+      StatTile(
         label: l.statLiabilities,
         value: currencyFormat.displayMoney(liabilities),
         accent: context.negative,
@@ -1498,7 +1499,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 usdMxnRate: usdMxnRate,
               ),
       ),
-      _StatTile(
+      StatTile(
         label: l.statCash,
         value: currencyFormat.displayMoney(cash),
         accent: context.info,
@@ -1514,7 +1515,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 usdMxnRate: usdMxnRate,
               ),
       ),
-      _StatTile(
+      StatTile(
         label: l.statInvestments,
         value: currencyFormat.displayMoney(investments),
         accent: context.tealAccent,
@@ -1543,7 +1544,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       // pattern as the allocation band-tap scroll).
       if (dividendIncome > 0 &&
           ((_portfolioData?['holdings'] as List?) ?? const []).isNotEmpty)
-        _StatTile(
+        StatTile(
           label: l.ovw3DividendsPerYear,
           value: currencyFormat.displayMoney(dividendIncome * conversionFactor),
           // Income accent — same styling family as the Investments tile's
@@ -1561,7 +1562,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       // a typical brand-new account has none and an empty $0 tile would
       // waste the row's horizontal budget.
       if (realAssets > 0)
-        _StatTile(
+        StatTile(
           label: 'Real assets',
           value: currencyFormat.displayMoney(realAssets),
           accent: context.yellowAccent,
@@ -3001,7 +3002,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// Compact-width combined currency control: "USD · 17.51" in one tappable
   /// tonal chip (tap toggles the display currency). Replaces two bar
   /// elements from the pre-audit design — the bordered-but-inert FX pill
-  /// (button styling, no tap handler) and the sub-30dp _CurrencyToggleButton
+  /// (button styling, no tap handler) and the sub-30dp CurrencyToggleButton
   /// — bringing the compact bar to three actions + overflow (the M3
   /// ceiling). Tonal fill, no border: color is reserved for state, warning
   /// when the rate is >24h stale. Wide layouts keep the separate pair.
@@ -3098,7 +3099,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     }) {
       final enabled = onPressed != null;
       return Material(
-        color: Colors.white.withValues(alpha: enabled ? 0.05 : 0.02),
+        // context.tint keeps the tile surface visible in light mode too — a
+        // white 5% tint is invisible on a white card.
+        color: context.tint(enabled ? 0.05 : 0.02),
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -3161,7 +3164,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               padding: const EdgeInsets.all(24),
               child: LayoutBuilder(
                 builder: (ctx, c) {
-                  final stack = c.maxWidth < 560;
+                  final stack = c.maxWidth < kCompactLayoutBelow;
                   final tiles = [
                     actionTile(
                       icon: Icons.account_balance,
@@ -4572,7 +4575,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         // instead — five always-on icons crowded a 360px AppBar. During
         // first-run the bottom nav (and thus the Settings tab) is
         // hidden, so the cycle button shows on all widths there.
-        if (!isCompact || firstRun) _ThemeCycleButton(),
+        if (!isCompact || firstRun) const ThemeCycleButton(),
         // First-run escape hatch: language now lives on the Settings
         // tab, which is hidden with the rest of the nav chrome here —
         // keep the kebab's EN ⇄ ES toggle on the bar so a
@@ -4611,7 +4614,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           // badge + toggle.
           isCompact
               ? _buildCurrencyFxChip()
-              : _CurrencyToggleButton(
+              : CurrencyToggleButton(
                   targetCurrency: _targetCurrency,
                   onSwap: () => _setTargetCurrency(
                     _targetCurrency == 'USD' ? 'MXN' : 'USD',
@@ -4624,7 +4627,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     // widths wrap the bar in the collapsing shell driven by _appBarVisible.
     // Wide and first-run keep the static bar untouched.
     final PreferredSizeWidget topBar = (isCompact && !firstRun)
-        ? _CollapsingAppBar(visible: _appBarVisible, child: appBar)
+        ? CollapsingAppBar(visible: _appBarVisible, child: appBar)
         : appBar;
 
     return Shortcuts(
@@ -7009,146 +7012,6 @@ class _KeepAliveTabState extends State<_KeepAliveTab>
   }
 }
 
-class _StatTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color accent;
-
-  /// Optional explanatory note. When non-null a small info glyph sits after
-  /// the label and surfaces this text on hover / long-press, used e.g. to
-  /// explain why the Investments subtotal differs from the Portfolio total.
-  final String? tooltip;
-
-  /// Optional drilldown callback. When non-null the tile becomes tappable
-  /// (with a chevron affordance) and opens a sheet listing the accounts that
-  /// fed the subtotal. Null keeps the tile a plain display-only Container —
-  /// today's behaviour for any tile with no accounts behind it.
-  final VoidCallback? onTap;
-
-  const _StatTile({
-    required this.label,
-    required this.value,
-    required this.accent,
-    this.tooltip,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Secondary stat: shared hairline border, tile surface, label in
-    // textSubtle with a small accent dot on its leading edge — a category
-    // cue without painting the whole label in a loud neon. (The net-worth
-    // hero treatment now lives in _buildNetWorthHero, above the row, so
-    // these tiles are uniformly secondary.)
-    final tile = Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: context.tileSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.hairline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: accent,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: context.textSubtle,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (tooltip != null) ...[
-                const SizedBox(width: 4),
-                Tooltip(
-                  message: tooltip!,
-                  triggerMode: TooltipTriggerMode.tap,
-                  child: Icon(
-                    Icons.info_outline,
-                    size: 12,
-                    color: context.textFaint,
-                  ),
-                ),
-              ],
-              // Drilldown affordance: a faint chevron only when the tile is
-              // tappable, signalling "tap to see the accounts behind this".
-              if (onTap != null) ...[
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right, size: 14, color: context.textFaint),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            // JetBrains Mono "ledger" figures — same treatment as the
-            // net-worth hero so the dashboard's big numbers share one
-            // consistent identity (bundled up to Bold/w700).
-            style: brandDisplayStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: context.textPrimary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-
-    // A3 (round 3, a11y): each tile is ONE labelled node — "Assets,
-    // $1,234.00" — and tappable tiles announce as buttons. The label uses
-    // the un-uppercased text (screen readers spell out all-caps strings on
-    // some engines); the inner Texts/tooltip icon are excluded so nothing
-    // is read twice.
-    final semanticsLabel = '$label, $value';
-
-    // Display-only when there's nothing to drill into — identical to the
-    // tile's historical behaviour. Otherwise make the whole tile a tap
-    // target with a matching ink ripple (the AppBar currency-swap toggle is
-    // a separate widget, so this never swallows that gesture).
-    if (onTap == null) {
-      return Semantics(
-        container: true,
-        label: semanticsLabel,
-        excludeSemantics: true,
-        child: tile,
-      );
-    }
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        label: semanticsLabel,
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: onTap,
-            child: ExcludeSemantics(child: tile),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// One account row inside an Overview stat-tile drilldown sheet. Carries the
 /// raw account map (so a tap can deep-link into the transactions panel) plus
 /// its native and reporting-currency balances, computed once in
@@ -7171,576 +7034,4 @@ class _StatDrilldownRow {
 /// Intent fired by Cmd-K / Ctrl-K to open the global command palette.
 class _OpenPaletteIntent extends Intent {
   const _OpenPaletteIntent();
-}
-
-/// Compact reporting-currency pill. Replaces the dual icon-only /
-/// labelled-button compound that lived inline in the AppBar — the
-/// pill is the same shape regardless of breakpoint so the chrome on
-/// the right side of the AppBar stays even.
-class _CurrencyToggleButton extends StatelessWidget {
-  final String targetCurrency;
-  final VoidCallback onSwap;
-
-  const _CurrencyToggleButton({
-    required this.targetCurrency,
-    required this.onSwap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final active = targetCurrency == 'MXN';
-    final accent = active ? context.positive : context.textPrimary;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Tooltip(
-        message: AppLocalizations.of(
-          context,
-        ).currencyToggleTooltip(targetCurrency),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onSwap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: context.accentBorder(accent)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.currency_exchange, size: 14, color: accent),
-                const SizedBox(width: 6),
-                Text(
-                  targetCurrency,
-                  style: TextStyle(
-                    color: accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Single-tap theme picker. Tapping cycles system → light → dark →
-/// system; long-press still surfaces the explicit picker for users who
-/// know exactly which mode they want without cycling.
-class _ThemeCycleButton extends StatelessWidget {
-  static const _order = [ThemeMode.system, ThemeMode.light, ThemeMode.dark];
-
-  IconData _iconFor(ThemeMode m) => switch (m) {
-    ThemeMode.system => Icons.brightness_auto,
-    ThemeMode.light => Icons.light_mode_outlined,
-    ThemeMode.dark => Icons.dark_mode_outlined,
-  };
-
-  String _labelFor(AppLocalizations l, ThemeMode m) => switch (m) {
-    ThemeMode.system => l.dashThemeSystem,
-    ThemeMode.light => l.dashThemeLight,
-    ThemeMode.dark => l.dashThemeDark,
-  };
-
-  void _persist(ThemeMode m) => Preferences.setThemeMode(switch (m) {
-    ThemeMode.system => 'system',
-    ThemeMode.light => 'light',
-    ThemeMode.dark => 'dark',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeModeNotifier,
-      builder: (ctx, mode, _) {
-        return GestureDetector(
-          onLongPress: () async {
-            final picked = await showMenu<ThemeMode>(
-              context: context,
-              position: const RelativeRect.fromLTRB(1000, 56, 0, 0),
-              items: [
-                PopupMenuItem(
-                  value: ThemeMode.system,
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.brightness_auto),
-                    title: Text(l.dashThemeSystemDefault),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: ThemeMode.light,
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.light_mode_outlined),
-                    title: Text(l.dashThemeLightShort),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: ThemeMode.dark,
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.dark_mode_outlined),
-                    title: Text(l.dashThemeDarkShort),
-                  ),
-                ),
-              ],
-            );
-            if (picked != null) {
-              themeModeNotifier.value = picked;
-              _persist(picked);
-            }
-          },
-          child: IconButton(
-            tooltip: l.dashThemeTooltip(_labelFor(l, mode)),
-            // AnimatedSwitcher fades between the per-mode icons so the
-            // tap-cycle reads as a smooth icon swap rather than an
-            // instant glyph flip.
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: ScaleTransition(scale: anim, child: child),
-              ),
-              child: Icon(_iconFor(mode), key: ValueKey(mode)),
-            ),
-            onPressed: () {
-              final next = _order[(_order.indexOf(mode) + 1) % _order.length];
-              themeModeNotifier.value = next;
-              _persist(next);
-            },
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Shows the shared sign-out confirmation dialog — the same bilingual strings
-/// as the Security screen's "Sign out of this device" — and resolves to true
-/// only if the user confirmed. Used by the Settings tab's Account & security
-/// card and by the dashboard's own confirmed sign-out; public so widget tests
-/// can exercise the flow.
-Future<bool> confirmSignOutDialog(BuildContext context) async {
-  final l = AppLocalizations.of(context);
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: Text(l.secSignOutThisDeviceTitle),
-      content: Text(l.secSignOutThisDeviceBody),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(l.actionCancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(l.secSignOut),
-        ),
-      ],
-    ),
-  );
-  return confirmed == true;
-}
-
-/// Preferences card on the Settings tab: language (explicit radio picker) and
-/// theme (three-way segmented control). Reads/writes the app-global notifiers
-/// (localeNotifier, themeModeNotifier) and persists via Preferences — the
-/// exact persist+notify pattern the AppBar controls use, so both stay in
-/// step. Public (unlike the dashboard's other cards) so widget tests can pump
-/// it in isolation — tests never pump the full dashboard screen.
-class SettingsPreferencesCard extends StatelessWidget {
-  const SettingsPreferencesCard({super.key});
-
-  void _pickLanguage(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final current = Localizations.localeOf(context).languageCode;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.dashLanguageLabel),
-        // Radio tiles carry their own horizontal padding; shrink the default
-        // 24px content inset so they align under the title.
-        contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
-        content: RadioGroup<String>(
-          groupValue: current,
-          onChanged: (code) {
-            if (code == null) return;
-            // Same persist + live-notify pattern as the AppBar's language
-            // toggle: Preferences stores it, localeNotifier re-points intl
-            // and rebuilds MaterialApp.
-            Preferences.setLocale(code);
-            localeNotifier.value = Locale(code);
-            Navigator.of(dialogContext).pop();
-          },
-          child: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Autonyms — deliberately NOT localized: each language names
-              // itself so it stays findable from the "wrong" locale.
-              RadioListTile<String>(value: 'en', title: Text('English')),
-              RadioListTile<String>(
-                value: 'es',
-                title: Text('Español (México)'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l.actionCancel),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.tune, size: 18, color: context.tealAccent),
-                const SizedBox(width: 8),
-                Text(
-                  l.dashPreferencesTitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.translate),
-              title: Text(l.dashLanguageLabel),
-              subtitle: Text(
-                // Autonym of the ACTIVE locale (deliberately not localized).
-                Localizations.localeOf(context).languageCode == 'es'
-                    ? 'Español (México)'
-                    : 'English',
-              ),
-              onTap: () => _pickLanguage(context),
-            ),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              // Width decisions off the card's INNER constraint (house
-              // convention), not the screen.
-              child: LayoutBuilder(
-                builder: (ctx, c) {
-                  final label = Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.brightness_6_outlined),
-                      const SizedBox(width: 16),
-                      Text(
-                        l.dashThemeMenu,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ],
-                  );
-                  // ValueListenableBuilder keeps the selection in step with
-                  // theme changes made elsewhere (the wide AppBar's
-                  // theme-cycle button writes the same notifier). Rendered as
-                  // an M3 Expressive connected button group (2px gaps, no
-                  // shared outline, selected segment morphs to a filled
-                  // fully-rounded pill) — the classic SegmentedButton's
-                  // outline+checkmark read as dated chrome, and equal-flex
-                  // segments always fit the card, no scroll guard needed.
-                  final picker = ValueListenableBuilder<ThemeMode>(
-                    valueListenable: themeModeNotifier,
-                    builder: (pickerCtx, mode, _) {
-                      // The group's look lives in the shared
-                      // ConnectedSegments widget (extracted from the
-                      // inline builder that used to be here); only the
-                      // persist logic stays local.
-                      return ConnectedSegments<ThemeMode>(
-                        segments: [
-                          ConnectedSegment(
-                            value: ThemeMode.system,
-                            icon: Icons.brightness_auto,
-                            label: l.dashThemeSystemShort,
-                          ),
-                          ConnectedSegment(
-                            value: ThemeMode.light,
-                            icon: Icons.light_mode_outlined,
-                            label: l.dashThemeLightShort,
-                          ),
-                          ConnectedSegment(
-                            value: ThemeMode.dark,
-                            icon: Icons.dark_mode_outlined,
-                            label: l.dashThemeDarkShort,
-                          ),
-                        ],
-                        selected: mode,
-                        onSelected: (value) {
-                          themeModeNotifier.value = value;
-                          // Same persist mapping as the AppBar theme
-                          // controls.
-                          Preferences.setThemeMode(switch (value) {
-                            ThemeMode.system => 'system',
-                            ThemeMode.light => 'light',
-                            ThemeMode.dark => 'dark',
-                          });
-                        },
-                      );
-                    },
-                  );
-                  if (c.maxWidth < 520) {
-                    // Narrow: the group gets its own full-width line under
-                    // the label.
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Align(alignment: Alignment.centerLeft, child: label),
-                        const SizedBox(height: 12),
-                        picker,
-                      ],
-                    );
-                  }
-                  return Row(
-                    children: [
-                      Expanded(child: label),
-                      const SizedBox(width: 16),
-                      SizedBox(width: 360, child: picker),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Account & security card on the Settings tab: Security, Hidden & archived
-/// items, Server (native builds only), and the confirmed sign-out as the
-/// deliberately low-prominence final row. Dumb/injected per house convention;
-/// public so widget tests can pump it in isolation.
-class SettingsAccountSecurityCard extends StatelessWidget {
-  const SettingsAccountSecurityCard({
-    super.key,
-    required this.onHiddenItemsClosed,
-    required this.onSignOut,
-    required this.onChangeServer,
-  });
-
-  /// Fired when HiddenItemsScreen pops — hiding/unhiding accounts or
-  /// holdings changes totals, so the owner must refresh.
-  final VoidCallback onHiddenItemsClosed;
-
-  /// Fired only after the user CONFIRMED the sign-out dialog.
-  final VoidCallback onSignOut;
-
-  /// Fired only after the user confirmed the change-server dialog. The owner
-  /// runs the logout-then-clear sequence.
-  final Future<void> Function() onChangeServer;
-
-  Future<void> _confirmChangeServer(BuildContext context) async {
-    final l = AppLocalizations.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(l.dashServerChangeTitle),
-        content: Text(l.dashServerChangeBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l.actionCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            // The consequence the user is accepting is the sign-out, so the
-            // confirm button reuses the Security screen's sign-out label.
-            child: Text(l.secSignOut),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await onChangeServer();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.shield_outlined,
-                  size: 18,
-                  color: context.tealAccent,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  l.dashAccountSecurityTitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.shield_outlined),
-              title: Text(l.dashSecurity),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SecurityScreen())),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.visibility_off_outlined),
-              title: Text(l.dashHiddenItems),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const HiddenItemsScreen()),
-                );
-                onHiddenItemsClosed();
-              },
-            ),
-            // Native builds configure the backend URL at first run; this row
-            // keeps that setting reachable afterwards. Web derives the URL
-            // from its own origin, so there's nothing to change there.
-            if (!kIsWeb)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.dns_outlined),
-                title: Text(l.dashServerLabel),
-                subtitle: Text(BackendConfig.baseUrl ?? ''),
-                onTap: () => _confirmChangeServer(context),
-              ),
-            const Divider(),
-            // Sign out — deliberately the final, low-prominence row, always
-            // behind a confirmation.
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.logout, color: scheme.error),
-              title: Text(l.dashSignOut, style: TextStyle(color: scheme.error)),
-              onTap: () async {
-                if (await confirmSignOutDialog(context)) onSignOut();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Scroll-away shell for the compact app bar (enter-always + snap semantics).
-///
-/// Keeps `Scaffold.appBar` instead of migrating tabs to slivers:
-/// [preferredSize] stays constant — Scaffold only uses it as a *max*
-/// constraint and positions the body by the bar's ACTUAL laid-out height
-/// (`_ScaffoldLayout.performLayout` uses `layoutChild(...).height`) — so
-/// animating the inner height slides the body up/down smoothly, with the
-/// wrapped [AppBar] itself completely untouched. Its default lift-on-scroll
-/// surface tint keeps working: the scrolled-under listener registers with the
-/// Scaffold's own ScrollNotificationObserver, which wraps this slot too.
-///
-/// Collapsed, the shell never reaches height 0 on a phone: an opaque strip of
-/// exactly the status-bar inset remains (painted in the bar's own background
-/// colour), so tab content never renders under the OS status bar.
-class _CollapsingAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _CollapsingAppBar({required this.visible, required this.child});
-
-  /// Whether the bar is shown. Flipping this triggers the ~200ms snap.
-  final bool visible;
-
-  /// The untouched app bar being slid in/out.
-  final AppBar child;
-
-  @override
-  Size get preferredSize => child.preferredSize;
-
-  @override
-  Widget build(BuildContext context) {
-    final topInset = MediaQuery.paddingOf(context).top;
-    final expanded = child.preferredSize.height + topInset;
-    // Implicitly animated — no controller to own or dispose. t runs 1.0
-    // (shown) -> 0.0 (collapsed to the status-bar strip); the short easeInOut
-    // is the "snap". The bar subtree is passed as `child` so it is NOT
-    // rebuilt per animation frame — only this cheap shell is.
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(end: visible ? 1.0 : 0.0),
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeInOut,
-      child: child,
-      builder: (context, t, bar) {
-        return SizedBox(
-          height: topInset + (expanded - topInset) * t,
-          child: ClipRect(
-            child: Stack(
-              children: [
-                // Bottom-anchored at its full height inside the shrinking
-                // clip, so the bar slides up out of view rather than
-                // squashing its contents. While hidden it must not be
-                // hit-testable through the residual strip.
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: expanded,
-                  child: IgnorePointer(ignoring: !visible, child: bar!),
-                ),
-                // Opaque status-bar strip: fades in as the bar leaves so no
-                // toolbar content ever sits under the OS status bar, and at
-                // rest fully covers the slice of the bar still inside the
-                // clip. Uses the bar's themed background (falling back to
-                // surface) so the strip blends with it in both themes.
-                if (t < 1.0)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    height: topInset,
-                    child: IgnorePointer(
-                      child: Opacity(
-                        opacity: 1.0 - t,
-                        child: ColoredBox(
-                          color:
-                              Theme.of(context).appBarTheme.backgroundColor ??
-                              Theme.of(context).colorScheme.surface,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

@@ -39,6 +39,18 @@ String formatPercentLocale(String locale, double value, {int digits = 1}) =>
     // rendered percents can't drift.
     '${value.toStringAsFixed(digits)}%';
 
+/// Explicitly signed variant of [formatPercent]: non-negative values gain a
+/// leading `+` (negatives already carry `-` from the number itself), so a
+/// gain/loss percent always reads with a sign — the percent twin of the
+/// `_signedMoney` idiom on the money side.
+String formatSignedPercent(
+  BuildContext context,
+  double value, {
+  int digits = 1,
+}) => value >= 0
+    ? '+${formatPercent(context, value, digits: digits)}'
+    : formatPercent(context, value, digits: digits);
+
 /// Wraps an already-formatted percentage *number* string (e.g. `"88.6"`, `"85"`)
 /// with the locale's percent suffix — for the variable-precision callers
 /// (whole-number-or-one-decimal, like the rebalancing card) that don't fit

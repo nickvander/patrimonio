@@ -608,7 +608,7 @@ List<AppNotification> deriveNotifications({
           accent: BrandPalette.warning(brightness),
           title: l.lwNotifSpendingUpTitle(
             insight.categoryLabel,
-            '${insight.pctIncrease.round()}%',
+            formatPercentLocale(l.localeName, insight.pctIncrease, digits: 0),
           ),
           detail: l.lwNotifSpendingUpDetail(
             lookback,

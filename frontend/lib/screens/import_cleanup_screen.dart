@@ -12,7 +12,21 @@ import '../utils/theme_colors.dart';
 ///  2. Clean up by account + date range — for PAST imports that predate
 ///     batch tagging (no batch id), or any bulk removal.
 class ImportCleanupScreen extends StatefulWidget {
-  const ImportCleanupScreen({super.key});
+  const ImportCleanupScreen({
+    super.key,
+    this.fetchBatchesOverride,
+    this.fetchOverviewOverride,
+    this.fetchContinuityOverride,
+    this.fetchDismissedGapsOverride,
+  });
+
+  /// Test seams (same pattern as RebalancingCard): replace the four reads
+  /// `_load` issues so widget tests can render batch / statement-coverage
+  /// fixtures without network I/O. Production callers never set them.
+  final Future<List<dynamic>> Function()? fetchBatchesOverride;
+  final Future<Map<String, dynamic>> Function()? fetchOverviewOverride;
+  final Future<List<dynamic>> Function()? fetchContinuityOverride;
+  final Future<dynamic> Function()? fetchDismissedGapsOverride;
 
   @override
   State<ImportCleanupScreen> createState() => _ImportCleanupScreenState();
@@ -49,10 +63,18 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final batches = await _api.getImportBatches();
-      final overview = await _api.getDashboardOverview();
-      final continuity = await _api.getImportContinuity();
-      final dismissed = await _api.getSetting('dismissed_continuity_gaps');
+      final batches =
+          await (widget.fetchBatchesOverride?.call() ??
+              _api.getImportBatches());
+      final overview =
+          await (widget.fetchOverviewOverride?.call() ??
+              _api.getDashboardOverview());
+      final continuity =
+          await (widget.fetchContinuityOverride?.call() ??
+              _api.getImportContinuity());
+      final dismissed =
+          await (widget.fetchDismissedGapsOverride?.call() ??
+              _api.getSetting('dismissed_continuity_gaps'));
       if (!mounted) return;
       setState(() {
         _batches = batches;

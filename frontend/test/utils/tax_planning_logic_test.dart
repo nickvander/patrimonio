@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:patrimonio/screens/tax_planning_logic.dart';
+import 'package:patrimonio/utils/tax_planning_logic.dart';
 
 void main() {
   group('deriveTaxYears', () {

@@ -6,14 +6,16 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import 'dividend_detail_sheet.dart';
 import 'skeleton.dart';
 
 /// Test seam for [InstrumentDetailSheet]: matches the shape of
 /// [ApiService.getInstrumentDetail] so widget tests can feed canned C-A
-/// payloads without touching the network (subclassing ApiService is off the
-/// table in the test VM). Production callers never set it.
+/// payloads without touching the network (ApiService constructs fine under
+/// the test VM via the api_platform seam, but its methods would do real
+/// HTTP). Production callers never set it.
 typedef InstrumentDetailFetcher =
     Future<Map<String, dynamic>> Function(String symbol, {String range});
 
@@ -256,7 +258,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   String _signedMoney(double usd) => usd >= 0 ? '+${_money(usd)}' : _money(usd);
 
   String _signedPct(double pct, {int digits = 2}) =>
-      '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(digits)}%';
+      formatSignedPercent(context, pct, digits: digits);
 
   /// Per-unit amounts (price, lot cost) stay in the instrument's native
   /// currency and can be sub-dollar for some funds, so they keep up to
@@ -959,7 +961,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
       _statTile(l10n.insStatGain, gainText, valueColor: gainColor),
       _statTile(
         l10n.insStatWeight,
-        weightPct == null ? '—' : '${weightPct.toStringAsFixed(2)}%',
+        weightPct == null ? '—' : formatPercent(context, weightPct, digits: 2),
       ),
       _assetClassTile(l10n, assetClass),
     ];

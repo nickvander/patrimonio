@@ -26,6 +26,13 @@ library;
 
 import 'package:flutter/material.dart';
 
+/// Compact-layout / phone-width threshold: below this inner width a layout
+/// takes its narrow form (header rows stack, segment labels swap to their
+/// short variants, side-by-side columns fold to one). Derivation: four
+/// equal-flex period segments need ~136px each for the longest es-MX full
+/// label, ≈550px with gaps, rounded up (see `CashFlowPeriodSelector`).
+const double kCompactLayoutBelow = 560;
+
 /// Card inner width below which a card is treated as touch-shaped and its
 /// action buttons go full-bleed and stacked.
 ///

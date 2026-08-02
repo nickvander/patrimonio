@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/buttons.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/percent_format.dart';
@@ -147,7 +148,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
         padding: EdgeInsets.all(pad),
         child: LayoutBuilder(
           builder: (ctx, c) {
-            final isNarrow = c.maxWidth < 560;
+            final isNarrow = c.maxWidth < kCompactLayoutBelow;
             // House ~420 phone breakpoint off the card's OWN interior width
             // (see portfolio_card.dart): compact chrome — no leading icon,
             // the title compressed to a small uppercase overline. The period

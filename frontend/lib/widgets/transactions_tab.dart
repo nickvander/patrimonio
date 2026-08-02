@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/transaction_mutation_refresh.dart'
     show kTxBackendMaxPageSize;
+import '../theme/buttons.dart';
 import '../theme/menus.dart';
 import '../theme/palette.dart';
 import '../theme/typography.dart';
@@ -1532,7 +1533,7 @@ class TransactionsTabState extends State<TransactionsTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 560;
+            final isNarrow = constraints.maxWidth < kCompactLayoutBelow;
             // Bounded-host mode: when the parent hands us a finite height
             // (e.g. the account panel's Expanded slot, side panel or
             // bottom sheet), the rows region must fill the remaining
@@ -1714,7 +1715,7 @@ class TransactionsTabState extends State<TransactionsTab> {
       ),
       child: LayoutBuilder(
         builder: (ctx, c) {
-          final isNarrow = c.maxWidth < 560;
+          final isNarrow = c.maxWidth < kCompactLayoutBelow;
 
           final selectToggle = TextButton.icon(
             onPressed: _selectAllLoading

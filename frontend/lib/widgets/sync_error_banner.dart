@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/buttons.dart';
 import '../utils/theme_colors.dart';
 
 /// Sticky banner shown above the dashboard body whenever one or more
@@ -74,7 +75,7 @@ class SyncErrorBanner extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (ctx, c) {
-          final isNarrow = c.maxWidth < 560;
+          final isNarrow = c.maxWidth < kCompactLayoutBelow;
           final names = problems
               .map((p) => (p['name'] ?? '').toString())
               .where((s) => s.isNotEmpty)

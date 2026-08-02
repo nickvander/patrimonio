@@ -10,9 +10,12 @@ import 'dart:async';
 /// allocation, trends, etc. That meant redundant network traffic and a
 /// perceptible flash/sluggishness.
 ///
-/// This component is deliberately free of `package:web` / Flutter
-/// imports so it can be unit-tested on the plain Dart VM (subclassing
-/// `ApiService` in tests pulls `package:web` and breaks the test VM).
+/// This component is deliberately free of Flutter / `ApiService`
+/// imports so its cache semantics can be unit-tested standalone on the
+/// plain Dart VM. (ApiService itself is test-VM-safe these days — the
+/// api_platform conditional import resolves a VM-safe client — but
+/// exercising the cache through it would drag the whole network layer
+/// into what is a pure caching test.)
 ///
 /// Correctness model (finance app — never serve wrong numbers):
 ///   * Entries carry a conservative TTL. Within the TTL a read is a

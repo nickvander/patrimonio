@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../theme/buttons.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/movers.dart';
@@ -1191,7 +1192,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
               LayoutBuilder(
                 builder: (ctx, c) {
                   // Side-by-side on wide screens, stacked on phone widths.
-                  final perRow = c.maxWidth >= 560 ? chips.length : 1;
+                  final perRow = c.maxWidth >= kCompactLayoutBelow
+                      ? chips.length
+                      : 1;
                   if (perRow == 1) {
                     return Column(
                       children: [
@@ -1357,7 +1360,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           LayoutBuilder(
             builder: (ctx, c) {
               // Two columns side-by-side on wide screens, stacked on phone.
-              if (c.maxWidth >= 560 && columns.length == 2) {
+              if (c.maxWidth >= kCompactLayoutBelow && columns.length == 2) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2216,8 +2219,9 @@ String _formatQuantity(double q) {
 const double _kRowHeight = 60.0;
 const double _kTableNaturalWidth = 1144.0;
 // Below this viewport width the wide 8-column table collapses to the
-// tap-to-expand mobile row (name + value + change).
-const double _kMobileBreakpoint = 560.0;
+// tap-to-expand mobile row (name + value + change) — the shared
+// compact-layout threshold.
+const double _kMobileBreakpoint = kCompactLayoutBelow;
 const double _kHMargin = 20.0;
 const double _kColShares = 100.0;
 const double _kColPrice = 124.0;

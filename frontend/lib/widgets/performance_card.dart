@@ -769,7 +769,9 @@ class _PerformanceCardState extends State<PerformanceCard> {
         if (coverage < 0.99) ...[
           const SizedBox(height: 4),
           Text(
-            l.lwPerfTwrCoverage('${(coverage * 100).round()}%'),
+            l.lwPerfTwrCoverage(
+              formatPercent(context, coverage * 100, digits: 0),
+            ),
             style: TextStyle(color: context.textFaint, fontSize: 11),
           ),
         ],

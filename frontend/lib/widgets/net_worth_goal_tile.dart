@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
 /// Compact "where am I against my net-worth goal" tile shown on the
@@ -43,7 +44,7 @@ class NetWorthGoalTile extends StatelessWidget {
     final pace = _computePace(goalUsd, goalYear);
 
     final pct = (netWorthUsd / goalUsd).clamp(0.0, 1.0);
-    final pctLabel = (pct * 100).toStringAsFixed(1);
+    final pctLabel = formatPercent(context, pct * 100, digits: 1);
     final yearsRemaining = goalYear - DateTime.now().year;
     // Brightness-aware so the goal accent is AA-readable on both
     // surfaces — neon emerald/teal/yellow only pass on dark cards.
@@ -75,7 +76,7 @@ class NetWorthGoalTile extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$pctLabel%',
+                  pctLabel,
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w900,

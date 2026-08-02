@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/buttons.dart';
 import '../theme/menus.dart';
 import '../theme/palette.dart';
 import '../utils/mask_aware_name.dart';
@@ -22,8 +23,9 @@ import 'connected_segments.dart';
 /// decides which MODAL to launch over the whole screen, not how to lay
 /// out content inside a card, so there is no inner LayoutBuilder
 /// constraint to prefer (the sheet's gutters do come from its own inner
-/// LayoutBuilder, per the house rule). 560 matches the transactions
-/// tab's narrow breakpoint, which hosts this flow's filter twin.
+/// LayoutBuilder, per the house rule). [kCompactLayoutBelow] matches the
+/// transactions tab's narrow breakpoint, which hosts this flow's filter
+/// twin.
 Future<void> openAddTransactionPanel(
   BuildContext context, {
   required List<dynamic> accounts,
@@ -42,7 +44,7 @@ Future<void> openAddTransactionPanel(
     editTransaction: editTransaction,
     asSheet: asSheet,
   );
-  if (MediaQuery.sizeOf(context).width < 560) {
+  if (MediaQuery.sizeOf(context).width < kCompactLayoutBelow) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

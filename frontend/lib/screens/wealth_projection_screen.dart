@@ -20,9 +20,11 @@ import '../utils/theme_colors.dart';
 enum _FireFocus { full, coast, barista }
 
 /// Test seams (same pattern as TaxPlanningScreen): the screen fetches through
-/// these typedefs so widget tests can inject fixtures without subclassing
-/// ApiService (which pulls package:web into the test VM). Each defaults to
-/// the real service in production.
+/// these typedefs so widget tests can inject fixtures without real network
+/// I/O. (ApiService itself constructs fine under the test VM — the
+/// api_platform conditional import resolves a VM-safe client — but its
+/// methods would hit the network.) Each defaults to the real service in
+/// production.
 typedef WealthProjectionFetcher =
     Future<Map<String, dynamic>> Function({
       required double startBalance,

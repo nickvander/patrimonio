@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/main.dart' show themeModeNotifier;
-import 'package:patrimonio/screens/dashboard_screen.dart'
+import 'package:patrimonio/widgets/settings_cards.dart'
     show SettingsAccountSecurityCard, SettingsPreferencesCard;
 
 // The Settings tab's app-level settings cards (Preferences and

@@ -17,12 +17,13 @@ import 'package:patrimonio/l10n/app_localizations.dart';
 void main() {
   Future<String> render(
     WidgetTester tester,
-    String Function(AppLocalizations l) pick,
-  ) async {
+    String Function(AppLocalizations l) pick, {
+    Locale locale = const Locale('en'),
+  }) async {
     late String out;
     await tester.pumpWidget(
       MaterialApp(
-        locale: const Locale('en'),
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
@@ -35,6 +36,18 @@ void main() {
     );
     await tester.pumpAndSettle();
     return out;
+  }
+
+  // Renders [pick] in en AND es and pins both outputs, so a transposition
+  // that only manifests in one locale's template still fails.
+  Future<void> expectBoth(
+    WidgetTester tester,
+    String Function(AppLocalizations l) pick, {
+    required String en,
+    required String es,
+  }) async {
+    expect(await render(tester, pick), en);
+    expect(await render(tester, pick, locale: const Locale('es')), es);
   }
 
   testWidgets('taxHarvestFooterFlow(carryforward, gains, ordinary)', (
@@ -111,5 +124,181 @@ void main() {
     // pin catches any future rename that breaks that coincidence.
     final s = await render(tester, (l) => l.projMxRateLine('NOW', 'RET'));
     expect(s, 'USD/MXN NOW today → ≈RET at retirement');
+  });
+
+  // ---------------------------------------------------------------------
+  // Audit round 2: every remaining metadata-less multi-placeholder key whose
+  // alphabetical signature differs from its template order AND whose
+  // adjacent args share a type. Each is pinned in BOTH locales with
+  // distinguishable sentinels so a transposition fails either assertion.
+  // ---------------------------------------------------------------------
+
+  testWidgets('txRenamedNFailed(failed, ok)', (tester) async {
+    // template: "Renamed {ok} · {failed} failed" — alphabetical puts
+    // failed FIRST, the reverse of reading order.
+    await expectBoth(
+      tester,
+      (l) => l.txRenamedNFailed('FA', 'OK'),
+      en: 'Renamed OK · FA failed',
+      es: 'Se renombraron OK · FA con error',
+    );
+  });
+
+  testWidgets('txUpdatedNFailed(failed, ok)', (tester) async {
+    // template: "Updated {ok} · {failed} failed"
+    await expectBoth(
+      tester,
+      (l) => l.txUpdatedNFailed('FA', 'OK'),
+      en: 'Updated OK · FA failed',
+      es: 'Se actualizaron OK · FA con error',
+    );
+  });
+
+  testWidgets('dpSplitCredit(amount, count)', (tester) async {
+    // template: "{count} credit · {amount}" — alphabetical is (amount, count).
+    await expectBoth(
+      tester,
+      (l) => l.dpSplitCredit('AM', 'CT'),
+      en: 'CT credit · AM',
+      es: 'CT crédito · AM',
+    );
+  });
+
+  testWidgets('dpSplitLoan(amount, count)', (tester) async {
+    // template: "{count} loans · {amount}"
+    await expectBoth(
+      tester,
+      (l) => l.dpSplitLoan('AM', 'CT'),
+      en: 'CT loans · AM',
+      es: 'CT préstamos · AM',
+    );
+  });
+
+  testWidgets('dashFxPill(base, rate, target)', (tester) async {
+    // template: "{base}/{target} {rate}" — rate and target swap between
+    // template and alphabetical order.
+    await expectBoth(
+      tester,
+      (l) => l.dashFxPill('BA', 'RT', 'TG'),
+      en: 'BA/TG RT',
+      es: 'BA/TG RT',
+    );
+  });
+
+  testWidgets('dashWebhookPartial(failed, updated)', (tester) async {
+    // template: "{updated} updated, {failed} failed" — alphabetical is
+    // the reverse.
+    await expectBoth(
+      tester,
+      (l) => l.dashWebhookPartial('FA', 'UP'),
+      en: 'UP updated, FA failed',
+      es: 'UP actualizadas, FA con error',
+    );
+  });
+
+  testWidgets('dashTransfersLinked(checked, inserted)', (tester) async {
+    // template: "Linked {inserted} transfer pair(s) (checked {checked}
+    // candidates)" — alphabetical is the reverse.
+    await expectBoth(
+      tester,
+      (l) => l.dashTransfersLinked('CH', 'IN'),
+      en: 'Linked IN transfer pair(s) (checked CH candidates)',
+      es:
+          'Se vincularon IN par(es) de transferencias '
+          '(se revisaron CH candidatos)',
+    );
+  });
+
+  testWidgets('pfGoalHitBy(amount, remaining, year)', (tester) async {
+    // template: "Hit {amount} by {year} · {remaining}" — remaining and
+    // year swap between template and alphabetical order.
+    await expectBoth(
+      tester,
+      (l) => l.pfGoalHitBy('AM', 'RM', 'YR'),
+      en: 'Hit AM by YR · RM',
+      es: 'Alcanzar AM para YR · RM',
+    );
+  });
+
+  testWidgets('pfGoalOnPaceFor(rate, when)', (tester) async {
+    // template: "on pace for ~{when} at +{rate}/mo" — alphabetical is
+    // the reverse.
+    await expectBoth(
+      tester,
+      (l) => l.pfGoalOnPaceFor('RT', 'WH'),
+      en: 'on pace for ~WH at +RT/mo',
+      es: 'en camino para ~WH a +RT/mes',
+    );
+  });
+
+  testWidgets('pfInstDescriptor(descriptor, inst)', (tester) async {
+    // template: "{inst} · {descriptor}" — alphabetical is the reverse.
+    await expectBoth(
+      tester,
+      (l) => l.pfInstDescriptor('DE', 'IN'),
+      en: 'IN · DE',
+      es: 'IN · DE',
+    );
+  });
+
+  testWidgets('lwNotifRepaymentDueDetail(amount, dueDate, number)', (
+    tester,
+  ) async {
+    // template: "Installment #{number} of {amount} due {dueDate}." —
+    // number renders FIRST but sits LAST alphabetically.
+    await expectBoth(
+      tester,
+      (l) => l.lwNotifRepaymentDueDetail('AM', 'DD', 'NU'),
+      en: 'Installment #NU of AM due DD.',
+      es: 'Cuota #NU de AM vence el DD.',
+    );
+  });
+
+  testWidgets('lwNotifRepaymentDueTodayDetail(amount, number)', (tester) async {
+    // template: "Installment #{number} of {amount} is due today."
+    await expectBoth(
+      tester,
+      (l) => l.lwNotifRepaymentDueTodayDetail('AM', 'NU'),
+      en: 'Installment #NU of AM is due today.',
+      es: 'Cuota #NU de AM vence hoy.',
+    );
+  });
+
+  testWidgets('lwTrendsSemanticMonth(income, month, spending)', (tester) async {
+    // template: "{month}: income {income}, spending {spending}" — month
+    // renders first but income leads alphabetically. Screen-reader-only,
+    // which is exactly why a swap would otherwise go unnoticed.
+    await expectBoth(
+      tester,
+      (l) => l.lwTrendsSemanticMonth('IC', 'MO', 'SP'),
+      en: 'MO: income IC, spending SP',
+      es: 'MO: ingresos IC, gastos SP',
+    );
+  });
+
+  testWidgets('impFoundWithAutoDeselected(count, message)', (tester) async {
+    // template: "{message} ({count} auto-deselected as informational)" —
+    // alphabetical is the reverse.
+    await expectBoth(
+      tester,
+      (l) => l.impFoundWithAutoDeselected('CT', 'ME'),
+      en: 'ME (CT auto-deselected as informational)',
+      es: 'ME (CT deseleccionados automáticamente por ser informativos)',
+    );
+  });
+
+  testWidgets('cfBudgetsOverAlert(count, amount) — metadata order', (
+    tester,
+  ) async {
+    // This key HAS a placeholders block, so the generated signature keeps
+    // the DECLARATION order (int count, String amount) — not alphabetical.
+    // Pinned here because both orders currently coincide only by luck of
+    // the declaration; a metadata reorder would silently transpose.
+    await expectBoth(
+      tester,
+      (l) => l.cfBudgetsOverAlert(2, 'AM'),
+      en: 'Over budget in 2 — AM over total',
+      es: 'Sobre presupuesto en 2 — AM de más',
+    );
   });
 }

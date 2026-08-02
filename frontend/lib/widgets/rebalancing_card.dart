@@ -239,9 +239,11 @@ class RebalancingCard extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
-  /// Test seams (widget tests can't subclass ApiService — package:web
-  /// breaks the test VM — and must not hit the network). When set they
-  /// replace `getSetting('allocation_targets')` / `putSetting(...)`.
+  /// Test seams. Widget tests construct a real ApiService fine (the
+  /// api_platform conditional import resolves a VM-safe client under
+  /// `flutter test`), but its methods hit the network — so tests inject
+  /// these instead. When set they replace
+  /// `getSetting('allocation_targets')` / `putSetting(...)`.
   final Future<dynamic> Function()? loadTargetsOverride;
   final Future<void> Function(dynamic value)? saveTargetsOverride;
 
@@ -1122,7 +1124,7 @@ class _TargetsEditorSheetState extends State<_TargetsEditorSheet> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: dialogCtx.negative,
-              foregroundColor: Colors.white,
+              foregroundColor: dialogCtx.onAccent(dialogCtx.negative),
             ),
             onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text(l.rebRemoveTargets),
