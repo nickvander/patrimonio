@@ -4,12 +4,22 @@
 > state; [work/CURRENT.md](CURRENT.md) has the detailed log. This file is the
 > "what to do next" filter over [work/FUTURE.md](FUTURE.md)'s full backlog.
 >
-> **Last updated:** 2026-08-02 (rebuilt after the transactions drill-down batch)
+> **Last updated:** 2026-08-02 (sweep deferred-items batch: added ApiService
+> split recipe + detail-panel decoupling; see CURRENT.md)
 > **Purpose:** Pickup-ready priorities, ordered by impact-per-effort. When one
 > of these ships, delete it here and log it in CURRENT.md — a stale backlog is
 > worse than none.
 
 ## Open items needing only a sitting
+
+- **ApiService `part`-file + private-mixin split** — assessed 2026-08-02
+  (deferred-items batch, CURRENT.md): domain sections are already fenced by
+  comments; use mixins, NOT extensions (five test fakes `@override` endpoint
+  methods and extension members dispatch statically). Lending (~420 lines)
+  and holdings (~565) first.
+- **dashboard_screen → direct `dividend_income_card.dart` import** — remove
+  the documented re-export seam in `portfolio_card.dart` next time
+  dashboard_screen is in someone's territory (one import line).
 
 - **Audit tail findings still open** (from the 2026-07-26 five-agent audit;
   the truncated-filtered-totals one shipped 2026-08-02 as `X-Total-Count`,
@@ -28,6 +38,13 @@
   hardcode the "MX$" glyph instead of the locale-aware helper.
 
 ## Needs a product/design call first (don't just start coding)
+
+- **transactions_tab detail-panel decoupling** — the 955-line
+  `_TransactionDetailPanel` takes `state: this` and reaches back into 14
+  private tab-state members by documented design; extracting it means
+  inverting those into callbacks/params (a real interface design), not a
+  mechanical move. Coupling inventory is in the 2026-08-02 deferred-items
+  batch notes.
 
 - **FBAR unverified badge + FinCEN peak-balance method** and
   **description-keyed import dedup** — the four-way product-call bundle from

@@ -1,7 +1,65 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-02 (multi-agent quality sweep)
+> **Last updated:** 2026-08-02 (sweep deferred-items batch)
 > **Branch:** `main`.
+
+## 2026-08-02 (deferred-items batch) — Loans Decimal wire, god-file splits, ApiService seam
+
+The four items deferred from the night's quality sweep, worked by the
+committed `.agent/agents/` team (fixer + both verifiers + walkthrough rig),
+one verified checkpoint per item against the sweep's green baseline
+(backend 558, frontend 952 — both re-verified first).
+
+* **Loans money pipeline f64 → Decimal (`e4a109c`)** — all ~37 DTO/helper
+  sites in `api/loans.rs`: DTOs, read path (direct `try_get::<Decimal>`),
+  write path (`cents()` deleted; allocation binds `.round_dp(2)`), accrual/
+  allocation math, `fmt_money`, currency aggregations. `MONEY_EPSILON` is now
+  a Decimal half-cent guarding **legacy stored f64-era dust**, not in-process
+  float error. Two things the plan didn't anticipate, both handled:
+  Decimal's `{:.N}` **truncates** instead of rounding (every precision-format
+  site now pre-rounds — CSVs, rate percents, the agreement's paid-% pair),
+  and `dec_to_f64` survives as a documented boundary shim into
+  `services::loan_match` + the f64 FX-rate check. Wire proof: serde-float
+  keeps JSON numbers; `loan_endpoints` (39) + `loan_match_boundary` (2)
+  untouched and green; live rig walkthrough of the Lending tab passed
+  including the write path (create 1,234.56 @ 5.5% → 12-row schedule →
+  $100 payment → coherent totals → delete; 0 console/network errors).
+* **God-file splits, mechanical-extraction style** (byte-identical moves,
+  952 conserved at each step): `lending_tab.dart` 5,427→1,023 (`c889f19`:
+  AddLoanDialog, EditLoanDialog, LoanDetailSheet, RecordPaymentSheet);
+  `transactions_tab.dart` 5,291→5,098 only (`a6d3539`: AccountMover + pure
+  helpers → `utils/transactions_tab_logic.dart`) — **honest small yield**:
+  the 955-line detail panel reaches back into 14 private tab-state members
+  by documented design and the jump-context/claim machinery stayed fenced;
+  decoupling it is a design change, not a move. `portfolio_card.dart`
+  4,359→2,141 (`df92253`: nine extractions — DividendIncomeCard, lot
+  breakdown sheet, both holding-row tiles with the shared pixel-alignment
+  row seam, HoldingSubtitle, EdgeFadedHScroll, KpiTile, + pure filter/
+  quantity helpers to `utils/`; a documented re-export keeps
+  dashboard_screen's import working until that file is next owned).
+* **ApiService testability (`799681b`)** — nullable `@visibleForTesting`
+  `debugHttpClientOverride` behind a private getter (production stays the
+  static-shared lazily-init `createApiClient()`); 17 new tests via
+  `package:http/testing` MockClient pin the previously untested core: CSRF
+  header on every mutating verb, base-url joining, the 401 signedIn-edge
+  flow (exactly one auth-stream emission), `_errorFromBody` fallbacks incl.
+  es localization, dashboard-cache TTL/invalidation gates. 952→969.
+  Split assessment (not implemented): `part` files + **private mixins** —
+  extensions would statically dispatch the endpoint methods five test fakes
+  `@override`, silently breaking them.
+* **Chart-touch convention closed (`89549c6`)** — `account_balance_chart`
+  migrated to `standardLineTouch` (content byte-identical, gains the house
+  snap/guide/fitInside mechanics); its frozen allowlist entry removed, so
+  the equivalence invariant now enforces every line chart. The
+  `docs/deployment.md` framing item was **rejected as already fixed** by
+  `954bdde` — the surviving "static/stateless" mentions are the deliberate
+  managed-cloud-alternative paragraph.
+* Final gates on the shipped tree: backend **558/558** (fmt + clippy clean),
+  frontend **969/969** (format clean, analyze at the 18-info baseline).
+* Deferred again, recorded in NEXT.md: transactions detail-panel decoupling
+  (needs a callback/param design), the ApiService mixin split (assessed,
+  recipe in this entry), dashboard_screen's direct DividendIncomeCard
+  import.
 
 ## 2026-08-02 (night) — Multi-agent quality sweep: tests, refactors, agent infra
 
