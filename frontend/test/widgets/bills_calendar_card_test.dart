@@ -215,19 +215,34 @@ List<double> _chartCloses(WidgetTester tester) => tester
     .map((s) => s.y)
     .toList();
 
-/// The state-dot decorations drawn inside one day cell of the grid. The
-/// dots are the only 6dp-square Containers in a cell, so the cell's own
-/// today/selected outline never lands in the result.
-List<BoxDecoration> _dayDots(WidgetTester tester, String iso) => tester
+/// Diameters of a day-cell marker: a declared disc, and the wider hollow
+/// ring a detected occurrence draws (2026-08-03 legibility pass — the ring
+/// was the same 6px box with a 1.5px hairline and read as faint at 1x).
+const double _gridDeclaredDot = 6;
+const double _gridDetectedDot = _gridDeclaredDot + kBillDetectedSizeBoost;
+
+/// The marker Containers in one day cell, keyed off the only two widths a
+/// marker can have (the cell's other Containers are the 44dp selection
+/// chrome).
+Iterable<Container> _dayDotBoxes(WidgetTester tester, String iso) => tester
     .widgetList<Container>(
       find.descendant(
         of: find.byKey(ValueKey('bc-day-$iso')),
         matching: find.byType(Container),
       ),
     )
-    .where((c) => c.constraints?.maxWidth == 6)
-    .map((c) => c.decoration! as BoxDecoration)
-    .toList();
+    .where(
+      (c) =>
+          c.constraints?.maxWidth == _gridDeclaredDot ||
+          c.constraints?.maxWidth == _gridDetectedDot,
+    );
+
+/// The state-dot decorations drawn inside one day cell of the grid — the
+/// cell's own today/selected outline never lands in the result.
+List<BoxDecoration> _dayDots(WidgetTester tester, String iso) => _dayDotBoxes(
+  tester,
+  iso,
+).map((c) => c.decoration! as BoxDecoration).toList();
 
 /// Flip the "Detected charges" switch and settle.
 Future<void> _toggleDetected(WidgetTester tester) async {
@@ -332,6 +347,25 @@ void main() {
       expect(detected.color, isNull);
       expect(detected.border, isNotNull);
       expect(detected.border!.top.color, ctx.info);
+
+      // 2026-08-03 legibility pass. The ring used to be the declared disc's
+      // box with a 1.5px hairline — a 1.5px stroke around a 3px hole, which
+      // the calendar rig read as "discernible but subtle" at native 1x. It
+      // is now a whole-pixel 2px stroke on a marker 2px wider, so it lands
+      // on device-pixel boundaries at 1x instead of smearing.
+      expect(kBillDetectedRingStroke, 2.0);
+      expect(kBillDetectedSizeBoost, 2.0);
+      expect(detected.border!.top.width, kBillDetectedRingStroke);
+
+      // Same-hue, shape-only distinction — the ring is WIDER than the disc,
+      // never a different color and never a filled marker.
+      final boxes = tester.widgetList<Container>(find.byType(Container));
+      expect(boxes.first.constraints?.maxWidth, 7.0);
+      expect(
+        boxes.last.constraints?.maxWidth,
+        7.0 + kBillDetectedSizeBoost,
+        reason: 'the detected ring is drawn wider than the declared disc',
+      );
     });
 
     // The owner's chosen default. `Preferences` is inert under the test VM
@@ -633,6 +667,19 @@ void main() {
       expect(filledDay, hasLength(1));
       expect(filledDay.single.color, isNotNull);
       expect(filledDay.single.border, isNull);
+
+      // Legibility pass: in the GRID (the at-a-glance surface) the ring is
+      // an 8px marker with a 2px stroke — a 4px hole — against the declared
+      // 6px disc. Both whole numbers, so the ring survives native 1x.
+      expect(ringDay.single.border!.top.width, kBillDetectedRingStroke);
+      expect(
+        _dayDotBoxes(tester, '2026-08-06').single.constraints?.maxWidth,
+        _gridDetectedDot,
+      );
+      expect(
+        _dayDotBoxes(tester, '2026-08-04').single.constraints?.maxWidth,
+        _gridDeclaredDot,
+      );
     });
 
     testWidgets('toggling off clears them from grid, agenda AND the curve', (

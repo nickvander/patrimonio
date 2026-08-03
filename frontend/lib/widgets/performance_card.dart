@@ -91,6 +91,12 @@ typedef _ScrubReading = ({
   String? bench,
 });
 
+/// Inner card width below which the range row's benchmark chip and range
+/// segments stop sharing a line (see `_rangeSelector`). The house
+/// Row→Column header-stack breakpoint; the pair needs ~465px content-sized,
+/// so this also leaves headroom for the widest localized benchmark label.
+const double _rangeStackBelow = 520;
+
 final List<_BenchmarkOption> _benchmarkOptions = [
   _BenchmarkOption('SP500', (l) => l.lwPerfBenchSp500),
   _BenchmarkOption('NDX', (l) => l.lwPerfBenchNdx),
@@ -719,21 +725,56 @@ class _PerformanceCardState extends State<PerformanceCard> {
     );
   }
 
+  /// Benchmark chip + range segments — side by side when the row has the
+  /// width for it, stacked when it doesn't.
+  ///
+  /// WHY IT STACKS. Content-sized, the two never fit a phone: the chip runs
+  /// to ~150px (the widest label is "Mundo (ACWI)") and the five-segment
+  /// selector to ~315px, so the pair wants ~465px against ~350px of inner
+  /// card on a 390pt phone — it overflowed by 35px there and ~65px at 420
+  /// (where the selector's own padding steps up from 10 to 16). Below
+  /// [_rangeStackBelow] the chip therefore takes its own line and the
+  /// selector goes full-bleed underneath — exactly the case
+  /// `DateRangeSelector.fill` documents ("the selector is the only thing on
+  /// its line"), and the same touch-width-goes-full-bleed rule the action
+  /// buttons settled on. All five segments stay on screen and tappable:
+  /// filling splits the width equally, so the narrowest supported card still
+  /// gives each segment ~68px at the component's 44dp hit height.
+  ///
+  /// The width is the INNER `LayoutBuilder` constraint, never
+  /// `MediaQuery` — this row lives inside a card whose padding and column
+  /// width are not the screen's.
   Widget _rangeSelector() {
-    return Row(
-      children: [
-        _benchmarkPicker(),
-        const Spacer(),
-        DateRangeSelector(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = constraints.maxWidth < _rangeStackBelow;
+        final selector = DateRangeSelector(
           selectedRange: _range,
+          fill: stacked,
           onRangeChanged: (r) {
             // A new window replots the series — drop any scrub reading with
             // it so the header can't keep a value from the old one.
             _setScrub(null);
             setState(() => _range = r);
           },
-        ),
-      ],
+        );
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [_benchmarkPicker(), const SizedBox(height: 8), selector],
+          );
+        }
+        // Above the breakpoint the chip is `Flexible` rather than fixed, so
+        // even a long benchmark label can only ellipsize — it can never
+        // push the selector past the edge again.
+        return Row(
+          children: [
+            Flexible(child: _benchmarkPicker()),
+            const Spacer(),
+            selector,
+          ],
+        );
+      },
     );
   }
 
@@ -772,12 +813,16 @@ class _PerformanceCardState extends State<PerformanceCard> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              _benchmarkLabel(l),
-              style: TextStyle(
-                color: context.textMuted,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+            Flexible(
+              child: Text(
+                _benchmarkLabel(l),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.textMuted,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
             const SizedBox(width: 4),

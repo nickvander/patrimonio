@@ -119,6 +119,10 @@ String billStateLabel(AppLocalizations l, String state) {
 /// paid/upcoming/late/pending-import, and because "we guessed this" is a
 /// claim the UI must not make silently. The agenda pairs the ring with an
 /// icon + "Detected" label; the legend explains the ring.
+///
+/// [size] is the DECLARED disc's diameter; a detected ring is drawn
+/// [kBillDetectedSizeBoost] wider at a [kBillDetectedRingStroke] stroke —
+/// see those constants for why the ring is not simply the same box.
 Widget billStateDot(
   BuildContext context, {
   required String state,
@@ -126,16 +130,44 @@ Widget billStateDot(
   double size = 7,
 }) {
   final color = billStateColor(context, state);
+  final diameter = detected ? size + kBillDetectedSizeBoost : size;
   return Container(
-    width: size,
-    height: size,
+    width: diameter,
+    height: diameter,
     decoration: BoxDecoration(
       shape: BoxShape.circle,
       color: detected ? null : color,
-      border: detected ? Border.all(color: color, width: 1.5) : null,
+      border: detected
+          ? Border.all(color: color, width: kBillDetectedRingStroke)
+          : null,
     ),
   );
 }
+
+/// Stroke of the hollow detected ring, and how much wider it is drawn than
+/// the filled disc it stands beside.
+///
+/// The grid marker was a 6px circle with a 1.5px border — a 3px hole and a
+/// hairline stroke, which the 2026-08-03 calendar rig read as "discernible
+/// but subtle" at native 1× (it only became unmistakable at 3×). The grid is
+/// the at-a-glance surface, so the ring has to survive one device pixel per
+/// logical pixel: 2.0 of stroke around a marker 2.0 wider than the disc puts
+/// the grid ring at 8px/2px, i.e. a 4px hole. Both values are whole numbers
+/// so the ring lands on device-pixel boundaries at 1× instead of smearing
+/// across two rows of pixels, which is most of why 1.5 read as faint.
+///
+/// Deliberately NOT a color change: shape carries the source (see
+/// [billStateDot]) and colour is fully spent on state. And deliberately not
+/// louder still — a hollow ring reads as secondary to a solid disc even when
+/// it covers more area, which is what keeps a declared bill outranking an
+/// inferred one at a glance.
+const double kBillDetectedRingStroke = 2.0;
+const double kBillDetectedSizeBoost = 2.0;
+
+/// Diameter of a DECLARED day-cell marker. Detected rings render
+/// [kBillDetectedSizeBoost] wider, so the cell's marker lane is sized for
+/// the sum.
+const double _kGridDotSize = 6;
 
 /// Dot-priority order for a day cell (most urgent first): the cell shows
 /// at most three dots, so red must never be crowded out by green.
@@ -629,8 +661,11 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
                       : context.textPrimary,
                 ),
               ),
+              // The lane is sized for the TALLER of the two markers — a
+              // detected ring — or the ring would be squeezed into an
+              // ellipse by the tight height.
               SizedBox(
-                height: 7,
+                height: _kGridDotSize + kBillDetectedSizeBoost,
                 child: markers.isEmpty
                     ? null
                     : Row(
@@ -642,7 +677,7 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
                               context,
                               state: markers[i].state,
                               detected: markers[i].detected,
-                              size: 6,
+                              size: _kGridDotSize,
                             ),
                           ],
                         ],
