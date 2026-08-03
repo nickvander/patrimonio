@@ -1057,8 +1057,13 @@ mixin _TxApi on _ApiServiceBase {
   String exportTransactionsCsvUrl() =>
       '$_baseUrl/dashboard/transactions/export';
 
-  /// Insert a manually-entered transaction. Positive amount = expense /
-  /// outflow, negative = income / inflow (same convention as Plaid).
+  /// Insert a manually-entered transaction. App convention: NEGATIVE
+  /// amount = expense / outflow, positive = income / inflow — the add
+  /// dialog signs the value before calling (add_transaction_dialog.dart).
+  /// This is the OPPOSITE of Plaid's raw sign; rows are normalized to the
+  /// app convention before this layer. (The old comment here claimed the
+  /// Plaid convention and misled a 2026-08-03 walkthrough into seeding an
+  /// expense as an inflow.)
   Future<void> createManualTransaction({
     required String accountId,
     required DateTime date,
