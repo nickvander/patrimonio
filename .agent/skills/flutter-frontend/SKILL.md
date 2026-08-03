@@ -112,7 +112,16 @@ fails any hand-rolled `…}%`-style percent outside `lib/utils/`.
 ## 3. Networking — the ApiService layer
 
 Single `ApiService` over `package:http` (no dio). Platform-split base URL/client via
-conditional imports.
+conditional imports. The class is split by domain into `part` files
+(`services/api_service/{auth,dashboard,transactions,holdings,lending}.dart`), one
+**private mixin** per domain (`_AuthApi`, `_DashboardApi`, `_TxApi`, `_HoldingsApi`,
+`_LendingApi`) composed into `ApiService` over the `_ApiServiceBase` plumbing
+surface declared in `api_service.dart` (which keeps the verb wrappers, CSRF, cache
+glue, and the `debugHttpClientOverride` test seam). Add new endpoints to the
+matching part file's mixin. Mixins, NOT extensions, on purpose: several widget
+tests fake the service with `extends ApiService` + `@override` on endpoint
+methods — extension members dispatch statically and would silently bypass those
+fakes.
 
 - **Always go through the verb wrappers `_get/_post/_patch/_put/_delete`** — never raw
   `_client`. They centralize: 401 handling (`_maybeUnauthorized` → `handleUnauthorized()` +
@@ -312,10 +321,12 @@ io impl under `if (dart.library.io)`).
 
 ## Anti-patterns to avoid
 
-- Adding to god files — `dashboard_screen.dart` (7,746 lines), `lending_tab.dart` (5,427),
-  `transactions_tab.dart` (5,290), `portfolio_card.dart` (4,355), `api_service.dart`
-  (3,560) — extract to `utils/` / new widgets and split cards instead (the
-  `CashFlowPeriodSelector` and `ConnectedSegments` extractions are the pattern).
+- Adding to god files — `dashboard_screen.dart` (7,746 lines), `transactions_tab.dart`
+  (~5,100) — extract to `utils/` / new widgets and split cards instead (the
+  `CashFlowPeriodSelector` and `ConnectedSegments` extractions are the pattern;
+  `lending_tab.dart`, `portfolio_card.dart`, and `api_service.dart` have already
+  been split — `api_service.dart` into domain part-file mixins, so new endpoints
+  go in the matching `services/api_service/*.dart` part, §3).
 - Forking another copy of `chart_time_axis` / `chart_touch` — use the shared helpers.
 - `Colors.white70` / hex colors — use the `context` extension or fail light-mode contrast.
 - Raw `_client` calls bypassing the verb wrappers (lose CSRF / 401 / cache handling).
