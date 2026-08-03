@@ -225,57 +225,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // A4 (round 3, a11y): title + total announce as ONE header
-            // landmark ("Asset distribution, Total $X") so screen readers
-            // can jump to the card and hear its headline figure at once.
-            MergeSemantics(
-              child: Semantics(
-                header: true,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        l.lwAllocTitle,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Money never ellipsizes mid-digits: mirror the
-                    // net-worth hero — FittedBox shrinks the total down
-                    // on narrow cards instead of clipping it to
-                    // "Total $1,234,5…".
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          l.lwAllocTotal(
-                            widget.currencyFormat.displayMoney(
-                              activeTotal * widget.conversionFactor,
-                            ),
-                          ),
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: context.textSubtle,
-                            fontWeight: FontWeight.w600,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                          textAlign: TextAlign.right,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _header(context, l, activeTotal),
             if (hasToggle) ...[
               const SizedBox(height: 16),
               _dimensionToggle(dim, hasType, hasInst, l),
@@ -299,6 +249,85 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Card header: the title and the active dimension's total.
+  ///
+  /// A4 (round 3, a11y): title + total announce as ONE header landmark
+  /// ("Asset distribution, Total $X") so screen readers can jump to the card
+  /// and hear its headline figure at once.
+  ///
+  /// Layout is off the INNER width, not the screen. The two used to be
+  /// equal-flex `Flexible`s in a `spaceBetween` Row, which caps each at HALF
+  /// the row: on a phone the title clipped to "Asset distributi…" while the
+  /// total sat comfortably inside its own half. Now the title is the one that
+  /// takes the row's slack, and below the house ~420 phone breakpoint — where
+  /// a 22px title and a money total genuinely cannot share a line — the total
+  /// drops onto its own line instead of eating the card's name.
+  Widget _header(BuildContext context, AppLocalizations l, double activeTotal) {
+    final title = Text(
+      l.lwAllocTitle,
+      style: const TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.5,
+      ),
+      // Wraps rather than truncates: a long es-MX title on a mid-width card
+      // reads as two lines, never as an elided word.
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+    // Money never ellipsizes mid-digits: mirror the net-worth hero —
+    // FittedBox shrinks the total down instead of clipping it to
+    // "Total $1,234,5…".
+    final total = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Text(
+        l.lwAllocTotal(
+          widget.currencyFormat.displayMoney(
+            activeTotal * widget.conversionFactor,
+          ),
+        ),
+        style: TextStyle(
+          fontSize: 14,
+          color: context.textSubtle,
+          fontWeight: FontWeight.w600,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+        textAlign: TextAlign.right,
+        maxLines: 1,
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, box) {
+        final stacked = box.maxWidth < 420;
+        return MergeSemantics(
+          child: Semantics(
+            header: true,
+            child: stacked
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      title,
+                      const SizedBox(height: 4),
+                      Align(alignment: Alignment.centerLeft, child: total),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      // Expanded + a NON-flex total: the title gets whatever
+                      // the total doesn't need, instead of a fixed half.
+                      Expanded(child: title),
+                      const SizedBox(width: 12),
+                      total,
+                    ],
+                  ),
+          ),
+        );
+      },
     );
   }
 

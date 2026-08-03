@@ -4356,10 +4356,22 @@
   "ruleAmountMaxLabel": "Max amount",
   "ruleAmountRangeHint": "Amounts compare the absolute value in each transaction's own currency — add a currency scope so pesos and dollars aren't compared raw.",
   "ruleSaveForward": "Save rule",
-  "ruleSaveAndApply": "{count, plural, =0{Save & apply} =1{Save & apply to 1 past transaction} other{Save & apply to {count} past transactions}}",
-  "@ruleSaveAndApply": {
+  "ruleSaveAndApplyPlain": "Save & apply",
+  "ruleSaveAndApplyChanges": "{count, plural, =1{Save & apply · changes 1 transaction} other{Save & apply · changes {count} transactions}}",
+  "@ruleSaveAndApplyChanges": {
     "placeholders": {
       "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ruleSaveAndApplyBoth": "Save & apply · changes {categories} categories, {names} names",
+  "@ruleSaveAndApplyBoth": {
+    "placeholders": {
+      "categories": {
+        "type": "int"
+      },
+      "names": {
         "type": "int"
       }
     }

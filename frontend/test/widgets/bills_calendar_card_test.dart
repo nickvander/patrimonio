@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -141,6 +142,17 @@ Widget _host(ApiService api, {Locale locale = const Locale('en')}) {
     ),
   );
 }
+
+/// Every tick label the projection chart rendered, no-break spaces
+/// normalized (compactMoney glues its parts with U+00A0 so a tick can't wrap
+/// inside fl_chart's reserved title box).
+List<String> _chartTickLabels(WidgetTester tester) => tester
+    .widgetList<Text>(
+      find.descendant(of: find.byType(LineChart), matching: find.byType(Text)),
+    )
+    .map((t) => (t.data ?? '').replaceAll(' ', ' '))
+    .where((s) => s.isNotEmpty)
+    .toList();
 
 Future<void> _pump(
   WidgetTester tester,
@@ -326,6 +338,71 @@ void main() {
       expect(find.textContaining('Consider moving USD to MXN'), findsOneWidget);
       // The shortfall is the DEFICIT currency's native magnitude.
       expect(find.textContaining('MXN'), findsWidgets);
+    });
+
+    // The projection y-axis used to go through
+    // `NumberFormat.compactSimpleCurrency`, whose table maps MXN to its LOCAL
+    // symbol "$" — so a peso curve was labelled "$100K" and read as USD at a
+    // glance. Axis ticks go through the house `compactMoney` helper now.
+    testWidgets('MXN y-axis ticks carry an unambiguous currency', (
+      tester,
+    ) async {
+      // Spread MXN values so fl_chart places interior ticks (a flat series
+      // has nothing to label between min and max).
+      final fixture = _calendarFixture()
+        ..['projection'] = [
+          for (var i = 0; i <= 30; i++)
+            {
+              'date': _projection()[i]['date'],
+              'usd': 1000.0 + i * 200,
+              'mxn': 100000.0 + i * 20000,
+            },
+        ];
+      final api = _FakeCalendarApi(fixture);
+      await _pump(tester, api);
+
+      await tester.ensureVisible(find.text('MXN'));
+      await tester.tap(find.text('MXN'));
+      await tester.pumpAndSettle();
+
+      final ticks = _chartTickLabels(tester);
+      expect(ticks, isNotEmpty);
+      final money = ticks.where((t) => RegExp(r'\d').hasMatch(t)).toList();
+      expect(
+        money.where((t) => t.startsWith('MXN')),
+        isNotEmpty,
+        reason: 'peso ticks must name the currency, not borrow "\$": $money',
+      );
+      expect(
+        money.where((t) => t.startsWith('\$')),
+        isEmpty,
+        reason: 'a peso axis must never render a bare "\$" tick: $money',
+      );
+    });
+
+    testWidgets('USD y-axis ticks keep the idiomatic "\$" glyph', (
+      tester,
+    ) async {
+      final fixture = _calendarFixture()
+        ..['projection'] = [
+          for (var i = 0; i <= 30; i++)
+            {
+              'date': _projection()[i]['date'],
+              'usd': 100000.0 + i * 20000,
+              'mxn': 2000000.0 + i * 400000,
+            },
+        ];
+      final api = _FakeCalendarApi(fixture);
+      await _pump(tester, api);
+
+      final money = _chartTickLabels(
+        tester,
+      ).where((t) => RegExp(r'\d').hasMatch(t)).toList();
+      expect(
+        money.where((t) => t.startsWith('\$')),
+        isNotEmpty,
+        reason: 'USD ticks keep the house glyph: $money',
+      );
     });
 
     testWidgets('hides entirely when there are no occurrences', (tester) async {

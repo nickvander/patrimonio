@@ -191,7 +191,7 @@ void main() {
     await tester.pumpWidget(_host(api));
     await _openSheet(tester);
 
-    // Preview in flight: the count is unknown, so the apply button shows
+    // Preview in flight: the counts are unknown, so the apply button shows
     // its no-count label and NEITHER action is pressable.
     expect(find.text('Save & apply'), findsOneWidget);
     expect(
@@ -219,7 +219,7 @@ void main() {
           .widget<FilledButton>(
             find.widgetWithText(
               FilledButton,
-              'Save & apply to 37 past transactions',
+              'Save & apply · changes 22 categories, 31 names',
             ),
           )
           .onPressed,
@@ -271,7 +271,9 @@ void main() {
       await _openSheet(tester);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Save & apply to 37 past transactions'));
+      await tester.tap(
+        find.text('Save & apply · changes 22 categories, 31 names'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Apply to past transactions?'), findsOneWidget);
@@ -319,7 +321,9 @@ void main() {
     await _openSheet(tester);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Guardar y aplicar a 37 movimientos pasados'));
+    await tester.tap(
+      find.text('Guardar y aplicar · cambia 22 categorías, 31 nombres'),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('¿Aplicar a movimientos pasados?'), findsOneWidget);
@@ -342,7 +346,9 @@ void main() {
     await _openSheet(tester);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Save & apply to 37 past transactions'));
+    await tester.tap(
+      find.text('Save & apply · changes 22 categories, 31 names'),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
@@ -366,6 +372,169 @@ void main() {
       _allText(tester),
       contains('Rule saved. It applies to new transactions from now on.'),
     );
+  });
+
+  // The primary button used to read "Save & apply to {matched} past
+  // transactions", which oversold the blast radius: `matched` is only how many
+  // rows the rule TOUCHES, and most of those already show the target value
+  // (the apply just stamps them rule-managed). The label now leads with what
+  // will visibly change — without inventing a combined number the preview
+  // doesn't report, and without hiding the matched-vs-applied nuance, which
+  // stays in the confirm dialog and the apply snackbar.
+  group('apply button leads with the change counts, honestly', () {
+    Map<String, dynamic> payload({
+      required int matched,
+      required int categoryChanges,
+      required int descriptionChanges,
+    }) => {
+      ..._previewPayload,
+      'matched': matched,
+      'category_changes': categoryChanges,
+      'description_changes': descriptionChanges,
+    };
+
+    testWidgets('a category-only rule counts transactions, not matches', (
+      tester,
+    ) async {
+      final api = _FakeRulesApi(
+        preview: RulePreview.fromJson(
+          payload(matched: 37, categoryChanges: 22, descriptionChanges: 0),
+        ),
+      );
+      await tester.pumpWidget(_host(api));
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      // 22, not 37: with a single action the change count IS the number of
+      // transactions whose displayed value moves.
+      expect(
+        find.text('Save & apply · changes 22 transactions'),
+        findsOneWidget,
+      );
+      // The matched count is still on screen (the preview line reports it and
+      // the confirm dialog explains it) — it just no longer leads the button.
+      expect(
+        find.descendant(
+          of: find.byType(FilledButton),
+          matching: find.textContaining('37'),
+        ),
+        findsNothing,
+      );
+      expect(_allText(tester), contains('Matches 37'));
+    });
+
+    testWidgets('es-MX: the same single-action label is localized', (
+      tester,
+    ) async {
+      final api = _FakeRulesApi(
+        preview: RulePreview.fromJson(
+          payload(matched: 37, categoryChanges: 22, descriptionChanges: 0),
+        ),
+      );
+      await tester.pumpWidget(_host(api, locale: const Locale('es')));
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Guardar y aplicar · cambia 22 movimientos'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a rename-only rule counts the renames', (tester) async {
+      final api = _FakeRulesApi(
+        preview: RulePreview.fromJson(
+          payload(matched: 12, categoryChanges: 0, descriptionChanges: 5),
+        ),
+      );
+      await tester.pumpWidget(_host(api));
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Save & apply · changes 5 transactions'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the singular branch reads as one transaction', (tester) async {
+      final api = _FakeRulesApi(
+        preview: RulePreview.fromJson(
+          payload(matched: 9, categoryChanges: 1, descriptionChanges: 0),
+        ),
+      );
+      await tester.pumpWidget(_host(api));
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Save & apply · changes 1 transaction'), findsOneWidget);
+    });
+
+    testWidgets(
+      'a two-action rule names BOTH counts rather than inventing a union',
+      (tester) async {
+        final api = _FakeRulesApi(
+          preview: RulePreview.fromJson(
+            payload(matched: 37, categoryChanges: 22, descriptionChanges: 31),
+          ),
+        );
+        await tester.pumpWidget(_host(api));
+        await _openSheet(tester);
+        await tester.pumpAndSettle();
+
+        // A row can be in both sets, and the preview reports no combined
+        // count — so neither 53 (a sum) nor 31 (a guess) is claimed.
+        expect(
+          find.text('Save & apply · changes 22 categories, 31 names'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'nothing to change: the label makes no claim, but the apply stays '
+      'available because it still marks matched rows rule-managed',
+      (tester) async {
+        final api = _FakeRulesApi(
+          preview: RulePreview.fromJson(
+            payload(matched: 37, categoryChanges: 0, descriptionChanges: 0),
+          ),
+        );
+        await tester.pumpWidget(_host(api));
+        await _openSheet(tester);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Save & apply'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Save & apply'),
+              )
+              .onPressed,
+          isNotNull,
+        );
+      },
+    );
+
+    testWidgets('no matches at all keeps the apply disabled', (tester) async {
+      final api = _FakeRulesApi(
+        preview: RulePreview.fromJson(
+          payload(matched: 0, categoryChanges: 0, descriptionChanges: 0),
+        ),
+      );
+      await tester.pumpWidget(_host(api));
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save & apply'),
+            )
+            .onPressed,
+        isNull,
+      );
+    });
   });
 
   testWidgets('the previewed draft carries the editor state verbatim', (

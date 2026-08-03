@@ -621,18 +621,42 @@ class _RuleEditorSheetState extends State<RuleEditorSheet> {
     required bool stacked,
     required double width,
   }) {
-    final applyCount = _preview?.matched ?? 0;
+    final preview = _preview;
+    // Enablement still keys off MATCHED: applying a rule to rows that already
+    // show the target value is a real operation (it stamps them rule-managed,
+    // which is why the apply's counts can exceed the preview's). Only the
+    // LABEL changed — it now leads with what will visibly change, because
+    // "apply to 37 past transactions" oversold the blast radius when 37 was
+    // merely the match count.
+    final matched = preview?.matched ?? 0;
+    final categoryChanges = preview?.categoryChanges ?? 0;
+    final nameChanges = preview?.descriptionChanges ?? 0;
+    // No union of the two is available (a row can be in both sets), and the
+    // preview reports no such count — so a two-action rule names both counts
+    // rather than inventing a combined one. With a single action the count IS
+    // the number of transactions that visibly change. Neither number is
+    // rounded, padded, or hidden; the confirm dialog still carries the full
+    // matched-vs-changed explanation, and the snackbar still reports what the
+    // apply actually did.
+    final String applyLabel;
+    if (categoryChanges > 0 && nameChanges > 0) {
+      // gen-l10n takes these in metadata declaration order, which the arb
+      // declares in template order → (categories, names).
+      applyLabel = l.ruleSaveAndApplyBoth(categoryChanges, nameChanges);
+    } else if (categoryChanges > 0 || nameChanges > 0) {
+      applyLabel = l.ruleSaveAndApplyChanges(
+        categoryChanges > 0 ? categoryChanges : nameChanges,
+      );
+    } else {
+      applyLabel = l.ruleSaveAndApplyPlain;
+    }
     final saveButton = OutlinedButton(
       onPressed: ready ? _saveOnly : null,
       child: Text(l.ruleSaveForward),
     );
     final applyButton = FilledButton(
-      onPressed: ready && applyCount > 0 ? _saveAndApply : null,
-      child: Text(
-        l.ruleSaveAndApply(applyCount),
-        maxLines: 2,
-        textAlign: TextAlign.center,
-      ),
+      onPressed: ready && matched > 0 ? _saveAndApply : null,
+      child: Text(applyLabel, maxLines: 2, textAlign: TextAlign.center),
     );
     if (stacked) {
       // Touch-width: full-bleed and stacked, primary action last (nearest

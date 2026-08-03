@@ -514,10 +514,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
     maxY += pad;
     if (minY < 0 && values.every((v) => v >= 0)) minY = 0;
     final spanDays = spots.isEmpty ? 0 : spots.last.x.toInt();
-    final tickInterval = dayOffsetTickInterval(spanDays);
+    // Same tick recipe as the default-lens chart (`_dayTickInterval` /
+    // `_bottomTickOffsets`), so all three lenses label the same day offsets at
+    // the same density — not just plot on the same day-offset x.
+    final tickInterval = _dayTickInterval(spanDays, chartWidth);
     final tickDates = [
-      for (var x = 0.0; x <= spanDays; x += tickInterval)
-        points.first.date.add(Duration(days: x.toInt())),
+      for (final x in _bottomTickOffsets(spanDays, tickInterval, chartWidth))
+        points.first.date.add(Duration(days: x.round())),
     ];
     final labelFormat = nonRepeatingDateFormat(tickDates, spanDays: spanDays);
     DateTime dateFor(double x) =>
@@ -546,13 +549,21 @@ class _NetWorthCardState extends State<NetWorthCard> {
               showTitles: true,
               reservedSize: 22,
               interval: tickInterval,
-              getTitlesWidget: (value, meta) => SideTitleWidget(
-                meta: meta,
-                child: Text(
-                  labelFormat.format(dateFor(value)),
-                  style: TextStyle(color: context.textSubtle, fontSize: 10),
-                ),
-              ),
+              getTitlesWidget: (value, meta) {
+                // fl_chart always emits both endpoints, so the latest point
+                // is always labelled; drop the earlier neighbour that would
+                // collide with it.
+                if (_suppressTick(value, spanDays, chartWidth)) {
+                  return const SizedBox.shrink();
+                }
+                return SideTitleWidget(
+                  meta: meta,
+                  child: Text(
+                    labelFormat.format(dateFor(value)),
+                    style: TextStyle(color: context.textSubtle, fontSize: 10),
+                  ),
+                );
+              },
             ),
           ),
           leftTitles: AxisTitles(
@@ -1165,27 +1176,61 @@ class _NetWorthCardState extends State<NetWorthCard> {
     return _renderLineChart(filtered, institutions, chartWidth);
   }
 
-  /// ~1 x-label per 72px of plot width ("MMM y" labels are wide); never
-  /// denser than one per sample. Same house thinning rule as trends_chart.
-  int _bottomLabelStep(int count, double chartWidth) {
-    if (count <= 1) return 1;
-    final maxLabels = (chartWidth / 72).floor().clamp(1, count);
-    return (count / maxLabels).ceil().clamp(1, count);
+  /// History rows paired with their snapshot date, normalized to UTC midnight,
+  /// same-day duplicates collapsed to the LAST row, sorted ascending — the
+  /// `dedupeDailyCloses` rule from `utils/chart_time_axis.dart`, applied to the
+  /// richer rows this chart also reads for tooltips and institution bands.
+  /// Rows whose date won't parse have no position on a TIME axis, so they drop.
+  static List<({DateTime date, Map<String, dynamic> row})> _datedRows(
+    List<dynamic> data,
+  ) {
+    final byDay = <DateTime, Map<String, dynamic>>{};
+    for (final raw in data) {
+      if (raw is! Map) continue;
+      final date = DateTime.tryParse(raw['date']?.toString() ?? '');
+      if (date == null) continue;
+      byDay[DateTime.utc(date.year, date.month, date.day)] = raw
+          .cast<String, dynamic>();
+    }
+    final days = byDay.keys.toList()..sort();
+    return [for (final d in days) (date: d, row: byDay[d]!)];
   }
 
-  /// The sample indices the bottom axis will actually label, mirroring the
-  /// filtering `getTitlesWidget` applies below: fl_chart ticks at multiples of
-  /// the step, and any tick too close to the final one is dropped rather than
-  /// allowed to collide with it.
-  List<int> _bottomLabelIndices(int count, int step, double chartWidth) {
-    if (count <= 0) return const [];
-    final unitPx = chartWidth / (count - 1).clamp(1, 1 << 30);
-    final out = <int>[];
-    for (int i = 0; i < count; i += step) {
-      if (i != count - 1 && (count - 1 - i) * unitPx < 60) continue;
-      out.add(i);
+  /// Bottom-axis tick interval in DAYS for a time-spaced (day-offset) x axis:
+  /// ~1 label per 72px of plot width ("MMM y" labels are wide), whole days so
+  /// the tick grid stays exact, never below one day. Same thinning rule the
+  /// index-spaced axis used, expressed in the day-offset space that both this
+  /// chart and the currency-lens chart now share.
+  static double _dayTickInterval(int spanDays, double chartWidth) {
+    if (spanDays <= 0) return 1;
+    final maxLabels = (chartWidth / 72).floor().clamp(2, spanDays + 1);
+    return (spanDays / (maxLabels - 1)).ceil().toDouble();
+  }
+
+  /// Whether a tick at day offset [value] should be dropped because it would
+  /// paint within ~60px of the final one. fl_chart always emits both endpoints
+  /// (`SideTitles.minIncluded`/`maxIncluded`), so the latest snapshot is always
+  /// labelled and it is the earlier neighbour that gives way.
+  static bool _suppressTick(double value, int spanDays, double plotWidth) {
+    if (spanDays <= 0 || value >= spanDays) return false;
+    return (spanDays - value) * (plotWidth / spanDays) < 60;
+  }
+
+  /// The day offsets the bottom axis will actually label, mirroring what
+  /// `getTitlesWidget` renders: multiples of [interval] plus the final
+  /// endpoint, minus anything [_suppressTick] drops.
+  static List<double> _bottomTickOffsets(
+    int spanDays,
+    double interval,
+    double plotWidth,
+  ) {
+    if (spanDays <= 0) return const [0.0];
+    final out = <double>[];
+    for (var x = 0.0; x < spanDays; x += interval) {
+      if (_suppressTick(x, spanDays, plotWidth)) continue;
+      out.add(x);
     }
-    if (out.isEmpty || out.last != count - 1) out.add(count - 1);
+    out.add(spanDays.toDouble());
     return out;
   }
 
@@ -1196,24 +1241,28 @@ class _NetWorthCardState extends State<NetWorthCard> {
   ) {
     if (data.isEmpty) return const SizedBox.shrink();
 
-    // Bottom-axis label format follows the FILTERED data's real span, not the
+    // TIME-SPACED x, identical to the currency-lens chart's mapping: x is the
+    // day offset from the first snapshot, so a sparse March sample sits its
+    // real distance from a tightly packed July one. Index-as-x gave the
+    // default lens a different horizontal mapping from the MXN / constant-FX
+    // lenses, and switching lenses appeared to reshape the same history.
+    final rows = _datedRows(data);
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final firstDate = rows.first.date;
+    final spanDays = rows.last.date.difference(firstDate).inDays;
+    DateTime dateForOffset(double x) =>
+        firstDate.add(Duration(days: x.round()));
+
+    // Bottom-axis label format follows the plotted data's real span, not the
     // selected range chip — then escalates if the ticks at THIS density would
     // still repeat themselves (see `nonRepeatingDateFormat`).
-    final firstDate = DateTime.tryParse(data.first['date']?.toString() ?? '');
-    final lastDate = DateTime.tryParse(data.last['date']?.toString() ?? '');
-    final spanDays = (firstDate != null && lastDate != null)
-        ? lastDate.difference(firstDate).inDays.abs()
-        : null;
-
     List<DateTime> ticksFor(double width) => [
-      for (final i in _bottomLabelIndices(
-        data.length,
-        _bottomLabelStep(data.length, width),
+      for (final x in _bottomTickOffsets(
+        spanDays,
+        _dayTickInterval(spanDays, width),
         width,
       ))
-        if (DateTime.tryParse(data[i]['date']?.toString() ?? '')
-            case final DateTime d)
-          d,
+        dateForOffset(x),
     ];
     double halfWidestLabel(List<DateTime> ticks, DateFormat f) => ticks.isEmpty
         ? 0.0
@@ -1237,7 +1286,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
       nonRepeatingDateFormat(firstPass, spanDays: spanDays),
     );
     final plotWidth = (chartWidth - bottomOverhang).clamp(1.0, chartWidth);
-    final labelStep = _bottomLabelStep(data.length, plotWidth);
+    final tickInterval = _dayTickInterval(spanDays, plotWidth);
     final bottomLabelFormat = nonRepeatingDateFormat(
       ticksFor(plotWidth),
       spanDays: spanDays,
@@ -1262,15 +1311,20 @@ class _NetWorthCardState extends State<NetWorthCard> {
     double maxY = -double.infinity;
 
     final baseValue =
-        (data.first['net_worth'] as num).toDouble() * conversionFactor;
+        (rows.first.row['net_worth'] as num).toDouble() * conversionFactor;
+
+    // Day offset → row index, so the tooltip can still find the sample under
+    // the cursor now that x is a date position rather than an index.
+    final rowIndexByX = <double, int>{};
 
     // Performance Optimization: Downsample to ~150 points maximum
-    final int step = data.length > 150 ? (data.length / 150).ceil() : 1;
+    final int step = rows.length > 150 ? (rows.length / 150).ceil() : 1;
 
     void processPoint(int i) {
-      final point = data[i] as Map<String, dynamic>;
+      final point = rows[i].row;
       final total = (point['net_worth'] as num).toDouble() * conversionFactor;
-      final x = i.toDouble();
+      final x = rows[i].date.difference(firstDate).inDays.toDouble();
+      rowIndexByX[x] = i;
       totalSpots.add(FlSpot(x, total));
 
       final byInst =
@@ -1295,12 +1349,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
       if (running < minY) minY = running;
     }
 
-    for (int i = 0; i < data.length; i += step) {
+    for (int i = 0; i < rows.length; i += step) {
       processPoint(i);
     }
     // Always include the most recent data point
-    if ((data.length - 1) % step != 0 && data.isNotEmpty) {
-      processPoint(data.length - 1);
+    if ((rows.length - 1) % step != 0) {
+      processPoint(rows.length - 1);
     }
 
     // Fit the Y axis. minY/maxY currently hold the raw data extent; the
@@ -1395,10 +1449,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
               return touchedSpots.map((spot) {
                 if (spot.barIndex != wealthBarIndex) return null;
 
-                final idx = spot.x.toInt().clamp(0, data.length - 1);
-                final point = data[idx] as Map<String, dynamic>;
-                final dateStr = point['date'].toString();
-                final date = DateTime.tryParse(dateStr) ?? DateTime.now();
+                // x is a day offset now, not an index — the sample map built
+                // alongside the spots is the only correct way back to a row.
+                final idx = rowIndexByX[spot.x] ?? 0;
+                final point = rows[idx].row;
+                final date = rows[idx].date;
 
                 final nw = point['net_worth'];
                 final ta = point['total_assets'];
@@ -1517,34 +1572,21 @@ class _NetWorthCardState extends State<NetWorthCard> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 22,
-              interval: labelStep.toDouble(),
+              interval: tickInterval,
               getTitlesWidget: (value, meta) {
-                final int index = value.toInt();
-                // Only label real samples: fl_chart emits ticks at every
-                // interval multiple, including fractional x positions, which
-                // painted duplicate month labels between points.
-                if (index < 0 ||
-                    index >= data.length ||
-                    value != index.toDouble()) {
+                if (value < 0 || value > spanDays) {
                   return const SizedBox.shrink();
                 }
                 // Keep the last label; drop any earlier tick that would
-                // paint within ~60px of it — a "Jul 2026" tick one sample
+                // paint within ~60px of it — a "Jul 2026" tick one step
                 // before the end used to collide with the final label.
-                final unitPx = plotWidth / (data.length - 1).clamp(1, 1 << 30);
-                final isLast = index == data.length - 1;
-                if (!isLast && (data.length - 1 - index) * unitPx < 60) {
+                if (_suppressTick(value, spanDays, plotWidth)) {
                   return const SizedBox.shrink();
                 }
-                final dateStr = data[index]['date'].toString();
-                if (dateStr.length >= 10) {
-                  final date = DateTime.parse(dateStr);
-                  return Text(
-                    bottomLabelFormat.format(date),
-                    style: TextStyle(color: context.textSubtle, fontSize: 10),
-                  );
-                }
-                return const Text('');
+                return Text(
+                  bottomLabelFormat.format(dateForOffset(value)),
+                  style: TextStyle(color: context.textSubtle, fontSize: 10),
+                );
               },
             ),
           ),

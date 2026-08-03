@@ -94,9 +94,9 @@ Widget _host(Widget child, {Locale? locale}) => MaterialApp(
   home: Scaffold(body: SingleChildScrollView(child: child)),
 );
 
-NetWorthCard _card(ApiService api) => NetWorthCard(
+NetWorthCard _card(ApiService api, {List<dynamic>? history}) => NetWorthCard(
   netWorth: 1780.0,
-  history: _history(),
+  history: history ?? _history(),
   conversionFactor: 1.0,
   currencyFormat: moneyFormat('USD'),
   reportingCurrency: 'USD',
@@ -111,7 +111,123 @@ void _useWideSurface(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
+/// A deliberately SPARSE history: a lone February snapshot, then a cluster in
+/// March. Index-spacing hides that gap (the three points land one step apart);
+/// time-spacing renders it at its real width.
+const List<String> _sparseDates = [
+  '2026-02-01',
+  '2026-03-20',
+  '2026-03-22',
+  '2026-03-25',
+];
+
+/// Day offsets of [_sparseDates] from the first date — what a time-spaced
+/// x-axis must produce, and what an index-spaced one (0,1,2,3) must not.
+final List<double> _sparseDayOffsets = [
+  for (final d in _sparseDates)
+    DateTime.parse(
+      d,
+    ).difference(DateTime.parse(_sparseDates.first)).inDays.toDouble(),
+];
+
+List<dynamic> _sparseHistory() => [
+  for (var i = 0; i < _sparseDates.length; i++)
+    {
+      'date': _sparseDates[i],
+      'net_worth': 1500.0 + i * 100,
+      'total_assets': 2000.0 + i * 100,
+      'total_liabilities': 500.0,
+      'by_institution': const <String, dynamic>{},
+    },
+];
+
+/// The lens series over the SAME dates, so every lens plots one history.
+Map<String, dynamic> _sparseAttribution() => {
+  ..._attribution(),
+  'from': _sparseDates.first,
+  'to': _sparseDates.last,
+  'series': [
+    for (var i = 0; i < _sparseDates.length; i++)
+      {
+        'date': _sparseDates[i],
+        'usd': 1500.0 + i * 100,
+        'mxn': 30000.0 + i * 2000,
+        'constant_fx_usd': 1500.0 + i * 90,
+      },
+  ],
+};
+
+/// x positions of the plotted series — the last bar is always the headline
+/// line (the stacked institution bands, when present, precede it).
+List<double> _plottedXs(WidgetTester tester) => tester
+    .widget<LineChart>(find.byType(LineChart))
+    .data
+    .lineBarsData
+    .last
+    .spots
+    .map((s) => s.x)
+    .toList();
+
 void main() {
+  group('lens x-axis mapping is the same for every lens', () {
+    // The USD (default) lens plotted its history index-spaced while the MXN
+    // and constant-FX lenses plotted the attribution series day-offset
+    // spaced. Same history, three horizontal mappings: switching lenses
+    // appeared to reshape the past, and a sparse March point sat one step
+    // from a tightly packed cluster. Every lens is time-spaced now.
+    testWidgets('all three lenses plot the same day offsets', (tester) async {
+      _useWideSurface(tester);
+      final api = _FakeAttributionApi(result: _sparseAttribution());
+      await tester.pumpWidget(_host(_card(api, history: _sparseHistory())));
+      await tester.pumpAndSettle();
+
+      // Default (USD) lens — the history path, formerly index-as-x.
+      expect(_plottedXs(tester), _sparseDayOffsets);
+      // …and it is emphatically NOT index spacing.
+      expect(_plottedXs(tester), isNot([0.0, 1.0, 2.0, 3.0]));
+
+      for (final lens in const ['MXN', 'Constant FX', 'USD']) {
+        await tester.tap(find.text(lens));
+        await tester.pumpAndSettle();
+        expect(
+          _plottedXs(tester),
+          _sparseDayOffsets,
+          reason: 'the $lens lens must use the same horizontal mapping',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('same-day duplicate snapshots collapse to one x position', (
+      tester,
+    ) async {
+      _useWideSurface(tester);
+      final api = _FakeAttributionApi(result: _sparseAttribution());
+      final history = _sparseHistory()
+        ..add({
+          // A second row for the last date — a time axis has exactly one
+          // position per calendar day, and the LAST close wins.
+          'date': _sparseDates.last,
+          'net_worth': 9999.0,
+          'total_assets': 9999.0,
+          'total_liabilities': 0.0,
+          'by_institution': const <String, dynamic>{},
+        });
+      await tester.pumpWidget(_host(_card(api, history: history)));
+      await tester.pumpAndSettle();
+
+      expect(_plottedXs(tester), _sparseDayOffsets);
+      final spots = tester
+          .widget<LineChart>(find.byType(LineChart))
+          .data
+          .lineBarsData
+          .last
+          .spots;
+      expect(spots.last.y, 9999.0);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('attribution section', () {
     testWidgets('renders all four components in English (nonzero residual)', (
       tester,

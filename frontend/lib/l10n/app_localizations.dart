@@ -12377,11 +12377,23 @@ abstract class AppLocalizations {
   /// **'Save rule'**
   String get ruleSaveForward;
 
-  /// No description provided for @ruleSaveAndApply.
+  /// No description provided for @ruleSaveAndApplyPlain.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =0{Save & apply} =1{Save & apply to 1 past transaction} other{Save & apply to {count} past transactions}}'**
-  String ruleSaveAndApply(int count);
+  /// **'Save & apply'**
+  String get ruleSaveAndApplyPlain;
+
+  /// No description provided for @ruleSaveAndApplyChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Save & apply · changes 1 transaction} other{Save & apply · changes {count} transactions}}'**
+  String ruleSaveAndApplyChanges(int count);
+
+  /// No description provided for @ruleSaveAndApplyBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'Save & apply · changes {categories} categories, {names} names'**
+  String ruleSaveAndApplyBoth(int categories, int names);
 
   /// No description provided for @ruleApplyConfirmTitle.
   ///

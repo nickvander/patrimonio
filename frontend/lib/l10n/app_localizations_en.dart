@@ -7739,15 +7739,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ruleSaveForward => 'Save rule';
 
   @override
-  String ruleSaveAndApply(int count) {
+  String get ruleSaveAndApplyPlain => 'Save & apply';
+
+  @override
+  String ruleSaveAndApplyChanges(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Save & apply to $count past transactions',
-      one: 'Save & apply to 1 past transaction',
-      zero: 'Save & apply',
+      other: 'Save & apply · changes $count transactions',
+      one: 'Save & apply · changes 1 transaction',
     );
     return '$_temp0';
+  }
+
+  @override
+  String ruleSaveAndApplyBoth(int categories, int names) {
+    return 'Save & apply · changes $categories categories, $names names';
   }
 
   @override

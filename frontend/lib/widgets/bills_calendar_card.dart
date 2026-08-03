@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -759,9 +761,14 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
     ];
     final tickFormat = nonRepeatingDateFormat(tickDates, spanDays: spanDays);
     final lineColor = _currency == 'MXN' ? context.tealAccent : context.info;
-    final compact = NumberFormat.compactSimpleCurrency(
-      name: money.currencyName,
-    );
+    // House compact money ticks. `NumberFormat.compactSimpleCurrency` maps MXN
+    // to its LOCAL symbol "$", so a peso projection was labelled "$100K" and
+    // read as USD at a glance; `compactMoney` pairs the house glyph
+    // ("MXN 100K") with a locale-aware magnitude (see utils/currency.dart).
+    final tickCurrency = money.currencyName ?? _currency;
+    final closes = [for (final s in spots) s.y];
+    final tickMin = closes.reduce(math.min);
+    final tickMax = closes.reduce(math.max);
 
     return TransientTooltipLineChart(
       data: LineChartData(
@@ -786,13 +793,20 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 46,
+              // Fit the box to the widest tick this range can produce in this
+              // currency — the wider "MXN " prefix wraps or clips a fixed 46.
+              reservedSize: compactMoneyAxisWidth(
+                tickMin,
+                tickMax,
+                tickCurrency,
+                fontSize: 9,
+              ),
               getTitlesWidget: (value, meta) {
                 if (value <= meta.min || value >= meta.max) {
                   return const SizedBox.shrink();
                 }
                 return Text(
-                  compact.format(value),
+                  compactMoney(value, tickCurrency),
                   style: TextStyle(color: context.textSubtle, fontSize: 9),
                 );
               },

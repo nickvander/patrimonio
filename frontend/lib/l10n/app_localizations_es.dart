@@ -7806,15 +7806,22 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ruleSaveForward => 'Guardar regla';
 
   @override
-  String ruleSaveAndApply(int count) {
+  String get ruleSaveAndApplyPlain => 'Guardar y aplicar';
+
+  @override
+  String ruleSaveAndApplyChanges(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Guardar y aplicar a $count movimientos pasados',
-      one: 'Guardar y aplicar a 1 movimiento pasado',
-      zero: 'Guardar y aplicar',
+      other: 'Guardar y aplicar · cambia $count movimientos',
+      one: 'Guardar y aplicar · cambia 1 movimiento',
     );
     return '$_temp0';
+  }
+
+  @override
+  String ruleSaveAndApplyBoth(int categories, int names) {
+    return 'Guardar y aplicar · cambia $categories categorías, $names nombres';
   }
 
   @override
