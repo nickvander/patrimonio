@@ -26,6 +26,23 @@ pub struct Row {
     pub balance_after: Option<Decimal>,
 }
 
+/// True when a statement file's balance-bearing rows are a period-total
+/// MARKER rather than a running ledger.
+///
+/// A lone balance row among many is a marker (cetes "Total final", Nu "Saldo
+/// al generar") stamped for the snapshot back-fill — chaining those across
+/// statements would flag a portfolio's normal growth as a "missing statement",
+/// and anchoring an opening balance on one is meaningless. Genuine sparse
+/// statements are kept: a real month with one transaction has
+/// `with_balance == total`.
+///
+/// Shared with `services/reconcile.rs`, which needs the identical judgement
+/// (it reports `balance_marker_only` for these). Kept in one place on purpose
+/// — a hand-synced second copy is how the FX rules drifted apart historically.
+pub fn is_balance_marker_only(with_balance: usize, total: usize) -> bool {
+    with_balance < 2 && with_balance < total
+}
+
 struct Summary {
     file: String,
     start: NaiveDate,
@@ -57,13 +74,7 @@ fn summaries(rows: &[Row]) -> Vec<Summary> {
         if with_bal.is_empty() {
             continue;
         }
-        // A lone balance row among many is a period-total MARKER (cetes "Total
-        // final", Nu "Saldo al generar") stamped for the snapshot back-fill,
-        // not a running ledger — chaining those across statements would flag a
-        // portfolio's normal growth as a "missing statement". Skip those, but
-        // keep genuine sparse statements (a real month with 1 transaction has
-        // balance == row count).
-        if with_bal.len() < 2 && with_bal.len() < group.len() {
+        if is_balance_marker_only(with_bal.len(), group.len()) {
             continue;
         }
         let first = with_bal.first().unwrap();

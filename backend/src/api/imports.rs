@@ -13,6 +13,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
+use crate::api::error::{internal, ApiError};
 use crate::api::middleware::AuthContext;
 use crate::services::parser;
 use crate::AppState;
@@ -68,6 +69,10 @@ pub fn router() -> Router<AppState> {
         // rows, return which are already imported so the UI can flag /
         // auto-deselect them BEFORE confirming.
         .route("/check-duplicates", post(check_duplicates_handler))
+        // Preview-time statement reconciliation: given the chosen account(s)
+        // + parsed rows, does the app's ledger end each statement period on
+        // the balance the bank printed? Advisory — see `reconcile_handler`.
+        .route("/reconcile", post(reconcile_handler))
         // Import cleanup: list past import batches, undo one, or bulk-
         // delete transactions in an account + date range.
         // Full-history statement continuity: per account, chain the stored
@@ -174,6 +179,190 @@ async fn check_duplicates_handler(
         .collect();
 
     Json(serde_json::json!({ "duplicate_indices": duplicate_indices })).into_response()
+}
+
+/// One about-to-be-imported row, in the preview's flattened wire shape
+/// (`ParsedTransaction` fields + `source_file`). `source_file` is optional so
+/// an older client — or a hand-rolled call — still parses; those rows group
+/// under a single unnamed statement, exactly like `confirm_handler` treats
+/// them for the continuity check.
+#[derive(Deserialize)]
+struct ReconcileTx {
+    #[serde(flatten)]
+    tx: ParsedTransaction,
+    #[serde(default)]
+    source_file: Option<String>,
+}
+
+/// The rows destined for ONE account. Grouping mirrors `confirm_handler`,
+/// which imports one account at a time — so the dedup signatures computed
+/// here are byte-identical to the ones confirm will write.
+#[derive(Deserialize)]
+struct ReconcileAccountRequest {
+    account_id: Uuid,
+    transactions: Vec<ReconcileTx>,
+}
+
+#[derive(Deserialize)]
+struct ReconcileRequest {
+    /// One entry per account this import will write to. More than one when a
+    /// batch spans banks, or when a bundled statement's sections (Banamex's
+    /// MiCuenta + Pagaré) are routed to separate accounts.
+    accounts: Vec<ReconcileAccountRequest>,
+}
+
+/// Hard ceiling on the stored rows pulled in per account. A month of
+/// statements is tens of rows; this only bites on a mis-parsed period spanning
+/// years, where an unbounded fetch would be the DoS. Ordered by date so the
+/// clamp keeps the rows nearest the statement.
+const RECONCILE_MAX_EXISTING_ROWS: i64 = 2000;
+
+/// POST /api/imports/reconcile — the guided statement-reconciliation check,
+/// run BEFORE confirm so the user can act on it.
+///
+/// For each account, for each statement file, it compares the bank's own
+/// closing SALDO for the period against the balance the app will hold once
+/// this import lands (existing rows + the incoming rows that aren't
+/// duplicates), and classifies the gap — naming the specific stored
+/// transactions that explain it when it can. See `services/reconcile.rs` for
+/// the classification and its recorded limitation.
+///
+/// **This never blocks an import.** It is a read-only preview: nothing is
+/// written, `confirm` is unchanged, and a statement that does not reconcile
+/// still imports. Real statements carry mid-period adjustments and fees the
+/// layout parsers miss, so a hard gate here would block legitimate imports.
+async fn reconcile_handler(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Json(req): Json<ReconcileRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut out: Vec<crate::services::reconcile::AccountReconciliation> = Vec::new();
+
+    for account in &req.accounts {
+        // Ownership check doubles as the row-level scope: a foreign (or
+        // nonexistent) account id yields no row, and we 404 rather than
+        // reconcile against someone else's ledger — or leak, by the shape of
+        // the answer, whether that account exists.
+        let meta: Option<(String, String)> = sqlx::query_as(
+            "SELECT COALESCE(NULLIF(nickname, ''), name), currency \
+             FROM accounts WHERE id = $1 AND user_id = $2",
+        )
+        .bind(account.account_id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(internal)?;
+        let Some((account_name, account_currency)) = meta else {
+            return Err(ApiError::new(StatusCode::NOT_FOUND, "Account not found."));
+        };
+
+        if account.transactions.is_empty() {
+            out.push(crate::services::reconcile::reconcile_account(
+                account.account_id,
+                &account_name,
+                &account_currency,
+                &[],
+                &[],
+            ));
+            continue;
+        }
+
+        // Same occurrence-aware signatures confirm will insert under, computed
+        // over the SAME per-account row order — so "will be skipped as a
+        // duplicate" here means exactly what it will mean at confirm time.
+        let signatures = batch_signatures(
+            account
+                .transactions
+                .iter()
+                .map(|rt| (rt.tx.date, rt.tx.amount, rt.tx.description.clone())),
+        );
+        let already_present: std::collections::HashSet<String> = sqlx::query_scalar::<_, String>(
+            "SELECT external_id FROM transactions \
+             WHERE account_id = $1 AND user_id = $2 AND external_id = ANY($3)",
+        )
+        .bind(account.account_id)
+        .bind(ctx.user_id)
+        .bind(&signatures)
+        .fetch_all(&state.db)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .collect();
+        let incoming_signatures: std::collections::HashSet<&str> =
+            signatures.iter().map(|s| s.as_str()).collect();
+
+        let incoming: Vec<crate::services::reconcile::IncomingRow> = account
+            .transactions
+            .iter()
+            .zip(signatures.iter())
+            .map(|(rt, sig)| crate::services::reconcile::IncomingRow {
+                file: rt.source_file.clone().unwrap_or_default(),
+                date: rt.tx.date,
+                amount: rt.tx.amount,
+                currency: rt.tx.currency.clone(),
+                balance_after: rt.tx.balance_after,
+                duplicate: already_present.contains(sig),
+            })
+            .collect();
+
+        // Pull the account's stored rows once for the whole import span,
+        // widened by the misdated-row window so a charge booked into the
+        // neighbouring month can still be offered as an explanation. The
+        // per-statement period filtering happens in the pure layer.
+        let window = chrono::Duration::days(crate::services::reconcile::CANDIDATE_WINDOW_DAYS);
+        let (Some(min_date), Some(max_date)) = (
+            incoming.iter().map(|r| r.date).min(),
+            incoming.iter().map(|r| r.date).max(),
+        ) else {
+            // Unreachable: `incoming` mirrors a `transactions` list we already
+            // checked is non-empty. Skip rather than panic on a slice bound.
+            continue;
+        };
+        let from = min_date - window;
+        let to = max_date + window;
+        let stored = sqlx::query(
+            "SELECT id, date, description, amount, currency, external_id \
+             FROM transactions \
+             WHERE account_id = $1 AND user_id = $2 AND date >= $3 AND date <= $4 \
+             ORDER BY date, id \
+             LIMIT $5",
+        )
+        .bind(account.account_id)
+        .bind(ctx.user_id)
+        .bind(from)
+        .bind(to)
+        .bind(RECONCILE_MAX_EXISTING_ROWS)
+        .fetch_all(&state.db)
+        .await
+        .map_err(internal)?;
+
+        let existing: Vec<crate::services::reconcile::ExistingRow> = stored
+            .iter()
+            .map(|r| {
+                let external_id: Option<String> = r.try_get("external_id").ok().flatten();
+                crate::services::reconcile::ExistingRow {
+                    id: r.get("id"),
+                    date: r.get("date"),
+                    description: r.try_get("description").unwrap_or_default(),
+                    amount: r.get("amount"),
+                    currency: r.try_get("currency").unwrap_or_default(),
+                    matched_by_incoming: external_id
+                        .as_deref()
+                        .is_some_and(|id| incoming_signatures.contains(id)),
+                }
+            })
+            .collect();
+
+        out.push(crate::services::reconcile::reconcile_account(
+            account.account_id,
+            &account_name,
+            &account_currency,
+            &incoming,
+            &existing,
+        ));
+    }
+
+    Ok(Json(serde_json::json!({ "accounts": out })))
 }
 
 /// GET /api/imports/continuity — per account, chain the stored running
