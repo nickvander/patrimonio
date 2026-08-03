@@ -41,21 +41,19 @@ queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
-- **Rules-engine polish (2026-08-03 rig pass, minor):** (a) the primary
-  button reads "Save & apply to N past transactions" using the MATCHED
-  count while only the changed subset actually changes — the dialog body
-  explains it, but the button alone oversells the blast radius; consider
-  leading with the changes count. (b) `skipped` in the APPLY response is
-  structurally always 0 outside the preview→apply race (rows already
-  manual are excluded from the id set at preview time), so the
-  `ruleAppliedSkipped` string is near-unreachable — correct by design,
-  but don't "fix" it by inflating the number.
-- **Walkthrough observations (2026-08-03, minor):** (a) net-worth USD lens
-  x-axis is index-spaced over snapshots while MXN/Constant-FX lenses are
-  time-spaced — same history, different horizontal mapping across lenses;
-  (b) bills projection curve in MXN mode labels its y-axis "$100K" style
-  while the app elsewhere writes "MXN 100,000" — can read as USD at a
-  glance. Both cosmetic, neither blocks review.
+- ~~Rules-engine apply-button copy~~, ~~net-worth lens x-axis spacing~~,
+  ~~bills MXN axis notation~~, ~~allocation-header truncation~~ — ✅ all
+  fixed 2026-08-03 (`8da7d3d`, frontend 1047). Standing note kept from that
+  pass: `skipped` in the APPLY response is structurally always 0 outside the
+  preview→apply race, so `ruleAppliedSkipped` is near-unreachable — correct
+  by design; **don't "fix" it by inflating the number.**
+- ~~Bills calendar showed only loan repayments~~ — ✅ fixed 2026-08-03
+  (`a3915e3` + `56308db`): it read explicit rules only, never the detector.
+  Follow-ups the fix deliberately left: detected occurrences project from
+  the cluster's last observed charge forward only (earlier cycles aren't
+  emitted, to avoid phantom `missed` rows on irregular gaps), and detected
+  clusters are capped at 40 by monthly spend — revisit either if a real
+  charge goes missing from the calendar.
 - ~~Chart tooltip hides under the finger on touch~~ — ✅ fixed 2026-08-03
   (pointer-kind-aware pinning in chart_touch.dart, all line charts, new
   conventions invariant; frontend 996/996 — see CURRENT.md).

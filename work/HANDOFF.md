@@ -1,21 +1,22 @@
 # Handoff — start here
 
-> **Last updated:** 2026-08-03 (feature-research batch + rules engine shipped and deployed)
+> **Last updated:** 2026-08-03 (feature-research batch, rules engine, and the
+> calendar-detection fix shipped and deployed)
 > **Purpose:** The one-screen "where are we, what's next" doc to pick up cold.
 > Detail lives in [work/CURRENT.md](CURRENT.md) — this file deliberately stays short.
 
 ## TL;DR — current state
 
-**As of 2026-08-03:** `main` @ `dc81667`, pushed. **Prod runs on the homelab
+**As of 2026-08-03:** `main` @ `56308db`, pushed. **Prod runs on the homelab
 host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
 `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
-`dc81667`** via the host's own `update.sh` (the same script its 3am cron
+`56308db`** via the host's own `update.sh` (the same script its 3am cron
 runs: `git pull` + `docker compose up -d --build`). Verified after: api
 health 200, frontend 200, no errors in the api log, migration
 `2026080401 user rules` recorded `success=t`. Its provenance backfill was a
 **no-op on prod** — prod carries 0 hand-edited categories/descriptions
 across 2,520 transactions, so no existing row was rewritten. The latest APK
-is cut from `dc81667` (`app-arm64-v8a-release.apk`, 28.4MB; the 65-file diff
+is cut from `56308db` (`app-arm64-v8a-release.apk`, 28.4MB; the 65-file diff
 touched no Android dep/Gradle/proguard file, so the emulator smoke gate
 wasn't triggered).
 
@@ -34,6 +35,15 @@ build commands live in the repo-root [AGENTS.md](../AGENTS.md) (and the
 
 ## Shipped recently (newest first — detail in CURRENT.md)
 
+- **2026-08-03 (evening, `56308db`):** polish bundle (net-worth lens x-axis
+  converged on date spacing, MXN chart axis notation, allocation-header
+  truncation, rules apply-button copy) + the owner-reported bills-calendar
+  gap: it read explicit recurring rules only, never the detector that
+  IDENTIFIES charges from history (prod had 0 rules → loans only). Detector
+  extracted to `services/subscription_detect.rs`; the calendar now projects
+  detected clusters, marked by shape not hue, behind a default-on toggle,
+  with the ignore list honored and explicit rules deduped against.
+  Backend 614→**619**, frontend 1033→**1056**.
 - **2026-08-03 (feature-research batch, `dc81667`):** an evidence-grounded
   feature sweep (`work/research/2026-08-03-feature-research.md`, 8 PM-vetted
   briefs + 18 rejected-with-reasons; re-runnable via `.agent/agents/` +
@@ -80,7 +90,7 @@ build commands live in the repo-root [AGENTS.md](../AGENTS.md) (and the
   (pre-July entries archived in `work/archive/`).
 - [work/NEXT.md](NEXT.md) — pickup-ready priorities; [work/FUTURE.md](FUTURE.md)
   — the full backlog with per-item plans.
-- [work/DECISIONS.md](DECISIONS.md) — architecture decision records (DEC-001…026).
+- [work/DECISIONS.md](DECISIONS.md) — architecture decision records (DEC-001…028).
 
 ## How to verify / ship
 

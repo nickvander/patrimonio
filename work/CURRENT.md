@@ -3,6 +3,52 @@
 > **Last updated:** 2026-08-03 (feature-research sweep, 4 features + tooltip fix committed; rules-engine MVP built)
 > **Branch:** `main`.
 
+## 2026-08-03 (evening) — Shipped to prod; polish bundle; calendar detection fix
+
+Deployed `dc81667` → `56308db` to thelab via the host's own `update.sh`;
+api/frontend health 200, 0 error lines, APKs cut from both.
+
+* **Polish bundle (`8da7d3d`)** — four fixes, each sabotage-tested (new test
+  confirmed failing without the fix, then restored): the net-worth default
+  lens plotted x by ARRAY INDEX while currency lenses used date offsets, so
+  switching lenses reshaped the same history (converged on day offsets +
+  one tick rule; tooltip row lookup moved to an x-keyed map since indexing
+  by x breaks once x is a date); bills MXN axis said `$100K` on a peso
+  curve → house `compactMoney` (last `compactSimpleCurrency` axis in `lib/`);
+  allocation-heatmap header truncated to "Asset distributi…" (title+total
+  were equal-flex, capping the title at half the row — now stacks under
+  ~420px, title `Expanded` against a non-flex total above); rules apply
+  button led with MATCHED count → names real counts, no fabricated union
+  (category/description change sets can overlap). 1033→1047.
+* **Owner report: "bills calendar only shows loan repayments"** — root cause
+  was two systems sharing a name: the calendar expanded explicit
+  `recurring_rules` + loans but never the DETECTOR that identifies charges
+  from history. Prod: 0 rules, 5 loans, 2,520 txs → loans only. **The spec
+  caused it** — FUTURE.md's plan line said "off `/api/recurring/upcoming`"
+  (rules-based) while the brief it came from meant detection.
+  - **Backend (`a3915e3`, 614→619):** detector extracted to
+    `services/subscription_detect.rs` (behavior-preserving — the shipped
+    subscriptions DTO is field-identical, f64 path copied verbatim, its
+    tests pass untouched as proof). Calendar projects active clusters from
+    last charge + median cadence; `source: recurring|loan|detected`
+    (existing literal preserved — shipped client parses it); ignore-list
+    predicate lives INSIDE the service and now fails CLOSED; rule/detected
+    dedupe so an explicit Netflix rule doesn't render twice and fight over
+    one posted row; `pending_import` still applies. Projection points carry
+    `usd_detected`/`mxn_detected` so a toggle subtracts without client-side
+    FX.
+  - **Frontend (`56308db`, 1047→1056):** detected marked by SHAPE not hue
+    (filled disc = declared, hollow ring = detected) + icon + word + its own
+    semantics node; a grid day rings only when EVERY occurrence there is
+    detected. Toggle defaults ON, persists device-local; hide-when-empty
+    reads the UNFILTERED list so hiding detections can't take the toggle
+    off screen. FX shortfall banner keeps the detected-inclusive
+    computation and gains a "includes hidden charges" line rather than
+    warning about invisible bills. "Not a bill" action posts the merchant
+    key to the existing ignore endpoint. Also fixed the card's gating,
+    which required rules-or-loans and so hid the calendar from exactly the
+    detection-only users this change serves.
+
 ## 2026-08-03 (later) — Rules engine MVP (DEC-027/028), built + verified
 
 The last queue item, implemented from the owner-signed-off
