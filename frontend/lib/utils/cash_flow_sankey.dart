@@ -19,7 +19,7 @@
 /// raw MXN figure to a USD one.
 library;
 
-import 'dart:ui' show Offset, Path, Rect;
+import 'dart:ui' show Offset, Path, Rect, Size, TextAlign;
 
 import 'package:flutter/foundation.dart';
 
@@ -969,4 +969,383 @@ SankeyBand? sankeyBandAt(SankeyLayout layout, Offset point) {
     if (sankeyBandPath(layout.bands[i]).contains(point)) return layout.bands[i];
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Label layout
+// ---------------------------------------------------------------------------
+//
+// A Sankey node's rect is VALUE-sized: a $26 slice of a $620 period is about
+// one pixel tall. Centring a two-line label block on such a rect means the
+// blocks of adjacent small nodes overprint each other into mush — which is
+// exactly what shipped (4 of 6 value labels illegible at desktop width). So
+// label placement is a separate, explicit pass with three jobs:
+//
+//   1. **Never overlap.** A post-layout pass per column pushes blocks apart
+//      (forward, then backward off the bottom edge) so the placed rects are
+//      pairwise disjoint by construction.
+//   2. **Degrade deliberately.** When a column genuinely cannot fit every
+//      block, the SMALLEST-value labels are dropped outright — their amount is
+//      still reachable by tapping the band — rather than painted on top of a
+//      neighbour.
+//   3. **Stay inside the canvas.** Every rect is clamped into the paint box,
+//      so nothing bleeds over the widgets below (a `CustomPaint` does not clip
+//      by default; the painter also clips, belt and braces).
+//
+// It lives here, not in the painter, because it is pure geometry: the caller
+// injects text measurement and gets back final strings + rects.
+
+/// Vertical breathing room between two stacked label blocks.
+const double kSankeyLabelGap = 3.0;
+
+/// Vertical gap between a label's name line and its value line.
+const double kSankeyLabelLineGap = 1.0;
+
+/// Horizontal gap between a node bar and its label block.
+const double kSankeyLabelInset = 4.0;
+
+/// Text measurement injected into [layoutSankeyLabels] so the geometry stays
+/// `BuildContext`-free (and unit-testable) while still using the real font
+/// metrics of the styles the painter will draw with.
+@immutable
+class SankeyLabelMetrics {
+  const SankeyLabelMetrics({
+    required this.measureName,
+    required this.measureValue,
+    required this.nameHeight,
+    required this.valueHeight,
+  });
+
+  /// Unconstrained width of a node-name string in the name style.
+  final double Function(String text) measureName;
+
+  /// Unconstrained width of a money string in the value style.
+  final double Function(String text) measureValue;
+
+  /// Single-line heights of the two styles.
+  final double nameHeight;
+  final double valueHeight;
+
+  double get blockHeight => nameHeight + kSankeyLabelLineGap + valueHeight;
+}
+
+/// One node's label, measured, fitted and collision-resolved. [rect] is the
+/// whole two-line block; the name occupies the top [SankeyLabelMetrics.nameHeight]
+/// of it and the value the rest.
+@immutable
+class SankeyLabelPlacement {
+  const SankeyLabelPlacement({
+    required this.nodeId,
+    required this.name,
+    required this.value,
+    required this.rect,
+    required this.align,
+  });
+
+  final String nodeId;
+
+  /// Display string for the node name — already middle-elided if it did not
+  /// fit, so two sources sharing a long prefix stay distinguishable.
+  final String name;
+
+  /// Display string for the node value — exact money when it fits, compact
+  /// only as the fallback.
+  final String value;
+
+  final Rect rect;
+  final TextAlign align;
+}
+
+/// A block awaiting vertical placement inside one column.
+@immutable
+class SankeyLabelCandidate {
+  const SankeyLabelCandidate({
+    required this.nodeId,
+    required this.left,
+    required this.width,
+    required this.height,
+    required this.preferredCenterY,
+    required this.priority,
+  });
+
+  final String nodeId;
+  final double left;
+  final double width;
+  final double height;
+
+  /// Where the block would sit with no neighbours — the node's own centre.
+  final double preferredCenterY;
+
+  /// Bigger wins when the column has to drop labels. The node's value.
+  final double priority;
+}
+
+/// Place [candidates] inside `[minY, maxY]` so that **no two blocks overlap**.
+///
+/// Two phases:
+///
+/// * **Capacity** — if the blocks cannot all fit, the lowest-[priority] ones
+///   are dropped until they do. Painting a label illegibly on top of another
+///   is strictly worse than not painting it, and the tap readout still reports
+///   the dropped node's amount.
+/// * **Relaxation** — the survivors are sorted by preferred centre, pushed
+///   down off each other (forward pass) and then pulled back up off the bottom
+///   edge (backward pass). Because the survivors provably fit, the backward
+///   pass never has to push anything above [minY], so the result is pairwise
+///   disjoint.
+///
+/// Returned in top-to-bottom order.
+List<SankeyLabelSlot> placeSankeyLabels(
+  List<SankeyLabelCandidate> candidates, {
+  required double minY,
+  required double maxY,
+  double gap = kSankeyLabelGap,
+}) {
+  if (candidates.isEmpty) return const <SankeyLabelSlot>[];
+  // A hair of slack so float dust in the capacity check can never make the
+  // backward pass clamp two blocks onto the same pixel.
+  final available = maxY - minY - 0.5;
+  if (available <= 0) return const <SankeyLabelSlot>[];
+
+  final byPriority = [...candidates]
+    ..sort((a, b) {
+      final p = b.priority.compareTo(a.priority);
+      return p != 0 ? p : a.nodeId.compareTo(b.nodeId);
+    });
+  final kept = <SankeyLabelCandidate>[];
+  var used = 0.0;
+  for (final c in byPriority) {
+    final extra = c.height + (kept.isEmpty ? 0.0 : gap);
+    if (used + extra > available) break;
+    used += extra;
+    kept.add(c);
+  }
+  if (kept.isEmpty) return const <SankeyLabelSlot>[];
+
+  kept.sort((a, b) {
+    final c = a.preferredCenterY.compareTo(b.preferredCenterY);
+    return c != 0 ? c : a.nodeId.compareTo(b.nodeId);
+  });
+
+  final tops = <double>[];
+  var cursor = minY;
+  for (final c in kept) {
+    var top = c.preferredCenterY - c.height / 2;
+    if (top < cursor) top = cursor;
+    tops.add(top);
+    cursor = top + c.height + gap;
+  }
+  var limit = maxY;
+  for (var i = kept.length - 1; i >= 0; i--) {
+    var top = tops[i];
+    if (top + kept[i].height > limit) top = limit - kept[i].height;
+    if (top < minY) top = minY;
+    tops[i] = top;
+    limit = top - gap;
+  }
+
+  return <SankeyLabelSlot>[
+    for (var i = 0; i < kept.length; i++)
+      SankeyLabelSlot(
+        candidate: kept[i],
+        rect: Rect.fromLTWH(
+          kept[i].left,
+          tops[i],
+          kept[i].width,
+          kept[i].height,
+        ),
+      ),
+  ];
+}
+
+/// A candidate plus the rect [placeSankeyLabels] resolved for it.
+@immutable
+class SankeyLabelSlot {
+  const SankeyLabelSlot({required this.candidate, required this.rect});
+  final SankeyLabelCandidate candidate;
+  final Rect rect;
+}
+
+/// Shorten [text] from the MIDDLE until [measure] says it fits [maxWidth].
+///
+/// Tail-ellipsis ("Dividend received - AAPL" and "Dividend received - O
+/// (monthly)" both collapsing to "Dividend received - …") defeats the entire
+/// point of naming income sources — two different payers rendered as one
+/// string. Keeping a head AND a tail keeps them distinguishable, because the
+/// discriminating token in a bank label is almost always at the end.
+///
+/// The head/tail split is biased 45/55 toward the tail for that reason. The
+/// search is a binary search over how many characters survive, so [measure] is
+/// called O(log n) times.
+String middleEllipsize(
+  String text,
+  double maxWidth,
+  double Function(String) measure, {
+  String ellipsis = '…',
+}) {
+  if (maxWidth <= 0) return '';
+  if (text.isEmpty || measure(text) <= maxWidth) return text;
+
+  final runes = text.runes.toList();
+  final n = runes.length;
+  String build(int keep) {
+    if (keep <= 0) return ellipsis;
+    final head = (keep * 0.45).round().clamp(0, keep);
+    final tail = keep - head;
+    return String.fromCharCodes(runes.take(head)) +
+        ellipsis +
+        String.fromCharCodes(runes.skip(n - tail));
+  }
+
+  var lo = 0;
+  var hi = n - 1;
+  var best = ellipsis;
+  while (lo <= hi) {
+    final mid = (lo + hi) ~/ 2;
+    final candidate = build(mid);
+    if (measure(candidate) <= maxWidth) {
+      best = candidate;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
+/// Money string for a node label: **exact** when it fits the gutter, compact
+/// only when it doesn't.
+///
+/// The card reconciles with `MonthlyCashFlowCard` right above it, and
+/// unconditional [compactMoney] made it print "$50.6" next to that card's
+/// "$50.60" — a self-inflicted disagreement on the one thing this diagram
+/// exists to corroborate. Exact money is preferred; compact is the fallback
+/// that keeps a seven-figure MXN total from being ellipsized into a 10x
+/// misread on a 68px phone gutter.
+String sankeyLabelValueText(
+  double value,
+  String currency,
+  double maxWidth,
+  double Function(String) measure,
+) {
+  final exact = formatCurrencyAmount(value, currency);
+  if (measure(exact) <= maxWidth) return exact;
+  return compactMoney(value, currency);
+}
+
+/// Resolve every node label for [diagram] into a final string + a rect that
+/// overlaps no other label and lies entirely inside [canvas].
+///
+/// Column rules:
+/// * depth 0 — right-aligned in the left gutter;
+/// * last depth — left-aligned in the right gutter;
+/// * anything between (the pool, the FX conversion node) — centred over the
+///   bar, dropping below it only when there is no room above, and clamped into
+///   the canvas either way.
+List<SankeyLabelPlacement> layoutSankeyLabels({
+  required SankeyDiagram diagram,
+  required SankeyLayout layout,
+  required Size canvas,
+  required double gutter,
+  required String currency,
+  required SankeyLabelMetrics metrics,
+  double gap = kSankeyLabelGap,
+}) {
+  if (layout.isEmpty || diagram.depthCount < 2) {
+    return const <SankeyLabelPlacement>[];
+  }
+  final last = diagram.depthCount - 1;
+  final byDepth = <int, List<SankeyNode>>{};
+  for (final n in diagram.nodes) {
+    if (layout.nodeRects[n.id] == null) continue;
+    (byDepth[n.depth] ??= <SankeyNode>[]).add(n);
+  }
+
+  final out = <SankeyLabelPlacement>[];
+  final depths = byDepth.keys.toList()..sort();
+  for (final depth in depths) {
+    final column = byDepth[depth]!;
+    final edge = depth == 0 || depth == last;
+    final maxWidth = edge
+        ? gutter - kSankeyLabelInset * 2
+        : _middleLabelWidth(canvas.width, gutter);
+    if (maxWidth < (edge ? 12.0 : 40.0)) continue;
+
+    final texts = <String, ({String name, String value})>{};
+    final candidates = <SankeyLabelCandidate>[];
+    for (final node in column) {
+      final rect = layout.nodeRects[node.id]!;
+      texts[node.id] = (
+        name: middleEllipsize(node.label, maxWidth, metrics.measureName),
+        value: sankeyLabelValueText(
+          node.value,
+          currency,
+          maxWidth,
+          metrics.measureValue,
+        ),
+      );
+      final height = metrics.blockHeight;
+      final double left;
+      final double centerY;
+      if (edge) {
+        left = depth == 0
+            ? rect.left - kSankeyLabelInset - maxWidth
+            : rect.right + kSankeyLabelInset;
+        centerY = rect.center.dy;
+      } else {
+        left = (rect.center.dx - maxWidth / 2).clamp(
+          gutter + kSankeyLabelInset,
+          canvas.width - gutter - kSankeyLabelInset - maxWidth,
+        );
+        // Above the bar when it fits, otherwise below it. Either way the
+        // placer clamps the block into the canvas, so the old "below the bar"
+        // fallback can no longer paint the value on top of the caption
+        // underneath the diagram.
+        final above = rect.top - kSankeyLabelInset - height;
+        centerY =
+            (above >= 0 ? above : rect.bottom + kSankeyLabelInset) + height / 2;
+      }
+      candidates.add(
+        SankeyLabelCandidate(
+          nodeId: node.id,
+          left: left,
+          width: maxWidth,
+          height: height,
+          preferredCenterY: centerY,
+          priority: node.value,
+        ),
+      );
+    }
+
+    final placed = placeSankeyLabels(
+      candidates,
+      minY: 0,
+      maxY: canvas.height,
+      gap: gap,
+    );
+    for (final p in placed) {
+      final t = texts[p.candidate.nodeId]!;
+      out.add(
+        SankeyLabelPlacement(
+          nodeId: p.candidate.nodeId,
+          name: t.name,
+          value: t.value,
+          rect: p.rect,
+          align: edge
+              ? (depth == 0 ? TextAlign.right : TextAlign.left)
+              : TextAlign.center,
+        ),
+      );
+    }
+  }
+  return out;
+}
+
+/// Width for a middle-column label: wider than a gutter (the pool's name is
+/// the longest string on the card) but never wide enough to reach into either
+/// gutter, so a centred block can't collide with an edge-column one.
+double _middleLabelWidth(double canvasWidth, double gutter) {
+  final between = canvasWidth - gutter * 2 - kSankeyLabelInset * 2;
+  final wanted = gutter * 1.6;
+  return wanted < between ? wanted : between;
 }

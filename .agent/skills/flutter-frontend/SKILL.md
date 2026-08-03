@@ -239,9 +239,23 @@ fakes.
   a fixed strip in the card **header** (asserted in test: the readout rect must not
   contain the tap point and must sit above the canvas), mirror the flows into
   `Semantics(label:)` with `ExcludeSemantics` over the paint (a canvas is invisible to
-  screen readers), and ellipsize painted labels inside their own gutter so overflow is
-  structurally impossible. Keep the geometry + data model in a **pure `utils/` file**
+  screen readers), and **clip the painter to its bounds** (`canvas.clipRect` — a
+  `CustomPaint` does NOT clip by default, so a fallback label placement will happily
+  paint outside the widget). Keep the geometry + data model in a **pure `utils/` file**
   (`utils/cash_flow_sankey.dart`) and unit-test it there; the widget should only paint.
+  **Painted labels need real collision avoidance, not just ellipsis.** Centring each
+  label on its own node overprints as soon as two nodes are close — value-sized nodes
+  make a small one ~1px tall — and the first Sankey shipped with 4 of 6 value labels
+  illegible while all 43 of its tests passed. The house pattern is `placeSankeyLabels`:
+  per column, drop the lowest-value labels when the column can't fit them all (their
+  value stays reachable via the tap readout), then relax the survivors apart with a
+  forward+backward pass and clamp into the canvas. Distinguish similar names with
+  **middle-elision biased to the tail** (`middleEllipsize`) — bank labels discriminate at
+  the end, so head-truncation renders two different sources as the same string. Prefer
+  exact money and fall back to compact only when it measures too wide: a diagram whose
+  claim is that it reconciles with the card above it must not print `$50.6` beside that
+  card's `$50.60`. Assert non-overlap **geometrically** in tests — pumping the widget
+  proves nothing, since it renders happily while unreadable.
   **Reconciliation is the correctness bar for any derived diagram:** the Sankey shares
   `SpendingByCategoryCard`'s exact `top` param so it reuses that `_cachedGet` entry, and
   its totals are asserted equal to the numbers `MonthlyCashFlowCard` prints for the same

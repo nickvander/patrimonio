@@ -412,7 +412,11 @@ class _CashFlowSankeyCardState extends State<CashFlowSankeyCard> {
     final rows = _busiestColumn(diagram);
     final rowHeight = isPhone ? 34.0 : 40.0;
     final height = (rows * rowHeight).clamp(140.0, isPhone ? 320.0 : 420.0);
-    const topInset = 14.0;
+    // Deep enough for the middle column's two-line label block to sit ABOVE
+    // its bar. The pool node is full height by construction, so a 14px inset
+    // forced that block below the bar and — with no clip on a CustomPaint —
+    // out of the canvas, on top of the FX caption underneath it.
+    final topInset = isPhone ? 30.0 : 34.0;
 
     final layout = layoutSankey(
       diagram,
@@ -450,7 +454,7 @@ class _CashFlowSankeyCardState extends State<CashFlowSankeyCard> {
             valueListenable: _reading,
             builder: (context, reading, _) => CustomPaint(
               size: Size(width, height + topInset * 2),
-              painter: _SankeyPainter(
+              painter: SankeyPainter(
                 layout: layout,
                 diagram: diagram,
                 colors: colors,
@@ -462,7 +466,6 @@ class _CashFlowSankeyCardState extends State<CashFlowSankeyCard> {
                 gutter: gutter,
                 isPhone: isPhone,
                 currency: widget.targetCurrency,
-                nodeGap: nodeGap,
               ),
             ),
           ),
@@ -576,8 +579,65 @@ class _Reading {
   final double share;
 }
 
-class _SankeyPainter extends CustomPainter {
-  _SankeyPainter({
+/// The two styles a painted node label is drawn with. [sankeyLabelMetrics]
+/// measures through these same functions, so what the geometry pass sizes and
+/// what the painter draws can never drift apart.
+TextStyle _sankeyNameStyle(bool isPhone, {Color? color}) => TextStyle(
+  fontSize: isPhone ? 10 : 11.5,
+  fontWeight: FontWeight.w600,
+  color: color,
+  height: 1.15,
+);
+
+TextStyle _sankeyValueStyle(bool isPhone, {Color? color}) => TextStyle(
+  fontSize: isPhone ? 9 : 10.5,
+  fontWeight: FontWeight.w500,
+  color: color,
+  height: 1.15,
+  fontFeatures: const [ui.FontFeature.tabularFigures()],
+);
+
+double _measure(String text, TextStyle style) {
+  final tp = TextPainter(
+    text: TextSpan(text: text, style: style),
+    maxLines: 1,
+    // `ui.` qualified: package:intl also exports a `TextDirection`.
+    textDirection: ui.TextDirection.ltr,
+  )..layout();
+  return tp.width;
+}
+
+double _lineHeight(TextStyle style) {
+  final tp = TextPainter(
+    text: TextSpan(text: 'Xg', style: style),
+    maxLines: 1,
+    textDirection: ui.TextDirection.ltr,
+  )..layout();
+  return tp.height;
+}
+
+/// Real-font measurement for the painted node labels, handed to the pure
+/// [layoutSankeyLabels] geometry. Colors are deliberately absent — they don't
+/// affect metrics, and this keeps the measuring styles context-free.
+SankeyLabelMetrics sankeyLabelMetrics({required bool isPhone}) {
+  final name = _sankeyNameStyle(isPhone);
+  final value = _sankeyValueStyle(isPhone);
+  return SankeyLabelMetrics(
+    measureName: (t) => _measure(t, name),
+    measureValue: (t) => _measure(t, value),
+    nameHeight: _lineHeight(name),
+    valueHeight: _lineHeight(value),
+  );
+}
+
+/// Paints one Sankey diagram.
+///
+/// Label placement is delegated to [layoutSankeyLabels] — a pure function this
+/// class also exposes via [labelPlacements] so tests can assert the real,
+/// as-drawn geometry (above all: that no two label blocks overlap).
+@visibleForTesting
+class SankeyPainter extends CustomPainter {
+  SankeyPainter({
     required this.layout,
     required this.diagram,
     required this.colors,
@@ -587,7 +647,6 @@ class _SankeyPainter extends CustomPainter {
     required this.gutter,
     required this.isPhone,
     required this.currency,
-    required this.nodeGap,
   });
 
   final SankeyLayout layout;
@@ -599,11 +658,27 @@ class _SankeyPainter extends CustomPainter {
   final double gutter;
   final bool isPhone;
   final String currency;
-  final double nodeGap;
+
+  /// Final strings + non-overlapping rects for every label this painter will
+  /// draw at [size].
+  List<SankeyLabelPlacement> labelPlacements(Size size) => layoutSankeyLabels(
+    diagram: diagram,
+    layout: layout,
+    canvas: size,
+    gutter: gutter,
+    currency: currency,
+    metrics: sankeyLabelMetrics(isPhone: isPhone),
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
     if (layout.isEmpty) return;
+    // A CustomPaint does NOT clip its child painter. Without this, anything
+    // the label pass places near an edge escapes the canvas box and draws over
+    // the widgets below (this is how the FX value label ended up on top of the
+    // "USD … became MXN …" caption). The layout pass keeps every block inside
+    // `size` anyway; the clip is the structural guarantee behind it.
+    canvas.clipRect(Offset.zero & size);
 
     for (var i = 0; i < layout.bands.length; i++) {
       final band = layout.bands[i];
@@ -633,53 +708,38 @@ class _SankeyPainter extends CustomPainter {
         RRect.fromRectAndRadius(rect, const Radius.circular(2)),
         Paint()..color = color,
       );
-      _paintLabel(canvas, size, node, rect);
+    }
+
+    // Labels last, and as ONE resolved pass over all columns: node rects are
+    // value-sized, so centring each block on its own rect overprints the small
+    // nodes into mush.
+    for (final placement in labelPlacements(size)) {
+      _paintPlacement(canvas, placement);
     }
   }
 
-  void _paintLabel(Canvas canvas, Size size, SankeyNode node, Rect rect) {
-    final last = diagram.depthCount - 1;
-    final nameStyle = TextStyle(
-      fontSize: isPhone ? 10 : 11.5,
-      fontWeight: FontWeight.w600,
-      color: labelColor,
-      height: 1.15,
+  void _paintPlacement(Canvas canvas, SankeyLabelPlacement placement) {
+    final width = placement.rect.width;
+    final name = _painter(
+      placement.name,
+      _sankeyNameStyle(isPhone, color: labelColor),
+      width,
+      placement.align,
     );
-    final valueStyle = TextStyle(
-      fontSize: isPhone ? 9 : 10.5,
-      fontWeight: FontWeight.w500,
-      color: valueColor,
-      height: 1.15,
-      fontFeatures: const [ui.FontFeature.tabularFigures()],
+    final amount = _painter(
+      placement.value,
+      _sankeyValueStyle(isPhone, color: valueColor),
+      width,
+      placement.align,
     );
-    final value = compactMoney(node.value, currency);
-
-    if (node.depth == 0 || node.depth == last) {
-      final leading = node.depth == 0;
-      final maxWidth = gutter - 8;
-      if (maxWidth <= 12) return;
-      final align = leading ? TextAlign.right : TextAlign.left;
-      final name = _painter(node.label, nameStyle, maxWidth, align);
-      final amount = _painter(value, valueStyle, maxWidth, align);
-      final total = name.height + amount.height + 1;
-      final top = rect.center.dy - total / 2;
-      final x = leading ? rect.left - 4 - maxWidth : rect.right + 4;
-      name.paint(canvas, Offset(x, top));
-      amount.paint(canvas, Offset(x, top + name.height + 1));
-      return;
-    }
-
-    // Middle column (the pool / the FX node): centred above the bar, or below
-    // it when the bar already reaches the top inset.
-    final maxWidth = (gutter * 1.6).clamp(80.0, size.width);
-    final name = _painter(node.label, nameStyle, maxWidth, TextAlign.center);
-    final amount = _painter(value, valueStyle, maxWidth, TextAlign.center);
-    final block = name.height + amount.height + 1;
-    final x = (rect.center.dx - maxWidth / 2).clamp(0.0, size.width - maxWidth);
-    var top = rect.top - 4 - block;
-    if (top < 0) top = rect.bottom + 4;
-    name.paint(canvas, Offset(x, top));
-    amount.paint(canvas, Offset(x, top + name.height + 1));
+    name.paint(canvas, placement.rect.topLeft);
+    amount.paint(
+      canvas,
+      Offset(
+        placement.rect.left,
+        placement.rect.top + name.height + kSankeyLabelLineGap,
+      ),
+    );
   }
 
   TextPainter _painter(
@@ -700,9 +760,11 @@ class _SankeyPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SankeyPainter old) =>
+  bool shouldRepaint(SankeyPainter old) =>
       old.selected != selected ||
       !identical(old.layout, layout) ||
       old.labelColor != labelColor ||
-      old.currency != currency;
+      old.currency != currency ||
+      old.gutter != gutter ||
+      old.isPhone != isPhone;
 }
