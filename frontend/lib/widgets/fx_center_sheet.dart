@@ -634,8 +634,8 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
       child: ExcludeSemantics(
         child: SizedBox(
           height: height,
-          child: LineChart(
-            LineChartData(
+          child: TransientTooltipLineChart(
+            data: LineChartData(
               minY: minY,
               maxY: maxY,
               gridData: const FlGridData(show: false),

@@ -192,6 +192,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // LineChartData.showingTooltipIndicators. null/empty = no tooltip.
   List<LineBarSpot>? _chartTouchedSpots;
 
+  // Touch/stylus pointers pin the tooltip to the top of the chart box
+  // (showOnTopOfTheChartBoxArea) so the readout is never under the finger;
+  // mouse/trackpad keep the near-spot popover. Seeded per platform and then
+  // tracked from the active pointer's kind in the touchCallback — the same
+  // seam TransientTooltipLineChart applies to the wrapped charts (this
+  // screen owns its own tooltip state, so it wires the flag itself).
+  late bool _chartTooltipPinnedToTop = chartTooltipDefaultPinsToTop;
+
   // True when [spots] describes the same touched positions as the current
   // state — used to skip no-op setState calls on every hover tick.
   bool _sameTouchedSpots(List<LineBarSpot> spots) {
@@ -2809,12 +2817,22 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   // web, which pinned the tooltip there).
                   handleBuiltInTouches: false,
                   touchCallback: (event, response) {
+                    final kind = chartEventPointerKind(event);
+                    final pin = kind == null
+                        ? _chartTooltipPinnedToTop
+                        : chartTooltipPinsToTop(kind);
                     final spots = response?.lineBarSpots;
                     if (chartTouchDismisses(event) ||
                         spots == null ||
                         spots.isEmpty) {
                       if (_chartTouchedSpots != null) {
-                        setState(() => _chartTouchedSpots = null);
+                        setState(() {
+                          _chartTouchedSpots = null;
+                          _chartTooltipPinnedToTop = pin;
+                        });
+                      } else {
+                        // No tooltip visible — remember the kind quietly.
+                        _chartTooltipPinnedToTop = pin;
                       }
                       return;
                     }
@@ -2822,8 +2840,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     // tooltip rows / anchor spot are unchanged.
                     final sorted = List<LineBarSpot>.of(spots)
                       ..sort((a, b) => b.y.compareTo(a.y));
-                    if (!_sameTouchedSpots(sorted)) {
-                      setState(() => _chartTouchedSpots = sorted);
+                    if (!_sameTouchedSpots(sorted) ||
+                        pin != _chartTooltipPinnedToTop) {
+                      setState(() {
+                        _chartTouchedSpots = sorted;
+                        _chartTooltipPinnedToTop = pin;
+                      });
                     }
                   },
                   getTouchedSpotIndicator: (barData, spotIndexes) {
@@ -2850,6 +2872,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     // House tooltip chrome (chart_touch.dart §5): 12px corners —
                     // this copy had silently fallen back to fl_chart's default 4.
                     tooltipRoundedRadius: 12,
+                    // Touch scrub: readout at the top of the chart box, clear
+                    // of the finger (kind-tracked in the touchCallback above;
+                    // wrapped charts get this from TransientTooltipLineChart).
+                    showOnTopOfTheChartBoxArea: _chartTooltipPinnedToTop,
                     // Only the bold expected line carries a meaningful tooltip; the
                     // invisible band bars would otherwise emit blank rows.
                     getTooltipItems: (touchedSpots) {

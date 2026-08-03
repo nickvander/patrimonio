@@ -1,4 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'theme_colors.dart';
@@ -42,6 +43,69 @@ bool chartTouchDismisses(FlTouchEvent event) {
 
 bool _kindCanHover(PointerDeviceKind kind) =>
     kind == PointerDeviceKind.mouse || kind == PointerDeviceKind.trackpad;
+
+/// The [PointerDeviceKind] carried by [event], or null when the event type
+/// doesn't expose one (pan down/update/end, long-press, cancels) — callers
+/// keep their last known kind in that case.
+PointerDeviceKind? chartEventPointerKind(FlTouchEvent event) {
+  return switch (event) {
+    FlTapDownEvent(:final details) => details.kind,
+    FlTapUpEvent(:final details) => details.kind,
+    FlPanStartEvent(:final details) => details.kind,
+    FlPointerEnterEvent(:final event) => event.kind,
+    FlPointerHoverEvent(:final event) => event.kind,
+    FlPointerExitEvent(:final event) => event.kind,
+    _ => null,
+  };
+}
+
+/// True when a tooltip driven by a pointer of [kind] must render pinned to
+/// the top of the chart box (fl_chart's `showOnTopOfTheChartBoxArea`) instead
+/// of as a popover beside the touched spot: a finger or stylus *covers* the
+/// spot it is scrubbing, so the near-spot popover lands directly under it
+/// (the prod TWR-chart complaint). The top-of-box readout is the touch
+/// counterpart of the Robinhood-style scrub whose full-width X snapping
+/// [standardLineTouch] already imitates. Mouse/trackpad keep the popover.
+bool chartTooltipPinsToTop(PointerDeviceKind kind) => !_kindCanHover(kind);
+
+/// Platform seed used before any kind-carrying event arrives: the very first
+/// touch emits a kind-less [FlPanDownEvent] before the kind-carrying
+/// tap-down/pan-start, so a hover-default on a phone would flash the tooltip
+/// under the finger for that first frame. Phones/tablets are finger-first;
+/// everything else defaults to the hover popover. Either way the first
+/// kind-carrying event corrects the guess (see [chartEventPointerKind]).
+bool get chartTooltipDefaultPinsToTop => switch (defaultTargetPlatform) {
+  TargetPlatform.android ||
+  TargetPlatform.iOS ||
+  TargetPlatform.fuchsia => true,
+  _ => false,
+};
+
+/// Rebuilds [base] with `showOnTopOfTheChartBoxArea: pinned`, returning
+/// [base] itself when the flag already matches. Manual full-field copy
+/// because [LineTouchTooltipData] has no `copyWith` in fl_chart 0.70.2 —
+/// if fl_chart grows one, replace this body with it.
+LineTouchTooltipData lineTooltipPinnedToTop(
+  LineTouchTooltipData base, {
+  required bool pinned,
+}) {
+  if (base.showOnTopOfTheChartBoxArea == pinned) return base;
+  return LineTouchTooltipData(
+    tooltipRoundedRadius: base.tooltipRoundedRadius,
+    tooltipPadding: base.tooltipPadding,
+    tooltipMargin: base.tooltipMargin,
+    tooltipHorizontalAlignment: base.tooltipHorizontalAlignment,
+    tooltipHorizontalOffset: base.tooltipHorizontalOffset,
+    maxContentWidth: base.maxContentWidth,
+    getTooltipItems: base.getTooltipItems,
+    getTooltipColor: base.getTooltipColor,
+    fitInsideHorizontally: base.fitInsideHorizontally,
+    fitInsideVertically: base.fitInsideVertically,
+    showOnTopOfTheChartBoxArea: pinned,
+    rotateAngle: base.rotateAngle,
+    tooltipBorder: base.tooltipBorder,
+  );
+}
 
 /// The app-standard line-chart hover: full-width X snapping
 /// (touchSpotThreshold 100000), vertical guide + halo dot indicator,
@@ -128,6 +192,11 @@ LineTouchData standardLineTouch(
 /// y-descending exactly like the built-in handler — tooltip content, order
 /// and styling are unchanged. A `touchCallback` already present on [data]
 /// (e.g. tap-to-drill) is still invoked first, like fl_chart itself does.
+///
+/// It also owns tooltip *placement*: touch/stylus pointers pin the readout
+/// to the top of the chart box, mouse/trackpad keep the near-spot popover
+/// (see [chartTooltipPinsToTop]) — so every wrapped chart is pointer-kind
+/// aware for free.
 class TransientTooltipLineChart extends StatefulWidget {
   const TransientTooltipLineChart({super.key, required this.data});
 
@@ -142,6 +211,13 @@ class TransientTooltipLineChart extends StatefulWidget {
 class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
   /// Currently touched spots (sorted y-descending); null/empty = no tooltip.
   List<LineBarSpot>? _touched;
+
+  /// Whether the tooltip renders pinned to the top of the chart box
+  /// (touch/stylus — keeps the readout clear of the finger) instead of as
+  /// the near-spot popover (mouse/trackpad). Seeded per platform, then
+  /// tracks the active pointer's kind so runtime kind switches (touchscreen
+  /// laptop, mouse plugged into a tablet) flip the placement live.
+  late bool _pinToTop = chartTooltipDefaultPinsToTop;
 
   /// True when [spots] describes the same touched positions as the current
   /// state — used to skip no-op setState calls on every hover tick.
@@ -159,10 +235,18 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
 
   void _onTouch(FlTouchEvent event, LineTouchResponse? response) {
     widget.data.lineTouchData.touchCallback?.call(event, response);
+    final kind = chartEventPointerKind(event);
+    final pin = kind == null ? _pinToTop : chartTooltipPinsToTop(kind);
     final spots = response?.lineBarSpots;
     if (chartTouchDismisses(event) || spots == null || spots.isEmpty) {
       if (_touched != null) {
-        setState(() => _touched = null);
+        setState(() {
+          _touched = null;
+          _pinToTop = pin;
+        });
+      } else {
+        // No tooltip visible — remember the kind without a rebuild.
+        _pinToTop = pin;
       }
       return;
     }
@@ -170,8 +254,11 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
     // rows / anchor spot are unchanged.
     final sorted = List<LineBarSpot>.of(spots)
       ..sort((a, b) => b.y.compareTo(a.y));
-    if (!_sameTouched(sorted)) {
-      setState(() => _touched = sorted);
+    if (!_sameTouched(sorted) || pin != _pinToTop) {
+      setState(() {
+        _touched = sorted;
+        _pinToTop = pin;
+      });
     }
   }
 
@@ -203,6 +290,13 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
         lineTouchData: raw.lineTouchData.copyWith(
           handleBuiltInTouches: false,
           touchCallback: _onTouch,
+          // Touch/stylus scrubs read from the top of the chart box so the
+          // tooltip is never under the finger; mouse/trackpad keep the
+          // near-spot popover ([chartTooltipPinsToTop]).
+          touchTooltipData: lineTooltipPinnedToTop(
+            raw.lineTouchData.touchTooltipData,
+            pinned: _pinToTop,
+          ),
         ),
       ),
     );

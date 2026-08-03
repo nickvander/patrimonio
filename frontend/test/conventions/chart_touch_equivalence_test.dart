@@ -112,6 +112,66 @@ void main() {
       expect(canonical.keys, containsAll(_factNames));
     });
 
+    test(
+      'every line chart is pointer-kind aware: touch pins the tooltip to the '
+      'top of the chart box (showOnTopOfTheChartBoxArea)',
+      () {
+        // Touch/stylus scrubs must never render the tooltip under the finger
+        // (the prod Portfolio-TWR complaint). The seam is chart_touch.dart:
+        // TransientTooltipLineChart tracks the active pointer's kind and
+        // re-applies the tooltip via lineTooltipPinnedToTop, so every
+        // wrapped chart — including the net-worth and instrument-sheet
+        // inline copies, which are wrapped — inherits the behavior. The
+        // projections screen is the one sanctioned raw LineChart that owns
+        // its own tooltip state, so it must wire the flag itself.
+        final root = _packageRoot();
+        final failures = <String>[];
+
+        final canonical = _readLib(root, _canonicalPath);
+        if (!canonical.contains('lineTooltipPinnedToTop(')) {
+          failures.add(
+            '$_canonicalPath: TransientTooltipLineChart no longer applies '
+            'lineTooltipPinnedToTop — wrapped charts lost the touch '
+            'top-pinned tooltip.',
+          );
+        }
+        for (final path in const [
+          'lib/widgets/net_worth_card.dart',
+          'lib/widgets/instrument_detail_sheet.dart',
+        ]) {
+          if (!_readLib(root, path).contains('TransientTooltipLineChart(')) {
+            failures.add(
+              '$path: no longer wraps its chart in TransientTooltipLineChart '
+              '— its inline LineTouchData copy has no other source of the '
+              'touch top-pinned tooltip (and of transient dismissal). '
+              'Re-wrap it, or wire chartEventPointerKind + '
+              'showOnTopOfTheChartBoxArea by hand like '
+              'wealth_projection_screen.dart.',
+            );
+          }
+        }
+        final projections = _readLib(
+          root,
+          'lib/screens/wealth_projection_screen.dart',
+        );
+        for (final anchor in const [
+          'chartEventPointerKind(',
+          'showOnTopOfTheChartBoxArea:',
+        ]) {
+          if (!projections.contains(anchor)) {
+            failures.add(
+              'lib/screens/wealth_projection_screen.dart: missing "$anchor" '
+              '— the projections chart owns its own tooltip state (raw '
+              'LineChart, no wrapper), so it must track the pointer kind '
+              'and pin the tooltip to the top of the chart box for '
+              'touch/stylus itself.',
+            );
+          }
+        }
+        expect(failures, isEmpty, reason: failures.join('\n\n'));
+      },
+    );
+
     test('no new inline LineTouchData forks outside the sanctioned set', () {
       final root = _packageRoot();
       final offenders = <String>[];
@@ -195,7 +255,11 @@ Map<String, String> _extractFacts(String path, String rawCode) {
   if (dots.length != 1) failMissing('exactly one FlDotCirclePainter');
 
   // 3. Tooltip chrome: between LineTouchTooltipData( and getTooltipItems.
-  final chromeStart = code.indexOf('LineTouchTooltipData(');
+  // Anchored AFTER the indicator block: chart_touch.dart contains another
+  // LineTouchTooltipData( earlier in the file (lineTooltipPinnedToTop, the
+  // touch top-pinning field copy), and at every compared site the tooltip
+  // data follows getTouchedSpotIndicator.
+  final chromeStart = code.indexOf('LineTouchTooltipData(', indEnd);
   if (chromeStart < 0) failMissing('LineTouchTooltipData');
   final chromeEnd = code.indexOf('getTooltipItems', chromeStart);
   if (chromeEnd < 0) failMissing('getTooltipItems');
