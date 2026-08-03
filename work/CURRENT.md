@@ -1,7 +1,44 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-02 (sweep deferred-items batch)
+> **Last updated:** 2026-08-03 (deferral follow-ups: ApiService mixin split + detail-panel decoupling)
 > **Branch:** `main`.
+
+## 2026-08-03 — The batch's own deferrals, closed same-session
+
+After the deferred-items batch shipped (pushed + deployed through
+`72abd94`, api health 200, APK cut), all three items it had re-deferred
+were approved and landed:
+
+* **ApiService part-file mixin split (`1effbaa`)** — api_service.dart is a
+  335-line library root (`_ApiServiceBase` declares the private plumbing
+  surface; exceptions + verb wrappers + cache glue stay) with five part
+  files under `services/api_service/`: `_AuthApi`, `_DashboardApi`,
+  `_TxApi` (incl. the streaming uploads), `_HoldingsApi`, `_LendingApi`.
+  Mixins, NOT extensions, exactly per the recorded recipe: five test fakes
+  `@override` endpoint methods and extension members dispatch statically —
+  those suites pass unmodified. Bodies byte-identical except four
+  `clearDashboardCache()` calls qualified (class statics don't resolve
+  unqualified inside a mixin). Skill §3 updated in the same diff; new
+  endpoints go in the matching part file.
+* **Transaction detail panel decoupled (`afac14c`)** — the ~955-line
+  `_TransactionDetailPanel` is now public `TransactionDetailPanel` in its
+  own file behind a `TransactionDetailHost` interface: live tab config as
+  getters (constructor capture would freeze values across keyboard-inset
+  rebuilds), thin delegates over the shared helper hubs, the five actions,
+  and deliberately the TAB's `context`/`mounted` (post-close SnackBars —
+  the delete/undo flow — must outlive the panel). transactions_tab.dart
+  5,098→4,252. Deferred-delete/undo + jump-context machinery untouched.
+  Live rig smoke on the dirty tree: 8-tab sweep, panel edit/revert, split
+  dialog across the seam, delete + undo SnackBar, spike drill-down — 0
+  console errors, 0 failed requests.
+* **dashboard_screen imports DividendIncomeCard directly (`c85dc85`)** —
+  the portfolio_card re-export seam is gone.
+* Also: the walkthrough exposed a wrong doc comment on
+  `createManualTransaction` claiming the Plaid sign convention (positive =
+  expense); the app convention is negative = outflow. Corrected with the
+  incident noted.
+* Gates at every step: 969/969, analyze at the 18-info baseline, format
+  clean; independent verifier before each commit. Backend untouched.
 
 ## 2026-08-02 (deferred-items batch) — Loans Decimal wire, god-file splits, ApiService seam
 
