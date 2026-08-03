@@ -7536,6 +7536,32 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bcDetected => 'Detected';
+
+  @override
+  String get bcDetectedToggle => 'Detected charges';
+
+  @override
+  String get bcDetectedHint =>
+      'Recurring charges inferred from your transaction history — you never declared them as a rule. Turn this off to see only bills you set up plus loan dues.';
+
+  @override
+  String get bcDetectedSem =>
+      'Detected charge, inferred from transaction history';
+
+  @override
+  String get bcFxIncludesHidden =>
+      'Includes detected charges, which are hidden right now.';
+
+  @override
+  String get bcNotABill => 'Not a bill';
+
+  @override
+  String bcNotABillDone(String merchant) {
+    return '\"$merchant\" hidden — it won\'t be projected as a bill.';
+  }
+
+  @override
   String bcProjectionSem(String currency, String start, String end) {
     return 'Projected $currency balance from $start today to $end at the end of the window';
   }

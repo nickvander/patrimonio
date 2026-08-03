@@ -12041,6 +12041,48 @@ abstract class AppLocalizations {
   /// **'{date}: {count, plural, =0{nothing due} =1{1 item} other{{count} items}}'**
   String bcDaySem(String date, int count);
 
+  /// No description provided for @bcDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected'**
+  String get bcDetected;
+
+  /// No description provided for @bcDetectedToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected charges'**
+  String get bcDetectedToggle;
+
+  /// No description provided for @bcDetectedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring charges inferred from your transaction history — you never declared them as a rule. Turn this off to see only bills you set up plus loan dues.'**
+  String get bcDetectedHint;
+
+  /// No description provided for @bcDetectedSem.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected charge, inferred from transaction history'**
+  String get bcDetectedSem;
+
+  /// No description provided for @bcFxIncludesHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes detected charges, which are hidden right now.'**
+  String get bcFxIncludesHidden;
+
+  /// No description provided for @bcNotABill.
+  ///
+  /// In en, this message translates to:
+  /// **'Not a bill'**
+  String get bcNotABill;
+
+  /// No description provided for @bcNotABillDone.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{merchant}\" hidden — it won\'t be projected as a bill.'**
+  String bcNotABillDone(String merchant);
+
   /// No description provided for @bcProjectionSem.
   ///
   /// In en, this message translates to:

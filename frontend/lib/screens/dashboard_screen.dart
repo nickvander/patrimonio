@@ -6027,11 +6027,16 @@ class _DashboardScreenState extends State<DashboardScreen>
           // occurrences (rules + loan dues) with paid/late/pending-import
           // states, the per-currency cash curve, and the FX-transfer
           // prompt. Self-fetching and self-hiding when there's nothing
-          // expected; gated here on the same inputs so an account with no
-          // rules and no loans never pays the fetch. `refreshKey` re-loads
-          // it after any rule mutation (the rules list identity changes).
+          // expected; gated here on the same inputs so an account with
+          // nothing expected at all never pays the fetch. `refreshKey`
+          // re-loads it after any rule mutation (the rules list identity
+          // changes).
+          // Detected charges count as an input: the calendar projects them
+          // too, so gating on rules+loans alone hid the card from exactly
+          // the users who declared nothing and rely on detection.
           if ((_recurringRules ?? const []).isNotEmpty ||
-              _loans.isNotEmpty) ...[
+              _loans.isNotEmpty ||
+              (_subscriptions ?? const []).isNotEmpty) ...[
             BillsCalendarCard(
               apiService: _apiService,
               refreshKey: _recurringRules,

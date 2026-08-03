@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
+import 'package:patrimonio/services/preferences.dart';
 import 'package:patrimonio/utils/theme_colors.dart';
 import 'package:patrimonio/widgets/bills_calendar_card.dart';
 
@@ -21,6 +22,9 @@ class _FakeCalendarApi extends ApiService {
   int calls = 0;
   int? lastDays;
 
+  /// Every merchant key "Not a bill" POSTed, in order.
+  final List<String> ignored = [];
+
   @override
   Future<Map<String, dynamic>> getRecurringCalendar({
     int days = 30,
@@ -29,6 +33,11 @@ class _FakeCalendarApi extends ApiService {
     calls++;
     lastDays = days;
     return result;
+  }
+
+  @override
+  Future<void> ignoreSubscription(String merchant) async {
+    ignored.add(merchant);
   }
 }
 
@@ -44,11 +53,13 @@ Map<String, dynamic> _occurrence({
   double amount = -50.0,
   String currency = 'USD',
   double? amountUsd,
+  String? merchantKey,
 }) => {
   'source': source,
   'id': 'id-$description-$dueDate',
   'description': description,
   'account_name': ?accountName,
+  'merchant_key': ?merchantKey,
   'amount': amount,
   'currency': currency,
   'amount_usd': amountUsd ?? amount,
@@ -56,24 +67,39 @@ Map<String, dynamic> _occurrence({
   'state': state,
 };
 
-/// 31 daily projection points: USD 1000 → 800 after 08-04 (rent) → 900
-/// after 08-08 (loan inflow); MXN flat at 5000.
+/// The two detected clusters' native amounts: Spotify falls on 08-04
+/// (i == 1), Netflix on 08-06 (i == 3).
+const double _detectedSpotify = -9.99;
+const double _detectedNetflix = -15.99;
+
+/// 31 daily projection points. The DECLARED bills alone would run USD
+/// 1000 → 800 after 08-04 (rent) → 900 after 08-08 (loan inflow); the two
+/// detected charges drag `usd` a further 9.99 (from i == 1) and 15.99
+/// (from i == 3) down, and `usd_detected` reports exactly that cumulative
+/// part — already INCLUDED in `usd`, per the backend contract. So the
+/// detected-subtracted curve a client renders with the toggle off is the
+/// plain 1000/800/900 series, which is what the toggle tests assert. MXN
+/// flat at 5000 with nothing detected.
 List<Map<String, dynamic>> _projection() => [
   for (var i = 0; i <= 30; i++)
     () {
       final d = _today.add(Duration(days: i));
-      final usd = i == 0
+      final declared = i == 0
           ? 1000.0
           : i < 5
           ? 800.0
           : 900.0;
+      final detected =
+          (i >= 1 ? _detectedSpotify : 0.0) + (i >= 3 ? _detectedNetflix : 0.0);
       return {
         'date':
             '${d.year.toString().padLeft(4, '0')}-'
             '${d.month.toString().padLeft(2, '0')}-'
             '${d.day.toString().padLeft(2, '0')}',
-        'usd': usd,
+        'usd': declared + detected,
         'mxn': 5000.0,
+        'usd_detected': detected,
+        'mxn_detected': 0.0,
       };
     }(),
 ];
@@ -120,6 +146,29 @@ Map<String, dynamic> _calendarFixture({Map<String, dynamic>? fx}) => {
       source: 'loan',
       amount: 100.0,
     ),
+    // Detector-inferred: the only occurrence on 08-06 (so hiding it empties
+    // that day outright).
+    _occurrence(
+      description: 'Netflix',
+      dueDate: '2026-08-06',
+      state: 'upcoming',
+      source: 'detected',
+      accountName: 'Chase',
+      amount: _detectedNetflix,
+      merchantKey: 'netflix',
+    ),
+    // Detector-inferred but sharing 08-04 with the declared Rent — proves
+    // the two are separable inside one day's agenda, and that the day's
+    // grid marker stays FILLED because a declared bill is also due.
+    _occurrence(
+      description: 'Spotify',
+      dueDate: '2026-08-04',
+      state: 'upcoming',
+      accountName: 'Chase',
+      source: 'detected',
+      amount: _detectedSpotify,
+      merchantKey: 'spotify',
+    ),
   ],
   'projection': _projection(),
   'fx_transfer_suggestion': ?fx,
@@ -153,6 +202,47 @@ List<String> _chartTickLabels(WidgetTester tester) => tester
     .map((t) => (t.data ?? '').replaceAll(' ', ' '))
     .where((s) => s.isNotEmpty)
     .toList();
+
+/// The y-values the projection chart is actually plotting. This is the
+/// series itself, not a proxy for it — the detected-charges toggle has to
+/// change these NUMBERS (`usd - usd_detected`), not merely rebuild.
+List<double> _chartCloses(WidgetTester tester) => tester
+    .widget<LineChart>(find.byType(LineChart))
+    .data
+    .lineBarsData
+    .first
+    .spots
+    .map((s) => s.y)
+    .toList();
+
+/// The state-dot decorations drawn inside one day cell of the grid. The
+/// dots are the only 6dp-square Containers in a cell, so the cell's own
+/// today/selected outline never lands in the result.
+List<BoxDecoration> _dayDots(WidgetTester tester, String iso) => tester
+    .widgetList<Container>(
+      find.descendant(
+        of: find.byKey(ValueKey('bc-day-$iso')),
+        matching: find.byType(Container),
+      ),
+    )
+    .where((c) => c.constraints?.maxWidth == 6)
+    .map((c) => c.decoration! as BoxDecoration)
+    .toList();
+
+/// Flip the "Detected charges" switch and settle.
+Future<void> _toggleDetected(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('bc-detected-toggle'));
+  await tester.ensureVisible(toggle);
+  await tester.tap(toggle);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _tapDay(WidgetTester tester, String iso) async {
+  final day = find.byKey(ValueKey('bc-day-$iso'));
+  await tester.ensureVisible(day);
+  await tester.tap(day);
+  await tester.pumpAndSettle();
+}
 
 Future<void> _pump(
   WidgetTester tester,
@@ -207,6 +297,49 @@ void main() {
         );
       },
     );
+
+    testWidgets('billStateDot encodes the source as SHAPE, not as color', (
+      tester,
+    ) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (c) {
+              ctx = c;
+              return Column(
+                children: [
+                  billStateDot(c, state: 'upcoming', detected: false),
+                  billStateDot(c, state: 'upcoming', detected: true),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+      final dots = tester
+          .widgetList<Container>(find.byType(Container))
+          .map((c) => c.decoration! as BoxDecoration)
+          .toList();
+      expect(dots.length, 2);
+      final declared = dots[0];
+      final detected = dots[1];
+      // Declared = filled disc; detected = hollow ring. The distinction
+      // survives greyscale and color blindness because it isn't a color
+      // distinction at all — both carry the SAME state accent.
+      expect(declared.color, ctx.info);
+      expect(declared.border, isNull);
+      expect(detected.color, isNull);
+      expect(detected.border, isNotNull);
+      expect(detected.border!.top.color, ctx.info);
+    });
+
+    // The owner's chosen default. `Preferences` is inert under the test VM
+    // (nothing stored), which is exactly the "first run" case: absent must
+    // read as SHOWN, so only a literal 'false' hides them.
+    test('an unstored preference shows detected charges', () {
+      expect(Preferences.getBillsShowDetected(), isTrue);
+    });
   });
 
   group('BillsCalendarCard (en)', () {
@@ -455,6 +588,210 @@ void main() {
       await tester.ensureVisible(banner);
       expect(banner, findsOneWidget);
       expect(find.textContaining('Considera mover USD a MXN'), findsOneWidget);
+    });
+  });
+
+  // Detected recurring charges: the calendar used to read only explicit
+  // rules + loan dues, so an owner with zero rules saw nothing but loan
+  // repayments. Detected clusters now project too — shown by DEFAULT,
+  // marked as INFERRED rather than declared, and hideable behind a
+  // persisted toggle.
+  group('BillsCalendarCard — detected charges', () {
+    testWidgets('detected occurrences are marked and separable from rules', (
+      tester,
+    ) async {
+      final api = _FakeCalendarApi(_calendarFixture());
+      await _pump(tester, api);
+
+      // 08-04 carries the declared Rent AND the detected Spotify.
+      await _tapDay(tester, '2026-08-04');
+      expect(find.text('Rent'), findsOneWidget);
+      expect(find.text('Spotify'), findsOneWidget);
+
+      // Exactly ONE of the two rows claims to be inferred — the mark is
+      // per-occurrence, not per-day. (Screen readers get the same claim:
+      // the chip carries an explicit semantics label.)
+      expect(
+        find.bySemanticsLabel(
+          'Detected charge, inferred from transaction history',
+        ),
+        findsOneWidget,
+      );
+      // "Detected" appears twice: the agenda chip on Spotify + the legend
+      // entry that explains the ring. Rent gets neither.
+      expect(find.text('Detected'), findsNWidgets(2));
+
+      // Grid markers: 08-06 is detected-only → hollow RING; 08-04 mixes a
+      // declared bill in → stays a FILLED disc, so a day with a real rule
+      // on it never renders like a day of pure guesses.
+      final ringDay = _dayDots(tester, '2026-08-06');
+      expect(ringDay, hasLength(1));
+      expect(ringDay.single.color, isNull);
+      expect(ringDay.single.border, isNotNull);
+
+      final filledDay = _dayDots(tester, '2026-08-04');
+      expect(filledDay, hasLength(1));
+      expect(filledDay.single.color, isNotNull);
+      expect(filledDay.single.border, isNull);
+    });
+
+    testWidgets('toggling off clears them from grid, agenda AND the curve', (
+      tester,
+    ) async {
+      final api = _FakeCalendarApi(_calendarFixture());
+      await _pump(tester, api);
+
+      // --- default ON ---
+      await _tapDay(tester, '2026-08-06');
+      expect(find.text('Netflix'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Aug 6, 2026: 1 item'),
+        findsOneWidget,
+        reason: 'the grid cell counts the detected charge while shown',
+      );
+      final shown = _chartCloses(tester);
+      expect(shown.first, closeTo(1000.0, 0.001));
+      expect(
+        shown.last,
+        closeTo(900.0 + _detectedSpotify + _detectedNetflix, 0.001),
+        reason: 'the default curve is the detected-INCLUSIVE `usd` series',
+      );
+
+      // --- toggled OFF ---
+      await _toggleDetected(tester);
+
+      expect(find.text('Netflix'), findsNothing);
+      expect(find.text('Nothing due this day.'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Aug 6, 2026: nothing due'),
+        findsOneWidget,
+        reason: 'the grid cell must drop the hidden charge too',
+      );
+      expect(_dayDots(tester, '2026-08-06'), isEmpty);
+
+      // The curve switches to `usd - usd_detected` — real different
+      // NUMBERS, not just a rebuild.
+      final hidden = _chartCloses(tester);
+      expect(hidden.first, closeTo(1000.0, 0.001));
+      expect(hidden.last, closeTo(900.0, 0.001));
+      expect(hidden[1], closeTo(800.0, 0.001));
+      expect(hidden, isNot(equals(shown)));
+
+      // The declared Rent is untouched by the toggle.
+      await _tapDay(tester, '2026-08-04');
+      expect(find.text('Rent'), findsOneWidget);
+      expect(find.text('Spotify'), findsNothing);
+
+      // --- back ON ---
+      await _toggleDetected(tester);
+      expect(find.text('Spotify'), findsOneWidget);
+      expect(_chartCloses(tester), equals(shown));
+    });
+
+    testWidgets(
+      'the FX suggestion is qualified only while detected are hidden',
+      (tester) async {
+        final api = _FakeCalendarApi(
+          _calendarFixture(
+            fx: {
+              'deficit_currency': 'MXN',
+              'surplus_currency': 'USD',
+              'date': '2026-08-15',
+              'shortfall': 400.0,
+            },
+          ),
+        );
+        await _pump(tester, api);
+
+        final banner = find.byKey(const ValueKey('bc-fx-banner'));
+        final qualifier = find.byKey(const ValueKey('bc-fx-hidden-qualifier'));
+        await tester.ensureVisible(banner);
+        expect(banner, findsOneWidget);
+        expect(
+          qualifier,
+          findsNothing,
+          reason: 'nothing is hidden yet — no qualifier to make',
+        );
+
+        await _toggleDetected(tester);
+
+        // The suggestion stays (the backend computes it from the full curve;
+        // the risk is real whatever the UI shows) but it now says out loud
+        // that some of the bills behind it aren't on screen.
+        await tester.ensureVisible(banner);
+        expect(banner, findsOneWidget);
+        expect(qualifier, findsOneWidget);
+        expect(
+          find.text('Includes detected charges, which are hidden right now.'),
+          findsOneWidget,
+        );
+
+        await _toggleDetected(tester);
+        expect(find.byKey(const ValueKey('bc-fx-banner')), findsOneWidget);
+        expect(qualifier, findsNothing);
+      },
+    );
+
+    testWidgets('"Not a bill" POSTs the merchant key and refetches', (
+      tester,
+    ) async {
+      final api = _FakeCalendarApi(_calendarFixture());
+      await _pump(tester, api);
+      expect(api.calls, 1);
+
+      await _tapDay(tester, '2026-08-06');
+      // Declared occurrences carry no merchant key and get no action.
+      await _tapDay(tester, '2026-08-08'); // the loan due
+      expect(find.byIcon(Icons.do_not_disturb_on_outlined), findsNothing);
+
+      await _tapDay(tester, '2026-08-06');
+      final action = find.byKey(const ValueKey('bc-not-a-bill-netflix'));
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+
+      // The EXACT key the backend's ignore endpoint expects — not the
+      // description, not a re-derived slug.
+      expect(api.ignored, equals(['netflix']));
+      expect(
+        api.calls,
+        2,
+        reason: 'the calendar refetches so the projection drops it too',
+      );
+      expect(
+        find.textContaining('hidden — it won\'t be projected as a bill'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('es-MX: toggle, chip and FX qualifier are localized', (
+      tester,
+    ) async {
+      final api = _FakeCalendarApi(
+        _calendarFixture(
+          fx: {
+            'deficit_currency': 'MXN',
+            'surplus_currency': 'USD',
+            'date': '2026-08-15',
+            'shortfall': 400.0,
+          },
+        ),
+      );
+      await _pump(tester, api, locale: const Locale('es'));
+
+      expect(find.text('Cargos detectados'), findsOneWidget);
+      await _tapDay(tester, '2026-08-06');
+      expect(find.text('Netflix'), findsOneWidget);
+      // Chip + legend.
+      expect(find.text('Detectado'), findsNWidgets(2));
+
+      await _toggleDetected(tester);
+      expect(find.text('Netflix'), findsNothing);
+      expect(find.text('Nada por pagar este día.'), findsOneWidget);
+      expect(
+        find.text('Incluye cargos detectados que ahora están ocultos.'),
+        findsOneWidget,
+      );
     });
   });
 }

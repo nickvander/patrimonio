@@ -4183,6 +4183,20 @@
       }
     }
   },
+  "bcDetected": "Detected",
+  "bcDetectedToggle": "Detected charges",
+  "bcDetectedHint": "Recurring charges inferred from your transaction history — you never declared them as a rule. Turn this off to see only bills you set up plus loan dues.",
+  "bcDetectedSem": "Detected charge, inferred from transaction history",
+  "bcFxIncludesHidden": "Includes detected charges, which are hidden right now.",
+  "bcNotABill": "Not a bill",
+  "bcNotABillDone": "\"{merchant}\" hidden — it won't be projected as a bill.",
+  "@bcNotABillDone": {
+    "placeholders": {
+      "merchant": {
+        "type": "String"
+      }
+    }
+  },
   "bcProjectionSem": "Projected {currency} balance from {start} today to {end} at the end of the window",
   "@bcProjectionSem": {
     "placeholders": {

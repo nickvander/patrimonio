@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../services/preferences.dart';
 import '../utils/chart_time_axis.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
@@ -13,9 +14,15 @@ import '../utils/theme_colors.dart';
 import 'connected_segments.dart';
 
 /// One expected occurrence from `/api/recurring/calendar` — a recurring
-/// rule expansion or a loan schedule due, with its matched/paid state.
+/// rule expansion, a loan schedule due, or a detector-inferred cluster,
+/// with its matched/paid state.
 class BillOccurrence {
-  final String source; // 'recurring' | 'loan'
+  /// `'recurring'` (an explicit `recurring_rules` expansion — the backend
+  /// deliberately kept that literal rather than `'rule'`), `'loan'` (a
+  /// loan_payments due), or `'detected'` (a `subscription_detect` cluster
+  /// projected forward, i.e. INFERRED from transaction history rather than
+  /// declared by the user).
+  final String source;
   final String description;
   final String? accountName;
   final double amount; // native, signed (negative = outflow)
@@ -23,6 +30,12 @@ class BillOccurrence {
   final double amountUsd;
   final DateTime dueDate;
   final String state; // paid|upcoming|late|missed|pending_import
+
+  /// Detected occurrences only: the exact key
+  /// `POST /api/dashboard/subscriptions/ignore` expects, so "not a bill"
+  /// can be actioned from the agenda without re-deriving the detector's
+  /// normalisation. Null for rules and loans.
+  final String? merchantKey;
 
   const BillOccurrence({
     required this.source,
@@ -33,12 +46,18 @@ class BillOccurrence {
     required this.amountUsd,
     required this.dueDate,
     required this.state,
+    this.merchantKey,
   });
+
+  /// Inferred rather than declared — drives the distinct marker treatment
+  /// and the "Detected charges" toggle.
+  bool get isDetected => source == 'detected';
 
   static BillOccurrence? tryParse(dynamic raw) {
     if (raw is! Map) return null;
     final due = DateTime.tryParse((raw['due_date'] ?? '').toString());
     if (due == null) return null;
+    final key = raw['merchant_key']?.toString();
     return BillOccurrence(
       source: (raw['source'] ?? 'recurring').toString(),
       description: (raw['description'] ?? '').toString(),
@@ -48,6 +67,7 @@ class BillOccurrence {
       amountUsd: (raw['amount_usd'] as num?)?.toDouble() ?? 0.0,
       dueDate: DateTime.utc(due.year, due.month, due.day),
       state: (raw['state'] ?? 'upcoming').toString(),
+      merchantKey: (key == null || key.isEmpty) ? null : key,
     );
   }
 }
@@ -89,6 +109,34 @@ String billStateLabel(AppLocalizations l, String state) {
   }
 }
 
+/// State dot for the grid / agenda / legend.
+///
+/// **Shape carries the source, color carries the state.** A declared
+/// occurrence (an explicit rule or a loan due) is a FILLED disc; a
+/// detector-inferred one is a hollow RING of the same accent. That keeps
+/// the inferred/declared distinction readable without relying on color at
+/// all — which matters here because color is already spent on
+/// paid/upcoming/late/pending-import, and because "we guessed this" is a
+/// claim the UI must not make silently. The agenda pairs the ring with an
+/// icon + "Detected" label; the legend explains the ring.
+Widget billStateDot(
+  BuildContext context, {
+  required String state,
+  required bool detected,
+  double size = 7,
+}) {
+  final color = billStateColor(context, state);
+  return Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: detected ? null : color,
+      border: detected ? Border.all(color: color, width: 1.5) : null,
+    ),
+  );
+}
+
 /// Dot-priority order for a day cell (most urgent first): the cell shows
 /// at most three dots, so red must never be crowded out by green.
 const List<String> _statePriority = [
@@ -108,6 +156,14 @@ const List<String> _statePriority = [
 /// backend projects one currency running dry while the other stays
 /// positive. Renders nothing while loading or when there are no expected
 /// occurrences at all.
+///
+/// Three occurrence sources land here — explicit `recurring_rules`
+/// expansions (`source: "recurring"`), loan schedule dues (`"loan"`), and
+/// detector-inferred clusters (`"detected"`). The detected ones show by
+/// DEFAULT behind a persisted "Detected charges" toggle; the hide/show
+/// decision is display-only, so the card's visibility test still reads the
+/// UNFILTERED occurrence list (hiding every detection must never take the
+/// toggle that restores them off screen with it).
 class BillsCalendarCard extends StatefulWidget {
   final ApiService apiService;
 
@@ -142,6 +198,17 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
   DateTime? _selectedDay;
   DateTime? _visibleMonth; // first day of the shown month (UTC)
   String _currency = 'USD';
+
+  /// Owner-chosen: detector-inferred charges show by DEFAULT (a calendar of
+  /// nothing but loan repayments is what prompted this), with the toggle
+  /// below to hide them. Device-local via `Preferences`, not a backend
+  /// setting — it's a display choice, and the backend deliberately keeps
+  /// projecting them either way.
+  bool _showDetected = Preferences.getBillsShowDetected();
+
+  /// True while a "not a bill" POST is in flight — the action buttons
+  /// disable so a double-tap can't fire two ignores + two refetches.
+  bool _ignoring = false;
 
   @override
   void initState() {
@@ -200,12 +267,56 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
     return d == null ? null : DateTime.utc(d.year, d.month, d.day);
   }
 
+  /// Any detected occurrence in the fetched window — reads the UNFILTERED
+  /// list on purpose, so hiding them doesn't also hide the toggle that
+  /// brings them back.
+  bool get _hasDetected => _occurrences.any((o) => o.isDetected);
+
+  /// What the grid and agenda render: everything, minus detected charges
+  /// when the toggle is off.
+  List<BillOccurrence> get _visible => _showDetected
+      ? _occurrences
+      : _occurrences.where((o) => !o.isDetected).toList();
+
   Map<DateTime, List<BillOccurrence>> get _byDay {
     final out = <DateTime, List<BillOccurrence>>{};
-    for (final o in _occurrences) {
+    for (final o in _visible) {
       out.putIfAbsent(o.dueDate, () => []).add(o);
     }
     return out;
+  }
+
+  void _setShowDetected(bool v) {
+    if (v == _showDetected) return;
+    setState(() => _showDetected = v);
+    Preferences.setBillsShowDetected(v);
+  }
+
+  /// "Not a bill" on a detected occurrence: tell the detector to stop
+  /// clustering this merchant, then refetch so the calendar (and the
+  /// projection the backend computes) drop it for real. Explicit rules and
+  /// loan dues have no merchant key and never reach here.
+  Future<void> _ignoreDetected(BillOccurrence o) async {
+    final key = o.merchantKey;
+    if (key == null || _ignoring) return;
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _ignoring = true);
+    try {
+      await widget.apiService.ignoreSubscription(key);
+      await _load(forceRefresh: true);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l.bcNotABillDone(o.description))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l.dashFailedGeneric(e.toString()))),
+      );
+    } finally {
+      if (mounted) setState(() => _ignoring = false);
+    }
   }
 
   @override
@@ -261,6 +372,10 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
                     ),
                   ],
                 ),
+                if (_hasDetected) ...[
+                  SizedBox(height: isPhone ? 8 : 12),
+                  _detectedToggle(context, l),
+                ],
                 SizedBox(height: isPhone ? 12 : 16),
                 _monthHeader(context, l),
                 const SizedBox(height: 8),
@@ -277,6 +392,50 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  // ---------- detected-charges toggle ----------
+
+  /// "Detected charges" switch. Default ON; flipping it filters the grid,
+  /// the agenda AND the projection curve (which switches to the backend's
+  /// `usd - usd_detected` series — no client-side FX or re-summing).
+  ///
+  /// Label + help text + switch merge into one toggleable semantics node so
+  /// the switch isn't an anonymous on/off control (same idiom as the
+  /// projection screen's advanced toggles).
+  Widget _detectedToggle(BuildContext context, AppLocalizations l) {
+    return MergeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_awesome_rounded, size: 16, color: context.textSubtle),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.bcDetectedToggle,
+                  style: TextStyle(fontSize: 13, color: context.textMuted),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  l.bcDetectedHint,
+                  style: TextStyle(fontSize: 11, color: context.textFaint),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            key: const ValueKey('bc-detected-toggle'),
+            value: _showDetected,
+            activeThumbColor: context.info,
+            onChanged: _setShowDetected,
+          ),
+        ],
       ),
     );
   }
@@ -407,11 +566,17 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
     final isSelected = date == _selectedDay;
     final count = items?.length ?? 0;
     // At most three dots, urgency-first so red never gets crowded out.
-    final states = <String>[];
+    // A dot is drawn as a hollow RING when every occurrence it stands for
+    // is detector-inferred, and filled when at least one was declared — so
+    // a day whose only bills are guesses never looks like a day with a
+    // rule on it.
+    final markers = <({String state, bool detected})>[];
     if (items != null) {
       for (final s in _statePriority) {
-        if (states.length >= 3) break;
-        if (items.any((o) => o.state == s)) states.add(s);
+        if (markers.length >= 3) break;
+        final withState = items.where((o) => o.state == s);
+        if (withState.isEmpty) continue;
+        markers.add((state: s, detected: withState.every((o) => o.isDetected)));
       }
     }
 
@@ -466,20 +631,18 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
               ),
               SizedBox(
                 height: 7,
-                child: states.isEmpty
+                child: markers.isEmpty
                     ? null
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          for (var i = 0; i < states.length; i++) ...[
+                          for (var i = 0; i < markers.length; i++) ...[
                             if (i > 0) const SizedBox(width: 2),
-                            Container(
-                              width: 5,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: billStateColor(context, states[i]),
-                              ),
+                            billStateDot(
+                              context,
+                              state: markers[i].state,
+                              detected: markers[i].detected,
+                              size: 6,
                             ),
                           ],
                         ],
@@ -493,17 +656,10 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
   }
 
   Widget _legend(BuildContext context, AppLocalizations l) {
-    Widget item(String state, String label) => Row(
+    Widget item(String state, String label, {bool detected = false}) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: billStateColor(context, state),
-          ),
-        ),
+        billStateDot(context, state: state, detected: detected),
         const SizedBox(width: 4),
         Text(label, style: TextStyle(fontSize: 10, color: context.textMuted)),
       ],
@@ -516,6 +672,10 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
         item('upcoming', l.bcStateUpcoming),
         item('missed', l.bcStateMissed),
         item('pending_import', l.bcStatePendingImport),
+        // The ring legend only earns its space when the grid can actually
+        // draw one.
+        if (_hasDetected && _showDetected)
+          item('upcoming', l.bcDetected, detected: true),
       ],
     );
   }
@@ -557,25 +717,36 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+          billStateDot(
+            context,
+            state: o.state,
+            detected: o.isDetected,
+            size: 8,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: context.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (o.isDetected) ...[
+                      const SizedBox(width: 6),
+                      _detectedChip(context, l),
+                    ],
+                  ],
                 ),
                 if (subtitleParts.isNotEmpty)
                   Text(
@@ -615,6 +786,18 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
               ),
             ],
           ),
+          // Detected-only escape hatch: the detector guessed, and the user
+          // gets to say it guessed wrong. Explicit rules / loan dues carry
+          // no merchant key and never render this.
+          if (o.isDetected && o.merchantKey != null)
+            IconButton(
+              key: ValueKey('bc-not-a-bill-${o.merchantKey}'),
+              tooltip: l.bcNotABill,
+              icon: const Icon(Icons.do_not_disturb_on_outlined, size: 18),
+              color: context.textMuted,
+              visualDensity: VisualDensity.compact,
+              onPressed: _ignoring ? null : () => _ignoreDetected(o),
+            ),
         ],
       ),
     );
@@ -624,6 +807,44 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
     return isPending
         ? Tooltip(message: l.bcAwaitingImportHint, child: row)
         : row;
+  }
+
+  /// The "Detected" mark next to an inferred occurrence's title: outline +
+  /// icon + word, so the inferred/declared split survives greyscale, a
+  /// color-blind viewer, and a screen reader alike.
+  Widget _detectedChip(BuildContext context, AppLocalizations l) {
+    return Semantics(
+      label: l.bcDetectedSem,
+      // container: true or the label merges into the agenda row's node and
+      // the "we inferred this" claim stops being separately addressable.
+      container: true,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: l.bcDetectedHint,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: context.accentBorder(context.info)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_awesome_rounded, size: 10, color: context.info),
+              const SizedBox(width: 3),
+              Text(
+                l.bcDetected,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: context.info,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ---------- projected balances ----------
@@ -638,13 +859,28 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
         .toList();
     if (projection.length < 2) return const SizedBox.shrink();
 
+    final isMxn = _currency == 'MXN';
+    final valueKey = isMxn ? 'mxn' : 'usd';
+    // Hiding detected charges renders the backend's detected-subtracted
+    // series: `usd - usd_detected` (resp. MXN). `usd_detected` is the
+    // cumulative detected-only contribution ALREADY INCLUDED in `usd`, and
+    // it exists precisely so the client never redoes FX or Decimal math to
+    // answer "what would this curve look like without the guesses".
+    final detectedKey = isMxn ? 'mxn_detected' : 'usd_detected';
+
     final points = <({DateTime date, double close})>[];
     for (final p in projection) {
       final d = DateTime.tryParse((p['date'] ?? '').toString());
       if (d == null) continue;
-      final v = (p[_currency == 'MXN' ? 'mxn' : 'usd'] as num?)?.toDouble();
+      final v = (p[valueKey] as num?)?.toDouble();
       if (v == null) continue;
-      points.add((date: DateTime.utc(d.year, d.month, d.day), close: v));
+      final detected = _showDetected
+          ? 0.0
+          : ((p[detectedKey] as num?)?.toDouble() ?? 0.0);
+      points.add((
+        date: DateTime.utc(d.year, d.month, d.day),
+        close: v - detected,
+      ));
     }
     if (points.length < 2) return const SizedBox.shrink();
 
@@ -712,6 +948,13 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
         ? (fx['date'] ?? '').toString()
         : DateFormat.MMMd(l.localeName).format(rawDate);
     final shortfall = (fx['shortfall'] as num?)?.toDouble() ?? 0.0;
+    // Honesty guard: the backend computes this suggestion from the
+    // detected-INCLUSIVE curve on purpose — it answers "will I actually run
+    // dry", not "what is currently on screen". With detected charges hidden
+    // that means a shortfall warning whose contributing bills aren't in the
+    // grid or the agenda. Neither suppress it (the risk is real) nor show it
+    // bare (unexplained warnings destroy trust) — say so.
+    final qualified = !_showDetected && _hasDetected;
     return Container(
       key: const ValueKey('bc-fx-banner'),
       margin: const EdgeInsets.only(bottom: 12),
@@ -726,17 +969,30 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
           Icon(Icons.swap_horiz_rounded, size: 18, color: context.info),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              // Explicit placeholders metadata → gen-l10n follows
-              // DECLARATION order, pinned to template order by the l10n
-              // conventions test: (surplus, deficit, date, amount).
-              l.bcFxPrompt(
-                surplus,
-                deficit,
-                dateLabel,
-                formatCurrencyWithCode(shortfall, deficit),
-              ),
-              style: TextStyle(fontSize: 12, color: context.textPrimary),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  // Explicit placeholders metadata → gen-l10n follows
+                  // DECLARATION order, pinned to template order by the l10n
+                  // conventions test: (surplus, deficit, date, amount).
+                  l.bcFxPrompt(
+                    surplus,
+                    deficit,
+                    dateLabel,
+                    formatCurrencyWithCode(shortfall, deficit),
+                  ),
+                  style: TextStyle(fontSize: 12, color: context.textPrimary),
+                ),
+                if (qualified) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    l.bcFxIncludesHidden,
+                    key: const ValueKey('bc-fx-hidden-qualifier'),
+                    style: TextStyle(fontSize: 11, color: context.textMuted),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

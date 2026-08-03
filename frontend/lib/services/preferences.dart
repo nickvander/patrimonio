@@ -153,6 +153,15 @@ class Preferences {
   static void setManagementDetailsExpanded(bool v) =>
       _write('managementDetailsExpanded', v.toString());
 
+  /// Whether the bills calendar shows detector-inferred recurring charges
+  /// (`source: "detected"`) alongside explicit rules and loan dues.
+  /// **Defaults to ON** — the owner's calendar was near-empty without them —
+  /// so an absent/garbage value reads as true and only the literal 'false'
+  /// hides them.
+  static bool getBillsShowDetected() => _read('billsShowDetected') != 'false';
+  static void setBillsShowDetected(bool v) =>
+      _write('billsShowDetected', v.toString());
+
   /// Per-category monthly budgets, stored as a JSON object on the wire:
   /// {"Restaurants": 500.0, "Groceries": 800.0, ...}. Values are in USD
   /// (the backend storage unit); the UI converts for display.

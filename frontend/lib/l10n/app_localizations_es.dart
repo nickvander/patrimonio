@@ -7600,6 +7600,32 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get bcDetected => 'Detectado';
+
+  @override
+  String get bcDetectedToggle => 'Cargos detectados';
+
+  @override
+  String get bcDetectedHint =>
+      'Cargos recurrentes deducidos de tu historial de movimientos — nunca los declaraste como regla. Desactiva esta opción para ver solo los recibos que tú creaste y los pagos de préstamos.';
+
+  @override
+  String get bcDetectedSem =>
+      'Cargo detectado, deducido del historial de movimientos';
+
+  @override
+  String get bcFxIncludesHidden =>
+      'Incluye cargos detectados que ahora están ocultos.';
+
+  @override
+  String get bcNotABill => 'No es un recibo';
+
+  @override
+  String bcNotABillDone(String merchant) {
+    return '«$merchant» oculto: ya no se proyectará como recibo.';
+  }
+
+  @override
   String bcProjectionSem(String currency, String start, String end) {
     return 'Saldo proyectado en $currency: de $start hoy a $end al final del periodo';
   }
