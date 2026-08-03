@@ -2083,6 +2083,155 @@ async fn portfolio_twr_divides_out_contributions() {
     assert!((last["sp"].as_f64().unwrap() - 1.10).abs() < 0.005);
 }
 
+/// Regression: the performance card scrubs the TWR chart, and its headline is
+/// supposed to be MONEY at the scrubbed date. It used to source that money
+/// from `/dashboard/portfolio-value-history`, which can only reach as far
+/// back as `balance_snapshots` has rows — on a young install that is weeks,
+/// while the TWR chart spans back to the earliest lot (years). The fallback
+/// to a percentage therefore fired across almost the whole chart width.
+///
+/// So `/portfolio-twr` now carries `value_usd` on every point: the day's real
+/// market valuation (shares × that day's close), which is exactly the series
+/// the return is computed from. This test pins the two halves of the bug:
+/// the value series spans the FULL TWR window, and the snapshot-backed
+/// endpoint over the same account spans none of it.
+#[tokio::test]
+#[serial_test::serial]
+async fn portfolio_twr_points_carry_value_usd_across_the_full_span() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // Same price/lot fixture as `portfolio_twr_divides_out_contributions`:
+    // AAPL 100 (D-60) → 110 (D-30) → 121 (today); 6 shares opened at D-60,
+    // 4 more contributed at D-30.
+    sqlx::query(
+        "INSERT INTO benchmark_prices (symbol, price_date, close) VALUES \
+         ('AAPL', CURRENT_DATE - 60, 100), \
+         ('AAPL', CURRENT_DATE - 30, 110), \
+         ('AAPL', CURRENT_DATE,      121), \
+         ('SP500', CURRENT_DATE - 60, 1000), \
+         ('SP500', CURRENT_DATE,      1100) \
+         ON CONFLICT (symbol, price_date) DO UPDATE SET close = EXCLUDED.close",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'AAPL','Apple','USD',10,1210,$2) RETURNING id",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) VALUES \
+         ($1,$2,$3, CURRENT_DATE - 60, 6, 100, 'USD', 1.0, 'open'), \
+         ($1,$2,$3, CURRENT_DATE - 30, 4, 110, 'USD', 1.0, 'add')",
+    )
+    .bind(holding_id)
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Deliberately seed ONE recent balance snapshot — the shape of a young
+    // install. This is all `/portfolio-value-history` will ever have.
+    sqlx::query(
+        "INSERT INTO balance_snapshots (account_id, user_id, as_of_date, balance, balance_usd, currency) \
+         VALUES ($1,$2, CURRENT_DATE, 1210, 1210, 'USD') \
+         ON CONFLICT (account_id, as_of_date) DO NOTHING",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/portfolio-twr",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let points = body["points"].as_array().unwrap();
+    assert!(points.len() > 50, "expected a daily series over ~60 days");
+
+    // EVERY point carries a positive value — the fallback fired precisely
+    // because most days had none.
+    assert!(
+        points
+            .iter()
+            .all(|p| p["value_usd"].as_f64().is_some_and(|v| v > 0.0)),
+        "every TWR point must carry a value_usd"
+    );
+
+    // Day 1 of the window is the OPENING position (6 × 100 = 600), not the
+    // current 10 shares and not zero — the backward share reconstruction.
+    let first_value = points[0]["value_usd"].as_f64().unwrap();
+    assert!(
+        (first_value - 600.0).abs() < 0.5,
+        "first point should be the opening 6 shares @ 100, got {first_value}"
+    );
+    // The last point is the current position at the current close, matching
+    // the resting headline (`total_value_usd`) so lifting a finger off the
+    // right edge of the chart doesn't change the number.
+    let last_value = points.last().unwrap()["value_usd"].as_f64().unwrap();
+    assert!(
+        (last_value - 1210.0).abs() < 0.5,
+        "last point should be 10 shares @ 121, got {last_value}"
+    );
+    assert!(
+        (last_value - body["total_value_usd"].as_f64().unwrap()).abs() < 0.5,
+        "the value series must land on the portfolio total"
+    );
+    // And the contribution IS visible in dollars even though the return
+    // divides it out — proof this is a valuation, not `total × twr`
+    // (1210/600 = 2.02 vs a growth index of 1.21).
+    let mid_value = points[points.len() / 2]["value_usd"].as_f64().unwrap();
+    assert!(
+        mid_value > 700.0,
+        "mid-window value should reflect the contribution, got {mid_value}"
+    );
+
+    // The other half of the diagnosis: the snapshot-backed endpoint covers a
+    // single day of the same ~61-day window. Sourcing the scrub headline from
+    // it left ~98% of the chart with no money to show.
+    let hist_res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/portfolio-value-history",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(hist_res.status(), StatusCode::OK);
+    let hist = body_json(hist_res.into_body()).await;
+    let hist_points = hist.as_array().unwrap();
+    assert_eq!(
+        hist_points.len(),
+        1,
+        "balance_snapshots only has today's row: {hist_points:#?}"
+    );
+    assert!(
+        hist_points.len() < points.len() / 10,
+        "the snapshot series is a sliver of the TWR span — that IS the bug"
+    );
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn tax_summary_splits_short_and_long_term_from_lots() {

@@ -106,6 +106,17 @@ const double _rangeStackBelow = 520;
 /// window is narrow, and a wide sheet on a phone is not.
 const double _compactCardBelow = 720;
 
+/// Minimum `coverage_pct` at which the TWR payload's daily `value_usd` may be
+/// shown as the portfolio's value.
+///
+/// `value_usd` sums only the holdings the backend can price historically, so
+/// at 80% coverage it is 80% of a portfolio — a number that would sit under a
+/// "Portfolio value" caption while understating by a fifth. The same 0.99 is
+/// the threshold at which `_twrBody` stops printing the coverage caption:
+/// above it the card already tells the user the series is the whole
+/// portfolio, so the two must agree or the card contradicts itself.
+const double _twrValueCoverageFloor = 0.99;
+
 final List<_BenchmarkOption> _benchmarkOptions = [
   _BenchmarkOption('SP500', (l) => l.lwPerfBenchSp500),
   _BenchmarkOption('NDX', (l) => l.lwPerfBenchNdx),
@@ -157,6 +168,21 @@ class _PerformanceCardState extends State<PerformanceCard> {
   /// format the in-chart tooltip used, so the reading is recognizably the
   /// tooltip's content, just relocated.
   String _scrubDate(DateTime date) => DateFormat('MMM d, y').format(date);
+
+  /// The caption under the scrubbed headline.
+  ///
+  /// When the headline is money the date alone is right: it inherits the
+  /// "Portfolio value" caption it replaced. When no value resolves for that
+  /// date the headline degrades to the return — and the caption MUST say so.
+  /// The slot is the one the owner reads dollars in; letting a percentage
+  /// occupy it under an unchanged, date-only caption is a silent change of
+  /// meaning ("here's your money on May 1" vs "we can't value May 1"). Naming
+  /// the method also disambiguates *which* return, since the pills below
+  /// carry the same two numbers.
+  String _scrubCaption(AppLocalizations l, _ScrubReading scrub) =>
+      scrub.headlineIsMoney
+      ? _scrubDate(scrub.date)
+      : '${_scrubDate(scrub.date)} · ${l.lwPerfTwrReturn}';
 
   // Best-effort fetches, routed through the widget's test seams when present.
   Future<List<dynamic>> _fetchHistory() =>
@@ -244,19 +270,14 @@ class _PerformanceCardState extends State<PerformanceCard> {
   String _money(double usd) =>
       widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
-  /// `_history` reduced to (UTC calendar day → portfolio value in USD),
-  /// ascending, dropping rows with an unparseable date or a missing
-  /// `value_usd`. Memoized on the identity of `_history` (which only changes
-  /// in `_load`) because a scrub reads it on every pointer move — reparsing
-  /// thousands of rows per frame of a drag is exactly what the
-  /// ValueNotifier-not-setState scrub design exists to avoid.
-  List<({DateTime day, double valueUsd})> _valueDays = const [];
-  List<dynamic>? _valueDaysSource;
-
-  List<({DateTime day, double valueUsd})> get _historyValueDays {
-    if (identical(_valueDaysSource, _history)) return _valueDays;
+  /// A `[{date, value_usd}]` payload reduced to (UTC calendar day → value in
+  /// USD), ascending, dropping rows with an unparseable date or a missing
+  /// `value_usd`.
+  static List<({DateTime day, double valueUsd})> _toValueDays(
+    List<dynamic> rows,
+  ) {
     final out = <({DateTime day, double valueUsd})>[];
-    for (final p in _history) {
+    for (final p in rows) {
       final d = DateTime.tryParse(p['date']?.toString() ?? '');
       final v = (p['value_usd'] as num?)?.toDouble();
       if (d == null || v == null) continue;
@@ -265,24 +286,66 @@ class _PerformanceCardState extends State<PerformanceCard> {
       out.add((day: DateTime.utc(d.year, d.month, d.day), valueUsd: v));
     }
     out.sort((a, b) => a.day.compareTo(b.day));
-    _valueDays = out;
-    _valueDaysSource = _history;
     return out;
   }
 
-  /// The portfolio value in USD (unconverted) on [date]: the exact row when
-  /// history has one, otherwise the nearest PRIOR row — the house
-  /// carry-forward convention. Money is never interpolated between samples.
+  /// `_history` (the `balance_snapshots`-backed series) as value-days.
+  /// Memoized on the identity of `_history` (which only changes in `_load`)
+  /// because a scrub reads it on every pointer move — reparsing thousands of
+  /// rows per frame of a drag is exactly what the ValueNotifier-not-setState
+  /// scrub design exists to avoid.
+  List<({DateTime day, double valueUsd})> _valueDays = const [];
+  List<dynamic>? _valueDaysSource;
+
+  List<({DateTime day, double valueUsd})> get _historyValueDays {
+    if (identical(_valueDaysSource, _history)) return _valueDays;
+    _valueDays = _toValueDays(_history);
+    _valueDaysSource = _history;
+    return _valueDays;
+  }
+
+  /// The TWR payload's own daily valuation (`points[].value_usd`) as
+  /// value-days — same memoization, keyed on the identity of the points list.
   ///
-  /// Null when nothing can be resolved (empty history, every row missing
-  /// `value_usd`, or [date] falling before the first row). Callers must then
-  /// show something else rather than invent a figure: the TWR scrub falls
-  /// back to the return it used to show.
-  double? _valueUsdOn(DateTime date) {
-    final rows = _historyValueDays;
-    if (rows.isEmpty) return null;
-    final day = DateTime.utc(date.year, date.month, date.day);
-    // Binary search for the last row at or before `day`.
+  /// WHY THIS EXISTS. `/dashboard/portfolio-value-history` is backed by
+  /// `balance_snapshots`, so it starts whenever this install first
+  /// snapshotted — on the owner's account that was ~4 weeks of rows against a
+  /// TWR chart running back to 2019. Scrubbing ALL / 5Y / 1Y / YTD therefore
+  /// resolved no value for ~98% of the chart width and the headline degraded
+  /// to a percentage that merely repeated the "Your portfolio" pill — the
+  /// original complaint, unfixed. The TWR endpoint already values the
+  /// portfolio every single day it plots (that valuation IS what its return
+  /// is computed from), so the money is right there in the same payload,
+  /// on exactly the dates being scrubbed.
+  ///
+  /// Gated on [_twrValueCoverageFloor]: `value_usd` sums only the symbols the
+  /// backend can price daily, so below full coverage it is a PARTIAL total
+  /// and must not be shown under a "Portfolio value" caption. Beneath the
+  /// floor we fall through to `_history` (real observed balances) and then to
+  /// the honest return fallback.
+  List<({DateTime day, double valueUsd})> _twrValueDays = const [];
+  Object? _twrValueDaysSource;
+
+  List<({DateTime day, double valueUsd})> get _twrPointValueDays {
+    final pts = _twr?['points'];
+    final coverage = (_twr?['coverage_pct'] as num?)?.toDouble() ?? 0.0;
+    final usable = pts is List && coverage >= _twrValueCoverageFloor
+        ? pts
+        : const <dynamic>[];
+    if (identical(_twrValueDaysSource, usable)) return _twrValueDays;
+    _twrValueDays = _toValueDays(usable);
+    _twrValueDaysSource = usable;
+    return _twrValueDays;
+  }
+
+  /// The last value at or before [day] in an ascending value-day list — the
+  /// house carry-forward convention. Money is never interpolated between
+  /// samples, and never extrapolated BACKWARDS: a [day] preceding the first
+  /// row resolves to null, not to the first row's value.
+  static double? _carryForward(
+    List<({DateTime day, double valueUsd})> rows,
+    DateTime day,
+  ) {
     var lo = 0;
     var hi = rows.length - 1;
     var found = -1;
@@ -296,6 +359,26 @@ class _PerformanceCardState extends State<PerformanceCard> {
       }
     }
     return found < 0 ? null : rows[found].valueUsd;
+  }
+
+  /// The portfolio value in USD (unconverted) on [date], for the TWR scrub
+  /// headline.
+  ///
+  /// Source order matters. The TWR payload's own daily valuation comes FIRST:
+  /// it covers every plotted date (see [_twrPointValueDays]) and it lands on
+  /// the same total as the resting headline, so lifting a finger off the
+  /// right edge doesn't change the number. `_history` is the fallback for the
+  /// coverage-gated case, where the observed account balance is the better
+  /// figure anyway.
+  ///
+  /// Null when neither resolves. Callers must then show something else rather
+  /// than invent a figure — and must SAY so (see `_headline`), since a
+  /// percentage silently occupying the money slot is the bug this whole path
+  /// exists to prevent.
+  double? _valueUsdOn(DateTime date) {
+    final day = DateTime.utc(date.year, date.month, date.day);
+    return _carryForward(_twrPointValueDays, day) ??
+        _carryForward(_historyValueDays, day);
   }
 
   List<dynamic> _filterByRange(List<dynamic> data) {
@@ -708,7 +791,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
         final block = _headlineText(
           context,
           scrub?.headline ?? liveValue,
-          scrub == null ? liveSubtitle : _scrubDate(scrub.date),
+          scrub == null ? liveSubtitle : _scrubCaption(l, scrub),
         );
         if (scrub == null) return block;
         // The scrubbed readout replaces a tooltip that was already invisible
@@ -981,18 +1064,21 @@ class _PerformanceCardState extends State<PerformanceCard> {
                 final date = twrX0.add(Duration(days: day));
                 final youText = pctText(spot.y);
                 // The headline stays MONEY through the scrub — the portfolio
-                // value on the scrubbed date, looked up in `_history` BY DATE
-                // (the TWR series is separately range-filtered and
-                // downsampled, so an index into it wouldn't line up). The
-                // returns are already in the two pills; replacing the dollar
-                // total with a third percentage left the card showing no
-                // money at all exactly while it was being interrogated.
+                // value on the scrubbed date, looked up BY DATE (this series
+                // is separately range-filtered and downsampled, so an index
+                // into it wouldn't line up). The returns are already in the
+                // two pills; replacing the dollar total with a third
+                // percentage left the card showing no money at all exactly
+                // while it was being interrogated. The lookup prefers the TWR
+                // payload's own daily valuation, which covers every plotted
+                // date — `_history` alone covered only the last few weeks of
+                // a chart spanning years (see `_twrPointValueDays`).
                 final valueUsd = _valueUsdOn(date);
                 _setScrub((
                   date: date,
-                  // No resolvable value_usd for that date → keep the old
-                  // behavior (show the return) rather than render a wrong or
-                  // zero amount.
+                  // Still no resolvable value for that date → show the return
+                  // rather than a wrong or zero amount, and let `_headline`
+                  // caption it as a return so the swap isn't silent.
                   headline: valueUsd == null ? youText : _money(valueUsd),
                   headlineIsMoney: valueUsd != null,
                   you: youText,
@@ -1104,7 +1190,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
           l.lwPerfTwrMethodNote,
           style: TextStyle(color: context.textFaint, fontSize: 11),
         ),
-        if (coverage < 0.99) ...[
+        if (coverage < _twrValueCoverageFloor) ...[
           const SizedBox(height: 4),
           Text(
             l.lwPerfTwrCoverage(

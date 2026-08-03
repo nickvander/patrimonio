@@ -33,6 +33,14 @@
 //! start), alongside the S&P 500 indexed over the same dates. Because the
 //! index is multiplicative, the caller can compute the TWR over any sub-range
 //! by division: `twr[a,b] = index(b)/index(a) − 1`.
+//!
+//! Each point ALSO carries the day's raw market value (`value_usd`) — the
+//! valuation the return is derived from, before flows are divided out. That
+//! is what lets the performance card show real dollars while a finger scrubs
+//! this chart: `balance_snapshots` (and therefore
+//! `/dashboard/portfolio-value-history`) only goes back to whenever the
+//! install started snapshotting, whereas this walk reaches the earliest lot.
+//! See `TwrPoint::value_usd` for the two limits a caller must respect.
 
 use std::collections::HashMap;
 
@@ -49,6 +57,31 @@ pub struct TwrPoint {
     pub twr: f64,
     /// S&P 500 growth index over the same dates (1.0 at the start).
     pub sp: f64,
+    /// Market value of the COVERED positions on this date, USD — the very
+    /// valuation the day's return is computed from (`shares_on(d) ×
+    /// close_on(d)`, summed over the priced symbols).
+    ///
+    /// Why it's exposed: `/dashboard/portfolio-value-history` can only reach
+    /// back as far as `balance_snapshots` has rows (i.e. to whenever this
+    /// install first started snapshotting — weeks, on a young deployment),
+    /// while this series reaches back to the earliest known lot (years). The
+    /// performance card scrubs THIS chart, so without a value here the
+    /// headline had no dollars to show across almost the whole width and
+    /// degraded to a percentage — the owner's original complaint.
+    ///
+    /// This is a real valuation, NOT today's value scaled by `twr`: flows are
+    /// divided out of `twr` but are fully present here (a mid-window
+    /// contribution steps `value_usd` up while leaving `twr` flat), and the
+    /// prices are the actual historical closes.
+    ///
+    /// ⚠ Two honest limits the caller must respect:
+    /// 1. It covers only the priced symbols, so it is the whole portfolio
+    ///    only when `coverage_pct` is ~1.0 — below that it UNDERSTATES, and
+    ///    must not be labelled "portfolio value".
+    /// 2. Before a symbol's earliest lot its share count is assumed flat (the
+    ///    module-level "opening position" simplification), so the deep past
+    ///    is the opening position at that day's prices.
+    pub value_usd: f64,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -221,6 +254,8 @@ fn compute_daily_twr(inp: &DailyTwrInputs) -> (Vec<TwrPoint>, f64) {
             date: d.format("%Y-%m-%d").to_string(),
             twr: growth,
             sp: sp_idx,
+            // The day's raw market value, flows INCLUDED — see TwrPoint::value_usd.
+            value_usd: v,
         });
         d += Duration::days(1);
     }
@@ -665,5 +700,82 @@ mod tests {
         // Day 2 has no benchmark close → forward-fill from day 1.
         assert_close(points[1].sp, 1.0, "gap forward-fills previous close");
         assert_close(points[2].sp, 1.1, "day 3 = 4400/4000");
+    }
+
+    // (g) `value_usd` is the DOLLAR path, not the return path. This is the
+    // whole reason it exists: the performance card's scrub headline needs
+    // real money for every plotted day, and `twr` deliberately can't supply
+    // it (flows are divided out). A mid-window contribution must therefore
+    // step `value_usd` up on the day it lands while leaving `twr` flat.
+    #[test]
+    fn value_usd_tracks_dollars_including_flows_while_twr_does_not() {
+        // Same fixture as (b): 10 shares held, 10 more bought on day 2 @ 105.
+        let quotes = quotes_of("GOOG", &[(1, 100.0), (2, 105.0), (3, 110.0)]);
+        let (points, _) = compute_daily_twr(&DailyTwrInputs {
+            quotes: &quotes,
+            cur_qty: &qty_of("GOOG", 20.0),
+            lots_by_sym: &events_of("GOOG", &[(2, 10.0)]),
+            disps_by_sym: &HashMap::new(),
+            flow_map: &flows_of(&[(2, 1050.0)]),
+            sp: &[],
+            start: day(1),
+            end: day(3),
+        });
+        // Dollars: 10×100 → 20×105 → 20×110. The deposit is VISIBLE here.
+        assert_close(points[0].value_usd, 1000.0, "opening position at day 1");
+        assert_close(points[1].value_usd, 2100.0, "deposit shows in dollars");
+        assert_close(points[2].value_usd, 2200.0, "day 3 at the day-3 close");
+        // …while the return over the same days is only the 10% price move,
+        // so `value_usd` can never be reconstructed from `twr` (and vice
+        // versa): 2200/1000 = 2.2, but growth is 1.10.
+        assert_close(points[2].twr, 1.10, "return still excludes the deposit");
+    }
+
+    // (h) A sell is the mirror case: `value_usd` drops with the withdrawal
+    // even though `twr` doesn't book a loss. Guards against anyone "fixing"
+    // value_usd by deriving it from the growth index.
+    #[test]
+    fn value_usd_drops_on_a_withdrawal_without_booking_a_loss() {
+        let quotes = quotes_of("GOOG", &[(1, 100.0), (2, 105.0), (3, 110.0)]);
+        let (points, _) = compute_daily_twr(&DailyTwrInputs {
+            quotes: &quotes,
+            cur_qty: &qty_of("GOOG", 10.0),
+            lots_by_sym: &HashMap::new(),
+            disps_by_sym: &events_of("GOOG", &[(2, 10.0)]),
+            flow_map: &flows_of(&[(2, -1050.0)]),
+            sp: &[],
+            start: day(1),
+            end: day(3),
+        });
+        assert_close(points[0].value_usd, 2000.0, "20 shares before the sale");
+        assert_close(points[1].value_usd, 1050.0, "10 shares after the sale");
+        assert_close(points[2].value_usd, 1100.0, "10 shares at the day-3 close");
+        assert_close(points[2].twr, 1.10, "withdrawal is not a loss");
+    }
+
+    // (i) Multi-symbol: the day's value is the SUM over covered symbols, each
+    // at its own reconstructed share count and its own close — not a single
+    // position's path. (A per-symbol quote gap forward-fills via close_on.)
+    #[test]
+    fn value_usd_sums_every_covered_symbol_on_the_day() {
+        let mut quotes = quotes_of("GOOG", &[(1, 100.0), (2, 110.0)]);
+        quotes.insert(
+            "MSFT".to_string(),
+            vec![(day(1), 50.0)], // no day-2 close → forward-fills at 50
+        );
+        let mut qty = qty_of("GOOG", 10.0);
+        qty.insert("MSFT".to_string(), 4.0);
+        let (points, _) = compute_daily_twr(&DailyTwrInputs {
+            quotes: &quotes,
+            cur_qty: &qty,
+            lots_by_sym: &HashMap::new(),
+            disps_by_sym: &HashMap::new(),
+            flow_map: &HashMap::new(),
+            sp: &[],
+            start: day(1),
+            end: day(2),
+        });
+        assert_close(points[0].value_usd, 1200.0, "10×100 + 4×50");
+        assert_close(points[1].value_usd, 1300.0, "10×110 + 4×50 (filled)");
     }
 }

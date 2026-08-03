@@ -31,7 +31,15 @@ import 'package:patrimonio/widgets/performance_card.dart';
 /// now()-relative cutoff), full coverage, so the card renders the TWR chart
 /// and it is its ONLY LineChart. twr rises 1%/day and sp 0.5%/day from a
 /// base of 1.0, so day N reads exactly +N.0% / +N/2%.
-Map<String, dynamic> _twrFixture() => {
+///
+/// [valueUsd] optionally attaches the endpoint's per-day valuation
+/// (`points[].value_usd`); [coverage] lets a test drop below the card's
+/// coverage floor. Both default to the pre-`value_usd` shape so the original
+/// scrub tests keep exercising the `_history` path.
+Map<String, dynamic> _twrFixture({
+  double Function(int i)? valueUsd,
+  double coverage = 1.0,
+}) => {
   'points': [
     for (int i = 0; i < 30; i++)
       {
@@ -40,9 +48,10 @@ Map<String, dynamic> _twrFixture() => {
         ).format(DateTime.utc(2026, 5, 1).add(Duration(days: i))),
         'twr': 1.0 + i * 0.01,
         'sp': 1.0 + i * 0.005,
+        if (valueUsd != null) 'value_usd': valueUsd(i),
       },
   ],
-  'coverage_pct': 1.0,
+  'coverage_pct': coverage,
   'total_value_usd': 250000.0,
 };
 
@@ -66,6 +75,7 @@ Widget _perfHost({
   List<dynamic>? history,
   NumberFormat? currencyFormat,
   double conversionFactor = 1.0,
+  Map<String, dynamic>? twr,
 }) => MaterialApp(
   locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -78,7 +88,7 @@ Widget _perfHost({
         currencyFormat: currencyFormat ?? moneyFormat('USD'),
         historyFetchOverride: () async => history ?? _valueHistory(),
         comparisonFetchOverride: () async => null,
-        twrFetchOverride: () async => _twrFixture(),
+        twrFetchOverride: () async => twr ?? _twrFixture(),
       ),
     ),
   ),
@@ -350,8 +360,14 @@ void main() {
       await tester.pump();
 
       // Headline degrades to the return (the pre-fix behavior) rather than
-      // rendering $0 or a value from the wrong date.
-      expect(find.text('May 1, 2026'), findsOneWidget);
+      // rendering $0 or a value from the wrong date — and the caption SAYS
+      // it's a return, so the swap out of the money slot isn't silent.
+      expect(find.text('May 1, 2026 · Time-weighted return'), findsOneWidget);
+      expect(
+        find.text('May 1, 2026'),
+        findsNothing,
+        reason: 'a bare date caption would still read as "your money on May 1"',
+      );
       expect(find.text('+0.0%'), findsNWidgets(3)); // headline + both pills
       expect(
         _texts(tester).where((t) => t.contains(r'$')),
@@ -380,7 +396,7 @@ void main() {
       await gesture.moveTo(_chartEdge(tester, right: false));
       await tester.pump();
 
-      expect(find.text('May 1, 2026'), findsOneWidget);
+      expect(find.text('May 1, 2026 · Time-weighted return'), findsOneWidget);
       expect(find.text('+0.0%'), findsNWidgets(3)); // headline is the return
       expect(
         _texts(tester).where((t) => t.contains(r'$')),
@@ -458,6 +474,212 @@ void main() {
       await gesture.up();
       await tester.pump();
       expect(_texts(tester), contains('MXN 5,000,000'));
+    });
+  });
+
+  // ── the scrub's money source spans the whole chart, not just the tail ──
+  //
+  // The first fix (7d0e9a2) sourced the scrubbed headline from
+  // `/dashboard/portfolio-value-history`, which is backed by
+  // `balance_snapshots` and so begins whenever the install started
+  // snapshotting. On the owner's account that was 22 rows against a TWR chart
+  // running back to 2019: on ALL / 5Y / 1Y / YTD the money fallback fired
+  // across ~98% of the width and the headline showed a percentage that merely
+  // repeated the "Your portfolio" pill — the exact thing the fix existed to
+  // prevent, at the ranges they actually use.
+  //
+  // The endpoint now returns its own per-day valuation on every point, so
+  // these tests pin: money everywhere the chart plots, money that beats a
+  // stale/short snapshot series, and an honest fallback when the payload
+  // can't legitimately be read as the whole portfolio.
+  group('performance card — scrubbing money across the full chart span', () {
+    // History covering ONLY the last three days of the 30-day window: the
+    // shape of the production bug. Days 0–26 have no snapshot at all.
+    List<dynamic> shortHistory() => _valueHistory().sublist(27);
+
+    testWidgets('a date the snapshot history never covered still shows money, '
+        'sourced from the TWR payload', (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      await tester.pumpWidget(
+        _perfHost(
+          history: shortHistory(),
+          // Day i is worth 100,000 + 1,000·i → May 1 = $100,000.
+          twr: _twrFixture(valueUsd: (i) => 100000.0 + i * 1000),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      // May 1 predates every snapshot row, yet the headline is MONEY — and it
+      // is the value the endpoint reported for that day.
+      expect(find.text('May 1, 2026'), findsOneWidget);
+      expect(find.text(r'$100,000'), findsOneWidget);
+      expect(
+        find.text('May 1, 2026 · Time-weighted return'),
+        findsNothing,
+        reason: 'the money branch must not carry the fallback caption',
+      );
+      // The two pills still carry the returns; the headline is not a third.
+      expect(find.text('+0.0%'), findsNWidgets(2));
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('the money is a real valuation, not the return applied to '
+        "today's total", (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      // twr on day 0 is 1.0 (a 0% return), so "total × growth" would print
+      // the full $250,000 at May 1. The endpoint's valuation says $100,000 —
+      // contributions raised the value without being performance. The
+      // headline must be the valuation.
+      await tester.pumpWidget(
+        _perfHost(
+          history: const <dynamic>[],
+          twr: _twrFixture(valueUsd: (i) => 100000.0 + i * 1000),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      expect(_texts(tester).where((t) => t.contains(r'$')).toList(), [
+        r'$100,000',
+      ]);
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('the whole drag stays money — no percentage sneaks into the '
+        'headline anywhere across the span', (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      await tester.pumpWidget(
+        _perfHost(
+          history: shortHistory(),
+          twr: _twrFixture(valueUsd: (i) => 100000.0 + i * 1000),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(find.byType(LineChart));
+      final gesture = await tester.startGesture(rect.center);
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Walk the full plot width. At every stop the headline must be money
+      // (a currency string on screen) and never the return caption.
+      for (var i = 0; i <= 20; i++) {
+        final dx = rect.left + 2 + (rect.width - 4) * i / 20;
+        await gesture.moveTo(Offset(dx, rect.center.dy));
+        await tester.pump();
+        expect(
+          _texts(tester).where((t) => t.contains(r'$')),
+          isNotEmpty,
+          reason: 'no money at x-fraction ${i / 20}',
+        );
+        expect(
+          _texts(tester).where((t) => t.contains('· Time-weighted return')),
+          isEmpty,
+          reason: 'unexpected fallback caption at x-fraction ${i / 20}',
+        );
+      }
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('a partially-priced portfolio does NOT pass its partial value '
+        'off as the portfolio value', (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      // 60% coverage: `value_usd` is 60% of a portfolio. Showing it under the
+      // "Portfolio value" caption would understate by 40%, so the card must
+      // ignore it — and with no snapshot history either, fall back honestly.
+      await tester.pumpWidget(
+        _perfHost(
+          history: const <dynamic>[],
+          twr: _twrFixture(valueUsd: (i) => 100000.0 + i * 1000, coverage: 0.6),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      expect(find.text('May 1, 2026 · Time-weighted return'), findsOneWidget);
+      expect(
+        _texts(tester).where((t) => t.contains(r'$')),
+        isEmpty,
+        reason: 'a 60%-covered valuation is not the portfolio value',
+      );
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('below the coverage floor the observed snapshot balance is '
+        'used instead of the partial valuation', (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      // Same 60% coverage, but now snapshots DO cover May 1 ($221,000). The
+      // real observed balance is the better number and must win over both the
+      // partial valuation ($100,000) and the return fallback.
+      await tester.pumpWidget(
+        _perfHost(
+          twr: _twrFixture(valueUsd: (i) => 100000.0 + i * 1000, coverage: 0.6),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      expect(_texts(tester).where((t) => t.contains(r'$')).toList(), [
+        r'$221,000',
+      ]);
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('the fallback caption is localized (es-MX)', (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      await tester.pumpWidget(
+        _perfHost(locale: const Locale('es'), history: const <dynamic>[]),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      expect(
+        find.text('May 1, 2026 · Rendimiento ponderado por tiempo'),
+        findsOneWidget,
+      );
+
+      await gesture.up();
+      await tester.pump();
     });
   });
 
