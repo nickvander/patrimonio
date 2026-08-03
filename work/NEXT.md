@@ -43,11 +43,13 @@ queue behind these — shapes live in the report only.
 
 - **`MediaQuery` layout-branch inventory** (from the 2026-08-03 responsive
   pass; `performance_card` + `date_range_selector` already fixed in
-  `f86c30e`). Bucket **B — visible consequences, start here**:
-  `loan_detail_sheet.dart:674` decides whether the schedule table renders
-  AT ALL and `:976` drops two columns below 520 — a *sheet*, the exact
-  "wide sheet on a phone" case the rule names, and it removes data on the
-  wrong branch; then `budgets_card.dart:436` (also controls row count
+  `f86c30e`). ~~`loan_detail_sheet.dart`~~ ✅ fixed `4dac37e` — and my
+  entry there was **overstated**: it never made the schedule unreachable
+  (the same branch renders a "View N installments" disclosure). The real
+  defect was that a modal sheet is capped at 640dp by M3, so on a 1440dp
+  window the code read 1440 while the table had 592 — an ACTIVE wrong
+  branch, not a latent one. Bucket **B — remaining, by consequence**:
+  `budgets_card.dart:436` (also controls row count
   before "show all"), `wealth_projection_screen.dart:1018`,
   `tax_planning_screen.dart:564`, `debt_payoff_card.dart:308`,
   `spending_by_category_card.dart:100`, `lending_tab.dart:183,262`,
