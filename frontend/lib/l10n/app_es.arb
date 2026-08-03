@@ -3076,5 +3076,16 @@
   "cfsFxLegs": "{from} se convirtió en {to}",
   "cfsSemantics": "Diagrama de flujo de dinero. {flows} Total del periodo {total}.",
   "cfsFxSemantics": "Diagrama de conversión entre divisas. {flows}",
-  "cfsFlowSemantics": "{amount} ({share}), de {source} a {target}."
+  "cfsFlowSemantics": "{amount} ({share}), de {source} a {target}.",
+  "qeTitle": "Captura rápida",
+  "qeSpent": "Gasté",
+  "qeReceived": "Recibí",
+  "qeCategoryOther": "Otra…",
+  "qeNote": "Nota (opcional)",
+  "qeDefaultDescription": "Efectivo",
+  "qeLastUsed": "Última usada",
+  "qeFullForm": "Más opciones",
+  "qeUndone": "Movimiento eliminado",
+  "qeUndoFailed": "No se pudo eliminar el movimiento — sigue guardado.",
+  "qeSaved": "Guardado {amount} · {label}"
 }

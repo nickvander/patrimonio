@@ -71,6 +71,7 @@ import '../widgets/net_worth_goal_tile.dart';
 import '../widgets/notifications_panel.dart';
 import '../widgets/performance_card.dart';
 import '../widgets/portfolio_card.dart';
+import '../widgets/quick_entry_sheet.dart';
 import '../widgets/realized_gains_card.dart';
 import '../widgets/rebalancing_card.dart';
 import '../widgets/recurring_card.dart';
@@ -3392,14 +3393,38 @@ class _DashboardScreenState extends State<DashboardScreen>
     await _loadAllData(silent: true, forceRefresh: true);
   }
 
-  /// Quick capture from the compact-layout FAB (Home or Activity): the
-  /// exact same Add-transaction flow as the Activity tab. Prefers the
-  /// mounted tab's [TransactionsTabState.openAddDialog] (one code path,
-  /// including its account preselect) — but the IndexedStack only mounts
-  /// Activity once visited, and on a fresh session Home comes first, so
-  /// fall back to opening the shared dialog directly with the same
-  /// accounts / suggestions / refresh wiring the tab would use.
+  /// Quick capture from the compact-layout FAB (Home or Activity) — the
+  /// SHORT path, and the reason the FAB exists: amount first with the
+  /// numeric keypad already focused, most-recently-used categories as
+  /// one-tap chips, and the account / currency / date pre-filled from the
+  /// user's own last manual entry (`utils/quick_entry_defaults.dart`).
+  /// Saving leaves the sheet open so a second cash expense is one more
+  /// entry, not another round trip through the FAB.
+  ///
+  /// The FAB is the only affordance that lands here; everything else (the
+  /// wide-layout inline '+', the Activity toolbar, the per-account screen)
+  /// still opens the full Add-transaction panel, which quick entry itself
+  /// hands off to via "More options" → [_openFullAddTransaction].
   void _openQuickAddTransaction() {
+    openQuickEntrySheet(
+      context,
+      accounts: (_overview?['accounts'] as List?) ?? const [],
+      apiService: _apiService,
+      onCreated: () => _refreshAfterTransactionMutation(),
+      recentTransactions: _transactions ?? const [],
+      categorySuggestions: distinctPrettyCategories(_transactions ?? const []),
+      onFullForm: _openFullAddTransaction,
+    );
+  }
+
+  /// The full Add-transaction flow (description, notes, repeats), reached
+  /// from quick entry's "More options". Prefers the mounted tab's
+  /// [TransactionsTabState.openAddDialog] (one code path, including its
+  /// account preselect) — but the IndexedStack only mounts Activity once
+  /// visited, and on a fresh session Home comes first, so fall back to
+  /// opening the shared dialog directly with the same accounts /
+  /// suggestions / refresh wiring the tab would use.
+  void _openFullAddTransaction() {
     final txTab = _txTabKey.currentState;
     if (txTab != null) {
       txTab.openAddDialog();

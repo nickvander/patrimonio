@@ -4590,5 +4590,27 @@
         "type": "String"
       }
     }
+  },
+  "qeTitle": "Quick entry",
+  "qeSpent": "Spent",
+  "qeReceived": "Received",
+  "qeCategoryOther": "Other…",
+  "qeNote": "Note (optional)",
+  "qeDefaultDescription": "Cash",
+  "qeLastUsed": "Last used",
+  "qeFullForm": "More options",
+  "qeUndone": "Entry removed",
+  "qeUndoFailed": "Couldn't remove that entry — it's still saved.",
+  "qeSaved": "Saved {amount} · {label}",
+  "@qeSaved": {
+    "description": "Quick-entry inline confirmation. {amount} is the SIGNED, pre-formatted stored amount (negative for a spend, so the strip states exactly what was written); {label} is the transaction description. Placeholder names are chosen so declaration order, template order and alphabetical order all agree: (amount, label).",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
   }
 }

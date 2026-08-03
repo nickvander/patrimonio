@@ -1101,6 +1101,38 @@ mixin _TxApi on _ApiServiceBase {
     String? category,
     String? notes,
   }) async {
+    await createManualTransactionReturningId(
+      accountId: accountId,
+      date: date,
+      description: description,
+      amount: amount,
+      currency: currency,
+      category: category,
+      notes: notes,
+    );
+  }
+
+  /// Same POST as [createManualTransaction] — identical body, identical
+  /// sign convention (NEGATIVE = outflow) — but hands back the id of the
+  /// row the server created (`201 {"id": …}`), so a caller can offer an
+  /// Undo that deletes exactly the row it just wrote instead of guessing
+  /// which of the user's transactions was the new one.
+  ///
+  /// Returns null when the response carries no parseable id: the write
+  /// still SUCCEEDED, only the undo handle is unavailable, and callers
+  /// must degrade by hiding the Undo affordance rather than treating it
+  /// as a failure. [createManualTransaction] is the thin void wrapper
+  /// over this, kept so existing call sites and the `extends ApiService`
+  /// test fakes that override it are untouched.
+  Future<String?> createManualTransactionReturningId({
+    required String accountId,
+    required DateTime date,
+    required String description,
+    required double amount,
+    required String currency,
+    String? category,
+    String? notes,
+  }) async {
     final body = <String, dynamic>{
       'account_id': accountId,
       'date':
@@ -1134,6 +1166,18 @@ mixin _TxApi on _ApiServiceBase {
         ),
       );
     }
+    // The row is committed at this point; a body we can't read costs the
+    // caller its Undo handle, never the transaction.
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final id = decoded['id']?.toString();
+        if (id != null && id.isNotEmpty) return id;
+      }
+    } catch (_) {
+      /* fall through to null — the write already succeeded */
+    }
+    return null;
   }
 
   /// Full edit of a manually-entered transaction — same field set as

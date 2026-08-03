@@ -8047,4 +8047,40 @@ class AppLocalizationsEs extends AppLocalizations {
   ) {
     return '$amount ($share), de $source a $target.';
   }
+
+  @override
+  String get qeTitle => 'Captura rápida';
+
+  @override
+  String get qeSpent => 'Gasté';
+
+  @override
+  String get qeReceived => 'Recibí';
+
+  @override
+  String get qeCategoryOther => 'Otra…';
+
+  @override
+  String get qeNote => 'Nota (opcional)';
+
+  @override
+  String get qeDefaultDescription => 'Efectivo';
+
+  @override
+  String get qeLastUsed => 'Última usada';
+
+  @override
+  String get qeFullForm => 'Más opciones';
+
+  @override
+  String get qeUndone => 'Movimiento eliminado';
+
+  @override
+  String get qeUndoFailed =>
+      'No se pudo eliminar el movimiento — sigue guardado.';
+
+  @override
+  String qeSaved(String amount, String label) {
+    return 'Guardado $amount · $label';
+  }
 }

@@ -7980,4 +7980,39 @@ class AppLocalizationsEn extends AppLocalizations {
   ) {
     return '$amount ($share), $source to $target.';
   }
+
+  @override
+  String get qeTitle => 'Quick entry';
+
+  @override
+  String get qeSpent => 'Spent';
+
+  @override
+  String get qeReceived => 'Received';
+
+  @override
+  String get qeCategoryOther => 'Other…';
+
+  @override
+  String get qeNote => 'Note (optional)';
+
+  @override
+  String get qeDefaultDescription => 'Cash';
+
+  @override
+  String get qeLastUsed => 'Last used';
+
+  @override
+  String get qeFullForm => 'More options';
+
+  @override
+  String get qeUndone => 'Entry removed';
+
+  @override
+  String get qeUndoFailed => 'Couldn\'t remove that entry — it\'s still saved.';
+
+  @override
+  String qeSaved(String amount, String label) {
+    return 'Saved $amount · $label';
+  }
 }

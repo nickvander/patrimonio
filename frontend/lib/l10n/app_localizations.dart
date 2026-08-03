@@ -12693,6 +12693,72 @@ abstract class AppLocalizations {
     String source,
     String target,
   );
+
+  /// No description provided for @qeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick entry'**
+  String get qeTitle;
+
+  /// No description provided for @qeSpent.
+  ///
+  /// In en, this message translates to:
+  /// **'Spent'**
+  String get qeSpent;
+
+  /// No description provided for @qeReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Received'**
+  String get qeReceived;
+
+  /// No description provided for @qeCategoryOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other…'**
+  String get qeCategoryOther;
+
+  /// No description provided for @qeNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Note (optional)'**
+  String get qeNote;
+
+  /// No description provided for @qeDefaultDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash'**
+  String get qeDefaultDescription;
+
+  /// No description provided for @qeLastUsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Last used'**
+  String get qeLastUsed;
+
+  /// No description provided for @qeFullForm.
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get qeFullForm;
+
+  /// No description provided for @qeUndone.
+  ///
+  /// In en, this message translates to:
+  /// **'Entry removed'**
+  String get qeUndone;
+
+  /// No description provided for @qeUndoFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t remove that entry — it\'s still saved.'**
+  String get qeUndoFailed;
+
+  /// Quick-entry inline confirmation. {amount} is the SIGNED, pre-formatted stored amount (negative for a spend, so the strip states exactly what was written); {label} is the transaction description. Placeholder names are chosen so declaration order, template order and alphabetical order all agree: (amount, label).
+  ///
+  /// In en, this message translates to:
+  /// **'Saved {amount} · {label}'**
+  String qeSaved(String amount, String label);
 }
 
 class _AppLocalizationsDelegate

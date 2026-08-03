@@ -191,12 +191,19 @@ fakes.
   **`ConnectedSegments<T>`** (`widgets/connected_segments.dart`) — the house M3 Expressive
   connected button group, extracted from the theme picker's inline recipe and now on 9+
   call sites (theme picker, Filter & sort editor, cash-flow period selector, lending, tax
-  filing status, add-transaction Expense/Income, …). Don't use `SegmentedButton` and don't
+  filing status, add-transaction Expense/Income, quick-entry Spent/Received, …). Don't use
+  `SegmentedButton` and don't
   fork the recipe inline. API: a list of `ConnectedSegment(value, label, icon?)` +
   `selected` + `onSelected` (fires on re-taps too — callers that persist on change
   short-circuit no-ops) + an additive `enabled` flag that renders SegmentedButton-style
   disabled tones. Equal-flex 44dp segments, 2px gaps, selected segment morphs into a
   filled `secondaryContainer` pill; selection is mirrored into semantics. The
+  **A `ScaffoldMessenger` SnackBar renders on the Scaffold, i.e. BEHIND an open
+  modal bottom sheet** — a sheet that stays open after its write (the quick-entry
+  sheet saves without navigating, so a second expense is one more entry) must put
+  its confirmation + Undo in an inline strip inside the sheet; the transactions
+  tab's deferred-delete SnackBar idiom only fits a surface the user is looking at.
+  The
   compact app bar scrolls away via `utils/bar_scroll.dart` (`barVisibleAfter` — pure,
   unit-tested; `pixels <= 0` forces the bar visible so pull-to-refresh never fights it).
 - **StatelessWidget when there's no local state.**
