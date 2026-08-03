@@ -7,16 +7,16 @@
 
 ## TL;DR — current state
 
-**As of 2026-08-03:** `main` @ `56308db`, pushed. **Prod runs on the homelab
+**As of 2026-08-03:** `main` @ `50cec87`, pushed. **Prod runs on the homelab
 host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
 `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
-`56308db`** via the host's own `update.sh` (the same script its 3am cron
+`50cec87`** via the host's own `update.sh` (the same script its 3am cron
 runs: `git pull` + `docker compose up -d --build`). Verified after: api
 health 200, frontend 200, no errors in the api log, migration
 `2026080401 user rules` recorded `success=t`. Its provenance backfill was a
 **no-op on prod** — prod carries 0 hand-edited categories/descriptions
 across 2,520 transactions, so no existing row was rewritten. The latest APK
-is cut from `56308db` (`app-arm64-v8a-release.apk`, 28.4MB; the 65-file diff
+is cut from `50cec87` (`app-arm64-v8a-release.apk`, 28.5MB; the 65-file diff
 touched no Android dep/Gradle/proguard file, so the emulator smoke gate
 wasn't triggered).
 
@@ -80,6 +80,18 @@ build commands live in the repo-root [AGENTS.md](../AGENTS.md) (and the
 
 ## Shipped recently (newest first — detail in CURRENT.md)
 
+- **2026-08-03 (late, `50cec87`):** research briefs 6 (guided statement
+  reconciliation — classifies the gap, never blocks an import) and 7
+  (quick-entry sheet, 3 taps + digits) shipped; responsive-convention pass
+  (performance card + loan sheet branch on their own width — the sheet was
+  actively wrong, M3 caps it at 640dp); the owner's chart-scrub complaint
+  FULLY fixed by emitting the dollar valuation `compute_daily_twr` already
+  computed and discarded; several label/overflow defects. Two corrections
+  worth reading: a rig-reported HIGH "invisible hit region" **does not
+  exist** (disproved by measurement; NEXT.md records the rig's
+  false-positive mode), and `dart format --set-exit-if-changed` **rewrites
+  in place** — our own instructions were clobbering concurrent agents, now
+  `-o none` everywhere. Backend 620→**648**, frontend 1097→**1251**.
 - **2026-08-03 (evening, `56308db`):** polish bundle (net-worth lens x-axis
   converged on date spacing, MXN chart axis notation, allocation-header
   truncation, rules apply-button copy) + the owner-reported bills-calendar

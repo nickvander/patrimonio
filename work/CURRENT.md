@@ -3,6 +3,76 @@
 > **Last updated:** 2026-08-03 (feature-research sweep, 4 features + tooltip fix committed; rules-engine MVP built)
 > **Branch:** `main`.
 
+## 2026-08-03 (late) — Briefs 6+7, consolidation sweep, and two corrections
+
+Deployed through `50cec87`; backend **648/648**, frontend **1251/1251**
+(verified on the final clean tree, since every intermediate count was
+measured while other agents were mid-flight).
+
+* **Brief 6 — guided statement reconciliation (`48e906f`, backend only).**
+  `POST /api/imports/reconcile` classifies the gap instead of reporting one:
+  reconciled / reconciled_after_duplicate_skip / **explained_by_existing_
+  transactions** (names the stored rows that sum to the difference, tagged
+  double_entry_in_period or misdated_near_period) / unexplained /
+  unavailable+reason. Never blocks an import. Money fields serialize
+  explicitly as null so "can't check" never reads as zero, and account
+  status ranks `unavailable` ABOVE the green states. **Honest limit in the
+  module doc:** the authority is the running SALDO column, NOT the declared
+  SALDO FINAL that every MX layout parser discards as a block terminator —
+  so a parser that drops trailing rows still "matches to the centavo".
+  Capturing the declared total is the named follow-up.
+* **Brief 7 — quick entry (`42a629e`).** Compact FAB → amount-first sheet,
+  keypad up, account/currency/date pre-filled, recent categories as chips,
+  "More options" escaping to the full dialog (body moved verbatim so the two
+  can't drift). Honest cost: 3 taps + digits; 2 taps for a second in a row.
+  No user-visible string claims seconds. Sign convention pinned twice
+  (API-layer value AND a wire test decoding the body). Undo is an inline
+  strip, not the house SnackBar — a SnackBar renders BEHIND a modal sheet.
+* **Responsive convention pass (`f86c30e`, `4dac37e`).** performance_card
+  and loan_detail_sheet now branch on their own width. The loan sheet was
+  ACTIVE, not latent: M3 caps a modal sheet at 640dp, so a 1440 window read
+  1440 while the table had 592 — six columns were being crammed into ≤519dp
+  at 520-551. **My inventory entry was overstated** and is corrected: the
+  schedule was never unreachable (a disclosure kept it one tap away).
+* **`dart format` hazard, fixed repo-wide (`243cc7e`).** AGENTS.md, the
+  fixer def and the frontend-verifier all prescribed `dart format
+  --set-exit-if-changed` — which **rewrites in place**; the flag only sets
+  the exit code. It reflowed four untracked files belonging to a concurrent
+  agent mid-edit. All three now prescribe `-o none`.
+* **Small correctness (`cf66546`, `01831b5`).** import_cleanup no longer
+  claims "No recent imports" on a LOAD FAILURE (a confident false statement
+  when the truth is "we don't know"); lending money prefixes go through the
+  helper (the audit entry mislocated them — the getters live in the
+  extracted dialogs); cash-flow card no longer titled "this month" while
+  showing YTD figures (same lie was on "Last month" too); comparison line
+  overflowed 329px/284px unclipped; lending header truncated with 150px
+  free (Flexible+Spacer splitting 50/50).
+* **Owner's scrub complaint FULLY fixed (`a9863d0`).** `7d0e9a2` only
+  worked in 1M: portfolio-value-history has 23 rows (2026-07-06+) while the
+  TWR chart spans to 2019, so ALL/5Y/1Y/YTD still showed a percent — the
+  range they actually use. **My premise was wrong** (net-worth history does
+  NOT span further; the whole table starts 2026-03-15). Real fix:
+  `compute_daily_twr` already computes a dollar valuation per day
+  (shares × historical closes) and was discarding it; now emitted as
+  `TwrPoint.value_usd`. NOT the forbidden reconstruction — flows are
+  divided OUT of the index but present in the valuation, pinned by a test
+  (2.2× dollars vs 1.10 index). Gated at the card's existing 0.99 coverage
+  floor; the fallback caption now names itself "· Time-weighted return".
+* **Consolidation sweep + TWO CORRECTIONS.** A full-app rig sweep (~60
+  boots, 178 screenshots, 0 console errors) cleared the **notifications
+  input lock** (8 touch boots, no auto-open, all three dismissal paths
+  work — rig artifact) and reported a HIGH "invisible hit region flips the
+  reporting currency". **That defect does not exist** (`9db7001`): pumping
+  the real screen shows the control's box never leaves the app bar, a 4px
+  lattice sweep hits it zero times, and tapping the accused centre selects
+  the chip. The rig's x landed on the real control while its y was
+  displaced — a coordinate-space offset, internally inconsistent with its
+  own control probe. Logged in NEXT.md as a rig false-positive mode.
+  **Real bug found in that path instead:** `initState` called the data load,
+  which reads `Theme.of` before its first await; the throw landed in an
+  orphaned future, so in DEBUG the first load silently aborted and left the
+  skeleton up (release strips the assert). Deferred one frame.
+
 ## 2026-08-03 (evening) — Shipped to prod; polish bundle; calendar detection fix
 
 Deployed `dc81667` → `56308db` to thelab via the host's own `update.sh`;
