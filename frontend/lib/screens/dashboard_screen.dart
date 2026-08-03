@@ -86,6 +86,7 @@ import '../widgets/transactions_tab.dart';
 import '../widgets/upcoming_bills_card.dart';
 import 'account_transactions_screen.dart';
 import 'connect_bank_screen.dart';
+import 'continuity_dossier_screen.dart';
 import 'hidden_items_screen.dart';
 import 'import_cleanup_screen.dart';
 import 'import_screen.dart';
@@ -6507,6 +6508,27 @@ class _DashboardScreenState extends State<DashboardScreen>
                           builder: (context) => const ImportCleanupScreen(),
                         ),
                       ).then((_) => _loadAllData(silent: true));
+                    },
+                  ),
+                  // Household continuity dossier — the printable emergency
+                  // packet lives on its own small screen (instructions text +
+                  // language choice + generate).
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.health_and_safety_outlined,
+                      color: context.tealAccent,
+                    ),
+                    title: Text(l.dossierTitle),
+                    subtitle: Text(l.dossierEntrySubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ContinuityDossierScreen(),
+                        ),
+                      );
                     },
                   ),
                 ],

@@ -139,6 +139,10 @@ pub async fn try_setup(
         .nest("/api/imports", patrimonio::api::imports::router())
         .nest("/api/projections", patrimonio::api::projections::router())
         .nest("/api/tax", patrimonio::api::tax::router())
+        // Continuity-dossier printable + the generic app-settings store its
+        // instructions section round-trips through (mirrors main.rs).
+        .nest("/api/exports", patrimonio::api::exports::router())
+        .nest("/api/settings", patrimonio::api::settings::router())
         .nest("/api/loans", patrimonio::api::loans::router())
         .layer(axum::middleware::from_fn(
             patrimonio::api::middleware::require_owner,

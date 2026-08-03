@@ -3,6 +3,7 @@ pub mod auth;
 pub mod dashboard;
 pub mod error;
 pub mod exchange_rates;
+pub mod exports;
 pub mod imports;
 pub mod institutions;
 pub mod invites;

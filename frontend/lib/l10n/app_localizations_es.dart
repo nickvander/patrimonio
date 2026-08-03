@@ -5713,6 +5713,51 @@ class AppLocalizationsEs extends AppLocalizations {
       'Revisa o deshaz importaciones de estados de cuenta anteriores';
 
   @override
+  String get dossierTitle => 'Expediente de continuidad';
+
+  @override
+  String get dossierEntrySubtitle =>
+      'Paquete de emergencia imprimible: cada cuenta, saldo y préstamo — más tus instrucciones';
+
+  @override
+  String get dossierIntro =>
+      'Un inventario bilingüe e imprimible de todo lo que Patrimonio registra — instituciones, cuentas y últimos saldos, valuaciones de activos manuales, inversiones, el libro de préstamos y las marcas FBAR — para el familiar o albacea que deba hacerse cargo. No contiene contraseñas ni tokens, solo nombres y saldos.';
+
+  @override
+  String get dossierInstructionsTitle => 'Tus instrucciones';
+
+  @override
+  String get dossierInstructionsSubtitle =>
+      'Texto libre impreso en la primera página del expediente: dónde están las credenciales, a quién llamar, qué hacer primero.';
+
+  @override
+  String get dossierInstructionsHint =>
+      'p. ej. Las contraseñas están en el gestor familiar; llama primero al notario…';
+
+  @override
+  String get dossierInstructionsSaved => 'Instrucciones guardadas';
+
+  @override
+  String get dossierInstructionsSaveFailed =>
+      'No se pudieron guardar las instrucciones';
+
+  @override
+  String get dossierLanguageLabel => 'Idioma del documento';
+
+  @override
+  String get dossierLanguageEnglish => 'English';
+
+  @override
+  String get dossierLanguageSpanish => 'Español';
+
+  @override
+  String get dossierGenerate => 'Generar expediente imprimible';
+
+  @override
+  String get dossierGenerateNote =>
+      'Se abre como página imprimible — imprímela o guárdala como PDF y deja una copia donde tu familia pueda encontrarla.';
+
+  @override
   String get divCardTitle => 'Ingresos por dividendos';
 
   @override

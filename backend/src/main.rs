@@ -295,6 +295,9 @@ async fn main() -> Result<()> {
         .nest("/api/imports", patrimonio::api::imports::router())
         .nest("/api/projections", patrimonio::api::projections::router())
         .nest("/api/tax", patrimonio::api::tax::router())
+        // Printable continuity-dossier export (bilingual HTML, like the
+        // FBAR worksheet / loan agreement printables).
+        .nest("/api/exports", patrimonio::api::exports::router())
         .nest("/api/settings", patrimonio::api::settings::router())
         .nest("/api/loans", patrimonio::api::loans::router())
         // Recurring & scheduled transactions (expected-only MVP). Business

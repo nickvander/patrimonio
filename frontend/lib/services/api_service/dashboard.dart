@@ -685,6 +685,12 @@ mixin _DashboardApi on _ApiServiceBase {
     );
   }
 
+  /// Printable household continuity dossier (bilingual HTML → browser
+  /// print-to-PDF, like the loan agreement / FBAR worksheet). Opened in
+  /// a browser tab so cookie auth rides along.
+  String continuityDossierUrl({required String lang}) =>
+      '$_baseUrl/exports/continuity-dossier?lang=$lang';
+
   /// Removes the caller's FX alert for the pair. Idempotent server-side.
   Future<void> deleteFxAlert(String base, String target) async {
     final response = await _delete(

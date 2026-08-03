@@ -5668,6 +5668,50 @@ class AppLocalizationsEn extends AppLocalizations {
       'Review or undo past statement imports';
 
   @override
+  String get dossierTitle => 'Continuity dossier';
+
+  @override
+  String get dossierEntrySubtitle =>
+      'Printable emergency packet: every account, balance, and loan — plus your instructions';
+
+  @override
+  String get dossierIntro =>
+      'A bilingual, printable inventory of everything Patrimonio tracks — institutions, accounts and last balances, manual-asset valuations, holdings, the lending book, and FBAR flags — for the household member or executor who has to take over. It contains no passwords or tokens, only names and balances.';
+
+  @override
+  String get dossierInstructionsTitle => 'Your instructions';
+
+  @override
+  String get dossierInstructionsSubtitle =>
+      'Free text printed on the dossier\'s first page: where credentials live, who to call, what to do first.';
+
+  @override
+  String get dossierInstructionsHint =>
+      'e.g. Passwords are in the family password manager; call the notary first…';
+
+  @override
+  String get dossierInstructionsSaved => 'Instructions saved';
+
+  @override
+  String get dossierInstructionsSaveFailed => 'Couldn\'t save the instructions';
+
+  @override
+  String get dossierLanguageLabel => 'Document language';
+
+  @override
+  String get dossierLanguageEnglish => 'English';
+
+  @override
+  String get dossierLanguageSpanish => 'Español';
+
+  @override
+  String get dossierGenerate => 'Generate printable dossier';
+
+  @override
+  String get dossierGenerateNote =>
+      'Opens as a printable page — print or save as PDF and keep a copy where your family can find it.';
+
+  @override
   String get divCardTitle => 'Dividend income';
 
   @override

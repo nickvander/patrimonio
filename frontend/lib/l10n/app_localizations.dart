@@ -9027,6 +9027,84 @@ abstract class AppLocalizations {
   /// **'Review or undo past statement imports'**
   String get dashImportedBatchesSubtitle;
 
+  /// No description provided for @dossierTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Continuity dossier'**
+  String get dossierTitle;
+
+  /// No description provided for @dossierEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Printable emergency packet: every account, balance, and loan — plus your instructions'**
+  String get dossierEntrySubtitle;
+
+  /// No description provided for @dossierIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'A bilingual, printable inventory of everything Patrimonio tracks — institutions, accounts and last balances, manual-asset valuations, holdings, the lending book, and FBAR flags — for the household member or executor who has to take over. It contains no passwords or tokens, only names and balances.'**
+  String get dossierIntro;
+
+  /// No description provided for @dossierInstructionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your instructions'**
+  String get dossierInstructionsTitle;
+
+  /// No description provided for @dossierInstructionsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Free text printed on the dossier\'s first page: where credentials live, who to call, what to do first.'**
+  String get dossierInstructionsSubtitle;
+
+  /// No description provided for @dossierInstructionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Passwords are in the family password manager; call the notary first…'**
+  String get dossierInstructionsHint;
+
+  /// No description provided for @dossierInstructionsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Instructions saved'**
+  String get dossierInstructionsSaved;
+
+  /// No description provided for @dossierInstructionsSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the instructions'**
+  String get dossierInstructionsSaveFailed;
+
+  /// No description provided for @dossierLanguageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Document language'**
+  String get dossierLanguageLabel;
+
+  /// No description provided for @dossierLanguageEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get dossierLanguageEnglish;
+
+  /// No description provided for @dossierLanguageSpanish.
+  ///
+  /// In en, this message translates to:
+  /// **'Español'**
+  String get dossierLanguageSpanish;
+
+  /// No description provided for @dossierGenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate printable dossier'**
+  String get dossierGenerate;
+
+  /// No description provided for @dossierGenerateNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens as a printable page — print or save as PDF and keep a copy where your family can find it.'**
+  String get dossierGenerateNote;
+
   /// No description provided for @divCardTitle.
   ///
   /// In en, this message translates to:
