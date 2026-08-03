@@ -19,11 +19,6 @@ import 'instrument_detail_sheet.dart';
 import 'kpi_tile.dart';
 import 'mobile_holding_row.dart';
 
-/// [DividendIncomeCard] moved to its own file in the god-file split; the
-/// re-export keeps existing `portfolio_card.dart` importers (the dashboard)
-/// compiling without a call-site change.
-export 'dividend_income_card.dart' show DividendIncomeCard;
-
 /// Which slice of the portfolio surface a [PortfolioCard] instance renders.
 ///
 /// The portfolio tab follows the 2026 research flow

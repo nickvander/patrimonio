@@ -56,6 +56,7 @@ import '../widgets/credit_utilization_card.dart';
 import '../widgets/cross_currency_transfers_card.dart';
 import '../widgets/currency_toggle_button.dart';
 import '../widgets/debt_payoff_card.dart';
+import '../widgets/dividend_income_card.dart';
 import '../widgets/emergency_fund_card.dart';
 import '../widgets/fx_center_sheet.dart';
 import '../widgets/fx_widget.dart';
