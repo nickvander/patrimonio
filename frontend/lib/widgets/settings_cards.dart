@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart' show themeModeNotifier;
 import '../screens/hidden_items_screen.dart';
+import '../screens/rules_screen.dart';
 import '../screens/security_screen.dart';
 import '../services/backend_config.dart';
 import '../services/preferences.dart';
@@ -318,6 +319,20 @@ class SettingsAccountSecurityCard extends StatelessWidget {
                 );
                 onHiddenItemsClosed();
               },
+            ),
+            // Rules. No reload callback on the way back on purpose: rule
+            // CRUD changes zero transactions, and the one path that does
+            // (the previewed retroactive apply) publishes a realtime
+            // TransactionsChanged the dashboard already listens for.
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.rule_folder_outlined),
+              title: Text(l.ruleTitle),
+              subtitle: Text(l.ruleSettingsSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const RulesScreen())),
             ),
             // Native builds configure the backend URL at first run; this row
             // keeps that setting reachable afterwards. Web derives the URL

@@ -4196,5 +4196,278 @@
         "type": "String"
       }
     }
-  }
+  },
+  "ruleTitle": "Rules",
+  "ruleSettingsSubtitle": "Categorize and rename transactions automatically",
+  "ruleIntro": "Rules run on new transactions as they arrive, top to bottom — the first match wins. They never change past transactions unless you preview the diff and confirm.",
+  "ruleEmpty": "No rules yet. Create one from a transaction's “Save as rule…” action, or with the + button above.",
+  "ruleAdd": "New rule",
+  "ruleReorderFailed": "Couldn't save the new order: {error}",
+  "@ruleReorderFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleToggleFailed": "Couldn't update the rule: {error}",
+  "@ruleToggleFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleDeleteFailed": "Couldn't delete the rule: {error}",
+  "@ruleDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleDeleted": "Rule deleted.",
+  "ruleDeleteTitle": "Delete this rule?",
+  "ruleDeleteBody": "New transactions will stop matching it. Past changes made by this rule are kept — deleting a rule never rewrites your history.",
+  "rulePaused": "Paused",
+  "ruleMoreActions": "More actions",
+  "ruleActionEdit": "Edit",
+  "rulePreviewRetroactive": "Preview retroactive changes",
+  "ruleMatcherContains": "Description contains",
+  "ruleMatcherStartsWith": "Description starts with",
+  "ruleMatcherExact": "Description is exactly",
+  "ruleMatcherMerchantKey": "Merchant key is",
+  "ruleSummaryMatch": "{matcher} “{value}”",
+  "@ruleSummaryMatch": {
+    "placeholders": {
+      "matcher": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleSummaryCategory": "→ {category}",
+  "@ruleSummaryCategory": {
+    "placeholders": {
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleSummaryRename": "→ rename to “{name}”",
+  "@ruleSummaryRename": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleScopeAccountChip": "Account: {account}",
+  "@ruleScopeAccountChip": {
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleScopeCurrencyChip": "Currency: {currency}",
+  "@ruleScopeCurrencyChip": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleScopeInflowChip": "Inflows only",
+  "ruleScopeOutflowChip": "Outflows only",
+  "ruleScopeAmountRange": "Amount {min}–{max}",
+  "@ruleScopeAmountRange": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleScopeAmountFrom": "Amount from {min}",
+  "@ruleScopeAmountFrom": {
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleScopeAmountTo": "Amount up to {max}",
+  "@ruleScopeAmountTo": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleNewTitle": "New rule",
+  "ruleEditTitle": "Edit rule",
+  "ruleMatchTypeLabel": "Match",
+  "ruleMatchTypeContains": "Contains",
+  "ruleMatchTypeStartsWith": "Starts with",
+  "ruleMatchTypeExact": "Exact",
+  "ruleMatchTypeMerchantKey": "Merchant",
+  "ruleMatchValueLabel": "Text to match",
+  "ruleMatchValueHint": "e.g. OXXO GAS",
+  "ruleDerivedKey": "Compared against the merchant key “{key}”",
+  "@ruleDerivedKey": {
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleActionsLabel": "Then",
+  "ruleSetCategoryLabel": "Set category",
+  "ruleSetCategoryHint": "Leave empty to keep the current category",
+  "ruleSetDescriptionLabel": "Rename to",
+  "ruleSetDescriptionHint": "Leave empty to keep the current name",
+  "ruleNeedsAction": "Set a category, a new name, or both.",
+  "ruleScopeLabel": "Only when (optional)",
+  "ruleScopeThisAccount": "Only {account}",
+  "@ruleScopeThisAccount": {
+    "placeholders": {
+      "account": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleScopeThisCurrency": "Only {currency}",
+  "@ruleScopeThisCurrency": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleDirectionAny": "Any direction",
+  "ruleDirectionInflow": "Inflows",
+  "ruleDirectionOutflow": "Outflows",
+  "ruleAmountMinLabel": "Min amount",
+  "ruleAmountMaxLabel": "Max amount",
+  "ruleAmountRangeHint": "Amounts compare the absolute value in each transaction's own currency — add a currency scope so pesos and dollars aren't compared raw.",
+  "ruleSaveForward": "Save rule",
+  "ruleSaveAndApply": "{count, plural, =0{Save & apply} =1{Save & apply to 1 past transaction} other{Save & apply to {count} past transactions}}",
+  "@ruleSaveAndApply": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ruleApplyConfirmTitle": "Apply to past transactions?",
+  "ruleApplyConfirmBody": "{matched} past transactions match this rule. {categories} would show a new category and {names} a new name; the rest already show these values and are simply marked as rule-managed, so the applied count can come out higher. Transactions you edited by hand are never touched.",
+  "@ruleApplyConfirmBody": {
+    "placeholders": {
+      "matched": {
+        "type": "int"
+      },
+      "categories": {
+        "type": "int"
+      },
+      "names": {
+        "type": "int"
+      }
+    }
+  },
+  "ruleSaved": "Rule saved. It applies to new transactions from now on.",
+  "ruleSaveFailed": "Couldn't save the rule: {error}",
+  "@ruleSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleApplyFailed": "Couldn't apply the rule: {error}",
+  "@ruleApplyFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "ruleAppliedCounts": "Applied: {categories} categories, {names} names updated.",
+  "@ruleAppliedCounts": {
+    "placeholders": {
+      "categories": {
+        "type": "int"
+      },
+      "names": {
+        "type": "int"
+      }
+    }
+  },
+  "ruleAppliedSkipped": "{count, plural, =1{1 transaction was skipped — it was edited by hand after the preview.} other{{count} transactions were skipped — they were edited by hand after the preview.}}",
+  "@ruleAppliedSkipped": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rulePreviewTitle": "What this would change",
+  "rulePreviewRunning": "Checking your history…",
+  "rulePreviewIdle": "Enter what to match and what to set — every change will be listed here before anything is applied.",
+  "rulePreviewFailed": "Preview failed: {error}",
+  "@rulePreviewFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "rulePreviewCounts": "Matches {matched} · changes {categories} categories, {names} names",
+  "@rulePreviewCounts": {
+    "placeholders": {
+      "matched": {
+        "type": "int"
+      },
+      "categories": {
+        "type": "int"
+      },
+      "names": {
+        "type": "int"
+      }
+    }
+  },
+  "rulePreviewSkippedManual": "{count, plural, =1{1 skipped as a manual edit} other{{count} skipped as manual edits}}",
+  "@rulePreviewSkippedManual": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rulePreviewProvenanceNote": "Applying also marks matched transactions that already show these values as rule-managed, so the applied count can be higher than the changes above.",
+  "rulePreviewNoChanges": "Nothing would look different — these transactions already show these values.",
+  "rulePreviewFxWarning": "{count, plural, =1{1 matched transaction is a leg of a confirmed currency transfer. Recategorizing it puts it back into your spending totals.} other{{count} matched transactions are legs of confirmed currency transfers. Recategorizing them puts them back into your spending totals.}}",
+  "@rulePreviewFxWarning": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rulePreviewSamples": "Sample changes",
+  "rulePreviewShowingFirst": "Showing the first {count}.",
+  "@rulePreviewShowingFirst": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ruleFieldCategory": "Category",
+  "ruleFieldName": "Name",
+  "ruleSaveAsRule": "Save as rule…"
 }

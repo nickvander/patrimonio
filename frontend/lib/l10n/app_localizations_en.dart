@@ -7539,4 +7539,323 @@ class AppLocalizationsEn extends AppLocalizations {
   String bcProjectionSem(String currency, String start, String end) {
     return 'Projected $currency balance from $start today to $end at the end of the window';
   }
+
+  @override
+  String get ruleTitle => 'Rules';
+
+  @override
+  String get ruleSettingsSubtitle =>
+      'Categorize and rename transactions automatically';
+
+  @override
+  String get ruleIntro =>
+      'Rules run on new transactions as they arrive, top to bottom — the first match wins. They never change past transactions unless you preview the diff and confirm.';
+
+  @override
+  String get ruleEmpty =>
+      'No rules yet. Create one from a transaction\'s “Save as rule…” action, or with the + button above.';
+
+  @override
+  String get ruleAdd => 'New rule';
+
+  @override
+  String ruleReorderFailed(String error) {
+    return 'Couldn\'t save the new order: $error';
+  }
+
+  @override
+  String ruleToggleFailed(String error) {
+    return 'Couldn\'t update the rule: $error';
+  }
+
+  @override
+  String ruleDeleteFailed(String error) {
+    return 'Couldn\'t delete the rule: $error';
+  }
+
+  @override
+  String get ruleDeleted => 'Rule deleted.';
+
+  @override
+  String get ruleDeleteTitle => 'Delete this rule?';
+
+  @override
+  String get ruleDeleteBody =>
+      'New transactions will stop matching it. Past changes made by this rule are kept — deleting a rule never rewrites your history.';
+
+  @override
+  String get rulePaused => 'Paused';
+
+  @override
+  String get ruleMoreActions => 'More actions';
+
+  @override
+  String get ruleActionEdit => 'Edit';
+
+  @override
+  String get rulePreviewRetroactive => 'Preview retroactive changes';
+
+  @override
+  String get ruleMatcherContains => 'Description contains';
+
+  @override
+  String get ruleMatcherStartsWith => 'Description starts with';
+
+  @override
+  String get ruleMatcherExact => 'Description is exactly';
+
+  @override
+  String get ruleMatcherMerchantKey => 'Merchant key is';
+
+  @override
+  String ruleSummaryMatch(String matcher, String value) {
+    return '$matcher “$value”';
+  }
+
+  @override
+  String ruleSummaryCategory(String category) {
+    return '→ $category';
+  }
+
+  @override
+  String ruleSummaryRename(String name) {
+    return '→ rename to “$name”';
+  }
+
+  @override
+  String ruleScopeAccountChip(String account) {
+    return 'Account: $account';
+  }
+
+  @override
+  String ruleScopeCurrencyChip(String currency) {
+    return 'Currency: $currency';
+  }
+
+  @override
+  String get ruleScopeInflowChip => 'Inflows only';
+
+  @override
+  String get ruleScopeOutflowChip => 'Outflows only';
+
+  @override
+  String ruleScopeAmountRange(String min, String max) {
+    return 'Amount $min–$max';
+  }
+
+  @override
+  String ruleScopeAmountFrom(String min) {
+    return 'Amount from $min';
+  }
+
+  @override
+  String ruleScopeAmountTo(String max) {
+    return 'Amount up to $max';
+  }
+
+  @override
+  String get ruleNewTitle => 'New rule';
+
+  @override
+  String get ruleEditTitle => 'Edit rule';
+
+  @override
+  String get ruleMatchTypeLabel => 'Match';
+
+  @override
+  String get ruleMatchTypeContains => 'Contains';
+
+  @override
+  String get ruleMatchTypeStartsWith => 'Starts with';
+
+  @override
+  String get ruleMatchTypeExact => 'Exact';
+
+  @override
+  String get ruleMatchTypeMerchantKey => 'Merchant';
+
+  @override
+  String get ruleMatchValueLabel => 'Text to match';
+
+  @override
+  String get ruleMatchValueHint => 'e.g. OXXO GAS';
+
+  @override
+  String ruleDerivedKey(String key) {
+    return 'Compared against the merchant key “$key”';
+  }
+
+  @override
+  String get ruleActionsLabel => 'Then';
+
+  @override
+  String get ruleSetCategoryLabel => 'Set category';
+
+  @override
+  String get ruleSetCategoryHint => 'Leave empty to keep the current category';
+
+  @override
+  String get ruleSetDescriptionLabel => 'Rename to';
+
+  @override
+  String get ruleSetDescriptionHint => 'Leave empty to keep the current name';
+
+  @override
+  String get ruleNeedsAction => 'Set a category, a new name, or both.';
+
+  @override
+  String get ruleScopeLabel => 'Only when (optional)';
+
+  @override
+  String ruleScopeThisAccount(String account) {
+    return 'Only $account';
+  }
+
+  @override
+  String ruleScopeThisCurrency(String currency) {
+    return 'Only $currency';
+  }
+
+  @override
+  String get ruleDirectionAny => 'Any direction';
+
+  @override
+  String get ruleDirectionInflow => 'Inflows';
+
+  @override
+  String get ruleDirectionOutflow => 'Outflows';
+
+  @override
+  String get ruleAmountMinLabel => 'Min amount';
+
+  @override
+  String get ruleAmountMaxLabel => 'Max amount';
+
+  @override
+  String get ruleAmountRangeHint =>
+      'Amounts compare the absolute value in each transaction\'s own currency — add a currency scope so pesos and dollars aren\'t compared raw.';
+
+  @override
+  String get ruleSaveForward => 'Save rule';
+
+  @override
+  String ruleSaveAndApply(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Save & apply to $count past transactions',
+      one: 'Save & apply to 1 past transaction',
+      zero: 'Save & apply',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ruleApplyConfirmTitle => 'Apply to past transactions?';
+
+  @override
+  String ruleApplyConfirmBody(int matched, int categories, int names) {
+    return '$matched past transactions match this rule. $categories would show a new category and $names a new name; the rest already show these values and are simply marked as rule-managed, so the applied count can come out higher. Transactions you edited by hand are never touched.';
+  }
+
+  @override
+  String get ruleSaved =>
+      'Rule saved. It applies to new transactions from now on.';
+
+  @override
+  String ruleSaveFailed(String error) {
+    return 'Couldn\'t save the rule: $error';
+  }
+
+  @override
+  String ruleApplyFailed(String error) {
+    return 'Couldn\'t apply the rule: $error';
+  }
+
+  @override
+  String ruleAppliedCounts(int categories, int names) {
+    return 'Applied: $categories categories, $names names updated.';
+  }
+
+  @override
+  String ruleAppliedSkipped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count transactions were skipped — they were edited by hand after the preview.',
+      one:
+          '1 transaction was skipped — it was edited by hand after the preview.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get rulePreviewTitle => 'What this would change';
+
+  @override
+  String get rulePreviewRunning => 'Checking your history…';
+
+  @override
+  String get rulePreviewIdle =>
+      'Enter what to match and what to set — every change will be listed here before anything is applied.';
+
+  @override
+  String rulePreviewFailed(String error) {
+    return 'Preview failed: $error';
+  }
+
+  @override
+  String rulePreviewCounts(int matched, int categories, int names) {
+    return 'Matches $matched · changes $categories categories, $names names';
+  }
+
+  @override
+  String rulePreviewSkippedManual(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count skipped as manual edits',
+      one: '1 skipped as a manual edit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get rulePreviewProvenanceNote =>
+      'Applying also marks matched transactions that already show these values as rule-managed, so the applied count can be higher than the changes above.';
+
+  @override
+  String get rulePreviewNoChanges =>
+      'Nothing would look different — these transactions already show these values.';
+
+  @override
+  String rulePreviewFxWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count matched transactions are legs of confirmed currency transfers. Recategorizing them puts them back into your spending totals.',
+      one:
+          '1 matched transaction is a leg of a confirmed currency transfer. Recategorizing it puts it back into your spending totals.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get rulePreviewSamples => 'Sample changes';
+
+  @override
+  String rulePreviewShowingFirst(int count) {
+    return 'Showing the first $count.';
+  }
+
+  @override
+  String get ruleFieldCategory => 'Category';
+
+  @override
+  String get ruleFieldName => 'Name';
+
+  @override
+  String get ruleSaveAsRule => 'Save as rule…';
 }

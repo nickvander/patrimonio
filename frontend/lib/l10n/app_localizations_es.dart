@@ -7603,4 +7603,326 @@ class AppLocalizationsEs extends AppLocalizations {
   String bcProjectionSem(String currency, String start, String end) {
     return 'Saldo proyectado en $currency: de $start hoy a $end al final del periodo';
   }
+
+  @override
+  String get ruleTitle => 'Reglas';
+
+  @override
+  String get ruleSettingsSubtitle =>
+      'Categoriza y renombra movimientos automáticamente';
+
+  @override
+  String get ruleIntro =>
+      'Las reglas se aplican a los movimientos nuevos conforme llegan, de arriba hacia abajo: gana la primera que coincide. Nunca cambian movimientos pasados a menos que revises la vista previa y confirmes.';
+
+  @override
+  String get ruleEmpty =>
+      'Aún no hay reglas. Crea una desde la acción «Guardar como regla…» de un movimiento, o con el botón + de arriba.';
+
+  @override
+  String get ruleAdd => 'Nueva regla';
+
+  @override
+  String ruleReorderFailed(String error) {
+    return 'No se pudo guardar el nuevo orden: $error';
+  }
+
+  @override
+  String ruleToggleFailed(String error) {
+    return 'No se pudo actualizar la regla: $error';
+  }
+
+  @override
+  String ruleDeleteFailed(String error) {
+    return 'No se pudo eliminar la regla: $error';
+  }
+
+  @override
+  String get ruleDeleted => 'Regla eliminada.';
+
+  @override
+  String get ruleDeleteTitle => '¿Eliminar esta regla?';
+
+  @override
+  String get ruleDeleteBody =>
+      'Los movimientos nuevos dejarán de coincidir con ella. Los cambios que la regla ya hizo se conservan: eliminar una regla nunca reescribe tu historial.';
+
+  @override
+  String get rulePaused => 'En pausa';
+
+  @override
+  String get ruleMoreActions => 'Más acciones';
+
+  @override
+  String get ruleActionEdit => 'Editar';
+
+  @override
+  String get rulePreviewRetroactive => 'Ver cambios retroactivos';
+
+  @override
+  String get ruleMatcherContains => 'La descripción contiene';
+
+  @override
+  String get ruleMatcherStartsWith => 'La descripción empieza con';
+
+  @override
+  String get ruleMatcherExact => 'La descripción es exactamente';
+
+  @override
+  String get ruleMatcherMerchantKey => 'La clave de comercio es';
+
+  @override
+  String ruleSummaryMatch(String matcher, String value) {
+    return '$matcher «$value»';
+  }
+
+  @override
+  String ruleSummaryCategory(String category) {
+    return '→ $category';
+  }
+
+  @override
+  String ruleSummaryRename(String name) {
+    return '→ renombrar a «$name»';
+  }
+
+  @override
+  String ruleScopeAccountChip(String account) {
+    return 'Cuenta: $account';
+  }
+
+  @override
+  String ruleScopeCurrencyChip(String currency) {
+    return 'Moneda: $currency';
+  }
+
+  @override
+  String get ruleScopeInflowChip => 'Solo entradas';
+
+  @override
+  String get ruleScopeOutflowChip => 'Solo salidas';
+
+  @override
+  String ruleScopeAmountRange(String min, String max) {
+    return 'Monto $min–$max';
+  }
+
+  @override
+  String ruleScopeAmountFrom(String min) {
+    return 'Monto desde $min';
+  }
+
+  @override
+  String ruleScopeAmountTo(String max) {
+    return 'Monto hasta $max';
+  }
+
+  @override
+  String get ruleNewTitle => 'Nueva regla';
+
+  @override
+  String get ruleEditTitle => 'Editar regla';
+
+  @override
+  String get ruleMatchTypeLabel => 'Coincidencia';
+
+  @override
+  String get ruleMatchTypeContains => 'Contiene';
+
+  @override
+  String get ruleMatchTypeStartsWith => 'Empieza con';
+
+  @override
+  String get ruleMatchTypeExact => 'Exacta';
+
+  @override
+  String get ruleMatchTypeMerchantKey => 'Comercio';
+
+  @override
+  String get ruleMatchValueLabel => 'Texto a buscar';
+
+  @override
+  String get ruleMatchValueHint => 'p. ej. OXXO GAS';
+
+  @override
+  String ruleDerivedKey(String key) {
+    return 'Se compara con la clave de comercio «$key»';
+  }
+
+  @override
+  String get ruleActionsLabel => 'Entonces';
+
+  @override
+  String get ruleSetCategoryLabel => 'Asignar categoría';
+
+  @override
+  String get ruleSetCategoryHint =>
+      'Déjalo vacío para conservar la categoría actual';
+
+  @override
+  String get ruleSetDescriptionLabel => 'Renombrar a';
+
+  @override
+  String get ruleSetDescriptionHint =>
+      'Déjalo vacío para conservar el nombre actual';
+
+  @override
+  String get ruleNeedsAction =>
+      'Asigna una categoría, un nombre nuevo o ambos.';
+
+  @override
+  String get ruleScopeLabel => 'Solo cuando (opcional)';
+
+  @override
+  String ruleScopeThisAccount(String account) {
+    return 'Solo $account';
+  }
+
+  @override
+  String ruleScopeThisCurrency(String currency) {
+    return 'Solo $currency';
+  }
+
+  @override
+  String get ruleDirectionAny => 'Cualquiera';
+
+  @override
+  String get ruleDirectionInflow => 'Entradas';
+
+  @override
+  String get ruleDirectionOutflow => 'Salidas';
+
+  @override
+  String get ruleAmountMinLabel => 'Monto mínimo';
+
+  @override
+  String get ruleAmountMaxLabel => 'Monto máximo';
+
+  @override
+  String get ruleAmountRangeHint =>
+      'Los montos se comparan en valor absoluto y en la moneda de cada movimiento; agrega un alcance de moneda para no comparar pesos con dólares.';
+
+  @override
+  String get ruleSaveForward => 'Guardar regla';
+
+  @override
+  String ruleSaveAndApply(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Guardar y aplicar a $count movimientos pasados',
+      one: 'Guardar y aplicar a 1 movimiento pasado',
+      zero: 'Guardar y aplicar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ruleApplyConfirmTitle => '¿Aplicar a movimientos pasados?';
+
+  @override
+  String ruleApplyConfirmBody(int matched, int categories, int names) {
+    return '$matched movimientos pasados coinciden con esta regla. $categories mostrarían una categoría nueva y $names un nombre nuevo; los demás ya muestran estos valores y solo quedan marcados como gestionados por la regla, así que el total aplicado puede salir mayor. Los movimientos que editaste a mano nunca se tocan.';
+  }
+
+  @override
+  String get ruleSaved =>
+      'Regla guardada. Se aplica a los movimientos nuevos de ahora en adelante.';
+
+  @override
+  String ruleSaveFailed(String error) {
+    return 'No se pudo guardar la regla: $error';
+  }
+
+  @override
+  String ruleApplyFailed(String error) {
+    return 'No se pudo aplicar la regla: $error';
+  }
+
+  @override
+  String ruleAppliedCounts(int categories, int names) {
+    return 'Aplicado: $categories categorías y $names nombres actualizados.';
+  }
+
+  @override
+  String ruleAppliedSkipped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Se omitieron $count movimientos: se editaron a mano después de la vista previa.',
+      one:
+          'Se omitió 1 movimiento: se editó a mano después de la vista previa.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get rulePreviewTitle => 'Qué cambiaría';
+
+  @override
+  String get rulePreviewRunning => 'Revisando tu historial…';
+
+  @override
+  String get rulePreviewIdle =>
+      'Escribe qué buscar y qué asignar: todos los cambios se listarán aquí antes de aplicar nada.';
+
+  @override
+  String rulePreviewFailed(String error) {
+    return 'La vista previa falló: $error';
+  }
+
+  @override
+  String rulePreviewCounts(int matched, int categories, int names) {
+    return 'Coincide con $matched · cambia $categories categorías y $names nombres';
+  }
+
+  @override
+  String rulePreviewSkippedManual(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count omitidos por ser ediciones manuales',
+      one: '1 omitido por ser edición manual',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get rulePreviewProvenanceNote =>
+      'Al aplicar también se marcan como gestionados por la regla los movimientos que ya muestran estos valores, así que el total aplicado puede ser mayor que los cambios de arriba.';
+
+  @override
+  String get rulePreviewNoChanges =>
+      'Nada se vería distinto: estos movimientos ya muestran estos valores.';
+
+  @override
+  String rulePreviewFxWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count movimientos coincidentes son partes de transferencias de divisas confirmadas. Recategorizarlos los devuelve a tus totales de gasto.',
+      one:
+          '1 movimiento coincidente es parte de una transferencia de divisas confirmada. Recategorizarlo lo devuelve a tus totales de gasto.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get rulePreviewSamples => 'Ejemplos de cambios';
+
+  @override
+  String rulePreviewShowingFirst(int count) {
+    return 'Se muestran los primeros $count.';
+  }
+
+  @override
+  String get ruleFieldCategory => 'Categoría';
+
+  @override
+  String get ruleFieldName => 'Nombre';
+
+  @override
+  String get ruleSaveAsRule => 'Guardar como regla…';
 }

@@ -9,6 +9,8 @@ const skipBrowser = process.env.SKIP_BROWSER === '1';
 const suffix = Date.now();
 const manualAccountName = `Smoke Manual ${suffix}`;
 const cryptoInstitutionName = `Smoke Bitso ${suffix}`;
+// Distinctive descriptor the rules smoke matches on with `contains`.
+const ruleMatchValue = `SMOKE RULE OXXO ${suffix}`;
 
 // The smoke account persists across runs. On a fresh DB we bootstrap
 // it; on subsequent runs we just log in. Both use the same fixed
@@ -93,6 +95,7 @@ function cleanupDatabase() {
     DELETE FROM accounts WHERE institution_id IN (SELECT id FROM institutions WHERE name = '${cryptoInstitutionName}');
     DELETE FROM institutions WHERE name = '${cryptoInstitutionName}';
     DELETE FROM ignored_subscription_merchants WHERE merchant_key LIKE 'smoke-%';
+    DELETE FROM user_rules WHERE match_value LIKE 'SMOKE RULE OXXO %';
   `;
 
   execFileSync(
@@ -354,6 +357,123 @@ async function smokeRecentFeatures({ accountId, transactionId }) {
   record('detected subscriptions shape', { count: subs.body.length });
 }
 
+/// User rules engine (work/RULES_ENGINE_DESIGN.md §6): create -> preview
+/// -> apply, asserting the one property the whole feature rests on —
+/// a rule rewrites the rows it previewed and NEVER a row a human edited
+/// by hand. Also pins the single-use preview token and DEC-028 (deleting
+/// a rule keeps the values it already applied).
+async function smokeRules({ accountId }) {
+  // Two rows matching the same descriptor; one of them then gets a
+  // manual category edit, which must fence it off from the rule.
+  const seeded = await request('/imports/confirm', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      account_id: accountId,
+      transactions: [
+        { date: '2026-02-03', description: `${ruleMatchValue} A`, amount: -11.11, currency: 'USD', category: 'Smoke' },
+        { date: '2026-02-04', description: `${ruleMatchValue} B`, amount: -22.22, currency: 'USD', category: 'Smoke' },
+      ],
+    }),
+  });
+  assert(seeded.response.status === 200, `rules seed import returned ${seeded.response.status}`);
+  assert(seeded.body.new_transactions === 2, `rules seed inserted ${seeded.body.new_transactions} rows, expected 2`);
+
+  const listed = await request(`/accounts/${accountId}/transactions`);
+  assert(listed.response.status === 200, `account transactions returned ${listed.response.status}`);
+  const rowA = listed.body.find((t) => t.description === `${ruleMatchValue} A`);
+  const rowB = listed.body.find((t) => t.description === `${ruleMatchValue} B`);
+  assert(rowA && rowB, 'seeded rule rows not found in the account');
+
+  // Row B becomes a manual edit — the layer no rule may ever overwrite.
+  const manual = await request(`/accounts/transactions/${rowB.id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ user_category: 'Smoke Manual' }),
+  });
+  assert(manual.response.status === 200, `manual category edit returned ${manual.response.status}`);
+
+  const definition = {
+    match_type: 'contains',
+    match_value: ruleMatchValue,
+    set_category: 'Smoke Rules',
+  };
+
+  const created = await request('/rules', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(definition),
+  });
+  assert(created.response.status === 201, `rule create returned ${created.response.status}: ${JSON.stringify(created.body)}`);
+  const ruleId = created.body.id;
+  assert(ruleId, 'rule create did not return an id');
+
+  // Creating the rule must not have touched a single transaction.
+  const afterCreate = await request(`/accounts/${accountId}/transactions`);
+  const untouchedA = afterCreate.body.find((t) => t.id === rowA.id);
+  assert(
+    !untouchedA.user_category,
+    `creating a rule changed a transaction: ${JSON.stringify(untouchedA.user_category)}`,
+  );
+
+  const preview = await request('/rules/preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(definition),
+  });
+  assert(preview.response.status === 200, `rule preview returned ${preview.response.status}: ${JSON.stringify(preview.body)}`);
+  assert(preview.body.matched >= 2, `preview matched ${preview.body.matched}, expected >= 2`);
+  assert(preview.body.category_changes >= 1, `preview reported ${preview.body.category_changes} category changes`);
+  assert(preview.body.skipped_manual >= 1, `preview reported ${preview.body.skipped_manual} manual skips, expected >= 1`);
+  const token = preview.body.preview_token;
+  assert(typeof token === 'string' && token.length > 0, 'preview did not mint a token');
+
+  const applied = await request(`/rules/${ruleId}/apply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ preview_token: token }),
+  });
+  assert(applied.response.status === 200, `rule apply returned ${applied.response.status}: ${JSON.stringify(applied.body)}`);
+  assert(applied.body.updated_category >= 1, `apply updated ${applied.body.updated_category} categories, expected >= 1`);
+
+  // The whole point: the previewed row changed, the hand-edited one did not.
+  const afterApply = await request(`/accounts/${accountId}/transactions`);
+  const finalA = afterApply.body.find((t) => t.id === rowA.id);
+  const finalB = afterApply.body.find((t) => t.id === rowB.id);
+  assert(
+    finalA.user_category === 'Smoke Rules',
+    `rule did not apply to the unedited row: ${JSON.stringify(finalA.user_category)}`,
+  );
+  assert(
+    finalB.user_category === 'Smoke Manual',
+    `rule clobbered a manually edited row: ${JSON.stringify(finalB.user_category)}`,
+  );
+
+  // The token is single-use: a replay (double-click) must not re-fire.
+  const replay = await request(`/rules/${ruleId}/apply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ preview_token: token }),
+  });
+  assert(replay.response.status === 409, `replayed apply returned ${replay.response.status}, expected 409`);
+
+  // DEC-028: deleting a rule keeps the values it already applied.
+  const removed = await request(`/rules/${ruleId}`, { method: 'DELETE' });
+  assert(removed.response.status === 204, `rule delete returned ${removed.response.status}`);
+  const afterDelete = await request(`/accounts/${accountId}/transactions`);
+  const keptA = afterDelete.body.find((t) => t.id === rowA.id);
+  assert(
+    keptA.user_category === 'Smoke Rules',
+    `deleting the rule rewrote history: ${JSON.stringify(keptA.user_category)}`,
+  );
+
+  record('rules create/preview/apply flow', {
+    matched: preview.body.matched,
+    updatedCategory: applied.body.updated_category,
+    skippedManual: preview.body.skipped_manual,
+  });
+}
+
 async function smokeIntegrationStates() {
   const plaidLink = await request('/institutions/link-token', { method: 'POST' });
   assert([200, 503].includes(plaidLink.response.status), `plaid link-token returned ${plaidLink.response.status}`);
@@ -491,6 +611,7 @@ async function smokeBrowser() {
     await smokeApi();
     const seeded = await smokeManualAccountAndImport();
     await smokeRecentFeatures(seeded);
+    await smokeRules(seeded);
     await smokeIntegrationStates();
     await smokeBrowser();
   } finally {

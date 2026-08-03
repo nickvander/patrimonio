@@ -113,9 +113,9 @@ fails any hand-rolled `…}%`-style percent outside `lib/utils/`.
 
 Single `ApiService` over `package:http` (no dio). Platform-split base URL/client via
 conditional imports. The class is split by domain into `part` files
-(`services/api_service/{auth,dashboard,transactions,holdings,lending}.dart`), one
+(`services/api_service/{auth,dashboard,transactions,holdings,lending,rules}.dart`), one
 **private mixin** per domain (`_AuthApi`, `_DashboardApi`, `_TxApi`, `_HoldingsApi`,
-`_LendingApi`) composed into `ApiService` over the `_ApiServiceBase` plumbing
+`_LendingApi`, `_RulesApi`) composed into `ApiService` over the `_ApiServiceBase` plumbing
 surface declared in `api_service.dart` (which keeps the verb wrappers, CSRF, cache
 glue, and the `debugHttpClientOverride` test seam). Add new endpoints to the
 matching part file's mixin. Mixins, NOT extensions, on purpose: several widget

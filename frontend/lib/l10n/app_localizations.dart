@@ -12046,6 +12046,468 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Projected {currency} balance from {start} today to {end} at the end of the window'**
   String bcProjectionSem(String currency, String start, String end);
+
+  /// No description provided for @ruleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules'**
+  String get ruleTitle;
+
+  /// No description provided for @ruleSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Categorize and rename transactions automatically'**
+  String get ruleSettingsSubtitle;
+
+  /// No description provided for @ruleIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules run on new transactions as they arrive, top to bottom — the first match wins. They never change past transactions unless you preview the diff and confirm.'**
+  String get ruleIntro;
+
+  /// No description provided for @ruleEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No rules yet. Create one from a transaction\'s “Save as rule…” action, or with the + button above.'**
+  String get ruleEmpty;
+
+  /// No description provided for @ruleAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'New rule'**
+  String get ruleAdd;
+
+  /// No description provided for @ruleReorderFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the new order: {error}'**
+  String ruleReorderFailed(String error);
+
+  /// No description provided for @ruleToggleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t update the rule: {error}'**
+  String ruleToggleFailed(String error);
+
+  /// No description provided for @ruleDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete the rule: {error}'**
+  String ruleDeleteFailed(String error);
+
+  /// No description provided for @ruleDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule deleted.'**
+  String get ruleDeleted;
+
+  /// No description provided for @ruleDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this rule?'**
+  String get ruleDeleteTitle;
+
+  /// No description provided for @ruleDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'New transactions will stop matching it. Past changes made by this rule are kept — deleting a rule never rewrites your history.'**
+  String get ruleDeleteBody;
+
+  /// No description provided for @rulePaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get rulePaused;
+
+  /// No description provided for @ruleMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get ruleMoreActions;
+
+  /// No description provided for @ruleActionEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get ruleActionEdit;
+
+  /// No description provided for @rulePreviewRetroactive.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview retroactive changes'**
+  String get rulePreviewRetroactive;
+
+  /// No description provided for @ruleMatcherContains.
+  ///
+  /// In en, this message translates to:
+  /// **'Description contains'**
+  String get ruleMatcherContains;
+
+  /// No description provided for @ruleMatcherStartsWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Description starts with'**
+  String get ruleMatcherStartsWith;
+
+  /// No description provided for @ruleMatcherExact.
+  ///
+  /// In en, this message translates to:
+  /// **'Description is exactly'**
+  String get ruleMatcherExact;
+
+  /// No description provided for @ruleMatcherMerchantKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Merchant key is'**
+  String get ruleMatcherMerchantKey;
+
+  /// No description provided for @ruleSummaryMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'{matcher} “{value}”'**
+  String ruleSummaryMatch(String matcher, String value);
+
+  /// No description provided for @ruleSummaryCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'→ {category}'**
+  String ruleSummaryCategory(String category);
+
+  /// No description provided for @ruleSummaryRename.
+  ///
+  /// In en, this message translates to:
+  /// **'→ rename to “{name}”'**
+  String ruleSummaryRename(String name);
+
+  /// No description provided for @ruleScopeAccountChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Account: {account}'**
+  String ruleScopeAccountChip(String account);
+
+  /// No description provided for @ruleScopeCurrencyChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Currency: {currency}'**
+  String ruleScopeCurrencyChip(String currency);
+
+  /// No description provided for @ruleScopeInflowChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Inflows only'**
+  String get ruleScopeInflowChip;
+
+  /// No description provided for @ruleScopeOutflowChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Outflows only'**
+  String get ruleScopeOutflowChip;
+
+  /// No description provided for @ruleScopeAmountRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount {min}–{max}'**
+  String ruleScopeAmountRange(String min, String max);
+
+  /// No description provided for @ruleScopeAmountFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount from {min}'**
+  String ruleScopeAmountFrom(String min);
+
+  /// No description provided for @ruleScopeAmountTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount up to {max}'**
+  String ruleScopeAmountTo(String max);
+
+  /// No description provided for @ruleNewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New rule'**
+  String get ruleNewTitle;
+
+  /// No description provided for @ruleEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit rule'**
+  String get ruleEditTitle;
+
+  /// No description provided for @ruleMatchTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Match'**
+  String get ruleMatchTypeLabel;
+
+  /// No description provided for @ruleMatchTypeContains.
+  ///
+  /// In en, this message translates to:
+  /// **'Contains'**
+  String get ruleMatchTypeContains;
+
+  /// No description provided for @ruleMatchTypeStartsWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts with'**
+  String get ruleMatchTypeStartsWith;
+
+  /// No description provided for @ruleMatchTypeExact.
+  ///
+  /// In en, this message translates to:
+  /// **'Exact'**
+  String get ruleMatchTypeExact;
+
+  /// No description provided for @ruleMatchTypeMerchantKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Merchant'**
+  String get ruleMatchTypeMerchantKey;
+
+  /// No description provided for @ruleMatchValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Text to match'**
+  String get ruleMatchValueLabel;
+
+  /// No description provided for @ruleMatchValueHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. OXXO GAS'**
+  String get ruleMatchValueHint;
+
+  /// No description provided for @ruleDerivedKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Compared against the merchant key “{key}”'**
+  String ruleDerivedKey(String key);
+
+  /// No description provided for @ruleActionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Then'**
+  String get ruleActionsLabel;
+
+  /// No description provided for @ruleSetCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Set category'**
+  String get ruleSetCategoryLabel;
+
+  /// No description provided for @ruleSetCategoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to keep the current category'**
+  String get ruleSetCategoryHint;
+
+  /// No description provided for @ruleSetDescriptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename to'**
+  String get ruleSetDescriptionLabel;
+
+  /// No description provided for @ruleSetDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to keep the current name'**
+  String get ruleSetDescriptionHint;
+
+  /// No description provided for @ruleNeedsAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a category, a new name, or both.'**
+  String get ruleNeedsAction;
+
+  /// No description provided for @ruleScopeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Only when (optional)'**
+  String get ruleScopeLabel;
+
+  /// No description provided for @ruleScopeThisAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {account}'**
+  String ruleScopeThisAccount(String account);
+
+  /// No description provided for @ruleScopeThisCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {currency}'**
+  String ruleScopeThisCurrency(String currency);
+
+  /// No description provided for @ruleDirectionAny.
+  ///
+  /// In en, this message translates to:
+  /// **'Any direction'**
+  String get ruleDirectionAny;
+
+  /// No description provided for @ruleDirectionInflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Inflows'**
+  String get ruleDirectionInflow;
+
+  /// No description provided for @ruleDirectionOutflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Outflows'**
+  String get ruleDirectionOutflow;
+
+  /// No description provided for @ruleAmountMinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Min amount'**
+  String get ruleAmountMinLabel;
+
+  /// No description provided for @ruleAmountMaxLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Max amount'**
+  String get ruleAmountMaxLabel;
+
+  /// No description provided for @ruleAmountRangeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Amounts compare the absolute value in each transaction\'s own currency — add a currency scope so pesos and dollars aren\'t compared raw.'**
+  String get ruleAmountRangeHint;
+
+  /// No description provided for @ruleSaveForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Save rule'**
+  String get ruleSaveForward;
+
+  /// No description provided for @ruleSaveAndApply.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{Save & apply} =1{Save & apply to 1 past transaction} other{Save & apply to {count} past transactions}}'**
+  String ruleSaveAndApply(int count);
+
+  /// No description provided for @ruleApplyConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to past transactions?'**
+  String get ruleApplyConfirmTitle;
+
+  /// No description provided for @ruleApplyConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{matched} past transactions match this rule. {categories} would show a new category and {names} a new name; the rest already show these values and are simply marked as rule-managed, so the applied count can come out higher. Transactions you edited by hand are never touched.'**
+  String ruleApplyConfirmBody(int matched, int categories, int names);
+
+  /// No description provided for @ruleSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule saved. It applies to new transactions from now on.'**
+  String get ruleSaved;
+
+  /// No description provided for @ruleSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the rule: {error}'**
+  String ruleSaveFailed(String error);
+
+  /// No description provided for @ruleApplyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t apply the rule: {error}'**
+  String ruleApplyFailed(String error);
+
+  /// No description provided for @ruleAppliedCounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Applied: {categories} categories, {names} names updated.'**
+  String ruleAppliedCounts(int categories, int names);
+
+  /// No description provided for @ruleAppliedSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 transaction was skipped — it was edited by hand after the preview.} other{{count} transactions were skipped — they were edited by hand after the preview.}}'**
+  String ruleAppliedSkipped(int count);
+
+  /// No description provided for @rulePreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What this would change'**
+  String get rulePreviewTitle;
+
+  /// No description provided for @rulePreviewRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking your history…'**
+  String get rulePreviewRunning;
+
+  /// No description provided for @rulePreviewIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter what to match and what to set — every change will be listed here before anything is applied.'**
+  String get rulePreviewIdle;
+
+  /// No description provided for @rulePreviewFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview failed: {error}'**
+  String rulePreviewFailed(String error);
+
+  /// No description provided for @rulePreviewCounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Matches {matched} · changes {categories} categories, {names} names'**
+  String rulePreviewCounts(int matched, int categories, int names);
+
+  /// No description provided for @rulePreviewSkippedManual.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 skipped as a manual edit} other{{count} skipped as manual edits}}'**
+  String rulePreviewSkippedManual(int count);
+
+  /// No description provided for @rulePreviewProvenanceNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Applying also marks matched transactions that already show these values as rule-managed, so the applied count can be higher than the changes above.'**
+  String get rulePreviewProvenanceNote;
+
+  /// No description provided for @rulePreviewNoChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing would look different — these transactions already show these values.'**
+  String get rulePreviewNoChanges;
+
+  /// No description provided for @rulePreviewFxWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 matched transaction is a leg of a confirmed currency transfer. Recategorizing it puts it back into your spending totals.} other{{count} matched transactions are legs of confirmed currency transfers. Recategorizing them puts them back into your spending totals.}}'**
+  String rulePreviewFxWarning(int count);
+
+  /// No description provided for @rulePreviewSamples.
+  ///
+  /// In en, this message translates to:
+  /// **'Sample changes'**
+  String get rulePreviewSamples;
+
+  /// No description provided for @rulePreviewShowingFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing the first {count}.'**
+  String rulePreviewShowingFirst(int count);
+
+  /// No description provided for @ruleFieldCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get ruleFieldCategory;
+
+  /// No description provided for @ruleFieldName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get ruleFieldName;
+
+  /// No description provided for @ruleSaveAsRule.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as rule…'**
+  String get ruleSaveAsRule;
 }
 
 class _AppLocalizationsDelegate

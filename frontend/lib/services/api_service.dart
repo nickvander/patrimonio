@@ -17,6 +17,7 @@ part 'api_service/auth.dart';
 part 'api_service/dashboard.dart';
 part 'api_service/holdings.dart';
 part 'api_service/lending.dart';
+part 'api_service/rules.dart';
 part 'api_service/transactions.dart';
 
 /// Pick the English or es-MX variant of a user-facing message based on the
@@ -171,7 +172,7 @@ abstract class _ApiServiceBase {
 }
 
 class ApiService extends _ApiServiceBase
-    with _AuthApi, _DashboardApi, _TxApi, _HoldingsApi, _LendingApi {
+    with _AuthApi, _DashboardApi, _TxApi, _HoldingsApi, _LendingApi, _RulesApi {
   @override
   String get _baseUrl => apiBaseUrl();
 

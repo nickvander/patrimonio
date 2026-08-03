@@ -13,6 +13,7 @@ import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
 import '../utils/transactions_tab_logic.dart';
 import 'account_mover.dart';
+import 'rule_editor_sheet.dart';
 
 /// The surface [TransactionDetailPanel] needs from its hosting
 /// transactions tab.
@@ -392,6 +393,10 @@ class _TransactionDetailPanelState extends State<TransactionDetailPanel> {
     // Only an outflow can fund a loan (money left the account).
     final canCreateLoan = host.onCreateLoanFromTx != null && sourceAmount < 0;
     final canMakeRecurring = host.onMakeRecurring != null;
+    // "Save as rule…" needs nothing but the service — it opens a sheet
+    // that previews before it changes anything, and creating the rule
+    // mutates zero existing rows.
+    final canSaveAsRule = host.apiService != null;
     // Full edit (amount/date/direction/account/…) — ONLY for hand-typed
     // rows: the user is the source of truth there, whereas synced /
     // imported facts belong to the bank (the server enforces the same
@@ -410,6 +415,7 @@ class _TransactionDetailPanelState extends State<TransactionDetailPanel> {
         canUnsplit ||
         canCreateLoan ||
         canMakeRecurring ||
+        canSaveAsRule ||
         canDelete;
 
     Widget detailRows() {
@@ -505,6 +511,12 @@ class _TransactionDetailPanelState extends State<TransactionDetailPanel> {
               _close();
               host.onMakeRecurring?.call(tx);
               break;
+            case 'saveAsRule':
+              // Seed from the CURRENT editor state (the user may have just
+              // retyped the category) before closing — the controllers go
+              // away with the panel.
+              _openRuleEditor(_catController.text);
+              break;
             case 'delete':
               _confirmDelete(l);
               break;
@@ -551,6 +563,11 @@ class _TransactionDetailPanelState extends State<TransactionDetailPanel> {
             PopupMenuItem(
               value: 'makeRecurring',
               child: _menuRow(Icons.autorenew_rounded, l.recMakeRecurring),
+            ),
+          if (canSaveAsRule)
+            PopupMenuItem(
+              value: 'saveAsRule',
+              child: _menuRow(Icons.rule_folder_outlined, l.ruleSaveAsRule),
             ),
           if (canDelete)
             PopupMenuItem(
@@ -1019,6 +1036,48 @@ class _TransactionDetailPanelState extends State<TransactionDetailPanel> {
         const SizedBox(width: 12),
         Text(label, style: TextStyle(color: c)),
       ],
+    );
+  }
+
+  /// "Save as rule…" — open the rule editor pre-filled from this row
+  /// (design §5.1). The matcher ladder lives in [ruleDraftFromTransaction];
+  /// the one thing only the panel knows is [editedCategoryLabel], the
+  /// PRETTIFIED category currently in the editor field, which beats the raw
+  /// stored value (a Plaid enum like "FOOD_AND_DRINK") as a rule action and
+  /// picks up an edit the user hasn't saved yet.
+  ///
+  /// Deliberately hosted on the TAB's context: the panel route is popped
+  /// first (the sheet would otherwise sit on top of a stale panel showing
+  /// the very fields the rule is about to change).
+  void _openRuleEditor(String editedCategoryLabel) {
+    final host = _host;
+    final api = host.apiService;
+    if (api == null) return;
+    final map = Map<String, dynamic>.from(tx as Map);
+    final seed = ruleDraftFromTransaction(map);
+    final category = editedCategoryLabel.trim();
+    final accountId = (map['account_id'] ?? '').toString();
+    final accountName = (map['account_name'] ?? '').toString();
+    final currency = (map['currency'] ?? '').toString();
+    _close();
+    if (!host.mounted) return;
+    showRuleEditorSheet(
+      host.context,
+      api: api,
+      initial: RuleDraft(
+        matchType: seed.matchType,
+        matchValue: seed.matchValue,
+        setCategory: category.isNotEmpty ? category : seed.setCategory,
+        setDescription: seed.setDescription,
+      ),
+      accountOption: accountId.isEmpty
+          ? null
+          : RuleScopeAccount(
+              accountId,
+              accountName.isEmpty ? host.accountLabel(tx) : accountName,
+            ),
+      currencyOption: currency.isEmpty ? null : currency,
+      categorySuggestions: _categorySuggestions,
     );
   }
 
