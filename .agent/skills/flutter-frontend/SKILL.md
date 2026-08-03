@@ -310,7 +310,23 @@ with `group(...)`.
   pinning the exact codepoint. Test both plural cases.
 - **Name bug-fix tests after the fix** (`fix2_regressions_test.dart`, `net_worth_yaxis_test.dart`).
 - Tests deliberately avoid pumping real app screens (a `package:web` widget-test hazard) — test
-  cards/utils in isolation instead.
+  cards/utils in isolation instead. **One sanctioned exception:** a
+  *cross-widget geometry* property cannot exist in an isolated card — e.g.
+  "no control outside the app bar may receive a tap in the body's area"
+  (`test/widgets/app_bar_hit_region_test.dart`, which pumps `DashboardScreen`
+  against a stubbed backend). When you must, drive with **`tester.tapAt(Offset)`
+  on real coordinates, never a finder** — the whole class of defect is that the
+  widget tree and the hit region disagree, so a finder-based tap passes while the
+  bug is live. Such a test can't be sabotage-checked against HEAD when the defect
+  turns out not to exist, so prove it non-vacuous by *injecting* the defect
+  (an opaque `GestureDetector` in a `Positioned`, an overhanging
+  `toolbarHeight`) and confirming which assertions fail.
+- **Reading an inherited widget (`Theme.of`, `MediaQuery.of`) before `initState`
+  returns throws** — and if the caller is an unawaited `async` method, the throw
+  lands in an orphaned future: the work silently never happens, in debug only,
+  because release strips the assert. `dashboard_screen.dart` hit exactly this
+  (its first data load aborted, leaving the skeleton up). Defer such calls with
+  `addPostFrameCallback` + a `mounted` guard.
 
 ## 8. Platform seams — web-only APIs must be isolated (the app targets web AND Android)
 

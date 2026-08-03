@@ -41,6 +41,20 @@ queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
+- **⚠ The walkthrough rig can report false hit-region defects.** On
+  2026-08-03 a sweep reported (12/12 "reproductions") an invisible region
+  below the app bar that flipped the reporting currency and made the Cash
+  flow "This year" chip unusable. **It does not exist** — disproved in
+  `9db7001` by pumping the real `DashboardScreen` at the same viewports and
+  measuring: the currency control never leaves the app bar, a 4px lattice
+  sweep of the accused rect hits it zero times, and tapping its centre
+  selects the chip. The rig's **x** coordinates landed exactly on the real
+  control while its **y** were displaced downward — a coordinate-space
+  offset between how it measures rects and where it injects taps, and its
+  own observations were internally inconsistent. The compact chip's 3-line
+  Tooltip renders a band at almost exactly the reported rect and is the
+  likely visual culprit. **Before acting on a rig geometry claim, reproduce
+  it in a widget test with `tapAt`.**
 - **Hardcoded `MX$` glyph still in 4 user-facing files** (found 2026-08-03
   while fixing the lending dialogs, `cf66546`). Each builds a `NumberFormat`
   with `symbol: currency == 'MXN' ? r'MX$' : r'$'`, so they render `MX$`
