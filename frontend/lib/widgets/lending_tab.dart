@@ -298,10 +298,16 @@ class _LendingTabState extends State<LendingTab> {
                 const SizedBox(width: 8),
                 // A7 (round 3, a11y): card header landmark. container:
                 // forces the boundary so the flag can't absorb the card.
-                // Flexible + ellipsis: the title yields to the action
+                // Expanded + ellipsis: the title yields to the action
                 // cluster instead of RenderFlex-overflowing at narrow
-                // widths (it did at 390px once interest was earned).
-                Flexible(
+                // widths (it did at 390px once interest was earned), but
+                // takes ALL the leftover width so it only ellipsizes when
+                // there genuinely isn't room. It was `Flexible` followed by
+                // a `Spacer()`: both default to flex 1, so the free space
+                // was split 50/50 and "Money I've lent" truncated to
+                // "Money I'…" at 390px with ~150px of that row still empty.
+                // Expanded IS the gap-filler, so the Spacer is gone.
+                Expanded(
                   child: Semantics(
                     container: true,
                     header: true,
@@ -317,7 +323,6 @@ class _LendingTabState extends State<LendingTab> {
                     ),
                   ),
                 ),
-                const Spacer(),
                 // Drill into the full cash-basis interest-income report
                 // (per-month series, per-loan + per-currency totals,
                 // §7872 below-market flag). Only meaningful once interest

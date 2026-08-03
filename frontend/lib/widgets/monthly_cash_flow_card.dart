@@ -139,6 +139,19 @@ class MonthlyCashFlowCard extends StatelessWidget {
     final monthLabel =
         periodLabel ?? _formatMonth(trends[currentIdx]['month'] as String?);
 
+    // The title must never contradict the period the figures describe. It
+    // used to be the fixed "Cash flow this month" string, so picking
+    // "Year to date" in the period selector produced a card titled "this
+    // month" over year-to-date numbers (and its own subtitle said so).
+    // "this month" is only true when the card headlines the LATEST month of
+    // a single-month window; on an aggregate window or a back-dated month
+    // (the selector's "Last month") the title drops to the neutral "Cash
+    // flow" and [monthLabel] beside it names the window — and that label is
+    // the selector's own string (periodLabel is threaded down from the same
+    // `l.cfPeriod*` key the selected segment renders), so there is one
+    // source of truth for the period name.
+    final headlinesCurrentMonth = !aggregate && currentIdx == trends.length - 1;
+
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
@@ -182,7 +195,9 @@ class MonthlyCashFlowCard extends StatelessWidget {
                   )
                 else ...[
                   Text(
-                    l.cfMonthlyTitle,
+                    headlinesCurrentMonth
+                        ? l.cfMonthlyTitle
+                        : l.cfCashFlowShort,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -463,8 +478,18 @@ class _NetLine extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        // Wrap, not Row: the headline figure and the vs-prior comparison are
+        // both intrinsically sized, so at phone width a long comparison
+        // ("↑ MXN 6,998.77 vs last month" — a peso figure runs far wider
+        // than its dollar counterpart) pushed past the card edge and was
+        // clipped mid-word, with no ellipsis and no wrap. A Wrap bounds each
+        // child to the available width, so the comparison drops onto its own
+        // run when it can't sit beside the number, and ellipsizes only in
+        // the pathological case where it doesn't fit a full line either.
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 8,
+          runSpacing: 4,
           children: [
             Text(
               (positive ? '+' : '−') + currencyFormat.displayMoney(net.abs()),
@@ -477,8 +502,7 @@ class _NetLine extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(width: 8),
-            if (delta != null) ...[
+            if (delta != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
@@ -495,7 +519,6 @@ class _NetLine extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ],
           ],
         ),
         if (rate != null) ...[
