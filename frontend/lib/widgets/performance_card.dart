@@ -77,9 +77,16 @@ class _BenchmarkOption {
 /// [date], the headline figure at that point, and (TWR chart only) the two
 /// return pills. A record, so equality is structural and the header's
 /// [ValueListenableBuilder] skips no-op rebuilds.
+///
+/// [headlineIsMoney] tells the screen-reader announcement what the headline
+/// actually is: on the TWR chart it's the portfolio VALUE at the scrubbed
+/// date, but it degrades to the return when no `value_usd` can be resolved
+/// for that date (see `_valueUsdOn`), and the spoken string must not label a
+/// percentage "Portfolio value".
 typedef _ScrubReading = ({
   DateTime date,
   String headline,
+  bool headlineIsMoney,
   String? you,
   String? bench,
 });
@@ -221,6 +228,60 @@ class _PerformanceCardState extends State<PerformanceCard> {
 
   String _money(double usd) =>
       widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
+
+  /// `_history` reduced to (UTC calendar day → portfolio value in USD),
+  /// ascending, dropping rows with an unparseable date or a missing
+  /// `value_usd`. Memoized on the identity of `_history` (which only changes
+  /// in `_load`) because a scrub reads it on every pointer move — reparsing
+  /// thousands of rows per frame of a drag is exactly what the
+  /// ValueNotifier-not-setState scrub design exists to avoid.
+  List<({DateTime day, double valueUsd})> _valueDays = const [];
+  List<dynamic>? _valueDaysSource;
+
+  List<({DateTime day, double valueUsd})> get _historyValueDays {
+    if (identical(_valueDaysSource, _history)) return _valueDays;
+    final out = <({DateTime day, double valueUsd})>[];
+    for (final p in _history) {
+      final d = DateTime.tryParse(p['date']?.toString() ?? '');
+      final v = (p['value_usd'] as num?)?.toDouble();
+      if (d == null || v == null) continue;
+      // Normalize to a UTC midnight so a DST-shifted local parse can't slip a
+      // row into the previous day (same convention as dedupeDailyCloses).
+      out.add((day: DateTime.utc(d.year, d.month, d.day), valueUsd: v));
+    }
+    out.sort((a, b) => a.day.compareTo(b.day));
+    _valueDays = out;
+    _valueDaysSource = _history;
+    return out;
+  }
+
+  /// The portfolio value in USD (unconverted) on [date]: the exact row when
+  /// history has one, otherwise the nearest PRIOR row — the house
+  /// carry-forward convention. Money is never interpolated between samples.
+  ///
+  /// Null when nothing can be resolved (empty history, every row missing
+  /// `value_usd`, or [date] falling before the first row). Callers must then
+  /// show something else rather than invent a figure: the TWR scrub falls
+  /// back to the return it used to show.
+  double? _valueUsdOn(DateTime date) {
+    final rows = _historyValueDays;
+    if (rows.isEmpty) return null;
+    final day = DateTime.utc(date.year, date.month, date.day);
+    // Binary search for the last row at or before `day`.
+    var lo = 0;
+    var hi = rows.length - 1;
+    var found = -1;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      if (rows[mid].day.isAfter(day)) {
+        hi = mid - 1;
+      } else {
+        found = mid;
+        lo = mid + 1;
+      }
+    }
+    return found < 0 ? null : rows[found].valueUsd;
+  }
 
   List<dynamic> _filterByRange(List<dynamic> data) {
     if (data.isEmpty || _range == DateRange.all) return data;
@@ -402,15 +463,25 @@ class _PerformanceCardState extends State<PerformanceCard> {
             // The headline is the current portfolio *value* in dollars — the
             // TWR % (which lwPerfTwrReturn correctly names) lives in the pill
             // below, so captioning this figure "Time-weighted return" was a
-            // mislabel. During a touch scrub it carries the scrubbed return
-            // and its date instead (see _headline).
+            // mislabel. During a touch scrub it stays money (the value on the
+            // scrubbed date) with the date as its caption; the returns move
+            // in the pills (see _headline / the chart's onScrub).
             _headline(
               context,
               l,
               _money(headlineValue),
               l.rgxPerfPortfolioValue,
-              scrubValues: (s) =>
-                  '${l.lwPerfTwrYou} ${s.you}, ${_benchmarkLabel(l)} ${s.bench}',
+              // Spoken value list. The money figure is labelled with the same
+              // caption it replaces so the announcement can't be mistaken for
+              // a third return — and it's omitted entirely in the fallback
+              // case, where the headline IS the return and would otherwise be
+              // announced as a "portfolio value".
+              scrubValues: (s) => [
+                if (s.headlineIsMoney)
+                  '${l.rgxPerfPortfolioValue} ${s.headline}',
+                '${l.lwPerfTwrYou} ${s.you}',
+                '${_benchmarkLabel(l)} ${s.bench}',
+              ].join(', '),
             ),
             const SizedBox(height: 14),
             twrBody,
@@ -488,6 +559,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                         date: valueX0.add(Duration(days: spot.x.round())),
                         // spot.y already carries conversionFactor.
                         headline: widget.currencyFormat.displayMoney(spot.y),
+                        headlineIsMoney: true,
                         you: null,
                         bench: null,
                       ));
@@ -821,10 +893,24 @@ class _PerformanceCardState extends State<PerformanceCard> {
                   orElse: () => scrub.spots.first,
                 );
                 final day = spot.x.round();
+                final date = twrX0.add(Duration(days: day));
+                final youText = pctText(spot.y);
+                // The headline stays MONEY through the scrub — the portfolio
+                // value on the scrubbed date, looked up in `_history` BY DATE
+                // (the TWR series is separately range-filtered and
+                // downsampled, so an index into it wouldn't line up). The
+                // returns are already in the two pills; replacing the dollar
+                // total with a third percentage left the card showing no
+                // money at all exactly while it was being interrogated.
+                final valueUsd = _valueUsdOn(date);
                 _setScrub((
-                  date: twrX0.add(Duration(days: day)),
-                  headline: pctText(spot.y),
-                  you: pctText(spot.y),
+                  date: date,
+                  // No resolvable value_usd for that date → keep the old
+                  // behavior (show the return) rather than render a wrong or
+                  // zero amount.
+                  headline: valueUsd == null ? youText : _money(valueUsd),
+                  headlineIsMoney: valueUsd != null,
+                  you: youText,
                   bench: pctText(spByDay[day] ?? 0.0),
                 ));
               },

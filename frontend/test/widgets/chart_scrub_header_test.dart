@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
+import 'package:patrimonio/utils/app_locale.dart';
 import 'package:patrimonio/utils/currency.dart';
 import 'package:patrimonio/widgets/net_worth_card.dart';
 import 'package:patrimonio/widgets/performance_card.dart';
@@ -45,7 +46,27 @@ Map<String, dynamic> _twrFixture() => {
   'total_value_usd': 250000.0,
 };
 
-Widget _perfHost({Locale? locale}) => MaterialApp(
+/// Portfolio value history over the SAME month as the TWR fixture, so a
+/// scrubbed TWR date resolves to a dollar value: day i is worth
+/// `250000 - (29 - i) * 1000`, i.e. May 1 → $221,000 and May 30 → $250,000
+/// (the last point matching the TWR payload's `total_value_usd`, as it does
+/// in production).
+List<dynamic> _valueHistory() => [
+  for (var i = 0; i < 30; i++)
+    {
+      'date': DateFormat(
+        'yyyy-MM-dd',
+      ).format(DateTime.utc(2026, 5, 1).add(Duration(days: i))),
+      'value_usd': 250000.0 - (29 - i) * 1000,
+    },
+];
+
+Widget _perfHost({
+  Locale? locale,
+  List<dynamic>? history,
+  NumberFormat? currencyFormat,
+  double conversionFactor = 1.0,
+}) => MaterialApp(
   locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
@@ -53,9 +74,9 @@ Widget _perfHost({Locale? locale}) => MaterialApp(
     body: SingleChildScrollView(
       child: PerformanceCard(
         apiService: ApiService(),
-        conversionFactor: 1.0,
-        currencyFormat: moneyFormat('USD'),
-        historyFetchOverride: () async => <dynamic>[],
+        conversionFactor: conversionFactor,
+        currencyFormat: currencyFormat ?? moneyFormat('USD'),
+        historyFetchOverride: () async => history ?? _valueHistory(),
         comparisonFetchOverride: () async => null,
         twrFetchOverride: () async => _twrFixture(),
       ),
@@ -186,20 +207,25 @@ void main() {
         reason: 'the guide + dot remain as the touch position feedback',
       );
       // Header now reports the scrubbed point: the date replaces the
-      // "Portfolio value" caption, the headline and both pills report the
-      // values AT that date.
+      // "Portfolio value" caption, the headline is the portfolio VALUE on
+      // that date (the owner's complaint about 3afa140 was that the money
+      // vanished mid-drag and left three percentages), and the two pills
+      // carry the returns AT that date.
       expect(find.text('May 1, 2026'), findsOneWidget);
       expect(find.text('Portfolio value'), findsNothing);
       expect(find.text(r'$250,000'), findsNothing);
-      // headline + "Your portfolio" pill + benchmark pill all read +0.0%.
-      expect(find.text('+0.0%'), findsNWidgets(3));
+      expect(find.text(r'$221,000'), findsOneWidget); // May 1's value_usd
+      // ONLY the two pills read +0.0% — the headline is money, not a third
+      // percentage.
+      expect(find.text('+0.0%'), findsNWidgets(2));
       expect(find.text('+29.0%'), findsNothing);
 
-      // Drag to the LAST sample: May 30 (day 29) → +29.0% / +14.5%.
+      // Drag to the LAST sample: May 30 (day 29) → $250,000, +29.0% / +14.5%.
       await gesture.moveTo(_chartEdge(tester, right: true));
       await tester.pump();
       expect(find.text('May 30, 2026'), findsOneWidget);
-      expect(find.text('+29.0%'), findsNWidgets(2)); // headline + "you" pill
+      expect(find.text(r'$250,000'), findsOneWidget); // headline
+      expect(find.text('+29.0%'), findsOneWidget); // "you" pill only
       expect(find.text('+14.5%'), findsOneWidget); // benchmark pill
 
       // Lift: the header reverts to the live values in the same frame — a
@@ -256,10 +282,13 @@ void main() {
       await tester.pump();
 
       // It replaces a tooltip that was already invisible to screen readers,
-      // so the label has to carry the whole reading.
+      // so the label has to carry the whole reading — money AND both
+      // returns, with the money labelled so it can't be misheard as a third
+      // percentage.
       expect(
         find.bySemanticsLabel(
-          'Chart reading at May 1, 2026: Your portfolio +0.0%, S&P 500 +0.0%',
+          'Chart reading at May 1, 2026: Portfolio value \$221,000, '
+          'Your portfolio +0.0%, S&P 500 +0.0%',
         ),
         findsOneWidget,
       );
@@ -286,7 +315,10 @@ void main() {
 
       expect(
         find.bySemanticsLabel(
-          RegExp(r'^Lectura de la gráfica en May 1, 2026: Tu portafolio '),
+          RegExp(
+            r'^Lectura de la gráfica en May 1, 2026: '
+            r'Valor del portafolio \$221,000, Tu portafolio ',
+          ),
         ),
         findsOneWidget,
       );
@@ -294,6 +326,138 @@ void main() {
       await gesture.up();
       await tester.pump();
       semantics.dispose();
+    });
+
+    testWidgets('with NO resolvable portfolio value for the scrubbed date '
+        'the headline falls back to the return — never a bogus amount', (
+      tester,
+    ) async {
+      _useSurface(tester, const Size(700, 1000));
+      // Empty history: the TWR chart still plots (its points are their own
+      // series) but nothing can be looked up by date.
+      await tester.pumpWidget(_perfHost(history: const <dynamic>[]));
+      await tester.pumpAndSettle();
+
+      // With no history the resting headline falls back to the TWR payload's
+      // total_value_usd.
+      expect(find.text(r'$250,000'), findsOneWidget);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      // Headline degrades to the return (the pre-fix behavior) rather than
+      // rendering $0 or a value from the wrong date.
+      expect(find.text('May 1, 2026'), findsOneWidget);
+      expect(find.text('+0.0%'), findsNWidgets(3)); // headline + both pills
+      expect(
+        _texts(tester).where((t) => t.contains(r'$')),
+        isEmpty,
+        reason: 'no money may be fabricated when no value_usd resolves',
+      );
+
+      await gesture.up();
+      await tester.pump();
+      expect(find.text(r'$250,000'), findsOneWidget);
+    });
+
+    testWidgets('a date BEFORE the first history row also falls back to the '
+        'return (no backwards carry-forward)', (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      // History starts a fortnight into the TWR window, so the left edge of
+      // the chart (May 1) precedes every row: there is nothing to carry
+      // forward FROM.
+      await tester.pumpWidget(_perfHost(history: _valueHistory().sublist(15)));
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      expect(find.text('May 1, 2026'), findsOneWidget);
+      expect(find.text('+0.0%'), findsNWidgets(3)); // headline is the return
+      expect(
+        _texts(tester).where((t) => t.contains(r'$')),
+        isEmpty,
+        reason: 'a money figure must never be extrapolated backwards',
+      );
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('a scrubbed date with no exact row carries the nearest PRIOR '
+        'value forward instead of interpolating', (tester) async {
+      _useSurface(tester, const Size(700, 1000));
+      // Only May 1 ($221,000) and May 30 ($250,000) exist. Every date in
+      // between must read $221,000 — the carry-forward — not something
+      // between the two.
+      await tester.pumpWidget(
+        _perfHost(history: [_valueHistory().first, _valueHistory().last]),
+      );
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(find.byType(LineChart));
+      final gesture = await tester.startGesture(rect.center);
+      await tester.pump(const Duration(milliseconds: 200));
+      // Mid-chart: a TWR sample around the middle of May — no history row
+      // there, so the May 1 row must carry forward.
+      await gesture.moveTo(Offset(rect.center.dx + 2, rect.center.dy));
+      await tester.pump();
+
+      // Exactly one money string on screen, and it is the May 1 row carried
+      // forward verbatim — not an interpolation towards May 30's $250,000.
+      expect(_texts(tester).where((t) => t.contains(r'$')).toList(), [
+        r'$221,000',
+      ]);
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('the scrubbed money figure honors the card\'s currency and '
+        'conversion factor (es-MX / MXN)', (tester) async {
+      await syncIntlLocale(const Locale('es'));
+      addTearDown(() async {
+        localeNotifier.value = null;
+        await syncIntlLocale(null);
+      });
+      _useSurface(tester, const Size(700, 1000));
+      await tester.pumpWidget(
+        _perfHost(
+          locale: const Locale('es'),
+          currencyFormat: moneyFormat('MXN'),
+          conversionFactor: 20.0,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Resting headline: $250,000 USD → MXN 5,000,000 (the house glyph for
+      // MXN is the ISO prefix, see utils/currency.dart).
+      expect(_texts(tester), contains('MXN 5,000,000'));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(LineChart)),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveTo(_chartEdge(tester, right: false));
+      await tester.pump();
+
+      // May 1: $221,000 USD × 20 → MXN 4,420,000, in the SAME unit as the
+      // resting headline (a scrub that skipped conversionFactor would read
+      // MXN 221,000).
+      expect(_texts(tester), contains('MXN 4,420,000'));
+      expect(_texts(tester), isNot(contains('MXN 221,000')));
+
+      await gesture.up();
+      await tester.pump();
+      expect(_texts(tester), contains('MXN 5,000,000'));
     });
   });
 
