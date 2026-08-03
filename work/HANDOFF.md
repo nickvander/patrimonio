@@ -20,13 +20,25 @@ is cut from `56308db` (`app-arm64-v8a-release.apk`, 28.4MB; the 65-file diff
 touched no Android dep/Gradle/proguard file, so the emulator smoke gate
 wasn't triggered).
 
-> ⚠️ **Prod has no database backups.** No `~/patrimonio-backups`, no
-> `*.sql.gpg` anywhere on thelab, and no backup cron — only the auto-update
-> one. `scripts/backup.sh` + `docs/operations.md` exist but were never wired
-> up on this host; running it needs a `BACKUP_PASSPHRASE` only the owner
-> holds. Noticed 2026-08-03 while checking whether a migration that writes
-> to `transactions` was safe to deploy. This is the standing FUTURE.md item 7
-> follow-up, now upgraded from "off-machine copies" to "no copies at all".
+**Backups (wired up 2026-08-03 — thelab had NONE before that):** encrypted
+nightly `pg_dump` via `scripts/backup.sh`, cron at **02:45**, deliberately
+*before* the 03:00 auto-update so the snapshot predates any migration a
+deploy applies. Passphrase lives in `~/.patrimonio-backup.env` (0600, cron
+sources it); dumps in `~/patrimonio-backups` (dir 700, files 600), retention
+14. Note the cron line uses the real stack path
+`/mnt/data/docker/stacks/patrimonio`, **not** `docs/operations.md`'s generic
+`$HOME/patrimonio`. First dump verified by an INDEPENDENT decrypt (4 MB
+plaintext, 28 tables, transaction rows present) — not just the script's own
+self-check.
+
+> ⚠️ **Two owner-only follow-ups remain.** (1) The backup passphrase exists
+> ONLY on thelab — copy it into Vaultwarden (`bw` CLI, same pattern as
+> `~/.patrimonio-key-backup/bw-backup-patrimonio-key.sh`); losing it makes
+> every dump unreadable. (2) Store `ENCRYPTION_KEY` (stack `.env`) there too
+> — a restored dump's `*_enc` columns (Plaid tokens, TOTP secrets) are
+> useless without it. Both secrets and the dumps currently live on the SAME
+> host, so a host loss still loses everything: off-machine copies remain the
+> open FUTURE.md item 7 follow-up.
 
 **Dev on this VM is native (no docker):** Postgres `:5442` + Redis `:6380`
 with data dirs inside the repo, cargo + `~/flutter` toolchains. All run/test/
