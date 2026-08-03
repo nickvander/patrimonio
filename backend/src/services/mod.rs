@@ -22,6 +22,7 @@ pub mod plaid_webhook_verify;
 pub mod projections;
 pub mod realtime;
 pub mod recovery;
+pub mod rules;
 pub mod sessions;
 pub mod staleness;
 pub mod sync;

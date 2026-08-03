@@ -14,6 +14,7 @@ pub mod passkeys;
 pub mod projections;
 pub mod realtime;
 pub mod recurring;
+pub mod rules;
 pub mod session;
 pub mod settings;
 pub mod setup;

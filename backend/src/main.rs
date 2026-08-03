@@ -303,6 +303,10 @@ async fn main() -> Result<()> {
         // Recurring & scheduled transactions (expected-only MVP). Business
         // data: mutations (create/pause/delete rules) are owner-gated.
         .nest("/api/recurring", patrimonio::api::recurring::router())
+        // User categorization/rename rules. Business data, and the apply
+        // endpoint rewrites transaction history behind a confirmed
+        // dry-run — squarely owner-gated.
+        .nest("/api/rules", patrimonio::api::rules::router())
         .nest("/api/auth/invites", patrimonio::api::invites::router())
         // Realtime WS lives here because GETs only — read-only
         // users can subscribe to their own invalidations just like

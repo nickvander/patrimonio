@@ -36,7 +36,15 @@ pub use std::str::FromStr;
 pub use tower::ServiceExt;
 
 pub const TEST_DB_VAR: &str = "PATRIMONIO_TEST_DATABASE_URL";
+pub const TEST_REDIS_VAR: &str = "PATRIMONIO_TEST_REDIS_URL";
 pub const SESSION_COOKIE: &str = "patrimonio_session";
+
+/// Redis URL for the harness: the configured test instance when set,
+/// otherwise the historical default. CI and the documented local test
+/// command both set `PATRIMONIO_TEST_REDIS_URL`.
+pub fn test_redis_url() -> String {
+    std::env::var(TEST_REDIS_VAR).unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string())
+}
 
 /// Build the full protected + public router so the tests exercise the
 /// same middleware stack as production (CSRF outer layer, auth inner
@@ -68,7 +76,7 @@ pub async fn try_setup(
     // accounts via the institutions foreign keys.
     sqlx::query(
         "TRUNCATE \
-         loan_payments, loans, people, \
+         loan_payments, loans, people, user_rules, \
          cash_fx_transfers, ignored_subscription_merchants, \
          exchange_rates, benchmark_prices, lot_disposals, holding_lots, holdings, \
          auth_audit, user_sessions, app_settings, \
@@ -82,7 +90,14 @@ pub async fn try_setup(
     let config = AppConfig {
         database_url: database_url.clone(),
         database_max_connections: 2,
-        redis_url: "redis://127.0.0.1:6379".to_string(),
+        // The rules preview/apply contract stores its single-use token in
+        // Redis, so the harness must point at the SAME Redis the test
+        // command configures. Falls back to the historical hard-coded
+        // default when the var is unset, so every other test file behaves
+        // exactly as before. (`tests/rules_endpoints.rs` additionally
+        // PINGs it and panics if it's unreachable — a configured-but-dead
+        // dependency must never look like a passing suite.)
+        redis_url: test_redis_url(),
         port: 0,
         plaid_client_id: plaid_creds.then(|| "test-client".to_string()),
         plaid_secret: plaid_creds.then(|| "test-secret".to_string()),
@@ -144,6 +159,9 @@ pub async fn try_setup(
         .nest("/api/exports", patrimonio::api::exports::router())
         .nest("/api/settings", patrimonio::api::settings::router())
         .nest("/api/loans", patrimonio::api::loans::router())
+        // User rules engine — mutations (and the retroactive apply) are
+        // owner-gated exactly as in main.rs.
+        .nest("/api/rules", patrimonio::api::rules::router())
         .layer(axum::middleware::from_fn(
             patrimonio::api::middleware::require_owner,
         ));

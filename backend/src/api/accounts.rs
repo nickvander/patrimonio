@@ -811,15 +811,42 @@ async fn update_transaction(
     // clears the override (reverts the row to the auto-picked label);
     // a missing key leaves the existing value alone. CASE encodes
     // both semantics in one SQL expression.
+    //
+    // Provenance (rules engine, DEC-027): whenever this handler WRITES a
+    // user_* field it stamps `*_source = 'manual'` and drops any rule id.
+    // That's what makes "a human edit always wins" enforceable — the rule
+    // paths refuse to touch a field whose source is 'manual' (or NULL, for
+    // rows predating the columns). Clearing a value clears its source too:
+    // provenance never claims an owner for an absent value (behaviourally
+    // identical to stamping 'manual' — an empty value is unprotected
+    // either way).
     let result = sqlx::query(
         r#"
         UPDATE transactions
         SET user_category = COALESCE($1, user_category),
+            user_category_source = CASE
+                WHEN $1::text IS NULL THEN user_category_source
+                WHEN $1::text = '' THEN NULL
+                ELSE 'manual'
+            END,
+            user_category_rule_id = CASE
+                WHEN $1::text IS NULL THEN user_category_rule_id
+                ELSE NULL
+            END,
             user_notes    = COALESCE($2, user_notes),
             user_description = CASE
                 WHEN $3::text IS NULL THEN user_description
                 WHEN $3::text = '' THEN NULL
                 ELSE $3::text
+            END,
+            user_description_source = CASE
+                WHEN $3::text IS NULL THEN user_description_source
+                WHEN $3::text = '' THEN NULL
+                ELSE 'manual'
+            END,
+            user_description_rule_id = CASE
+                WHEN $3::text IS NULL THEN user_description_rule_id
+                ELSE NULL
             END,
             account_id    = COALESCE($4, account_id)
         WHERE id = $5 AND user_id = $6
@@ -976,6 +1003,13 @@ async fn update_manual_transaction(
             category = $7,
             user_category = NULL,
             user_description = NULL,
+            -- Provenance follows the value: clearing the override clears
+            -- who set it, so the row is neither manual-protected nor
+            -- attributed to a rule that no longer applies to it.
+            user_category_source = NULL,
+            user_category_rule_id = NULL,
+            user_description_source = NULL,
+            user_description_rule_id = NULL,
             user_notes = $8
         WHERE id = $9 AND user_id = $10 AND source = 'manual'
         "#,
@@ -1088,15 +1122,36 @@ async fn batch_update_transactions(
         }
     }
 
+    // Provenance stamping mirrors the single PATCH exactly (see the
+    // comment there): a bulk human edit fences those rows off from the
+    // rules engine just as a per-row edit does.
     let result = sqlx::query(
         r#"
         UPDATE transactions
         SET user_category = COALESCE($1, user_category),
+            user_category_source = CASE
+                WHEN $1::text IS NULL THEN user_category_source
+                WHEN $1::text = '' THEN NULL
+                ELSE 'manual'
+            END,
+            user_category_rule_id = CASE
+                WHEN $1::text IS NULL THEN user_category_rule_id
+                ELSE NULL
+            END,
             user_notes    = COALESCE($2, user_notes),
             user_description = CASE
                 WHEN $3::text IS NULL THEN user_description
                 WHEN $3::text = '' THEN NULL
                 ELSE $3::text
+            END,
+            user_description_source = CASE
+                WHEN $3::text IS NULL THEN user_description_source
+                WHEN $3::text = '' THEN NULL
+                ELSE 'manual'
+            END,
+            user_description_rule_id = CASE
+                WHEN $3::text IS NULL THEN user_description_rule_id
+                ELSE NULL
             END,
             account_id    = COALESCE($4, account_id)
         WHERE id = ANY($5) AND user_id = $6

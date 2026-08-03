@@ -541,6 +541,20 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                 }
 
                 // 2. Fetch Transactions (/transactions/sync)
+                //
+                // The owner's active rules, loaded ONCE for this
+                // institution rather than per row (a Plaid page can carry
+                // hundreds of transactions). A load failure must not fail
+                // the sync: log it and sync without rules — the rows still
+                // land, and the retroactive preview can label them after.
+                let user_rules = crate::services::rules::load_rules(db, inst_user_id)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::error!(
+                            "Could not load user rules for {inst_name} ({e}) — syncing without them"
+                        );
+                        Vec::new()
+                    });
                 let tx_url = format!("https://{}.plaid.com/transactions/sync", config.plaid_env);
                 let mut cursor: Option<String> = initial_cursor;
                 loop {
@@ -571,7 +585,7 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                     for key in ["added", "modified"] {
                         if let Some(transactions) = tx_val[key].as_array() {
                             for tx in transactions {
-                                upsert_plaid_transaction(db, tx, inst_user_id).await?;
+                                upsert_plaid_transaction(db, tx, inst_user_id, &user_rules).await?;
                             }
                         }
                     }
@@ -1046,10 +1060,30 @@ fn is_vault_transfer(description: &str) -> bool {
     }
 }
 
-async fn upsert_plaid_transaction(
+/// Insert (or refresh) one Plaid transaction.
+///
+/// `rules` is the caller's ACTIVE rule set, loaded once per institution —
+/// this path is the gap the rules engine exists to close: before it,
+/// nothing user-defined ever reached synced US accounts, so a fix taught
+/// on the statement-import path never applied here.
+///
+/// **Rule application is INSERT-ONLY**, deliberately: re-evaluating on the
+/// conflict path would let a later-disabled or later-edited rule silently
+/// revert historical rows on the next re-sync, violating the "no history
+/// changes without a confirmed dry-run" invariant. The `DO UPDATE SET`
+/// list below must therefore never gain a `user_*` column. (A re-synced
+/// row whose description changes enough to newly match a rule is covered
+/// by the retroactive preview, not by this path — documented trade-off.)
+///
+/// `pub` rather than private so `tests/rules_endpoints.rs` can drive this
+/// exact write path with canned Plaid JSON; there is no other way to test
+/// it without a Plaid sandbox, and an integration test lives in a separate
+/// crate (so `pub(crate)` would not be visible to it).
+pub async fn upsert_plaid_transaction(
     db: &PgPool,
     tx: &serde_json::Value,
     user_id: uuid::Uuid,
+    rules: &[crate::services::rules::UserRule],
 ) -> Result<()> {
     let acc_ext_id = tx["account_id"].as_str().unwrap_or("");
     let tx_ext_id = tx["transaction_id"].as_str().unwrap_or("");
@@ -1126,17 +1160,49 @@ async fn upsert_plaid_transaction(
 
     if let Some(acc_row) = internal_acc {
         let acc_id: uuid::Uuid = acc_row.get("id");
+
+        // Explicit user rules, evaluated on the same field set the
+        // transaction list displays. `amount` is the app-signed value
+        // (negative = outflow), so the rule's direction/amount scopes read
+        // exactly as they do everywhere else. from_f64_retain can only
+        // fail on NaN/inf, which Plaid never sends — fall back to zero so
+        // a malformed payload just doesn't match an amount-scoped rule.
+        let rule_amount = rust_decimal::Decimal::from_f64_retain(amount).unwrap_or_default();
+        let outcome = crate::services::rules::apply_rules(
+            rules,
+            &crate::services::rules::RuleInput {
+                description: name,
+                original_description,
+                merchant_name,
+                counterparty_name: counterparty_name.as_deref(),
+                amount: rule_amount,
+                currency,
+                account_id: acc_id,
+            },
+        );
+        let (user_category, user_category_source, user_category_rule_id) = match &outcome.category {
+            Some((value, rule_id)) => (Some(value.as_str()), Some("rule"), Some(*rule_id)),
+            None => (None, None, None),
+        };
+        let (user_description, user_description_source, user_description_rule_id) =
+            match &outcome.description {
+                Some((value, rule_id)) => (Some(value.as_str()), Some("rule"), Some(*rule_id)),
+                None => (None, None, None),
+            };
+
         sqlx::query(
             r#"
             INSERT INTO transactions (
                 account_id, external_id, date, description, amount, currency,
                 category, category_detailed, payment_channel, merchant_name,
                 pending, source, original_description, counterparty_name,
-                counterparty_logo_url, payment_payee, payment_payer, user_id
+                counterparty_logo_url, payment_payee, payment_payer, user_id,
+                user_category, user_category_source, user_category_rule_id,
+                user_description, user_description_source, user_description_rule_id
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'plaid',
-                $12, $13, $14, $15, $16, $17
+                $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
             )
             ON CONFLICT (account_id, external_id)
             DO UPDATE SET
@@ -1154,6 +1220,9 @@ async fn upsert_plaid_transaction(
                 counterparty_logo_url = EXCLUDED.counterparty_logo_url,
                 payment_payee = COALESCE(EXCLUDED.payment_payee, transactions.payment_payee),
                 payment_payer = COALESCE(EXCLUDED.payment_payer, transactions.payment_payer)
+                -- NO user_* column here, ever. See the fn doc: rules are
+                -- insert-only, and a manual edit must survive every
+                -- re-sync (pending → posted, description refresh).
             "#,
         )
         .bind(acc_id)
@@ -1173,6 +1242,12 @@ async fn upsert_plaid_transaction(
         .bind(payment_payee)
         .bind(payment_payer)
         .bind(user_id)
+        .bind(user_category)
+        .bind(user_category_source)
+        .bind(user_category_rule_id)
+        .bind(user_description)
+        .bind(user_description_source)
+        .bind(user_description_rule_id)
         .execute(db)
         .await?;
     }

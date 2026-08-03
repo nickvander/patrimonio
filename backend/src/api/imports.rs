@@ -478,14 +478,38 @@ async fn confirm_handler(
             .map(|ct| (ct.tx.date, ct.tx.amount, ct.tx.description.clone())),
     );
 
+    // Explicit user rules (services/rules.rs) — loaded ONCE for the whole
+    // batch, evaluated per row below. They sit ABOVE the learned map in
+    // precedence: an explicit rule the user wrote and previewed beats an
+    // implicit inference from a past edit.
+    //
+    // A load failure must not fail the import: log it and proceed with no
+    // rules (the rows still land, just without rule labels, and the
+    // retroactive preview can fix them afterwards).
+    let user_rules = crate::services::rules::load_rules(&state.db, ctx.user_id)
+        .await
+        .unwrap_or_else(|e| {
+            error!("Import confirm: could not load user rules ({e}) — importing without them");
+            Vec::new()
+        });
+
     // Learn from edits: a map of the categories the user has manually
     // assigned (user_category), keyed by a coarse merchant key, so a
     // re-import inherits their own labeling instead of the generic rule
     // guess. Built once; most-recent edit wins per merchant.
+    //
+    // Source filter (`COALESCE(user_category_source,'manual') = 'manual'`,
+    // i.e. excluding 'rule' and 'learned') cuts the feedback loop: without
+    // it, values this very map wrote — and values a *rule* wrote — would
+    // re-enter it as if they were human edits, so a deleted rule would
+    // keep resurrecting itself through the learned map forever. Legacy
+    // rows carry a NULL source and are treated as manual, matching the
+    // migration's conservative backfill.
     let learned: HashMap<String, String> = {
         let labeled = sqlx::query(
             "SELECT description, user_category FROM transactions \
              WHERE user_id = $1 AND user_category IS NOT NULL AND user_category <> '' \
+             AND COALESCE(user_category_source, 'manual') = 'manual' \
              ORDER BY created_at DESC NULLS LAST",
         )
         .bind(ctx.user_id)
@@ -576,11 +600,28 @@ async fn confirm_handler(
         // safety-net `categorize` only yields a PFC primary, so there's no
         // detail to derive on the fallback path — leave it None then.
         let category_detailed = tx.category_detailed.clone();
-        // Learn-from-edits override: if the user has labeled this merchant
-        // before, carry their label onto the new row (display prefers
-        // user_category). Only on fresh inserts — the conflict path never
-        // clobbers an existing manual edit.
-        let user_category = {
+        // Rule + learn-from-edits override, in precedence order:
+        //
+        //   1. an explicit user rule  → user_category_source = 'rule'
+        //   2. the learned map        → user_category_source = 'learned'
+        //
+        // Both are applied to FRESH INSERTS only — the ON CONFLICT clause
+        // below still touches nothing but `balance_after`, so a re-import
+        // never clobbers an existing value (manual, rule-set or learned).
+        let rule_outcome = crate::services::rules::apply_rules(
+            &user_rules,
+            &crate::services::rules::RuleInput {
+                description: &tx.description,
+                original_description: tx.original_description.as_deref(),
+                // Statement rows carry no Plaid enrichment.
+                merchant_name: None,
+                counterparty_name: None,
+                amount: tx.amount,
+                currency: &tx.currency,
+                account_id: payload.account_id,
+            },
+        );
+        let learned_category = {
             let key = crate::services::categorize::merchant_key(&basis);
             if key.is_empty() {
                 None
@@ -588,6 +629,17 @@ async fn confirm_handler(
                 learned.get(&key).cloned()
             }
         };
+        let (user_category, user_category_source, user_category_rule_id) =
+            match (&rule_outcome.category, learned_category) {
+                (Some((value, rule_id)), _) => (Some(value.clone()), Some("rule"), Some(*rule_id)),
+                (None, Some(value)) => (Some(value), Some("learned"), None),
+                (None, None) => (None, None, None),
+            };
+        let (user_description, user_description_source, user_description_rule_id) =
+            match &rule_outcome.description {
+                Some((value, rule_id)) => (Some(value.clone()), Some("rule"), Some(*rule_id)),
+                None => (None, None, None),
+            };
 
         // The parser stashes the pre-polish raw line in
         // `original_description` only when polish_description
@@ -603,8 +655,8 @@ async fn confirm_handler(
         // tells insert (true) from conflict-update (false) so the new-vs-
         // duplicate counts stay accurate despite the upsert.
         let result = sqlx::query(
-            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description, import_batch_id, import_file, balance_after, user_category, category_detailed)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10, $11, $12, $13, $14, $15)
+            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description, import_batch_id, import_file, balance_after, user_category, category_detailed, user_category_source, user_category_rule_id, user_description, user_description_source, user_description_rule_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
              ON CONFLICT (account_id, external_id) DO UPDATE
                  SET balance_after = COALESCE(transactions.balance_after, EXCLUDED.balance_after)
              RETURNING (xmax = 0) AS inserted",
@@ -627,6 +679,13 @@ async fn confirm_handler(
         // SET clause, so a re-import never clobbers a detail already stored
         // (only balance_after is backfilled on conflict).
         .bind(category_detailed)
+        // Provenance for the two user_* columns: who set them. NULL when
+        // nothing set them. Same insert-only contract as above.
+        .bind(user_category_source)
+        .bind(user_category_rule_id)
+        .bind(user_description)
+        .bind(user_description_source)
+        .bind(user_description_rule_id)
         .fetch_optional(&mut *tx_conn)
         .await;
 
