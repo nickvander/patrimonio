@@ -27,12 +27,15 @@ verified checkpoint per feature, in this order:
 4. ~~Bills calendar + 1–90-day projected balances~~ — ✅ built + verified
    2026-08-03 (backend 585/585, frontend 1005/1005; pending_import
    never-false-red pinned in tests; uncommitted — see CURRENT.md).
-5. **User rules engine + dry-run** (L) — ✎ DESIGN READY 2026-08-03:
-   `work/RULES_ENGINE_DESIGN.md` (rule model + provenance columns,
-   precedence with manual-always-wins enforced in SQL, write-time
-   application on BOTH import + Plaid paths, Redis-token dry-run/apply
-   contract, 5-day MVP phasing). **Awaiting owner sign-off — §8 lists the
-   8 open questions.** Implementation does not start before that.
+5. ~~User rules engine + dry-run~~ — ✅ MVP built + verified 2026-08-03
+   (backend 614/614, frontend 1033/1033; design signed off, DEC-027/028).
+   Design doc `work/RULES_ENGINE_DESIGN.md` §7 lists what the MVP punted
+   (regex, revert machinery, hit-count stats, manual-add/split-child
+   application, Plaid conflict-path re-evaluation) — pick from there when
+   the feature has real mileage.
+   **Not yet live-verified:** the rules UI is the one surface today's
+   walkthrough didn't cover (it was built after). Worth a rig pass on the
+   dry-run→apply flow before leaning on it.
 
 Briefs 6–8 (guided statement reconciliation, sub-5s quick-entry, FX Sankey)
 queue behind these — shapes live in the report only.

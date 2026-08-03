@@ -1,7 +1,55 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-03 (feature-research sweep + continuity dossier built; queue running)
+> **Last updated:** 2026-08-03 (feature-research sweep, 4 features + tooltip fix committed; rules-engine MVP built)
 > **Branch:** `main`.
+
+## 2026-08-03 (later) — Rules engine MVP (DEC-027/028), built + verified
+
+The last queue item, implemented from the owner-signed-off
+`work/RULES_ENGINE_DESIGN.md` in two verified phases.
+
+* **Backend (`services/rules.rs`, `api/rules.rs`, migration
+  `2026080401_user_rules.sql`)** — `user_rules` + four provenance columns on
+  `transactions` (`user_{category,description}_{source,rule_id}`, legacy rows
+  conservatively backfilled `'manual'`). ONE matcher in Rust (never duplicated
+  in SQL — Postgres/Rust disagree on accent-case edges, and any divergence
+  would break dry-run↔apply parity): four match types, no regex, scope by
+  account/currency/direction/native-ABS-amount, first-match-wins **per action
+  field** over `(priority, created_at, id)`. `/api/rules` CRUD + reorder mutate
+  ZERO transaction rows (checksum-asserted); `/preview` returns counts +
+  ≤50 samples + `fx_transfer_legs` + a Redis-stored fingerprinted token
+  (`rules:preview:{user_id}:{token}`, 15-min TTL, atomic `GETDEL` — `redis`
+  0.27 has it, so single-use is genuine); `/{id}/apply` is the ONLY writer of
+  rule provenance onto pre-existing rows, re-asserting the manual-protection
+  predicate in SQL so a row hand-edited after the preview is skipped, not
+  clobbered, and publishes `TransactionsChanged`. **Both forward paths**:
+  import confirm (rule-over-learned, `ON CONFLICT` untouched → re-imports stay
+  idempotent) and **Plaid sync** — the gap the feature existed to close —
+  insert-only, `DO UPDATE SET` still carries no `user_*`. Learned-map source
+  filtered to `COALESCE(source,'manual')='manual'`, cutting the feedback loop
+  that would let a deleted rule resurrect itself; the fixer proved that guard
+  bites by removing it and watching the regression test fail. +14 unit / +15
+  integration → **614/614** (fmt + clippy clean).
+* **Frontend** — `api_service/rules.dart` (`_RulesApi`, the SIXTH part-file
+  mixin; skill §3 corrected in the same diff), `RuleEditorSheet` with a
+  debounced live preview diff, `RulePreviewDiff`, `RulesScreen`
+  (reorder/toggle/edit/delete), "Save as rule…" in the transaction detail
+  panel (no host-interface change needed), Settings row next to Hidden items,
+  +68 l10n keys per locale. Both primary actions gated on a completed preview,
+  and any edit to the definition clears preview AND token together so the
+  token on screen always belongs to the numbers on screen. **1033/1033**
+  (format clean, 18-info baseline).
+* **The two honest-numbers cases are pinned as behavior, not bugs:** apply's
+  `updated_*` can EXCEED preview's `changes` (matched rows already showing the
+  target value still get a provenance write) — the sheet test asserts a
+  snackbar of 24 against a previewed 22 — and `skipped > 0` gets its own
+  plain-language line. `fx_transfer_legs > 0` renders a full-width warning
+  banner (DEC-028's allow+warn is only as good as that banner).
+* `scripts/smoke.cjs` gained `smokeRules()`: seed → hand-edit one row →
+  create (assert zero mutation) → preview → apply → row A changed, hand-edited
+  row B untouched → replayed token 409 → delete keeps applied values.
+* Deferred per design §7: regex, revert machinery, hit-count stats,
+  manual-add/split-child application, Plaid conflict-path re-evaluation.
 
 ## 2026-08-03 — Feature-research pipeline + implementation queue (UNCOMMITTED, pending review)
 
