@@ -41,6 +41,12 @@ queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
+- **Performance card range selector overflows 65px at phone width** — found
+  2026-08-03 while building the scrub readout, NOT introduced by it:
+  `performance_card.dart`'s `_rangeSelector` Row (benchmark chip + `Spacer` +
+  `DateRangeSelector`) overflows by ~65px at ~388px inner card width, and
+  reproduces from a plain pump at a 420px surface. The owner's screenshots
+  show this row, so it may already be visibly clipped on their phone.
 - ~~Rules-engine apply-button copy~~, ~~net-worth lens x-axis spacing~~,
   ~~bills MXN axis notation~~, ~~allocation-header truncation~~ — ✅ all
   fixed 2026-08-03 (`8da7d3d`, frontend 1047). Standing note kept from that
