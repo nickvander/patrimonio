@@ -97,6 +97,15 @@ typedef _ScrubReading = ({
 /// so this also leaves headroom for the widest localized benchmark label.
 const double _rangeStackBelow = 520;
 
+/// Card width below which this card takes its touch layout: 16px of padding
+/// instead of 24, a 120px plot instead of 150, and the money-weighted
+/// benchmark block behind a tap-to-expand disclosure instead of inline.
+///
+/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
+/// constraint rather than `MediaQuery`: a card in a narrow column on a wide
+/// window is narrow, and a wide sheet on a phone is not.
+const double _compactCardBelow = 720;
+
 final List<_BenchmarkOption> _benchmarkOptions = [
   _BenchmarkOption('SP500', (l) => l.lwPerfBenchSp500),
   _BenchmarkOption('NDX', (l) => l.lwPerfBenchNdx),
@@ -333,58 +342,71 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // Nothing to show → don't render an empty card.
     if (!showValue && !hasBenchmark) return const SizedBox.shrink();
 
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
-    final pad = isPhone ? 16.0 : 24.0;
+    // Every layout decision below is keyed to the width the card was GIVEN,
+    // not the window's: this card sits in a tab column that is one-third of a
+    // wide dashboard on some screens and full-bleed on others, so the screen
+    // width says nothing useful about how much room the plot has.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isPhone = constraints.maxWidth < _compactCardBelow;
+        final pad = isPhone ? 16.0 : 24.0;
+        // Short plot on touch-width cards — see the scrub notes on the charts
+        // below, which assume the 120px box has no room for a tooltip.
+        final chartHeight = isPhone ? 120.0 : 150.0;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.show_chart, color: context.tealAccent, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l.lwPerfTitle,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: context.textPrimary,
+                Row(
+                  children: [
+                    Icon(Icons.show_chart, color: context.tealAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l.lwPerfTitle,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: context.textPrimary,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
+                const SizedBox(height: 18),
+                if (showValue)
+                  _valueSection(context, l, chartHeight)
+                else
+                  Text(
+                    l.lwPerfNotEnough,
+                    style: TextStyle(color: context.textFaint, fontSize: 12),
+                  ),
+                if (hasBenchmark) ...[
+                  if (showValue) ...[
+                    const SizedBox(height: 20),
+                    Divider(color: context.hairline, height: 1),
+                    const SizedBox(height: 16),
+                  ],
+                  // The TWR "glance" above always shows. On phones the
+                  // money-weighted benchmark detail collapses behind a tap-to-
+                  // expand disclosure; on wider screens it stays inline.
+                  if (isPhone)
+                    _benchmarkDisclosure(context, l, c, invested, lots)
+                  else
+                    _benchmarkSection(context, l, c, invested, lots),
+                ],
               ],
             ),
-            const SizedBox(height: 18),
-            if (showValue)
-              _valueSection(context, l)
-            else
-              Text(
-                l.lwPerfNotEnough,
-                style: TextStyle(color: context.textFaint, fontSize: 12),
-              ),
-            if (hasBenchmark) ...[
-              if (showValue) ...[
-                const SizedBox(height: 20),
-                Divider(color: context.hairline, height: 1),
-                const SizedBox(height: 16),
-              ],
-              // The TWR "glance" above always shows. On phones the
-              // money-weighted benchmark detail collapses behind a tap-to-
-              // expand disclosure; on wider screens it stays inline.
-              if (isPhone)
-                _benchmarkDisclosure(context, l, c, invested, lots)
-              else
-                _benchmarkSection(context, l, c, invested, lots),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -445,7 +467,14 @@ class _PerformanceCardState extends State<PerformanceCard> {
     );
   }
 
-  Widget _valueSection(BuildContext context, AppLocalizations l) {
+  /// [chartHeight] is derived from the card's own `LayoutBuilder` constraint
+  /// in `build` and passed down — the plot must size to the card, not the
+  /// window (see [_compactCardBelow]).
+  Widget _valueSection(
+    BuildContext context,
+    AppLocalizations l,
+    double chartHeight,
+  ) {
     // Headline dollar value: the CURRENT total portfolio value pushed in by
     // the parent (same source as the portfolio hero / holdings total).
     // Falling back to the last history point is a last resort only — after
@@ -461,7 +490,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // the performance line finally carry a real return — unlike the dollar
     // line, which ramps from ~0 as accounts sync and so can't be %-ed.
     if (_hasTwr) {
-      final twrBody = _twrBody(context, l);
+      final twrBody = _twrBody(context, l, chartHeight);
       if (twrBody != null) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -542,7 +571,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).width < 720 ? 120.0 : 150.0,
+            height: chartHeight,
             child: spots.length < 2
                 ? const SizedBox.shrink()
                 // Transient tooltip (dismisses on finger lift / pointer
@@ -751,6 +780,11 @@ class _PerformanceCardState extends State<PerformanceCard> {
         final selector = DateRangeSelector(
           selectedRange: _range,
           fill: stacked,
+          // Content-sized segments tighten their padding on a narrow row —
+          // hand the component this row's real width so it doesn't have to
+          // ask the screen (and can't, from inside a Row: a non-flex child
+          // is laid out unbounded).
+          availableWidth: constraints.maxWidth,
           onRangeChanged: (r) {
             // A new window replots the series — drop any scrub reading with
             // it so the header can't keep a value from the old one.
@@ -835,7 +869,13 @@ class _PerformanceCardState extends State<PerformanceCard> {
 
   /// The TWR return pills + indexed your-vs-S&P chart + coverage caption for
   /// the selected range. Returns null when the range is too short to plot.
-  Widget? _twrBody(BuildContext context, AppLocalizations l) {
+  /// [chartHeight] comes from the card's `LayoutBuilder` constraint — see
+  /// [_valueSection].
+  Widget? _twrBody(
+    BuildContext context,
+    AppLocalizations l,
+    double chartHeight,
+  ) {
     final pts = (_twr!['points'] as List).cast<dynamic>();
     var filtered = _filterByRange(pts);
     if (filtered.length < 2) return null;
@@ -914,7 +954,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).width < 720 ? 120.0 : 150.0,
+            height: chartHeight,
             // Transient tooltip (dismisses on finger lift / pointer exit) —
             // the raw LineChart kept it pinned on mobile web (prod bug). And
             // on TOUCH there is no in-chart tooltip at all: this box is 120px

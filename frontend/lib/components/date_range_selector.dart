@@ -30,20 +30,38 @@ class DateRangeSelector extends StatelessWidget {
   /// is far more room than any of them asks for.
   final bool fill;
 
+  /// Width this selector may occupy, taken from the CALLER's `LayoutBuilder`
+  /// constraint — never `MediaQuery`.
+  ///
+  /// Only the content-sized ([fill] == false) layout consults it, to tighten
+  /// each segment's horizontal padding on a phone-narrow row. It has to come
+  /// from the caller: content-sized callers hand this widget an *unbounded*
+  /// width (the net-worth header wraps it in a horizontal scroller, and a
+  /// non-flex child of a `Row` is laid out with `maxWidth: infinity`), so a
+  /// `LayoutBuilder` in here would measure infinity rather than the row.
+  ///
+  /// Null (or unbounded) means "no reason to tighten" → the roomy padding.
+  final double? availableWidth;
+
   const DateRangeSelector({
     super.key,
     required this.selectedRange,
     required this.onRangeChanged,
     this.fill = false,
+    this.availableWidth,
   });
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final width = MediaQuery.sizeOf(context).width;
     // Only consulted when sizing to content; a filling selector takes its
-    // width from the parent and centres the label in it.
-    final horizontalPadding = width < 420 ? 10.0 : 16.0;
+    // width from the parent and centres the label in it. The narrow test is
+    // the row this selector was given ([availableWidth]), not the screen —
+    // the same card is narrow in a column on a wide window and roomy on a
+    // wide sheet on a phone.
+    final horizontalPadding = (availableWidth ?? double.infinity) < 420
+        ? 10.0
+        : 16.0;
 
     final segments = <(String, DateRange)>[
       (l.lwRangeOneMonth, DateRange.oneMonth),
