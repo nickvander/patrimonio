@@ -41,12 +41,13 @@ queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
-- **Performance card range selector overflows 65px at phone width** — found
-  2026-08-03 while building the scrub readout, NOT introduced by it:
-  `performance_card.dart`'s `_rangeSelector` Row (benchmark chip + `Spacer` +
-  `DateRangeSelector`) overflows by ~65px at ~388px inner card width, and
-  reproduces from a plain pump at a 420px surface. The owner's screenshots
-  show this row, so it may already be visibly clipped on their phone.
+- ~~Performance card range selector overflows at phone width~~ — ✅ fixed
+  2026-08-03 (`dd38536`): stacks below a 520px inner width; verified at 11
+  widths × both locales, sabotage-checked. **Left open in the same file:**
+  `performance_card.dart` still derives `isPhone` and its chart height from
+  `MediaQuery.sizeOf(context).width < 720`, and `DateRangeSelector` picks its
+  padding off `MediaQuery` too — the §4/§5 screen-width-vs-inner-constraint
+  pattern, not implicated in this overflow but worth its own pass.
 - ~~Rules-engine apply-button copy~~, ~~net-worth lens x-axis spacing~~,
   ~~bills MXN axis notation~~, ~~allocation-header truncation~~ — ✅ all
   fixed 2026-08-03 (`8da7d3d`, frontend 1047). Standing note kept from that
@@ -59,11 +60,10 @@ queue behind these — shapes live in the report only.
   name; `/api/dashboard/subscriptions` omits `merchant_key` from its items,
   so any other client wanting to ignore a merchant must re-derive the
   detector's normalization (exactly the coupling the calendar's field
-  avoids); the detected-vs-rule dedupe (`duplicated_by_rule`) has **no live
-  evidence** — the rig's data never triggered it, only tests cover it; and
-  the grid's detected ring is 6px with a 1.5px border at native 1×, which
-  the rig called "discernible but subtle" (the agenda chip carries the
-  weight there — consider a thicker ring if it ever reads as noise).
+  avoids — being fixed 2026-08-03); and the detected-vs-rule dedupe
+  (`duplicated_by_rule`) has **no live evidence** — the rig's data never
+  triggered it, only tests cover it. ~~detected ring too subtle at 1×~~ ✅
+  fixed `dd38536` (8px/2px stroke on pixel boundaries).
 - ~~Bills calendar showed only loan repayments~~ — ✅ fixed 2026-08-03
   (`a3915e3` + `56308db`): it read explicit rules only, never the detector.
   Follow-ups the fix deliberately left: detected occurrences project from
