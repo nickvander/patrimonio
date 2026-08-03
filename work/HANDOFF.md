@@ -1,20 +1,21 @@
 # Handoff — start here
 
-> **Last updated:** 2026-08-03 (sweep deferred-items batch; push/deploy pending)
+> **Last updated:** 2026-08-03 (deferred-items batch shipped; follow-ups in progress)
 > **Purpose:** The one-screen "where are we, what's next" doc to pick up cold.
 > Detail lives in [work/CURRENT.md](CURRENT.md) — this file deliberately stays short.
 
 ## TL;DR — current state
 
-**As of 2026-08-03:** `main` @ `0d1d6e3` local, tree clean — the sweep
-deferred-items batch (6 commits, `e4a109c`…`0d1d6e3`) is **committed but NOT
-pushed** (push awaiting owner go-ahead; deploy follows it). **Prod runs on
-the homelab host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
-`/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — still **deployed
-through `842de84`**. An APK is cut from `0d1d6e3`
-(`app-arm64-v8a-release.apk`, 28.1MB; no Android dep/Gradle/proguard changes
-in the batch, so the emulator smoke gate wasn't triggered). To ship: push
-`main`, run the flock'd `update.sh` on thelab, verify api health 200.
+**As of 2026-08-03:** `main` @ `72abd94`, pushed. **Prod runs on the homelab
+host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
+`/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
+`72abd94`** (the sweep deferred-items batch; containers rebuilt, api health
+200 verified). The latest APK is cut from the same code
+(`app-arm64-v8a-release.apk`, 28.1MB; built at `0d1d6e3`, whose code tree is
+identical — only HANDOFF docs differ; no Android dep/Gradle/proguard changes,
+so the emulator smoke gate wasn't triggered). Follow-up work on the recorded
+deferrals (ApiService mixin split, detail-panel decoupling) is in progress
+on `main`.
 
 **Dev on this VM is native (no docker):** Postgres `:5442` + Redis `:6380`
 with data dirs inside the repo, cargo + `~/flutter` toolchains. All run/test/

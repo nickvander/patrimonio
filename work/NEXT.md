@@ -17,9 +17,6 @@
   comments; use mixins, NOT extensions (five test fakes `@override` endpoint
   methods and extension members dispatch statically). Lending (~420 lines)
   and holdings (~565) first.
-- **dashboard_screen → direct `dividend_income_card.dart` import** — remove
-  the documented re-export seam in `portfolio_card.dart` next time
-  dashboard_screen is in someone's territory (one import line).
 
 - **Audit tail findings still open** (from the 2026-07-26 five-agent audit;
   the truncated-filtered-totals one shipped 2026-08-02 as `X-Total-Count`,
