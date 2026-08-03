@@ -7356,32 +7356,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fxcRefreshFailed => 'No se pudo actualizar el tipo de cambio';
 
   @override
-  String get recTitle => 'Recurrentes';
-
-  @override
-  String get recExpectedChip => 'Previsto';
-
-  @override
-  String get recExpectedNote =>
-      'Previsto según tus reglas recurrentes — no son transacciones reales.';
-
-  @override
-  String get recExpectedIn => 'Entradas previstas';
-
-  @override
-  String get recExpectedOut => 'Salidas previstas';
-
-  @override
-  String get recManage => 'Administrar';
-
-  @override
-  String get recManageTitle => 'Reglas recurrentes';
-
-  @override
-  String get recNoRules =>
-      'Aún no hay reglas recurrentes. Usa \"Hacer recurrente\" en una transacción o la opción Se repite al agregarla.';
-
-  @override
   String get fxcCostsTitle => 'Costo de transferencias';
 
   @override
@@ -7421,6 +7395,32 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get recTitle => 'Recurrentes';
+
+  @override
+  String get recExpectedChip => 'Previsto';
+
+  @override
+  String get recExpectedNote =>
+      'Previsto según tus reglas recurrentes — no son transacciones reales.';
+
+  @override
+  String get recExpectedIn => 'Entradas previstas';
+
+  @override
+  String get recExpectedOut => 'Salidas previstas';
+
+  @override
+  String get recManage => 'Administrar';
+
+  @override
+  String get recManageTitle => 'Reglas recurrentes';
+
+  @override
+  String get recNoRules =>
+      'Aún no hay reglas recurrentes. Usa \"Hacer recurrente\" en una transacción o la opción Se repite al agregarla.';
 
   @override
   String get recNothingUpcoming => 'No se espera nada más en este período.';

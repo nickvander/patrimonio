@@ -7292,32 +7292,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fxcRefreshFailed => 'Couldn\'t refresh the rate';
 
   @override
-  String get recTitle => 'Recurring';
-
-  @override
-  String get recExpectedChip => 'Expected';
-
-  @override
-  String get recExpectedNote =>
-      'Expected from your recurring rules — not actual transactions.';
-
-  @override
-  String get recExpectedIn => 'Expected in';
-
-  @override
-  String get recExpectedOut => 'Expected out';
-
-  @override
-  String get recManage => 'Manage';
-
-  @override
-  String get recManageTitle => 'Recurring rules';
-
-  @override
-  String get recNoRules =>
-      'No recurring rules yet. Use \"Make recurring\" on a transaction, or the Repeats option when adding one.';
-
-  @override
   String get fxcCostsTitle => 'Transfer costs';
 
   @override
@@ -7357,6 +7331,32 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get recTitle => 'Recurring';
+
+  @override
+  String get recExpectedChip => 'Expected';
+
+  @override
+  String get recExpectedNote =>
+      'Expected from your recurring rules — not actual transactions.';
+
+  @override
+  String get recExpectedIn => 'Expected in';
+
+  @override
+  String get recExpectedOut => 'Expected out';
+
+  @override
+  String get recManage => 'Manage';
+
+  @override
+  String get recManageTitle => 'Recurring rules';
+
+  @override
+  String get recNoRules =>
+      'No recurring rules yet. Use \"Make recurring\" on a transaction, or the Repeats option when adding one.';
 
   @override
   String get recNothingUpcoming => 'Nothing more expected this period.';
