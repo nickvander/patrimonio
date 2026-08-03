@@ -173,6 +173,14 @@ trampling each other:
 
 - **Declare your file territory up front** (in your plan / first report) and
   stay inside it.
+- **Use `dart format -o none --set-exit-if-changed lib test` when another
+  agent may be active.** `--set-exit-if-changed` only sets the exit code —
+  the formatter still **rewrites files in place**, so the plain form silently
+  reformats every file in `lib/` and `test/`, including ones another agent is
+  mid-edit on (this happened 2026-08-03: a verification run reflowed four
+  untracked files belonging to a concurrent agent, invalidating its pending
+  edits). `-o none` checks without writing. The plain form is fine when you
+  are the only agent in the checkout.
 - **Take a `git status --porcelain` snapshot at session start** so you can
   attribute later changes to yourself vs. someone else.
 - **Before each edit to an existing file, check `git status --porcelain`:** if

@@ -41,6 +41,23 @@ queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
+- **`MediaQuery` layout-branch inventory** (from the 2026-08-03 responsive
+  pass; `performance_card` + `date_range_selector` already fixed in
+  `f86c30e`). Bucket **B — visible consequences, start here**:
+  `loan_detail_sheet.dart:674` decides whether the schedule table renders
+  AT ALL and `:976` drops two columns below 520 — a *sheet*, the exact
+  "wide sheet on a phone" case the rule names, and it removes data on the
+  wrong branch; then `budgets_card.dart:436` (also controls row count
+  before "show all"), `wealth_projection_screen.dart:1018`,
+  `tax_planning_screen.dart:564`, `debt_payoff_card.dart:308`,
+  `spending_by_category_card.dart:100`, `lending_tab.dart:183,262`,
+  `dashboard_screen.dart:6231`. Bucket **C — cosmetic** (card padding
+  16/24 read off the screen) spans ~35 call sites across the widgets and
+  screens; sweep opportunistically when a file is open for another reason.
+  Legitimately screen-based (do NOT "fix"): dialog/route sizing in
+  `import_screen.dart:2165`, `add_transaction_dialog.dart:47`,
+  `notifications_panel.dart:797`, and the screen-spanning
+  `dashboard_screen.dart:4424,4831,4837,5648`.
 - **UNVERIFIED, possibly severe: a Notifications bottom sheet auto-opened
   over the Cash tab and swallowed all input** — seen 2026-08-03 by the
   Sankey rig on a true 390×844 **touch** context at boot. Escape, barrier

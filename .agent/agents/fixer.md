@@ -43,7 +43,9 @@ work here.
   - backend: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
     and the full `cargo test` with the test-DB env vars (see AGENTS.md
     "Testing"; ≈10 min — use a ≥600000 ms Bash timeout; NEVER the dev DB).
-  - frontend: `~/flutter/bin/dart format --set-exit-if-changed lib test`,
+  - frontend: `~/flutter/bin/dart format -o none --set-exit-if-changed lib test`
+    (`-o none` checks WITHOUT writing — the plain form rewrites every file in
+    `lib/`+`test/` in place and will clobber a concurrent agent's edits),
     `~/flutter/bin/flutter analyze --no-fatal-infos` (18 infos are baseline),
     `~/flutter/bin/flutter test --exclude-tags golden`.
   Never end your turn while a verification command is still running, and never

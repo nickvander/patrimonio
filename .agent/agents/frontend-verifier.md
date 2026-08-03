@@ -18,7 +18,7 @@ fails, your job is an accurate report, not a fix.
 Flutter lives at `~/flutter/bin` (not on the default PATH):
 
 ```bash
-cd /home/nickvander/dev/patrimonio/frontend && ~/flutter/bin/dart format --set-exit-if-changed lib test
+cd /home/nickvander/dev/patrimonio/frontend && ~/flutter/bin/dart format -o none --set-exit-if-changed lib test
 cd /home/nickvander/dev/patrimonio/frontend && ~/flutter/bin/flutter analyze --no-fatal-infos
 cd /home/nickvander/dev/patrimonio/frontend && ~/flutter/bin/flutter test --exclude-tags golden
 ```
