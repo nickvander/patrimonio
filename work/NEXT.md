@@ -41,6 +41,14 @@ queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
+- **UNVERIFIED, possibly severe: a Notifications bottom sheet auto-opened
+  over the Cash tab and swallowed all input** — seen 2026-08-03 by the
+  Sankey rig on a true 390×844 **touch** context at boot. Escape, barrier
+  tap and handle-drag all failed; the rig worked around it by booting at
+  1440 and resizing. It may be a headless/touch-emulation artifact — the
+  owner uses the APK daily and has not reported it, which argues artifact —
+  but if it reproduces on a real phone it's a hard input lock. **Verify on
+  the emulator or a device before assuming it's the rig.**
 - ~~Performance card range selector overflows at phone width~~ — ✅ fixed
   2026-08-03 (`dd38536`): stacks below a 520px inner width; verified at 11
   widths × both locales, sabotage-checked. **Left open in the same file:**
