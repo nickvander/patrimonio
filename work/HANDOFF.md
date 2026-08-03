@@ -6,16 +6,14 @@
 
 ## TL;DR — current state
 
-**As of 2026-08-03:** `main` @ `72abd94`, pushed. **Prod runs on the homelab
+**As of 2026-08-03:** `main` @ `e7ef985`, pushed. **Prod runs on the homelab
 host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
 `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
-`72abd94`** (the sweep deferred-items batch; containers rebuilt, api health
-200 verified). The latest APK is cut from the same code
-(`app-arm64-v8a-release.apk`, 28.1MB; built at `0d1d6e3`, whose code tree is
-identical — only HANDOFF docs differ; no Android dep/Gradle/proguard changes,
-so the emulator smoke gate wasn't triggered). Follow-up work on the recorded
-deferrals (ApiService mixin split, detail-panel decoupling) is in progress
-on `main`.
+`e7ef985`** (deferred-items batch + same-session follow-ups: ApiService
+mixin split, detail-panel decoupling; containers rebuilt, api health 200 +
+frontend 200 verified). The latest APK is cut from `e7ef985`
+(`app-arm64-v8a-release.apk`, 28.1MB; no Android dep/Gradle/proguard changes
+anywhere in the batch, so the emulator smoke gate wasn't triggered).
 
 **Dev on this VM is native (no docker):** Postgres `:5442` + Redis `:6380`
 with data dirs inside the repo, cargo + `~/flutter` toolchains. All run/test/
