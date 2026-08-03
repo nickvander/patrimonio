@@ -47,6 +47,17 @@ queue behind these — shapes live in the report only.
   pass: `skipped` in the APPLY response is structurally always 0 outside the
   preview→apply race, so `ruleAppliedSkipped` is near-unreachable — correct
   by design; **don't "fix" it by inflating the number.**
+- **Calendar-detection follow-ups** (from the 2026-08-03 live-rig pass, all
+  minor): the ignore endpoint's JSON body key is `merchant` but the value it
+  carries is the *merchant_key* — a reader could plausibly send a display
+  name; `/api/dashboard/subscriptions` omits `merchant_key` from its items,
+  so any other client wanting to ignore a merchant must re-derive the
+  detector's normalization (exactly the coupling the calendar's field
+  avoids); the detected-vs-rule dedupe (`duplicated_by_rule`) has **no live
+  evidence** — the rig's data never triggered it, only tests cover it; and
+  the grid's detected ring is 6px with a 1.5px border at native 1×, which
+  the rig called "discernible but subtle" (the agenda chip carries the
+  weight there — consider a thicker ring if it ever reads as noise).
 - ~~Bills calendar showed only loan repayments~~ — ✅ fixed 2026-08-03
   (`a3915e3` + `56308db`): it read explicit rules only, never the detector.
   Follow-ups the fix deliberately left: detected occurrences project from

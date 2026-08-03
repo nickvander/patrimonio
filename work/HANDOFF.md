@@ -49,11 +49,29 @@ vault's secret policy live in Vaultwarden, config in
    while `backup_status.json` still reports "healthy" (it only counts restic
    snapshots, never checks dump contents).
 
-A repo-local `scripts/backup.sh` cron (02:45, `~/patrimonio-backups`,
-passphrase in `~/.patrimonio-backup.env`) was added the same day before the
-house system was found — it is **redundant with R2** and pending a decision
-to keep or remove; if kept, its passphrase must go into Vaultwarden or the
-dumps are unreadable.
+**Both findings fixed 2026-08-03 (owner-approved):**
+* The Patrimonio auto-update moved to **04:00**, so the 03:00 master backup
+  finishes first and is a clean pre-migration snapshot.
+* `master_backup.sh` hardened: a `dump_db` helper dumps to `.partial`,
+  requires non-empty output AND pg_dump's completion marker, and only then
+  moves it into place; failures are collected and the script now **exits 1**
+  (after the status JSON refresh) instead of shipping an empty file quietly.
+  Original saved as `master_backup.sh.bak-20260803`. Verified: helper
+  failure paths exercised in a temp dir (2 failures recorded, 1 success, no
+  stray files), then a full real run — all 5 dumps `[ok]` with byte counts,
+  snapshot saved to R2, exit 0.
+* The redundant repo-local `scripts/backup.sh` cron added earlier that day
+  was **removed** (cron, dumps, and passphrase file all deleted) — one good
+  offsite system beats two half-tracked ones.
+
+**Two pre-existing issues that run surfaced (NOT introduced by the change):**
+1. `finance_tracker` dumps to **669 bytes** — effectively an empty database.
+   Fine if it's a legacy leftover; alarming if it's supposed to hold data.
+   Size checks can't catch this class: it is a *valid* dump of nothing.
+2. Restic logs `permission denied` on
+   `local_export/infrastructure/stacks/{adguard/workdir/data,ntfy/cache/attachments}`
+   when run as `nickvander`, so those paths are silently absent from
+   snapshots (`Warning: at least one source file could not be read`).
 
 **Dev on this VM is native (no docker):** Postgres `:5442` + Redis `:6380`
 with data dirs inside the repo, cargo + `~/flutter` toolchains. All run/test/
