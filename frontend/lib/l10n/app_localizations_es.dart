@@ -2280,6 +2280,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get impCleanupTitle => 'Gestionar importaciones';
 
   @override
+  String impLoadError(Object error) {
+    return 'No se pudieron cargar tus importaciones: $error';
+  }
+
+  @override
+  String get impRetry => 'Reintentar';
+
+  @override
   String get impRecentImports => 'Importaciones recientes';
 
   @override

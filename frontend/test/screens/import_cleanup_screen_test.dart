@@ -38,6 +38,33 @@ Widget _host(Locale locale) => MaterialApp(
   ),
 );
 
+/// Host whose batch read fails [failures] times before succeeding with an
+/// EMPTY result — the pair of states the screen used to render identically.
+Widget _flakyHost(Locale locale, {required int failures}) {
+  var attempts = 0;
+  return MaterialApp(
+    locale: locale,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: ImportCleanupScreen(
+      fetchBatchesOverride: () async {
+        if (attempts++ < failures) throw Exception('boom');
+        return const [];
+      },
+      fetchOverviewOverride: () async => {'accounts': <dynamic>[]},
+      fetchContinuityOverride: () async => const [],
+      fetchDismissedGapsOverride: () async => const [],
+    ),
+  );
+}
+
+const _enEmpty =
+    'No tracked imports yet. Imports you do from now on appear here '
+    'and can be undone.';
+const _esEmpty =
+    'Aún no hay importaciones registradas. Las que hagas de ahora en '
+    'adelante aparecerán aquí y podrás deshacerlas.';
+
 void main() {
   // The screen formats balances as MXN; compute the expected money strings
   // with the same helper so the test pins placement, not symbol trivia.
@@ -81,5 +108,74 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  // A failed load used to fall through to the empty state, so "we couldn't
+  // reach the server" rendered as the confident false claim "you have no
+  // imports". The assertion that matters is the ABSENCE of that copy.
+  group('load failure is not emptiness', () {
+    testWidgets('en: failed load shows the error + retry, never "no imports"', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_flakyHost(const Locale('en'), failures: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't load your imports: boom"), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Retry'), findsOneWidget);
+      expect(find.text(_enEmpty), findsNothing);
+      expect(find.textContaining('No tracked imports'), findsNothing);
+    });
+
+    testWidgets('es: failed load shows the es-MX error + retry', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_flakyHost(const Locale('es'), failures: 1));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('No se pudieron cargar tus importaciones: boom'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(ElevatedButton, 'Reintentar'), findsOneWidget);
+      expect(find.text(_esEmpty), findsNothing);
+    });
+
+    testWidgets('retry re-runs the load and reveals the real empty state', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_flakyHost(const Locale('en'), failures: 1));
+      await tester.pumpAndSettle();
+      expect(find.text("Couldn't load your imports: boom"), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Retry'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("Couldn't load your imports"), findsNothing);
+      expect(find.text(_enEmpty), findsOneWidget);
+    });
+
+    testWidgets('en: a successful EMPTY load still shows the empty state', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_flakyHost(const Locale('en'), failures: 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_enEmpty), findsOneWidget);
+      expect(find.textContaining("Couldn't load your imports"), findsNothing);
+      expect(find.widgetWithText(ElevatedButton, 'Retry'), findsNothing);
+    });
+
+    testWidgets('es: a successful EMPTY load still shows the empty state', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_flakyHost(const Locale('es'), failures: 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_esEmpty), findsOneWidget);
+      expect(
+        find.textContaining('No se pudieron cargar tus importaciones'),
+        findsNothing,
+      );
+    });
   });
 }

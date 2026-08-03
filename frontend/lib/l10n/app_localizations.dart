@@ -3681,6 +3681,18 @@ abstract class AppLocalizations {
   /// **'Manage imports'**
   String get impCleanupTitle;
 
+  /// Error state on the Manage imports screen when the initial load fails. Replaces the empty state, which would otherwise claim there is nothing to show.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your imports: {error}'**
+  String impLoadError(Object error);
+
+  /// Retry button under the Manage imports load-failure message.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get impRetry;
+
   /// No description provided for @impRecentImports.
   ///
   /// In en, this message translates to:

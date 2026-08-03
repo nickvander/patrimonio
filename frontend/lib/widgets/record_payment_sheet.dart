@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
-import '../utils/currency.dart' show moneyFormat;
+import '../utils/currency.dart' show currencySymbol, moneyFormat;
 import '../utils/theme_colors.dart';
 import 'connected_segments.dart';
 
@@ -98,6 +98,13 @@ class _RecordPaymentSheetState extends State<RecordPaymentSheet> {
   }
 
   String _money(num v) => moneyFormat(widget.currency).format(v);
+
+  /// Amount-field prefix for the loan's currency, taken from the house
+  /// [currencySymbol] map (`$ `, `MXN `) rather than hardcoded, so the field
+  /// agrees with [_money] and every other money surface. `trimRight`
+  /// normalizes the map's already-spaced entries so the prefix never doubles
+  /// its space.
+  String get _amountPrefix => '${currencySymbol(widget.currency).trimRight()} ';
 
   /// Candidate transactions. Sign (inflow vs outflow), currency, and the
   /// search query are all applied by the backend now (see [_load]), so this
@@ -263,7 +270,7 @@ class _RecordPaymentSheetState extends State<RecordPaymentSheet> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             labelText: AppLocalizations.of(context).lendFieldAmountReceived,
-            prefixText: widget.currency == 'MXN' ? 'MXN ' : r'$ ',
+            prefixText: _amountPrefix,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),

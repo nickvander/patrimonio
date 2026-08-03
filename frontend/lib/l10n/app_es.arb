@@ -624,6 +624,8 @@
   "impCreateAccountForImport": "Nueva cuenta (p. ej. Banamex)",
   "impOcrHint": "Los estados de cuenta escaneados o fotografiados se leen con reconocimiento de texto (OCR), lo que puede tardar hasta un minuto por archivo: es normal, no está atorado.",
   "impCleanupTitle": "Gestionar importaciones",
+  "impLoadError": "No se pudieron cargar tus importaciones: {error}",
+  "impRetry": "Reintentar",
   "impRecentImports": "Importaciones recientes",
   "impNoRecentImports": "Aún no hay importaciones registradas. Las que hagas de ahora en adelante aparecerán aquí y podrás deshacerlas.",
   "impUndo": "Deshacer",

@@ -46,6 +46,12 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
   Set<String> _dismissedGaps = {};
   bool _loading = true;
 
+  /// Load failure, or null when the last load succeeded. Kept separate from
+  /// "loaded and empty": swallowing the error left the screen rendering
+  /// [AppLocalizations.impNoRecentImports] — telling the user their imports
+  /// don't exist when the truth is we couldn't ask.
+  String? _error;
+
   // Bulk form state.
   String? _bulkAccountId;
   DateTime? _from;
@@ -61,7 +67,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final batches =
           await (widget.fetchBatchesOverride?.call() ??
@@ -88,8 +97,12 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
             : null;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
     }
   }
 
@@ -202,6 +215,8 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
       appBar: AppBar(title: Text(l.impCleanupTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? _errorState(l)
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
@@ -258,6 +273,28 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
                 _bulkForm(l),
               ],
             ),
+    );
+  }
+
+  /// House load-failure state (same shape as `account_transactions_screen` /
+  /// `tax_planning_screen`): the error, not the empty state, so a failed load
+  /// never reads as "you have no imports".
+  Widget _errorState(AppLocalizations l) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: context.negative),
+            const SizedBox(height: 16),
+            Text(l.impLoadError(_error!), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _load, child: Text(l.impRetry)),
+          ],
+        ),
+      ),
     );
   }
 

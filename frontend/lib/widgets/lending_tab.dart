@@ -218,7 +218,7 @@ class _LendingTabState extends State<LendingTab> {
 
   /// Currency to denominate the summary stats in. When every loan shares
   /// one currency we show that native currency (no FX conversion) so a
-  /// single MX$30,000 loan reads "MX$30,000", not its USD equivalent.
+  /// single MXN 30,000 loan reads "MXN 30,000", not its USD equivalent.
   /// Only a genuinely mixed portfolio falls back to the display currency.
   String _summaryCurrency() {
     if (_loans.isEmpty) return widget.targetCurrency;

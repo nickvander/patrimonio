@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../theme/menus.dart';
+import '../utils/currency.dart' show currencySymbol;
 import '../utils/theme_colors.dart';
 
 /// Mirrors the add-loan dialog's look (same _section / _twoUp / filled
@@ -36,7 +37,13 @@ class _EditLoanDialogState extends State<EditLoanDialog> {
   bool _submitting = false;
 
   String get _currency => (widget.loan['currency'] ?? 'USD').toString();
-  String get _sym => _currency == 'MXN' ? r'MX$' : r'$';
+
+  /// Amount-field prefix for the loan's own currency, taken from the house
+  /// [currencySymbol] map (`$ `, `MXN `) rather than hardcoded, so the field
+  /// agrees with every other money surface. `trimRight` normalizes the map's
+  /// already-spaced entries so the prefix never doubles its space.
+  String get _amountPrefix => '${currencySymbol(_currency).trimRight()} ';
+
   String get _ratePeriod => (widget.loan['rate_period'] ?? 'annual').toString();
 
   @override
@@ -210,7 +217,7 @@ class _EditLoanDialogState extends State<EditLoanDialog> {
                       ),
                       decoration: _decoration(
                         AppLocalizations.of(context).lendFieldAmountLent,
-                        prefixText: '$_sym ',
+                        prefixText: _amountPrefix,
                         icon: Icons.payments_outlined,
                       ),
                     ),

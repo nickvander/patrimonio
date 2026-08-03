@@ -887,6 +887,14 @@
   "impCreateAccountForImport": "New account (e.g. Banamex)",
   "impOcrHint": "Scanned or photographed statements are read with text recognition (OCR), which can take up to a minute each — this is normal, not stuck.",
   "impCleanupTitle": "Manage imports",
+  "impLoadError": "Couldn't load your imports: {error}",
+  "@impLoadError": {
+    "description": "Error state on the Manage imports screen when the initial load fails. Replaces the empty state, which would otherwise claim there is nothing to show."
+  },
+  "impRetry": "Retry",
+  "@impRetry": {
+    "description": "Retry button under the Manage imports load-failure message."
+  },
   "impRecentImports": "Recent imports",
   "impNoRecentImports": "No tracked imports yet. Imports you do from now on appear here and can be undone.",
   "impUndo": "Undo",
