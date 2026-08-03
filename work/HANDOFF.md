@@ -20,25 +20,40 @@ is cut from `56308db` (`app-arm64-v8a-release.apk`, 28.4MB; the 65-file diff
 touched no Android dep/Gradle/proguard file, so the emulator smoke gate
 wasn't triggered).
 
-**Backups (wired up 2026-08-03 — thelab had NONE before that):** encrypted
-nightly `pg_dump` via `scripts/backup.sh`, cron at **02:45**, deliberately
-*before* the 03:00 auto-update so the snapshot predates any migration a
-deploy applies. Passphrase lives in `~/.patrimonio-backup.env` (0600, cron
-sources it); dumps in `~/patrimonio-backups` (dir 700, files 600), retention
-14. Note the cron line uses the real stack path
-`/mnt/data/docker/stacks/patrimonio`, **not** `docs/operations.md`'s generic
-`$HOME/patrimonio`. First dump verified by an INDEPENDENT decrypt (4 MB
-plaintext, 28 tables, transaction rows present) — not just the script's own
-self-check.
+**Backups — the homelab already covers this; don't re-invent it.** The house
+system `/mnt/data/backups/master_backup.sh` (nightly **03:00**) runs a proper
+`pg_dump` of the Patrimonio database among several stacks, then pushes
+everything to **Cloudflare R2 via Restic** — encrypted, offsite, retention
+keep-daily 7 / keep-weekly 4. Verified healthy 2026-08-03: 9 snapshots,
+763 MiB, last run 03:00:05. Status JSON:
+`/mnt/data/docker/stacks/n8n/data/backup_status.json`; credentials per the
+vault's secret policy live in Vaultwarden, config in
+`/mnt/data/docker/.env`.
 
-> ⚠️ **Two owner-only follow-ups remain.** (1) The backup passphrase exists
-> ONLY on thelab — copy it into Vaultwarden (`bw` CLI, same pattern as
-> `~/.patrimonio-key-backup/bw-backup-patrimonio-key.sh`); losing it makes
-> every dump unreadable. (2) Store `ENCRYPTION_KEY` (stack `.env`) there too
-> — a restored dump's `*_enc` columns (Plaid tokens, TOTP secrets) are
-> useless without it. Both secrets and the dumps currently live on the SAME
-> host, so a host loss still loses everything: off-machine copies remain the
-> open FUTURE.md item 7 follow-up.
+> **Correction (2026-08-03):** an earlier version of this file claimed prod
+> had NO backups. That was wrong. The check only looked for the repo
+> script's own artifacts (`~/patrimonio-backups`, `*.sql.gpg`, a
+> patrimonio-named cron); the house system uses a different path, Restic
+> (so no `.sql.gpg` exists), and deletes the local `.sql` after upload — so
+> absence of those artifacts proved nothing. Before asserting a backup gap,
+> check `/mnt/data/backups/`, the host crontabs, and the Obsidian vault's
+> `Homelab/Operations and Policies.md`.
+
+**Two real findings that survive the correction:**
+1. **03:00 collision.** `master_backup.sh` and the Patrimonio `update.sh`
+   auto-update are both on `0 3 * * *`. The update runs migrations while the
+   backup is dumping; concurrent DDL can make `pg_dump` fail.
+2. **Silent-empty-dump failure mode.** Each dump line in `master_backup.sh`
+   ends in `|| echo "[!] … skipped"`, and the redirect has already created
+   the file — so a failed dump uploads an EMPTY `postgres_patrimonio.sql`,
+   while `backup_status.json` still reports "healthy" (it only counts restic
+   snapshots, never checks dump contents).
+
+A repo-local `scripts/backup.sh` cron (02:45, `~/patrimonio-backups`,
+passphrase in `~/.patrimonio-backup.env`) was added the same day before the
+house system was found — it is **redundant with R2** and pending a decision
+to keep or remove; if kept, its passphrase must go into Vaultwarden or the
+dumps are unreadable.
 
 **Dev on this VM is native (no docker):** Postgres `:5442` + Redis `:6380`
 with data dirs inside the repo, cargo + `~/flutter` toolchains. All run/test/
