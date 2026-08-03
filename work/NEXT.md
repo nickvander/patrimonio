@@ -33,15 +33,23 @@ verified checkpoint per feature, in this order:
    (regex, revert machinery, hit-count stats, manual-add/split-child
    application, Plaid conflict-path re-evaluation) — pick from there when
    the feature has real mileage.
-   **Not yet live-verified:** the rules UI is the one surface today's
-   walkthrough didn't cover (it was built after). Worth a rig pass on the
-   dry-run→apply flow before leaning on it.
+   Live-rig verified 7/7 (DEC-027 "manual edits win" and both token attacks
+   checked against the DB — see CURRENT.md).
 
 Briefs 6–8 (guided statement reconciliation, sub-5s quick-entry, FX Sankey)
 queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
+- **Rules-engine polish (2026-08-03 rig pass, minor):** (a) the primary
+  button reads "Save & apply to N past transactions" using the MATCHED
+  count while only the changed subset actually changes — the dialog body
+  explains it, but the button alone oversells the blast radius; consider
+  leading with the changes count. (b) `skipped` in the APPLY response is
+  structurally always 0 outside the preview→apply race (rows already
+  manual are excluded from the id set at preview time), so the
+  `ruleAppliedSkipped` string is near-unreachable — correct by design,
+  but don't "fix" it by inflating the number.
 - **Walkthrough observations (2026-08-03, minor):** (a) net-worth USD lens
   x-axis is index-spaced over snapshots while MXN/Constant-FX lenses are
   time-spaced — same history, different horizontal mapping across lenses;

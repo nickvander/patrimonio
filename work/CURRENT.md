@@ -50,6 +50,27 @@ The last queue item, implemented from the owner-signed-off
   row B untouched → replayed token 409 → delete keeps applied values.
 * Deferred per design §7: regex, revert machinery, hit-count stats,
   manual-add/split-child application, Plaid conflict-path re-evaluation.
+* **Live-rig verification — 7/7 PASS**, 0 console errors / 0 failed requests
+  across 20 sessions, with the safety claims checked against the DATABASE,
+  not just the UI (agent seeded 3 marked rows + 2 rules and removed
+  everything; tree untouched):
+  - **DEC-027 held under attack:** a row hand-edited to `ZZ HANDEDIT KEEPME`
+    (`source='manual'`) survived an apply matching all three seeded rows —
+    post-apply the other two carried `source='rule'` + rule id, that row was
+    untouched, and the preview had already said "1 skipped as a manual edit".
+  - **Zero-mutation on create proven by checksum:** MD5 over
+    `(id, user_category, user_category_source, user_description)` for ALL of
+    claude_dev's transactions was byte-identical before/after rule creation.
+  - **Both token attacks 409'd:** exact replay → "already applied";
+    preview → PATCH the rule to `ZZ SNEAKY` → apply the old token → "the rule
+    changed after this preview was generated", and the sneaky value reached
+    **0 rows**.
+  - **DEC-028 confirmed:** after deleting the rule, applied values remained
+    with `source='rule'` and a NULL rule id.
+  - Button-gating probed via `aria-disabled`, not eyeballed: no window exists
+    where a live token coexists with stale numbers. Reorder + active toggle
+    persist across a hard reload; es-MX renders all 77 `rule*` keys including
+    plurals and «» quotes.
 
 ## 2026-08-03 — Feature-research pipeline + implementation queue (UNCOMMITTED, pending review)
 
