@@ -412,7 +412,21 @@ class _DashboardScreenState extends State<DashboardScreen>
     _dismissedNotifs = Preferences.getDismissedNotifications();
     _overviewDetailsExpanded = Preferences.getOverviewDetailsExpanded();
     _managementDetailsExpanded = Preferences.getManagementDetailsExpanded();
-    _loadAllData();
+    // Deferred by one frame ON PURPOSE. [_loadAllData] snapshots
+    // `Theme.of(context).brightness` before its first await (for the
+    // allocation palette), and reading an inherited widget is illegal until
+    // initState has completed — calling it directly from here threw
+    // "dependOnInheritedWidgetOfExactType<_InheritedTheme>() ... was called
+    // before _DashboardScreenState.initState() completed" into the returned
+    // future, where nothing awaited it. In debug builds that silently
+    // aborted the very first load and left the dashboard on its skeleton
+    // until some later trigger (a resume, a realtime push) ran the load
+    // again from a legal context; release builds strip the assert and never
+    // showed it, which is why it survived. The frame we skip already
+    // renders the skeleton `_isLoading` starts on.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadAllData();
+    });
     _checkRedirectStatus();
     _resumePlaidOAuthIfNeeded();
     // Open the realtime channel and route server-pushed
