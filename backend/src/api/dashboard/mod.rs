@@ -90,10 +90,11 @@ pub fn router() -> Router<AppState> {
             "/fx-transfers",
             get(fx_transfers::list_fx_transfers).post(fx_transfers::detect_fx_transfers),
         )
-        // Static "dismissed" segments mounted BEFORE the dynamic
-        // /{id} route so axum's matcher prefers them — otherwise
+        // Static "costs" / "dismissed" segments mounted BEFORE the
+        // dynamic /{id} route so axum's matcher prefers them — otherwise
         // /fx-transfers/dismissed could be parsed as id="dismissed"
         // and 400 on the UUID extractor.
+        .route("/fx-transfers/costs", get(fx_transfers::fx_transfer_costs))
         .route(
             "/fx-transfers/dismissed",
             get(fx_transfers::list_dismissed_fx_pairs),

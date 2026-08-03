@@ -7356,6 +7356,47 @@ class AppLocalizationsEs extends AppLocalizations {
       'Aún no hay reglas recurrentes. Usa \"Hacer recurrente\" en una transacción o la opción Se repite al agregarla.';
 
   @override
+  String get fxcCostsTitle => 'Costo de transferencias';
+
+  @override
+  String fxcCostsCaveat(int days) {
+    return 'Costo total frente al tipo de cambio medio — la tasa registrada más cercana dentro de ±$days días de cada transferencia.';
+  }
+
+  @override
+  String get fxcCostsEmpty => 'Aún no hay transferencias vinculadas';
+
+  @override
+  String get fxcCostsFailed =>
+      'No se pudieron cargar los costos de transferencia';
+
+  @override
+  String get fxcCostsUnknownProvider => 'Proveedor desconocido';
+
+  @override
+  String fxcCostsYearLine(int count, String moved) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transferencias · $moved movidos',
+      one: '1 transferencia · $moved movidos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String fxcCostsMissingSpot(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count transferencias sin tipo de cambio cercano; excluidas del costo',
+      one: '1 transferencia sin tipo de cambio cercano; excluida del costo',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get recNothingUpcoming => 'No se espera nada más en este período.';
 
   @override

@@ -4003,6 +4003,43 @@
   "fxcAlertInvalid": "Enter a threshold greater than zero",
   "fxcAlertFailed": "Couldn't save the alert",
   "fxcRefreshFailed": "Couldn't refresh the rate",
+  "fxcCostsTitle": "Transfer costs",
+  "@fxcCostsTitle": {
+    "description": "FX center: section title for the annual transfer-cost report (what moving money between currencies cost vs mid-market)."
+  },
+  "fxcCostsCaveat": "Total cost vs the mid-market rate — nearest stored rate within ±{days} days of each transfer.",
+  "@fxcCostsCaveat": {
+    "description": "FX center: caveat line under the transfer-cost report; {days} is the backend's spot-lookup tolerance (spot_window_days).",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "fxcCostsEmpty": "No linked transfers yet",
+  "fxcCostsFailed": "Couldn't load transfer costs",
+  "fxcCostsUnknownProvider": "Unknown provider",
+  "fxcCostsYearLine": "{count, plural, =1{1 transfer · {moved} moved} other{{count} transfers · {moved} moved}}",
+  "@fxcCostsYearLine": {
+    "description": "FX center: per-year subtitle in the transfer-cost report. gen-l10n orders placeholders alphabetically: (count, moved).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "moved": {
+        "type": "String"
+      }
+    }
+  },
+  "fxcCostsMissingSpot": "{count, plural, =1{1 transfer had no market rate within the window and is excluded from the cost} other{{count} transfers had no market rate within the window and are excluded from the cost}}",
+  "@fxcCostsMissingSpot": {
+    "description": "FX center: note when some transfers lacked a nearby spot rate and were left out of the cost figure.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "recTitle": "Recurring",
   "recExpectedChip": "Expected",
   "recExpectedNote": "Expected from your recurring rules — not actual transactions.",

@@ -11615,6 +11615,48 @@ abstract class AppLocalizations {
   /// **'Couldn\'t refresh the rate'**
   String get fxcRefreshFailed;
 
+  /// FX center: section title for the annual transfer-cost report (what moving money between currencies cost vs mid-market).
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer costs'**
+  String get fxcCostsTitle;
+
+  /// FX center: caveat line under the transfer-cost report; {days} is the backend's spot-lookup tolerance (spot_window_days).
+  ///
+  /// In en, this message translates to:
+  /// **'Total cost vs the mid-market rate — nearest stored rate within ±{days} days of each transfer.'**
+  String fxcCostsCaveat(int days);
+
+  /// No description provided for @fxcCostsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No linked transfers yet'**
+  String get fxcCostsEmpty;
+
+  /// No description provided for @fxcCostsFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load transfer costs'**
+  String get fxcCostsFailed;
+
+  /// No description provided for @fxcCostsUnknownProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown provider'**
+  String get fxcCostsUnknownProvider;
+
+  /// FX center: per-year subtitle in the transfer-cost report. gen-l10n orders placeholders alphabetically: (count, moved).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 transfer · {moved} moved} other{{count} transfers · {moved} moved}}'**
+  String fxcCostsYearLine(int count, String moved);
+
+  /// FX center: note when some transfers lacked a nearby spot rate and were left out of the cost figure.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 transfer had no market rate within the window and is excluded from the cost} other{{count} transfers had no market rate within the window and are excluded from the cost}}'**
+  String fxcCostsMissingSpot(int count);
+
   /// No description provided for @recTitle.
   ///
   /// In en, this message translates to:

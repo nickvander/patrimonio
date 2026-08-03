@@ -64,6 +64,8 @@ class FxCenterSheet extends StatefulWidget {
   final Future<void> Function(double threshold)? saveAlertOverride;
   @visibleForTesting
   final Future<void> Function()? deleteAlertOverride;
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function()? fetchCostsOverride;
 
   const FxCenterSheet({
     super.key,
@@ -75,6 +77,7 @@ class FxCenterSheet extends StatefulWidget {
     this.fetchAlertOverride,
     this.saveAlertOverride,
     this.deleteAlertOverride,
+    this.fetchCostsOverride,
   });
 
   @override
@@ -94,6 +97,10 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
   Map<String, dynamic>? _alert;
   bool _alertSaving = false;
 
+  Map<String, dynamic>? _costs;
+  bool _costsLoading = true;
+  bool _costsError = false;
+
   final _baseCtl = TextEditingController(text: '1');
   final _targetCtl = TextEditingController();
   final _alertCtl = TextEditingController();
@@ -111,6 +118,7 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
     _syncConverterFromBase();
     _loadHistory();
     _loadAlert();
+    _loadCosts();
   }
 
   @override
@@ -198,6 +206,27 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
       ).showSnackBar(SnackBar(content: Text(l.fxcRefreshFailed)));
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  /// Annual transfer-cost report — what moving money between the two
+  /// currencies cost vs mid-market, per year and provider.
+  Future<void> _loadCosts() async {
+    try {
+      final costs = widget.fetchCostsOverride != null
+          ? await widget.fetchCostsOverride!()
+          : await widget.apiService.getFxTransferCosts();
+      if (!mounted) return;
+      setState(() {
+        _costs = costs;
+        _costsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _costsLoading = false;
+        _costsError = true;
+      });
     }
   }
 
@@ -330,6 +359,10 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
                         _sectionTitle(l.fxcAlertTitle),
                         const SizedBox(height: 8),
                         _alertSection(l),
+                        const SizedBox(height: 24),
+                        _sectionTitle(l.fxcCostsTitle),
+                        const SizedBox(height: 8),
+                        _costsSection(l),
                       ],
                     );
                   },
@@ -771,6 +804,140 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Per-year total cost of moving money vs mid-market, with a
+  /// per-provider breakdown and the ±N-day spot caveat. Costs come from
+  /// the backend already in USD (per-row FX before summing), so this is
+  /// pure presentation.
+  Widget _costsSection(AppLocalizations l) {
+    if (_costsLoading) {
+      return SizedBox(
+        height: 40,
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation(context.tealAccent),
+            ),
+          ),
+        ),
+      );
+    }
+    if (_costsError) {
+      return Text(
+        l.fxcCostsFailed,
+        style: TextStyle(fontSize: 12, color: context.textMuted),
+      );
+    }
+    final years = (_costs?['years'] as List?) ?? const [];
+    if (years.isEmpty) {
+      return Text(
+        l.fxcCostsEmpty,
+        style: TextStyle(fontSize: 12, color: context.textMuted),
+      );
+    }
+    final windowDays = (_costs?['spot_window_days'] as num?)?.toInt() ?? 7;
+    var missingSpot = 0;
+    final blocks = <Widget>[];
+    for (final rawYear in years) {
+      final y = rawYear as Map<String, dynamic>;
+      missingSpot += (y['missing_spot_count'] as num? ?? 0).toInt();
+      final cost = (y['total_cost_usd'] as num? ?? 0).toDouble();
+      final moved = (y['total_moved_usd'] as num? ?? 0).toDouble();
+      final count = (y['transfer_count'] as num? ?? 0).toInt();
+      blocks.add(
+        Padding(
+          padding: EdgeInsets.only(top: blocks.isEmpty ? 0 : 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${y['year']}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    formatCurrencyAmount(cost, 'USD'),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                // gen-l10n orders these alphabetically → (count, moved).
+                l.fxcCostsYearLine(count, formatCurrencyAmount(moved, 'USD')),
+                style: TextStyle(fontSize: 12, color: context.textMuted),
+              ),
+              for (final rawProvider in (y['providers'] as List? ?? const []))
+                _providerRow(l, rawProvider as Map<String, dynamic>),
+            ],
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...blocks,
+        const SizedBox(height: 10),
+        Text(
+          l.fxcCostsCaveat(windowDays),
+          style: TextStyle(fontSize: 11, color: context.textSubtle),
+        ),
+        if (missingSpot > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            l.fxcCostsMissingSpot(missingSpot),
+            style: TextStyle(fontSize: 11, color: context.textSubtle),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _providerRow(AppLocalizations l, Map<String, dynamic> p) {
+    final cost = (p['total_cost_usd'] as num? ?? 0).toDouble();
+    // A null provider is the backend's "unknown" bucket — links the
+    // detector matched without a remittance keyword (direct wires).
+    final label = (p['provider'] as String?) ?? l.fxcCostsUnknownProvider;
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, top: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 12, color: context.textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            formatCurrencyAmount(cost, 'USD'),
+            style: TextStyle(
+              fontSize: 12,
+              color: context.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

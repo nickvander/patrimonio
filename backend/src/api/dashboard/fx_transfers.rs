@@ -3,11 +3,16 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use rust_decimal::Decimal;
 use serde::Serialize;
 use sqlx::Row;
+use std::collections::BTreeMap;
 use tracing::error;
 
+use crate::api::error::internal;
+use crate::api::error::ApiError;
 use crate::api::middleware::AuthContext;
+use crate::services::fx::FX_FALLBACK_USD_MXN_DEC;
 use crate::AppState;
 
 // ---------- Cross-currency cash-transfer linking ----------
@@ -391,6 +396,286 @@ pub(super) async fn list_dismissed_fx_pairs(
     )
 }
 
+// ---------- Annual transfer-cost report ----------
+
+/// How far (in days, either direction) from the source-transaction date
+/// we search `exchange_rates` for a "market spot" row. Mirrors the ±7-day
+/// window `list_fx_transfers` uses for its per-row `spot_fx_rate` — the
+/// two must stay in sync so the per-transfer view and the annual report
+/// never disagree about which spot a transfer was judged against.
+/// ⚠ The literal `7` inside `fx_transfer_costs`'s SQL below is this same
+/// number spelled into SQL — change them together.
+const SPOT_WINDOW_DAYS: i64 = 7;
+
+/// Provider names the detector's keyword list splits that are really the
+/// same company. `matched_keyword` stores the FIRST keyword hit, so a
+/// Wise transfer can carry either "WISE" or "TRANSFERWISE" depending on
+/// which string the bank put in the description — without this fold the
+/// report would show one provider as two buckets.
+fn provider_label(matched_keyword: Option<&str>) -> Option<String> {
+    let kw = matched_keyword?.trim().to_uppercase();
+    if kw.is_empty() {
+        return None;
+    }
+    Some(match kw.as_str() {
+        "TRANSFERWISE" => "WISE".to_string(),
+        "WESTERNUNION" => "WESTERN UNION".to_string(),
+        _ => kw,
+    })
+}
+
+/// TOTAL cost of one transfer vs the mid-market spot rate, in USD.
+/// Positive = the provider's bundled rate+fees left the user worse off
+/// than mid-market; a (rare) negative value means better-than-spot.
+///
+/// `spot` is always denominated USD→MXN (MXN per 1 USD), matching the
+/// `exchange_rates` table. No fee-vs-spread split — for deducted-fee
+/// providers (Wise) that decomposition is not computable from the two
+/// transaction legs, so v1 reports the honest total only.
+///
+/// Returns `None` when no usable spot rate is available or the currency
+/// pair isn't USD↔MXN — the caller counts those rows as "uncosted"
+/// instead of guessing.
+fn transfer_cost_usd(
+    source_currency: &str,
+    source_amount: Decimal,
+    dest_currency: &str,
+    dest_amount: Decimal,
+    spot: Option<Decimal>,
+) -> Option<Decimal> {
+    let spot = spot.filter(|s| *s > Decimal::ZERO)?;
+    match (source_currency, dest_currency) {
+        // Sent USD, received MXN: at mid-market the pesos received would
+        // have cost dest/spot dollars; the difference vs what was sent
+        // is the bundled cost.
+        ("USD", "MXN") => Some(source_amount - dest_amount / spot),
+        // Sent MXN, received USD: the pesos sent were worth source/spot
+        // dollars at mid-market; the shortfall vs dollars received is
+        // the cost.
+        ("MXN", "USD") => Some(source_amount / spot - dest_amount),
+        _ => None,
+    }
+}
+
+/// USD-equivalent of the amount SENT, for the "total moved" figure.
+/// Prefers the market spot for the transfer date; falls back to the
+/// transfer's own implied rate (the rate the user actually got — a fair
+/// stand-in for magnitude), then the hard FX fallback. Non-MXN source
+/// currencies are treated as USD-equivalent, the same "trust the native
+/// amount" stance as `services/fx.rs`.
+fn moved_usd(
+    source_currency: &str,
+    source_amount: Decimal,
+    implied_rate: Decimal,
+    spot: Option<Decimal>,
+) -> Decimal {
+    if source_currency != "MXN" {
+        return source_amount;
+    }
+    let rate = spot
+        .filter(|s| *s > Decimal::ZERO)
+        .or(Some(implied_rate).filter(|r| *r > Decimal::ZERO))
+        .unwrap_or(FX_FALLBACK_USD_MXN_DEC);
+    source_amount / rate
+}
+
+#[derive(Serialize)]
+pub(super) struct FxCostProvider {
+    /// Folded detection keyword (WISE, REMITLY, …); `null` is the
+    /// "unknown" bucket for keyword-less links (direct wires the
+    /// detector matched on window+rate+identity alone).
+    provider: Option<String>,
+    transfer_count: i64,
+    /// Sum of the SENT side converted per-row to USD (never a raw
+    /// cross-currency sum).
+    total_moved_usd: Decimal,
+    /// Sent totals per source currency — each entry only ever sums
+    /// same-currency rows, so no FX assumption is baked in.
+    moved_by_currency: BTreeMap<String, Decimal>,
+    /// Sum of implied-vs-spot deltas in USD over the costed transfers.
+    total_cost_usd: Decimal,
+    /// Transfers with no `exchange_rates` row within ±`spot_window_days`
+    /// of the transfer date — excluded from `total_cost_usd` rather than
+    /// costed against a stale rate.
+    missing_spot_count: i64,
+}
+
+#[derive(Serialize)]
+pub(super) struct FxCostYear {
+    year: i32,
+    transfer_count: i64,
+    total_moved_usd: Decimal,
+    moved_by_currency: BTreeMap<String, Decimal>,
+    total_cost_usd: Decimal,
+    missing_spot_count: i64,
+    providers: Vec<FxCostProvider>,
+}
+
+#[derive(Serialize)]
+pub(super) struct FxTransferCostsResponse {
+    /// The ±day tolerance of the spot lookup, surfaced so the frontend
+    /// can render the "vs nearest rate within ±N days" caveat without
+    /// hardcoding it.
+    spot_window_days: i64,
+    /// Newest year first; providers within a year sorted by cost desc.
+    years: Vec<FxCostYear>,
+}
+
+/// Annual "what did moving money cost us" report: per calendar year and
+/// per provider, the transfer count, total moved (per-source-currency and
+/// USD) and the TOTAL cost vs the mid-market spot rate nearest each
+/// transfer date. Scoped to the caller; aggregation is Decimal end-to-end.
+pub(super) async fn fx_transfer_costs(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Result<Json<FxTransferCostsResponse>, ApiError> {
+    // Same nearest-row-within-±7-days spot lookup as `list_fx_transfers`
+    // (see the comment there for the date-arithmetic subtlety), plus a
+    // `rate > 0` guard so a bad row can't divide a cost into nonsense,
+    // and a `recorded_at DESC` tie-break so two equidistant rows resolve
+    // deterministically.
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            f.source_amount, f.source_currency,
+            f.dest_amount, f.dest_currency,
+            f.implied_fx_rate, f.matched_keyword,
+            ts.date AS source_date,
+            (
+                SELECT er.rate
+                FROM exchange_rates er
+                WHERE er.base_currency = 'USD'
+                  AND er.target_currency = 'MXN'
+                  AND er.rate > 0
+                  AND er.recorded_at::date BETWEEN ts.date - INTEGER '7'
+                                              AND ts.date + INTEGER '7'
+                ORDER BY ABS(er.recorded_at::date - ts.date) ASC,
+                         er.recorded_at DESC
+                LIMIT 1
+            ) AS spot_fx_rate
+        FROM cash_fx_transfers f
+        JOIN transactions ts ON ts.id = f.source_tx_id
+        WHERE f.user_id = $1
+        ORDER BY ts.date ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(internal)?;
+
+    #[derive(Default)]
+    struct Agg {
+        count: i64,
+        moved_usd: Decimal,
+        moved_by_currency: BTreeMap<String, Decimal>,
+        cost_usd: Decimal,
+        missing_spot: i64,
+    }
+
+    // Keyed (year, provider). BTreeMap orders None before Some, which is
+    // irrelevant here — presentation order is re-sorted below.
+    let mut buckets: BTreeMap<(i32, Option<String>), Agg> = BTreeMap::new();
+
+    for r in &rows {
+        let source_amount: Decimal = r.try_get("source_amount").map_err(internal)?;
+        let source_currency: String = r.try_get("source_currency").map_err(internal)?;
+        let dest_amount: Decimal = r.try_get("dest_amount").map_err(internal)?;
+        let dest_currency: String = r.try_get("dest_currency").map_err(internal)?;
+        let implied_rate: Decimal = r.try_get("implied_fx_rate").map_err(internal)?;
+        let matched_keyword: Option<String> = r
+            .try_get::<Option<String>, _>("matched_keyword")
+            .ok()
+            .flatten();
+        let source_date: chrono::NaiveDate = r.try_get("source_date").map_err(internal)?;
+        let spot: Option<Decimal> = r
+            .try_get::<Option<Decimal>, _>("spot_fx_rate")
+            .ok()
+            .flatten();
+
+        let year = chrono::Datelike::year(&source_date);
+        let provider = provider_label(matched_keyword.as_deref());
+
+        let agg = buckets.entry((year, provider)).or_default();
+        agg.count += 1;
+        agg.moved_usd += moved_usd(&source_currency, source_amount, implied_rate, spot);
+        *agg.moved_by_currency
+            .entry(source_currency.clone())
+            .or_default() += source_amount;
+        match transfer_cost_usd(
+            &source_currency,
+            source_amount,
+            &dest_currency,
+            dest_amount,
+            spot,
+        ) {
+            Some(cost) => agg.cost_usd += cost,
+            None => agg.missing_spot += 1,
+        }
+    }
+
+    // Roll provider buckets up into years.
+    let mut years: BTreeMap<i32, FxCostYear> = BTreeMap::new();
+    for ((year, provider), agg) in buckets {
+        let y = years.entry(year).or_insert_with(|| FxCostYear {
+            year,
+            transfer_count: 0,
+            total_moved_usd: Decimal::ZERO,
+            moved_by_currency: BTreeMap::new(),
+            total_cost_usd: Decimal::ZERO,
+            missing_spot_count: 0,
+            providers: Vec::new(),
+        });
+        y.transfer_count += agg.count;
+        y.total_moved_usd += agg.moved_usd;
+        for (ccy, amt) in &agg.moved_by_currency {
+            *y.moved_by_currency.entry(ccy.clone()).or_default() += *amt;
+        }
+        y.total_cost_usd += agg.cost_usd;
+        y.missing_spot_count += agg.missing_spot;
+        y.providers.push(FxCostProvider {
+            provider,
+            transfer_count: agg.count,
+            total_moved_usd: agg.moved_usd.round_dp(2),
+            moved_by_currency: agg
+                .moved_by_currency
+                .into_iter()
+                .map(|(c, v)| (c, v.round_dp(2)))
+                .collect(),
+            total_cost_usd: agg.cost_usd.round_dp(2),
+            missing_spot_count: agg.missing_spot,
+        });
+    }
+
+    // Presentation: newest year first; within a year the most expensive
+    // provider first (count, then name as tie-breaks), rounded to 2dp.
+    let mut years: Vec<FxCostYear> = years
+        .into_values()
+        .map(|mut y| {
+            y.total_moved_usd = y.total_moved_usd.round_dp(2);
+            y.total_cost_usd = y.total_cost_usd.round_dp(2);
+            y.moved_by_currency = y
+                .moved_by_currency
+                .into_iter()
+                .map(|(c, v)| (c, v.round_dp(2)))
+                .collect();
+            y.providers.sort_by(|a, b| {
+                b.total_cost_usd
+                    .cmp(&a.total_cost_usd)
+                    .then(b.transfer_count.cmp(&a.transfer_count))
+                    .then(a.provider.cmp(&b.provider))
+            });
+            y
+        })
+        .collect();
+    years.sort_by(|a, b| b.year.cmp(&a.year));
+
+    Ok(Json(FxTransferCostsResponse {
+        spot_window_days: SPOT_WINDOW_DAYS,
+        years,
+    }))
+}
+
 /// Restore a previously-dismissed FX pair — deletes the row so the
 /// next detector run is free to surface the pair again. Idempotent:
 /// returns 204 even when the row is already gone.
@@ -410,5 +695,81 @@ pub(super) async fn restore_dismissed_fx_pair(
             error!("restore_dismissed_fx_pair failed for {}: {}", id, e);
             StatusCode::INTERNAL_SERVER_ERROR
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_decimal_macros::dec;
+
+    #[test]
+    fn provider_label_folds_detector_aliases() {
+        assert_eq!(provider_label(Some("WISE")).as_deref(), Some("WISE"));
+        // TRANSFERWISE and WESTERNUNION are separate detector keywords for
+        // the same companies — the report must not split them into two rows.
+        assert_eq!(
+            provider_label(Some("TRANSFERWISE")).as_deref(),
+            Some("WISE")
+        );
+        assert_eq!(
+            provider_label(Some("WESTERNUNION")).as_deref(),
+            Some("WESTERN UNION")
+        );
+        assert_eq!(provider_label(Some("REMITLY")).as_deref(), Some("REMITLY"));
+        // Keyword-less links land in the unknown (None) bucket.
+        assert_eq!(provider_label(None), None);
+        assert_eq!(provider_label(Some("  ")), None);
+    }
+
+    #[test]
+    fn cost_usd_to_mxn_is_sent_minus_midmarket_value_of_received() {
+        // Sent $1,000, got 19,500 MXN; spot 20.00 → mid-market value of the
+        // pesos is $975, so moving the money cost $25 total.
+        let cost = transfer_cost_usd("USD", dec!(1000), "MXN", dec!(19500), Some(dec!(20)));
+        assert_eq!(cost, Some(dec!(25)));
+    }
+
+    #[test]
+    fn cost_mxn_to_usd_is_midmarket_value_of_sent_minus_received() {
+        // Sent 20,000 MXN (= $1,000 at spot 20.00), received $950 → $50 cost.
+        let cost = transfer_cost_usd("MXN", dec!(20000), "USD", dec!(950), Some(dec!(20)));
+        assert_eq!(cost, Some(dec!(50)));
+    }
+
+    #[test]
+    fn cost_is_none_without_a_usable_spot() {
+        assert_eq!(
+            transfer_cost_usd("USD", dec!(1000), "MXN", dec!(19500), None),
+            None
+        );
+        // Zero/negative spot must be refused, never divided by.
+        assert_eq!(
+            transfer_cost_usd("USD", dec!(1000), "MXN", dec!(19500), Some(dec!(0))),
+            None
+        );
+        // Non-USD↔MXN pairs are uncosted, not guessed.
+        assert_eq!(
+            transfer_cost_usd("USD", dec!(1000), "EUR", dec!(900), Some(dec!(20))),
+            None
+        );
+    }
+
+    #[test]
+    fn moved_usd_converts_mxn_and_trusts_usd() {
+        assert_eq!(moved_usd("USD", dec!(800), dec!(19), None), dec!(800));
+        // MXN sent prefers the spot rate…
+        assert_eq!(
+            moved_usd("MXN", dec!(20000), dec!(19), Some(dec!(20))),
+            dec!(1000)
+        );
+        // …falls back to the transfer's own implied rate when spot is
+        // missing (the rate the user actually got)…
+        assert_eq!(moved_usd("MXN", dec!(1900), dec!(19), None), dec!(100));
+        // …and never divides by a non-positive rate.
+        assert_eq!(
+            moved_usd("MXN", dec!(2000), dec!(0), None),
+            dec!(2000) / FX_FALLBACK_USD_MXN_DEC
+        );
     }
 }

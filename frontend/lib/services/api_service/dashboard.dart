@@ -535,6 +535,28 @@ mixin _DashboardApi on _ApiServiceBase {
     }
   }
 
+  /// Annual transfer-cost report: `{ spot_window_days, years: [ { year,
+  /// transfer_count, total_moved_usd, moved_by_currency, total_cost_usd,
+  /// missing_spot_count, providers: [...] } ] }`. Costs are the TOTAL
+  /// delta vs the mid-market spot nearest each transfer date (within
+  /// ±spot_window_days) — no fee-vs-spread split.
+  Future<Map<String, dynamic>> getFxTransferCosts({bool forceRefresh = false}) {
+    return _cachedGet('fx-transfer-costs', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/fx-transfers/costs'),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception(
+        _t(
+          'Failed to load transfer costs',
+          'No se pudieron cargar los costos de transferencia',
+        ),
+      );
+    }, forceRefresh: forceRefresh);
+  }
+
   /// Accounts the backend auto-archived because they were closed/removed
   /// at the bank (e.g. a deleted SoFi vault). Surfaced in the
   /// "Closed accounts" management section so the user can restore them.

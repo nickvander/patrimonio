@@ -7292,6 +7292,47 @@ class AppLocalizationsEn extends AppLocalizations {
       'No recurring rules yet. Use \"Make recurring\" on a transaction, or the Repeats option when adding one.';
 
   @override
+  String get fxcCostsTitle => 'Transfer costs';
+
+  @override
+  String fxcCostsCaveat(int days) {
+    return 'Total cost vs the mid-market rate — nearest stored rate within ±$days days of each transfer.';
+  }
+
+  @override
+  String get fxcCostsEmpty => 'No linked transfers yet';
+
+  @override
+  String get fxcCostsFailed => 'Couldn\'t load transfer costs';
+
+  @override
+  String get fxcCostsUnknownProvider => 'Unknown provider';
+
+  @override
+  String fxcCostsYearLine(int count, String moved) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transfers · $moved moved',
+      one: '1 transfer · $moved moved',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String fxcCostsMissingSpot(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count transfers had no market rate within the window and are excluded from the cost',
+      one:
+          '1 transfer had no market rate within the window and is excluded from the cost',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get recNothingUpcoming => 'Nothing more expected this period.';
 
   @override
