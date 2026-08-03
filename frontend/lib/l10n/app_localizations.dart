@@ -11944,6 +11944,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The peso portion is converted at the projected rate at retirement and the model still runs in today\'s U.S. dollars. Peso figures are shown at that same rate.'**
   String get projMxDisclaimer;
+
+  /// No description provided for @bcTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bills calendar'**
+  String get bcTitle;
+
+  /// No description provided for @bcProjectedBalances.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected balances'**
+  String get bcProjectedBalances;
+
+  /// No description provided for @bcProjectedCaption.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash on hand plus expected bills over the next {days} days. Estimates only — nothing posts automatically.'**
+  String bcProjectedCaption(int days);
+
+  /// No description provided for @bcStatePaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid'**
+  String get bcStatePaid;
+
+  /// No description provided for @bcStateUpcoming.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming'**
+  String get bcStateUpcoming;
+
+  /// No description provided for @bcStateLate.
+  ///
+  /// In en, this message translates to:
+  /// **'Late'**
+  String get bcStateLate;
+
+  /// No description provided for @bcStateMissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Missed'**
+  String get bcStateMissed;
+
+  /// No description provided for @bcStatePendingImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending import'**
+  String get bcStatePendingImport;
+
+  /// No description provided for @bcAwaitingImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting statement import'**
+  String get bcAwaitingImport;
+
+  /// No description provided for @bcAwaitingImportHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This account updates by statement import and its newest data doesn\'t cover this due date yet, so the bill isn\'t marked late.'**
+  String get bcAwaitingImportHint;
+
+  /// No description provided for @bcNothingDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing due this day.'**
+  String get bcNothingDue;
+
+  /// No description provided for @bcLoanRepayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan payment — {name}'**
+  String bcLoanRepayment(String name);
+
+  /// No description provided for @bcPrevMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous month'**
+  String get bcPrevMonth;
+
+  /// No description provided for @bcNextMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Next month'**
+  String get bcNextMonth;
+
+  /// No description provided for @bcFxPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Consider moving {surplus} to {deficit} before {date}: projected shortfall of {amount}.'**
+  String bcFxPrompt(String surplus, String deficit, String date, String amount);
+
+  /// No description provided for @bcDaySem.
+  ///
+  /// In en, this message translates to:
+  /// **'{date}: {count, plural, =0{nothing due} =1{1 item} other{{count} items}}'**
+  String bcDaySem(String date, int count);
+
+  /// No description provided for @bcProjectionSem.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected {currency} balance from {start} today to {end} at the end of the window'**
+  String bcProjectionSem(String currency, String start, String end);
 }
 
 class _AppLocalizationsDelegate

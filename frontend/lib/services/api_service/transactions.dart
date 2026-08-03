@@ -54,6 +54,34 @@ mixin _TxApi on _ApiServiceBase {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Bills calendar + projected balances: expected occurrences (recurring
+  /// rules + loan schedule dues) in [today−days, today+days] with a
+  /// paid / upcoming / late / missed / pending_import state each, the
+  /// per-currency projected cash curve over [today, today+days], and an
+  /// optional `fx_transfer_suggestion` when one currency is projected to
+  /// run dry while the other stays positive. [days] is clamped 1..90
+  /// server-side. Display-only: the backend never posts anything.
+  Future<Map<String, dynamic>> getRecurringCalendar({
+    int days = 30,
+    bool forceRefresh = false,
+  }) {
+    return _cachedGet('recurring/calendar/$days', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/recurring/calendar?days=$days'),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Failed to load bills calendar',
+          'No se pudo cargar el calendario de recibos',
+        ),
+      );
+    }, forceRefresh: forceRefresh);
+  }
+
   /// Create a recurring rule. [amount] is signed like transactions:
   /// negative = expected outflow. [anchorDay] defaults server-side to
   /// [nextDueDate]'s day-of-month.

@@ -48,6 +48,7 @@ import '../widgets/add_crypto_dialog.dart';
 import '../widgets/add_recurring_rule_dialog.dart';
 import '../widgets/add_transaction_dialog.dart';
 import '../widgets/assets_liabilities_bar.dart';
+import '../widgets/bills_calendar_card.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/cash_flow_period_selector.dart';
 import '../widgets/collapsing_app_bar.dart';
@@ -6022,6 +6023,21 @@ class _DashboardScreenState extends State<DashboardScreen>
             },
           ),
           SizedBox(height: gap),
+          // Bills calendar + 1–90-day projected balances: expected
+          // occurrences (rules + loan dues) with paid/late/pending-import
+          // states, the per-currency cash curve, and the FX-transfer
+          // prompt. Self-fetching and self-hiding when there's nothing
+          // expected; gated here on the same inputs so an account with no
+          // rules and no loans never pays the fetch. `refreshKey` re-loads
+          // it after any rule mutation (the rules list identity changes).
+          if ((_recurringRules ?? const []).isNotEmpty ||
+              _loans.isNotEmpty) ...[
+            BillsCalendarCard(
+              apiService: _apiService,
+              refreshKey: _recurringRules,
+            ),
+            SizedBox(height: gap),
+          ],
           // Detected recurring outflows — surfaces what's silently
           // eating the budget every month. Tapping a row seeds the
           // transactions search with the merchant.

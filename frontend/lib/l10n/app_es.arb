@@ -2942,5 +2942,22 @@
       }
     }
   },
-  "projMxDisclaimer": "La parte en pesos se convierte al tipo de cambio proyectado al momento del retiro y el modelo sigue calculando en dólares de hoy. Las cifras en pesos se muestran a ese mismo tipo de cambio."
+  "projMxDisclaimer": "La parte en pesos se convierte al tipo de cambio proyectado al momento del retiro y el modelo sigue calculando en dólares de hoy. Las cifras en pesos se muestran a ese mismo tipo de cambio.",
+  "bcTitle": "Calendario de recibos",
+  "bcProjectedBalances": "Saldos proyectados",
+  "bcProjectedCaption": "Efectivo disponible más recibos previstos en los próximos {days} días. Solo estimaciones — nada se registra automáticamente.",
+  "bcStatePaid": "Pagado",
+  "bcStateUpcoming": "Próximo",
+  "bcStateLate": "Atrasado",
+  "bcStateMissed": "Vencido",
+  "bcStatePendingImport": "Pendiente de importar",
+  "bcAwaitingImport": "En espera de importación de estado de cuenta",
+  "bcAwaitingImportHint": "Esta cuenta se actualiza por importación de estados de cuenta y sus datos más recientes aún no cubren esta fecha de vencimiento, así que el recibo no se marca como atrasado.",
+  "bcNothingDue": "Nada por pagar este día.",
+  "bcLoanRepayment": "Pago de préstamo — {name}",
+  "bcPrevMonth": "Mes anterior",
+  "bcNextMonth": "Mes siguiente",
+  "bcFxPrompt": "Considera mover {surplus} a {deficit} antes del {date}: déficit proyectado de {amount}.",
+  "bcDaySem": "{date}: {count, plural, =0{nada por pagar} =1{1 elemento} other{{count} elementos}}",
+  "bcProjectionSem": "Saldo proyectado en {currency}: de {start} hoy a {end} al final del periodo"
 }

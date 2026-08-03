@@ -7529,4 +7529,78 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get projMxDisclaimer =>
       'La parte en pesos se convierte al tipo de cambio proyectado al momento del retiro y el modelo sigue calculando en dólares de hoy. Las cifras en pesos se muestran a ese mismo tipo de cambio.';
+
+  @override
+  String get bcTitle => 'Calendario de recibos';
+
+  @override
+  String get bcProjectedBalances => 'Saldos proyectados';
+
+  @override
+  String bcProjectedCaption(int days) {
+    return 'Efectivo disponible más recibos previstos en los próximos $days días. Solo estimaciones — nada se registra automáticamente.';
+  }
+
+  @override
+  String get bcStatePaid => 'Pagado';
+
+  @override
+  String get bcStateUpcoming => 'Próximo';
+
+  @override
+  String get bcStateLate => 'Atrasado';
+
+  @override
+  String get bcStateMissed => 'Vencido';
+
+  @override
+  String get bcStatePendingImport => 'Pendiente de importar';
+
+  @override
+  String get bcAwaitingImport => 'En espera de importación de estado de cuenta';
+
+  @override
+  String get bcAwaitingImportHint =>
+      'Esta cuenta se actualiza por importación de estados de cuenta y sus datos más recientes aún no cubren esta fecha de vencimiento, así que el recibo no se marca como atrasado.';
+
+  @override
+  String get bcNothingDue => 'Nada por pagar este día.';
+
+  @override
+  String bcLoanRepayment(String name) {
+    return 'Pago de préstamo — $name';
+  }
+
+  @override
+  String get bcPrevMonth => 'Mes anterior';
+
+  @override
+  String get bcNextMonth => 'Mes siguiente';
+
+  @override
+  String bcFxPrompt(
+    String surplus,
+    String deficit,
+    String date,
+    String amount,
+  ) {
+    return 'Considera mover $surplus a $deficit antes del $date: déficit proyectado de $amount.';
+  }
+
+  @override
+  String bcDaySem(String date, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementos',
+      one: '1 elemento',
+      zero: 'nada por pagar',
+    );
+    return '$date: $_temp0';
+  }
+
+  @override
+  String bcProjectionSem(String currency, String start, String end) {
+    return 'Saldo proyectado en $currency: de $start hoy a $end al final del periodo';
+  }
 }

@@ -7465,4 +7465,78 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get projMxDisclaimer =>
       'The peso portion is converted at the projected rate at retirement and the model still runs in today\'s U.S. dollars. Peso figures are shown at that same rate.';
+
+  @override
+  String get bcTitle => 'Bills calendar';
+
+  @override
+  String get bcProjectedBalances => 'Projected balances';
+
+  @override
+  String bcProjectedCaption(int days) {
+    return 'Cash on hand plus expected bills over the next $days days. Estimates only — nothing posts automatically.';
+  }
+
+  @override
+  String get bcStatePaid => 'Paid';
+
+  @override
+  String get bcStateUpcoming => 'Upcoming';
+
+  @override
+  String get bcStateLate => 'Late';
+
+  @override
+  String get bcStateMissed => 'Missed';
+
+  @override
+  String get bcStatePendingImport => 'Pending import';
+
+  @override
+  String get bcAwaitingImport => 'Awaiting statement import';
+
+  @override
+  String get bcAwaitingImportHint =>
+      'This account updates by statement import and its newest data doesn\'t cover this due date yet, so the bill isn\'t marked late.';
+
+  @override
+  String get bcNothingDue => 'Nothing due this day.';
+
+  @override
+  String bcLoanRepayment(String name) {
+    return 'Loan payment — $name';
+  }
+
+  @override
+  String get bcPrevMonth => 'Previous month';
+
+  @override
+  String get bcNextMonth => 'Next month';
+
+  @override
+  String bcFxPrompt(
+    String surplus,
+    String deficit,
+    String date,
+    String amount,
+  ) {
+    return 'Consider moving $surplus to $deficit before $date: projected shortfall of $amount.';
+  }
+
+  @override
+  String bcDaySem(String date, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+      zero: 'nothing due',
+    );
+    return '$date: $_temp0';
+  }
+
+  @override
+  String bcProjectionSem(String currency, String start, String end) {
+    return 'Projected $currency balance from $start today to $end at the end of the window';
+  }
 }

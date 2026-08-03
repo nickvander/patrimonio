@@ -4126,5 +4126,75 @@
       }
     }
   },
-  "projMxDisclaimer": "The peso portion is converted at the projected rate at retirement and the model still runs in today's U.S. dollars. Peso figures are shown at that same rate."
+  "projMxDisclaimer": "The peso portion is converted at the projected rate at retirement and the model still runs in today's U.S. dollars. Peso figures are shown at that same rate.",
+  "bcTitle": "Bills calendar",
+  "bcProjectedBalances": "Projected balances",
+  "bcProjectedCaption": "Cash on hand plus expected bills over the next {days} days. Estimates only — nothing posts automatically.",
+  "@bcProjectedCaption": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "bcStatePaid": "Paid",
+  "bcStateUpcoming": "Upcoming",
+  "bcStateLate": "Late",
+  "bcStateMissed": "Missed",
+  "bcStatePendingImport": "Pending import",
+  "bcAwaitingImport": "Awaiting statement import",
+  "bcAwaitingImportHint": "This account updates by statement import and its newest data doesn't cover this due date yet, so the bill isn't marked late.",
+  "bcNothingDue": "Nothing due this day.",
+  "bcLoanRepayment": "Loan payment — {name}",
+  "@bcLoanRepayment": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "bcPrevMonth": "Previous month",
+  "bcNextMonth": "Next month",
+  "bcFxPrompt": "Consider moving {surplus} to {deficit} before {date}: projected shortfall of {amount}.",
+  "@bcFxPrompt": {
+    "placeholders": {
+      "surplus": {
+        "type": "String"
+      },
+      "deficit": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "bcDaySem": "{date}: {count, plural, =0{nothing due} =1{1 item} other{{count} items}}",
+  "@bcDaySem": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bcProjectionSem": "Projected {currency} balance from {start} today to {end} at the end of the window",
+  "@bcProjectionSem": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      },
+      "start": {
+        "type": "String"
+      },
+      "end": {
+        "type": "String"
+      }
+    }
+  }
 }

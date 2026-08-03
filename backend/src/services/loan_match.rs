@@ -55,7 +55,10 @@ const REPAY_WINDOW_DAYS: i64 = 15;
 /// narrows AUTO-SUGGESTIONS — manual linking (link_disbursement /
 /// record_payment, and the full-ledger payment picker) has no account
 /// filter, so an oddly-typed account can always be reconciled by hand.
-const DEPOSITORY_TYPES: &[&str] = &[
+/// Shared with `api/recurring.rs`'s calendar projection, which needs the
+/// same "cash-like" account set for its starting-balance query — one list,
+/// so the two surfaces can't drift on what counts as spendable cash.
+pub(crate) const DEPOSITORY_TYPES: &[&str] = &[
     "checking",
     "savings",
     "cash",
