@@ -41,6 +41,24 @@ queue behind these — shapes live in the report only.
 
 ## Open items needing only a sitting
 
+- **Hardcoded `MX$` glyph still in 4 user-facing files** (found 2026-08-03
+  while fixing the lending dialogs, `cf66546`). Each builds a `NumberFormat`
+  with `symbol: currency == 'MXN' ? r'MX$' : r'$'`, so they render `MX$`
+  while the rest of the app renders `MXN `:
+  `interest_income_sheet.dart:66,77` · `instrument_detail_sheet.dart:269` ·
+  `dividend_detail_sheet.dart:102`. **Visible inconsistency today:**
+  interest_income_sheet is reachable from the lending tab, so a loan card
+  reads `MXN 30,000` and its own interest sheet reads `MX$30,000`.
+  Also: `utils/currency.dart:26,37,47` — the helper's OWN docstrings still
+  describe the glyph it no longer returns, which is the most misleading of
+  the set since that file is the source of truth. Stale `MX$` comments also
+  in `import_screen.dart:1611`, `portfolio_card.dart:824,826`,
+  `monthly_cash_flow_card.dart:292`, `cash_flow_sankey_card.dart:267`,
+  `dashboard_screen.dart:869,4825`.
+  Do it as one pass that adds `moneyFieldPrefix(code)` to
+  `utils/currency.dart`, points the three lending getters at it (they're a
+  repeated one-liner now), fixes the four `NumberFormat` sites, and
+  corrects the docstrings.
 - **`MediaQuery` layout-branch inventory** (from the 2026-08-03 responsive
   pass; `performance_card` + `date_range_selector` already fixed in
   `f86c30e`). ~~`loan_detail_sheet.dart`~~ ✅ fixed `4dac37e` — and my
