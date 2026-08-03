@@ -16,6 +16,20 @@ pub(super) struct DetectedSubscription {
     /// Display label for the merchant. Picked from the same ladder as
     /// the transactions list so renames propagate.
     merchant: String,
+    /// The detector's normalised clustering key — lowercased + trimmed
+    /// `merchant`, and exactly what `ignored_subscription_merchants
+    /// .merchant_key` stores. **This is the value the ignore endpoint
+    /// wants** (`POST /api/dashboard/subscriptions/ignore`, whose wire
+    /// field is confusingly named `merchant`) and the value the
+    /// un-ignore path segment takes (`DELETE
+    /// /api/dashboard/subscriptions/ignored/{merchant_key}`).
+    ///
+    /// Exposed so a client can dismiss a card by echoing a server-supplied
+    /// string instead of re-deriving the detector's normalisation itself —
+    /// a re-derivation that silently stops matching the moment the
+    /// detector's key rules change. `/api/recurring/calendar` carries the
+    /// same field on its detected occurrences for the same reason.
+    merchant_key: String,
     /// Monthly burn in USD (sum of all charges / number-of-months observed).
     /// Always positive — sign is implied (it's a recurring outflow).
     monthly_usd: f64,
@@ -68,6 +82,12 @@ struct SubscriptionAccountSlice {
 ///
 /// This handler is the presentation layer only: FX→USD normalisation of
 /// the per-month figure, ordering, and the display cap.
+///
+/// Each item carries both `merchant` (display label) and `merchant_key`
+/// (the detector's normalised key). Dismissing a card means POSTing the
+/// **`merchant_key`** to `/api/dashboard/subscriptions/ignore` — see
+/// `IgnoreSubscriptionRequest` for why the wire field there is still
+/// spelled `merchant`.
 ///
 /// Returns sorted by status (active first), then by monthly_usd
 /// descending so the most expensive subscriptions surface first.
@@ -123,6 +143,7 @@ pub(super) async fn detected_subscriptions(
             };
             DetectedSubscription {
                 merchant: c.merchant.clone(),
+                merchant_key: c.merchant_key.clone(),
                 monthly_usd,
                 cadence_days: c.cadence_days as i32,
                 last_charge_date: c.last_charge_date.to_string(),
@@ -161,19 +182,39 @@ pub(super) async fn detected_subscriptions(
 
 #[derive(Deserialize)]
 pub(super) struct IgnoreSubscriptionRequest {
-    /// Lowercased + trimmed merchant key the user wants the detector
-    /// to stop showing. Mirrors the key the detector itself clusters
-    /// on, so the frontend can send the same `merchant` value it
-    /// rendered.
+    /// **Wire field name `merchant`; expected content is the
+    /// `merchant_key`.** Send the `merchant_key` served by
+    /// `GET /api/dashboard/subscriptions` (or by a detected occurrence of
+    /// `GET /api/recurring/calendar`) — the detector's normalised
+    /// clustering key — NOT the human-readable `merchant` display label.
+    ///
+    /// The name is a legacy of the field predating `merchant_key` being
+    /// exposed at all; renaming it would break the shipped web + Android
+    /// clients, so the mismatch is documented instead of fixed.
+    ///
+    /// The handler normalises the incoming value with
+    /// `.trim().to_lowercase()` before storing it. That happens to be the
+    /// *entire* derivation of `merchant_key` from `merchant` today, so a
+    /// display label currently round-trips by accident — but it is an
+    /// accident, not a contract: the moment the detector's key rules gain
+    /// a step (punctuation stripping, POS-suffix trimming, …), a display
+    /// label starts producing a key that matches no cluster. And an
+    /// unmatched key does **not** error — the row inserts and the handler
+    /// returns 204 while the card stays exactly where it was. Only an
+    /// empty-after-trim value is rejected (400).
     merchant: String,
 }
 
 /// Mark a detected-subscription cluster as "not a subscription."
 /// Lands a row in `ignored_subscription_merchants`; subsequent
 /// detector runs skip the key entirely. The user can re-confirm by
-/// just letting the cluster come back (we don't expose an
-/// "unignore" today — if you actually need to undo, delete the row
-/// directly from the DB).
+/// just letting the cluster come back.
+///
+/// Takes `{"merchant": "<merchant_key>"}` — the wire field is named
+/// `merchant` for backwards compatibility but the value must be the
+/// detector's normalised `merchant_key` (now served on every
+/// subscriptions item); see `IgnoreSubscriptionRequest`. Undo is
+/// `DELETE /api/dashboard/subscriptions/ignored/{merchant_key}`.
 pub(super) async fn ignore_subscription(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
