@@ -322,7 +322,9 @@ io impl under `if (dart.library.io)`).
 ## Anti-patterns to avoid
 
 - Adding to god files — `dashboard_screen.dart` (7,746 lines), `transactions_tab.dart`
-  (~5,100) — extract to `utils/` / new widgets and split cards instead (the
+  (~4,250; its detail panel now lives in `transaction_detail_panel.dart` behind
+  the `TransactionDetailHost` interface) — extract to `utils/` / new widgets and
+  split cards instead (the
   `CashFlowPeriodSelector` and `ConnectedSegments` extractions are the pattern;
   `lending_tab.dart`, `portfolio_card.dart`, and `api_service.dart` have already
   been split — `api_service.dart` into domain part-file mixins, so new endpoints
