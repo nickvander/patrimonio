@@ -51,6 +51,7 @@ import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/bills_calendar_card.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/cash_flow_period_selector.dart';
+import '../widgets/cash_flow_sankey_card.dart';
 import '../widgets/collapsing_app_bar.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/credit_utilization_card.dart';
@@ -5974,6 +5975,25 @@ class _DashboardScreenState extends State<DashboardScreen>
             periodLabel: cfPeriodLabel,
             usdMxnRate: fxRate,
             targetCurrency: _targetCurrency,
+          ),
+          SizedBox(height: gap),
+          // The period drawn as one river: income sources → the pool →
+          // categories / investing / what's left, with a separate band for
+          // money that crossed currencies. Sits directly under the summary
+          // card because it must reconcile with exactly those figures — same
+          // trends rows, same month selection.
+          CashFlowSankeyCard(
+            apiService: _apiService,
+            trends: cashFlowSeries ?? const [],
+            months: _monthsForCashFlowPeriod(_cashFlowPeriod),
+            selectedMonthIso: cfSelectedMonthIso,
+            periodLabel: cfPeriodLabel,
+            transactions: _transactions ?? const [],
+            fxTransfers: _fxTransfers ?? const [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            targetCurrency: _targetCurrency,
+            usdMxnRate: fxRate,
           ),
           SizedBox(height: gap),
           BudgetsCard(

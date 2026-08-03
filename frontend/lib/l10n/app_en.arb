@@ -4507,5 +4507,88 @@
   },
   "ruleFieldCategory": "Category",
   "ruleFieldName": "Name",
-  "ruleSaveAsRule": "Save as rule…"
+  "ruleSaveAsRule": "Save as rule…",
+  "cfsTitle": "Where your money flows",
+  "cfsSubtitle": "This period's income splitting into spending, investing and what's left.",
+  "cfsEmpty": "No cash flow recorded in this period yet.",
+  "cfsUnitNote": "Every flow shown in {currency}",
+  "@cfsUnitNote": {
+    "description": "Cash-flow Sankey: the single reporting unit all band widths are drawn in.",
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "cfsHint": "Tap a flow for its amount.",
+  "cfsNodeIncome": "Income",
+  "cfsNodeOtherIncome": "Other income",
+  "cfsNodeMoneyIn": "Money in",
+  "cfsNodeSaved": "Left over",
+  "cfsNodeInvested": "Invested",
+  "cfsNodeFromSavings": "From savings",
+  "cfsNodeFromInvestments": "From investments",
+  "cfsNodeUncategorized": "Uncategorized",
+  "cfsFxTitle": "Across the border",
+  "cfsFxNode": "FX conversion",
+  "cfsFxCaption": "{count, plural, =1{1 matched transfer} other{{count} matched transfers}}. Your own money changing currency — not income and not spending. Transfers we could not match into a pair are not shown.",
+  "@cfsFxCaption": {
+    "description": "Cash-flow Sankey: caption under the cross-border band, naming how many linked cash_fx_transfers pairs it covers.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cfsFxLegs": "{from} became {to}",
+  "@cfsFxLegs": {
+    "description": "Cash-flow Sankey: the two native legs of the cross-border band, each with its own ISO code (never summed together). Placeholder names are chosen so declaration, template and alphabetical order all agree: (from, to).",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "cfsSemantics": "Money flow diagram. {flows} Period total {total}.",
+  "@cfsSemantics": {
+    "description": "Cash-flow Sankey: screen-reader summary mirrored over the pointer-only canvas. gen-l10n orders these alphabetically: (flows, total).",
+    "placeholders": {
+      "flows": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "cfsFxSemantics": "Cross-border conversion diagram. {flows}",
+  "@cfsFxSemantics": {
+    "description": "Cash-flow Sankey: screen-reader summary for the cross-border band.",
+    "placeholders": {
+      "flows": {
+        "type": "String"
+      }
+    }
+  },
+  "cfsFlowSemantics": "{amount} ({share}), {source} to {target}.",
+  "@cfsFlowSemantics": {
+    "description": "Cash-flow Sankey: one flow, for the semantics summary and the tap readout. Placeholder names are deliberately chosen so declaration order, template order and alphabetical order all agree: (amount, share, source, target).",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "share": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "target": {
+        "type": "String"
+      }
+    }
+  }
 }

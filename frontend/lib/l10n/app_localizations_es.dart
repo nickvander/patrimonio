@@ -7963,4 +7963,88 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get ruleSaveAsRule => 'Guardar como regla…';
+
+  @override
+  String get cfsTitle => 'A dónde fluye tu dinero';
+
+  @override
+  String get cfsSubtitle =>
+      'Los ingresos del periodo repartidos en gasto, inversión y lo que sobra.';
+
+  @override
+  String get cfsEmpty => 'Aún no hay flujo de efectivo en este periodo.';
+
+  @override
+  String cfsUnitNote(String currency) {
+    return 'Todos los flujos en $currency';
+  }
+
+  @override
+  String get cfsHint => 'Toca un flujo para ver su monto.';
+
+  @override
+  String get cfsNodeIncome => 'Ingresos';
+
+  @override
+  String get cfsNodeOtherIncome => 'Otros ingresos';
+
+  @override
+  String get cfsNodeMoneyIn => 'Dinero disponible';
+
+  @override
+  String get cfsNodeSaved => 'Sobrante';
+
+  @override
+  String get cfsNodeInvested => 'Invertido';
+
+  @override
+  String get cfsNodeFromSavings => 'De ahorros';
+
+  @override
+  String get cfsNodeFromInvestments => 'De inversiones';
+
+  @override
+  String get cfsNodeUncategorized => 'Sin categoría';
+
+  @override
+  String get cfsFxTitle => 'Al otro lado de la frontera';
+
+  @override
+  String get cfsFxNode => 'Conversión de divisas';
+
+  @override
+  String cfsFxCaption(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transferencias vinculadas',
+      one: '1 transferencia vinculada',
+    );
+    return '$_temp0. Tu propio dinero cambiando de moneda: no es ingreso ni gasto. Las transferencias que no pudimos emparejar no aparecen.';
+  }
+
+  @override
+  String cfsFxLegs(String from, String to) {
+    return '$from se convirtió en $to';
+  }
+
+  @override
+  String cfsSemantics(String flows, String total) {
+    return 'Diagrama de flujo de dinero. $flows Total del periodo $total.';
+  }
+
+  @override
+  String cfsFxSemantics(String flows) {
+    return 'Diagrama de conversión entre divisas. $flows';
+  }
+
+  @override
+  String cfsFlowSemantics(
+    String amount,
+    String share,
+    String source,
+    String target,
+  ) {
+    return '$amount ($share), de $source a $target.';
+  }
 }

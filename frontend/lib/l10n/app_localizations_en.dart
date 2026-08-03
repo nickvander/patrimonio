@@ -7896,4 +7896,88 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ruleSaveAsRule => 'Save as rule…';
+
+  @override
+  String get cfsTitle => 'Where your money flows';
+
+  @override
+  String get cfsSubtitle =>
+      'This period\'s income splitting into spending, investing and what\'s left.';
+
+  @override
+  String get cfsEmpty => 'No cash flow recorded in this period yet.';
+
+  @override
+  String cfsUnitNote(String currency) {
+    return 'Every flow shown in $currency';
+  }
+
+  @override
+  String get cfsHint => 'Tap a flow for its amount.';
+
+  @override
+  String get cfsNodeIncome => 'Income';
+
+  @override
+  String get cfsNodeOtherIncome => 'Other income';
+
+  @override
+  String get cfsNodeMoneyIn => 'Money in';
+
+  @override
+  String get cfsNodeSaved => 'Left over';
+
+  @override
+  String get cfsNodeInvested => 'Invested';
+
+  @override
+  String get cfsNodeFromSavings => 'From savings';
+
+  @override
+  String get cfsNodeFromInvestments => 'From investments';
+
+  @override
+  String get cfsNodeUncategorized => 'Uncategorized';
+
+  @override
+  String get cfsFxTitle => 'Across the border';
+
+  @override
+  String get cfsFxNode => 'FX conversion';
+
+  @override
+  String cfsFxCaption(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matched transfers',
+      one: '1 matched transfer',
+    );
+    return '$_temp0. Your own money changing currency — not income and not spending. Transfers we could not match into a pair are not shown.';
+  }
+
+  @override
+  String cfsFxLegs(String from, String to) {
+    return '$from became $to';
+  }
+
+  @override
+  String cfsSemantics(String flows, String total) {
+    return 'Money flow diagram. $flows Period total $total.';
+  }
+
+  @override
+  String cfsFxSemantics(String flows) {
+    return 'Cross-border conversion diagram. $flows';
+  }
+
+  @override
+  String cfsFlowSemantics(
+    String amount,
+    String share,
+    String source,
+    String target,
+  ) {
+    return '$amount ($share), $source to $target.';
+  }
 }

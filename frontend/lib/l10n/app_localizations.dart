@@ -12568,6 +12568,131 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save as rule…'**
   String get ruleSaveAsRule;
+
+  /// No description provided for @cfsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Where your money flows'**
+  String get cfsTitle;
+
+  /// No description provided for @cfsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This period\'s income splitting into spending, investing and what\'s left.'**
+  String get cfsSubtitle;
+
+  /// No description provided for @cfsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No cash flow recorded in this period yet.'**
+  String get cfsEmpty;
+
+  /// Cash-flow Sankey: the single reporting unit all band widths are drawn in.
+  ///
+  /// In en, this message translates to:
+  /// **'Every flow shown in {currency}'**
+  String cfsUnitNote(String currency);
+
+  /// No description provided for @cfsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a flow for its amount.'**
+  String get cfsHint;
+
+  /// No description provided for @cfsNodeIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Income'**
+  String get cfsNodeIncome;
+
+  /// No description provided for @cfsNodeOtherIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Other income'**
+  String get cfsNodeOtherIncome;
+
+  /// No description provided for @cfsNodeMoneyIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Money in'**
+  String get cfsNodeMoneyIn;
+
+  /// No description provided for @cfsNodeSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Left over'**
+  String get cfsNodeSaved;
+
+  /// No description provided for @cfsNodeInvested.
+  ///
+  /// In en, this message translates to:
+  /// **'Invested'**
+  String get cfsNodeInvested;
+
+  /// No description provided for @cfsNodeFromSavings.
+  ///
+  /// In en, this message translates to:
+  /// **'From savings'**
+  String get cfsNodeFromSavings;
+
+  /// No description provided for @cfsNodeFromInvestments.
+  ///
+  /// In en, this message translates to:
+  /// **'From investments'**
+  String get cfsNodeFromInvestments;
+
+  /// No description provided for @cfsNodeUncategorized.
+  ///
+  /// In en, this message translates to:
+  /// **'Uncategorized'**
+  String get cfsNodeUncategorized;
+
+  /// No description provided for @cfsFxTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Across the border'**
+  String get cfsFxTitle;
+
+  /// No description provided for @cfsFxNode.
+  ///
+  /// In en, this message translates to:
+  /// **'FX conversion'**
+  String get cfsFxNode;
+
+  /// Cash-flow Sankey: caption under the cross-border band, naming how many linked cash_fx_transfers pairs it covers.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 matched transfer} other{{count} matched transfers}}. Your own money changing currency — not income and not spending. Transfers we could not match into a pair are not shown.'**
+  String cfsFxCaption(int count);
+
+  /// Cash-flow Sankey: the two native legs of the cross-border band, each with its own ISO code (never summed together). Placeholder names are chosen so declaration, template and alphabetical order all agree: (from, to).
+  ///
+  /// In en, this message translates to:
+  /// **'{from} became {to}'**
+  String cfsFxLegs(String from, String to);
+
+  /// Cash-flow Sankey: screen-reader summary mirrored over the pointer-only canvas. gen-l10n orders these alphabetically: (flows, total).
+  ///
+  /// In en, this message translates to:
+  /// **'Money flow diagram. {flows} Period total {total}.'**
+  String cfsSemantics(String flows, String total);
+
+  /// Cash-flow Sankey: screen-reader summary for the cross-border band.
+  ///
+  /// In en, this message translates to:
+  /// **'Cross-border conversion diagram. {flows}'**
+  String cfsFxSemantics(String flows);
+
+  /// Cash-flow Sankey: one flow, for the semantics summary and the tap readout. Placeholder names are deliberately chosen so declaration order, template order and alphabetical order all agree: (amount, share, source, target).
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} ({share}), {source} to {target}.'**
+  String cfsFlowSemantics(
+    String amount,
+    String share,
+    String source,
+    String target,
+  );
 }
 
 class _AppLocalizationsDelegate

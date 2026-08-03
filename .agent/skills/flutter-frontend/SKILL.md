@@ -232,6 +232,22 @@ fakes.
   saw. Keep the host's scrub state in a `ValueNotifier` + `ValueListenableBuilder`
   around the header only: a scrub fires per pointer move, and a `setState` would
   re-run the whole card's series math each frame of the drag.
+- **Hand-painted charts inherit NONE of the above.** `cash_flow_sankey_card.dart` is the
+  first (fl_chart has no Sankey; adding a dependency for one diagram was rejected). A
+  `CustomPainter` gets no `chart_touch.dart` pinning, no semantics, and no automatic
+  overflow protection, so a painted chart owns all three by hand: put the tap readout in
+  a fixed strip in the card **header** (asserted in test: the readout rect must not
+  contain the tap point and must sit above the canvas), mirror the flows into
+  `Semantics(label:)` with `ExcludeSemantics` over the paint (a canvas is invisible to
+  screen readers), and ellipsize painted labels inside their own gutter so overflow is
+  structurally impossible. Keep the geometry + data model in a **pure `utils/` file**
+  (`utils/cash_flow_sankey.dart`) and unit-test it there; the widget should only paint.
+  **Reconciliation is the correctness bar for any derived diagram:** the Sankey shares
+  `SpendingByCategoryCard`'s exact `top` param so it reuses that `_cachedGet` entry, and
+  its totals are asserted equal to the numbers `MonthlyCashFlowCard` prints for the same
+  period — a diagram that disagrees with the card above it is worse than no diagram.
+  When a client can't reproduce a server-side aggregate, fail closed to an honest
+  unattributed node rather than scaling slices to fit.
 - **Date-x charts use `utils/chart_time_axis.dart`** — never index-as-x (it hides gaps):
   - `dedupeDailyCloses(points)` — last close per calendar day, normalized to
     `DateTime.utc(y,m,d)` (avoids DST day-slip), sorted ascending.
