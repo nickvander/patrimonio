@@ -3947,6 +3947,43 @@
   "@nwMoversToggleTooltip": {
     "description": "WS-B: tooltip / accessibility label on the expandable movers row that reveals the top institution movers."
   },
+  "nwAttrTitle": "Why it changed",
+  "@nwAttrTitle": {
+    "description": "Net-worth attribution: overline title for the FX / market / flows decomposition row under the chart."
+  },
+  "nwAttrFx": "FX",
+  "@nwAttrFx": {
+    "description": "Net-worth attribution: component label for the USD/MXN exchange-rate effect."
+  },
+  "nwAttrMarket": "Market",
+  "@nwAttrMarket": {
+    "description": "Net-worth attribution: component label for native-currency value change net of flows (investment/price movement)."
+  },
+  "nwAttrFlows": "Flows",
+  "@nwAttrFlows": {
+    "description": "Net-worth attribution: component label for net external money in/out (transactions)."
+  },
+  "nwAttrOther": "Other",
+  "@nwAttrOther": {
+    "description": "Net-worth attribution: residual bucket label; only shown when nonzero so the decomposition stays honest without cluttering the common case."
+  },
+  "nwAttrError": "Couldn't load change attribution",
+  "@nwAttrError": {
+    "description": "Net-worth attribution: muted inline error when the attribution endpoint fails."
+  },
+  "nwLensConstantFx": "Constant FX",
+  "@nwLensConstantFx": {
+    "description": "Net-worth card currency-lens toggle: third segment that revalues MXN balances at the window-start rate (alongside USD and MXN)."
+  },
+  "nwLensConstantCaption": "MXN revalued at the window-start rate ({rate} MXN/USD)",
+  "@nwLensConstantCaption": {
+    "description": "Caption under the chart while the constant-FX lens is active; {rate} is the window-start USD→MXN rate already formatted for the locale.",
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
   "fxcPillTapHint": "Tap for rate history & tools",
   "@fxcPillTapHint": {
     "description": "FX center: appended to the app-bar FX pill tooltip/semantics now that tapping it opens the FX center sheet."

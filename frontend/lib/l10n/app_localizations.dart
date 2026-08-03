@@ -11513,6 +11513,54 @@ abstract class AppLocalizations {
   /// **'What drove this change'**
   String get nwMoversToggleTooltip;
 
+  /// Net-worth attribution: overline title for the FX / market / flows decomposition row under the chart.
+  ///
+  /// In en, this message translates to:
+  /// **'Why it changed'**
+  String get nwAttrTitle;
+
+  /// Net-worth attribution: component label for the USD/MXN exchange-rate effect.
+  ///
+  /// In en, this message translates to:
+  /// **'FX'**
+  String get nwAttrFx;
+
+  /// Net-worth attribution: component label for native-currency value change net of flows (investment/price movement).
+  ///
+  /// In en, this message translates to:
+  /// **'Market'**
+  String get nwAttrMarket;
+
+  /// Net-worth attribution: component label for net external money in/out (transactions).
+  ///
+  /// In en, this message translates to:
+  /// **'Flows'**
+  String get nwAttrFlows;
+
+  /// Net-worth attribution: residual bucket label; only shown when nonzero so the decomposition stays honest without cluttering the common case.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get nwAttrOther;
+
+  /// Net-worth attribution: muted inline error when the attribution endpoint fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load change attribution'**
+  String get nwAttrError;
+
+  /// Net-worth card currency-lens toggle: third segment that revalues MXN balances at the window-start rate (alongside USD and MXN).
+  ///
+  /// In en, this message translates to:
+  /// **'Constant FX'**
+  String get nwLensConstantFx;
+
+  /// Caption under the chart while the constant-FX lens is active; {rate} is the window-start USD→MXN rate already formatted for the locale.
+  ///
+  /// In en, this message translates to:
+  /// **'MXN revalued at the window-start rate ({rate} MXN/USD)'**
+  String nwLensConstantCaption(String rate);
+
   /// FX center: appended to the app-bar FX pill tooltip/semantics now that tapping it opens the FX center sheet.
   ///
   /// In en, this message translates to:

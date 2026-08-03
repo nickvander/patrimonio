@@ -713,6 +713,36 @@ mixin _DashboardApi on _ApiServiceBase {
   String continuityDossierUrl({required String lang}) =>
       '$_baseUrl/exports/continuity-dossier?lang=$lang';
 
+  /// Net-worth change attribution over the [from, to] window (ISO dates):
+  /// `{ from, to, fx_rate_open, fx_rate_close, delta_usd, flows_usd,
+  /// market_usd, fx_usd, residual_usd, per_currency: [...], series:
+  /// [{date, usd, mxn, constant_fx_usd}] }`. The residual bucket keeps
+  /// `flows + market + fx + residual == delta` exact — see the backend's
+  /// `dashboard/attribution.rs` module comment for the valuation
+  /// convention. `series` feeds the card's USD / MXN / constant-FX lens.
+  Future<Map<String, dynamic>> getNetWorthAttribution({
+    required String from,
+    required String to,
+    bool forceRefresh = false,
+  }) {
+    return _cachedGet('net-worth-attribution-$from-$to', () async {
+      final response = await _get(
+        Uri.parse(
+          '$_baseUrl/dashboard/net-worth-attribution?from=$from&to=$to',
+        ),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception(
+        _t(
+          'Failed to load net worth attribution',
+          'No se pudo cargar la atribución del patrimonio neto',
+        ),
+      );
+    }, forceRefresh: forceRefresh);
+  }
+
   /// Removes the caller's FX alert for the pair. Idempotent server-side.
   Future<void> deleteFxAlert(String base, String target) async {
     final response = await _delete(

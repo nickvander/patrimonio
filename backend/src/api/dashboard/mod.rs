@@ -11,6 +11,7 @@ use crate::AppState;
 
 pub(crate) mod allocation;
 pub(crate) mod analytics;
+pub(crate) mod attribution;
 pub(crate) mod dividends;
 pub(crate) mod fx_transfers;
 pub(crate) mod holdings;
@@ -25,6 +26,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/overview", get(overview::dashboard_overview))
         .route("/net-worth-history", get(overview::net_worth_history))
+        .route(
+            "/net-worth-attribution",
+            get(attribution::net_worth_attribution),
+        )
         .route(
             "/portfolio-value-history",
             get(overview::portfolio_value_history),

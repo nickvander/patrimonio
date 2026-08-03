@@ -7265,6 +7265,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nwMoversToggleTooltip => 'Qué impulsó este cambio';
 
   @override
+  String get nwAttrTitle => 'Por qué cambió';
+
+  @override
+  String get nwAttrFx => 'Tipo de cambio';
+
+  @override
+  String get nwAttrMarket => 'Mercado';
+
+  @override
+  String get nwAttrFlows => 'Flujos';
+
+  @override
+  String get nwAttrOther => 'Otro';
+
+  @override
+  String get nwAttrError => 'No se pudo cargar la atribución del cambio';
+
+  @override
+  String get nwLensConstantFx => 'TC constante';
+
+  @override
+  String nwLensConstantCaption(String rate) {
+    return 'MXN valuado al tipo de cambio inicial del período ($rate MXN/USD)';
+  }
+
+  @override
   String get fxcPillTapHint => 'Toca para ver historial y herramientas';
 
   @override

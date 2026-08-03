@@ -7203,6 +7203,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nwMoversToggleTooltip => 'What drove this change';
 
   @override
+  String get nwAttrTitle => 'Why it changed';
+
+  @override
+  String get nwAttrFx => 'FX';
+
+  @override
+  String get nwAttrMarket => 'Market';
+
+  @override
+  String get nwAttrFlows => 'Flows';
+
+  @override
+  String get nwAttrOther => 'Other';
+
+  @override
+  String get nwAttrError => 'Couldn\'t load change attribution';
+
+  @override
+  String get nwLensConstantFx => 'Constant FX';
+
+  @override
+  String nwLensConstantCaption(String rate) {
+    return 'MXN revalued at the window-start rate ($rate MXN/USD)';
+  }
+
+  @override
   String get fxcPillTapHint => 'Tap for rate history & tools';
 
   @override

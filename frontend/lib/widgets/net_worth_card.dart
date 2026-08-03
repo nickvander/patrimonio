@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../components/date_range_selector.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../theme/typography.dart';
 import '../utils/chart_time_axis.dart';
@@ -14,6 +15,7 @@ import '../utils/currency.dart';
 import '../utils/net_worth_delta.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
+import 'connected_segments.dart';
 
 class NetWorthCard extends StatefulWidget {
   final double netWorth;
@@ -40,6 +42,11 @@ class NetWorthCard extends StatefulWidget {
   /// in the floating header above the card.
   final Widget? rangeSelector;
 
+  /// Injection seam for the attribution fetch (widget tests fake it with
+  /// `extends ApiService` + `@override`). Null → a real [ApiService], so the
+  /// dashboard call site needs no change.
+  final ApiService? apiService;
+
   const NetWorthCard({
     super.key,
     required this.netWorth,
@@ -52,6 +59,7 @@ class NetWorthCard extends StatefulWidget {
     this.selectedRange = DateRange.all,
     this.showSummary = true,
     this.rangeSelector,
+    this.apiService,
   });
 
   @override
@@ -69,6 +77,104 @@ class _NetWorthCardState extends State<NetWorthCard> {
   // the delta chips and is collapsed by default — it's attribution detail the
   // hero → delta reading order shouldn't be forced through.
   bool _moversExpanded = false;
+
+  /// Attribution fetch seam — the injected fake in tests, a real service in
+  /// the app (the dashboard call site passes nothing).
+  late final ApiService _api = widget.apiService ?? ApiService();
+
+  /// Currency lens for the chart: 'USD' / 'MXN' / 'CONST' (FX held constant
+  /// at the window-start rate). Defaults to the reporting currency, where the
+  /// existing chart path (institution bands and all) renders unchanged; a
+  /// non-default lens swaps in the attribution endpoint's lens series. The
+  /// lens deliberately affects only the CHART — the hero/delta/movers stay in
+  /// the reporting currency the rest of the dashboard uses.
+  late String _lens = _defaultLens;
+
+  /// `/dashboard/net-worth-attribution` response for the current window
+  /// (`flows/market/fx/residual` totals + the lens series), or null while
+  /// loading / when there's no history to attribute.
+  Map<String, dynamic>? _attribution;
+  bool _attributionError = false;
+
+  /// The `from|to` window key of the in-flight / loaded attribution, so
+  /// rebuilds and no-op didUpdateWidget calls don't refetch, and a stale
+  /// response can't clobber a newer window's data.
+  String? _attributionKey;
+
+  String get _defaultLens =>
+      widget.reportingCurrency.toUpperCase() == 'MXN' ? 'MXN' : 'USD';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAttribution();
+  }
+
+  @override
+  void didUpdateWidget(NetWorthCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Range switch or fresh history → the attribution window moved.
+    _loadAttribution();
+  }
+
+  /// The attribution window for the currently selected range, as ISO dates:
+  /// `to` = the latest snapshot, `from` = the range cutoff (mirroring
+  /// `_filterByRange`'s now-anchored cutoffs so the numbers explain the
+  /// plotted window), clamped so `from <= to`. Null when there's no history.
+  ({String from, String to})? _attributionWindow() {
+    final latest = _latestSnapshotDate(history);
+    if (latest == null) return null;
+    final now = DateTime.now();
+    DateTime from;
+    switch (selectedRange) {
+      case DateRange.oneMonth:
+        from = now.subtract(const Duration(days: 30));
+        break;
+      case DateRange.yearToDate:
+        from = DateTime(now.year, 1, 1);
+        break;
+      case DateRange.oneYear:
+        from = now.subtract(const Duration(days: 365));
+        break;
+      case DateRange.fiveYears:
+        from = now.subtract(const Duration(days: 365 * 5));
+        break;
+      case DateRange.all:
+        final first = history.isEmpty
+            ? null
+            : DateTime.tryParse(history.first['date']?.toString() ?? '');
+        from = first ?? latest;
+        break;
+    }
+    if (from.isAfter(latest)) from = latest;
+    final df = DateFormat('yyyy-MM-dd');
+    return (from: df.format(from), to: df.format(latest));
+  }
+
+  Future<void> _loadAttribution() async {
+    final win = _attributionWindow();
+    if (win == null) return;
+    final key = '${win.from}|${win.to}';
+    if (key == _attributionKey && !_attributionError) return;
+    _attributionKey = key;
+    try {
+      final data = await _api.getNetWorthAttribution(
+        from: win.from,
+        to: win.to,
+      );
+      if (!mounted || _attributionKey != key) return;
+      setState(() {
+        _attribution = data;
+        _attributionError = false;
+      });
+    } catch (_) {
+      if (!mounted || _attributionKey != key) return;
+      setState(() {
+        _attribution = null;
+        _attributionError = true;
+      });
+    }
+  }
 
   // The widget body below used to live on the StatelessWidget. To avoid
   // touching every `xxx` → `widget.xxx` access, expose passthroughs.
@@ -176,6 +282,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
             final institutions = _detailed
                 ? _topInstitutions(context, filtered, max: 4)
                 : const <MapEntry<String, Color>>[];
+            // Non-default lens: swap the plot for the attribution endpoint's
+            // lens series (single line, day-offset x). Falls back to the
+            // default chart while the series hasn't loaded (or errored).
+            final lensSeries = _lens == _defaultLens
+                ? null
+                : _attribution?['series'] as List<dynamic>?;
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,13 +301,19 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   // card/scroll layer — noticeably less raster work on
                   // Android while scrubbing.
                   child: RepaintBoundary(
-                    child: _buildChart(
-                      filtered,
-                      institutions,
-                      constraints.maxWidth,
-                    ),
+                    child: lensSeries != null && lensSeries.isNotEmpty
+                        ? _renderLensChart(lensSeries, constraints.maxWidth)
+                        : _buildChart(
+                            filtered,
+                            institutions,
+                            constraints.maxWidth,
+                          ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                _buildLensToggle(),
+                if (_lens == 'CONST') _buildConstantFxCaption(),
+                _buildAttributionSection(),
                 // Phone layout: the range selector lives inside the card,
                 // right under the plot it controls (thumb-reachable).
                 if (widget.rangeSelector != null) ...[
@@ -207,6 +325,293 @@ class _NetWorthCardState extends State<NetWorthCard> {
           },
         ),
       ),
+    );
+  }
+
+  /// Currency-lens toggle: USD / MXN / FX-held-constant. House connected
+  /// button group (ConnectedSegments) — never a forked segmented control.
+  /// "USD"/"MXN" are ISO codes rendered verbatim (same as the hero chips),
+  /// so only the constant-FX segment is localized.
+  Widget _buildLensToggle() {
+    final l = AppLocalizations.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        // Equal-flex segments go full-bleed by default; cap them so the
+        // toggle doesn't stretch into a banner on a 1440px card.
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: ConnectedSegments<String>(
+          segments: [
+            const ConnectedSegment(value: 'USD', label: 'USD'),
+            const ConnectedSegment(value: 'MXN', label: 'MXN'),
+            ConnectedSegment(value: 'CONST', label: l.nwLensConstantFx),
+          ],
+          selected: _lens,
+          // Fires on re-taps too — short-circuit no-ops.
+          onSelected: (v) {
+            if (v != _lens) setState(() => _lens = v);
+          },
+        ),
+      ),
+    );
+  }
+
+  /// "MXN revalued at the window-start rate (N MXN/USD)" — the honesty
+  /// caption for the constant-FX lens, so the flat peso never reads as a
+  /// live conversion. Hidden until the attribution response supplies r0.
+  Widget _buildConstantFxCaption() {
+    final rate = (_attribution?['fx_rate_open'] as num?)?.toDouble();
+    if (rate == null) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        // A rate is a plain number, not money — localize the decimal
+        // separator only.
+        l.nwLensConstantCaption(
+          localizeNumberString(context, rate.toStringAsFixed(2)),
+        ),
+        style: TextStyle(fontSize: 11, color: context.textFaint),
+      ),
+    );
+  }
+
+  /// "Why it changed" — the FX / Market / Flows decomposition of the selected
+  /// window's net-worth delta, from `/dashboard/net-worth-attribution`. The
+  /// residual folds into an "Other" chip ONLY when nonzero: the backend
+  /// guarantees fx + market + flows + residual == delta exactly, so a zero
+  /// residual is the common case and hiding it keeps the row honest without
+  /// clutter. Values arrive in USD and are scaled to the reporting currency
+  /// with the same conversionFactor as everything else on the card.
+  Widget _buildAttributionSection() {
+    final l = AppLocalizations.of(context);
+    if (_attributionError) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(
+          l.nwAttrError,
+          style: TextStyle(fontSize: 11, color: context.textFaint),
+        ),
+      );
+    }
+    final a = _attribution;
+    if (a == null) return const SizedBox.shrink();
+    double comp(String key) => ((a[key] ?? 0) as num).toDouble();
+    final fx = comp('fx_usd');
+    final market = comp('market_usd');
+    final flows = comp('flows_usd');
+    final residual = comp('residual_usd');
+    // Nothing moved (or an empty window): no decomposition to show.
+    if (fx == 0 && market == 0 && flows == 0 && residual == 0) {
+      return const SizedBox.shrink();
+    }
+    final items = <({String label, double value})>[
+      (label: l.nwAttrFx, value: fx),
+      (label: l.nwAttrMarket, value: market),
+      (label: l.nwAttrFlows, value: flows),
+      if (residual != 0) (label: l.nwAttrOther, value: residual),
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Semantics(
+        container: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l.nwAttrTitle.toUpperCase(),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: context.textSubtle,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [for (final item in items) _attrChip(item)],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// One attribution component chip: `label +$X` / `label −$X`, hue by sign
+  /// (muted for an exactly-zero component, e.g. Market in a pure-flows
+  /// month). Mirrors the mover-chip styling one section up.
+  Widget _attrChip(({String label, double value}) item) {
+    final zero = item.value == 0;
+    final up = item.value >= 0;
+    final color = zero
+        ? context.textMuted
+        : (up ? context.positive : context.negative);
+    final amount = item.value.abs() * conversionFactor;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: zero ? context.tint(0.05) : color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            item.label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: context.textSubtle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            zero
+                ? currencyFormat.displayMoney(0)
+                : '${up ? '+' : '−'}${currencyFormat.displayMoney(amount)}',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Single-line chart for a non-default currency lens, fed by the
+  /// attribution endpoint's window series. Day-offset x (a data gap occupies
+  /// its real width — never index-as-x) and the shared `standardLineTouch`
+  /// hover; deliberately NOT another inline LineTouchData fork.
+  Widget _renderLensChart(List<dynamic> series, double chartWidth) {
+    final valueKey = _lens == 'MXN'
+        ? 'mxn'
+        : (_lens == 'CONST' ? 'constant_fx_usd' : 'usd');
+    final lensCurrency = _lens == 'MXN' ? 'MXN' : 'USD';
+    final lensFormat = moneyFormat(lensCurrency);
+    final points = dedupeDailyCloses([
+      for (final p in series)
+        if (p is Map && DateTime.tryParse(p['date']?.toString() ?? '') != null)
+          (
+            date: DateTime.parse(p['date'].toString()),
+            close: ((p[valueKey] ?? 0) as num).toDouble(),
+          ),
+    ]);
+    if (points.isEmpty) return const SizedBox.shrink();
+    final spots = dayOffsetSpots(points);
+    final values = [for (final s in spots) s.y];
+    var minY = values.reduce(math.min);
+    var maxY = values.reduce(math.max);
+    // Fit the axis to the data with padding, like the simple-mode bounds —
+    // a short window shouldn't flat-line against a $0 floor.
+    var pad = (maxY - minY) * 0.15;
+    if (pad <= 0) pad = maxY.abs() * 0.15 + 1000;
+    minY -= pad;
+    maxY += pad;
+    if (minY < 0 && values.every((v) => v >= 0)) minY = 0;
+    final spanDays = spots.isEmpty ? 0 : spots.last.x.toInt();
+    final tickInterval = dayOffsetTickInterval(spanDays);
+    final tickDates = [
+      for (var x = 0.0; x <= spanDays; x += tickInterval)
+        points.first.date.add(Duration(days: x.toInt())),
+    ];
+    final labelFormat = nonRepeatingDateFormat(tickDates, spanDays: spanDays);
+    DateTime dateFor(double x) =>
+        points.first.date.add(Duration(days: x.toInt()));
+
+    final chart = TransientTooltipLineChart(
+      data: LineChartData(
+        minY: minY,
+        maxY: maxY,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) =>
+              FlLine(color: context.hairline, strokeWidth: 1),
+        ),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              interval: tickInterval,
+              getTitlesWidget: (value, meta) => SideTitleWidget(
+                meta: meta,
+                child: Text(
+                  labelFormat.format(dateFor(value)),
+                  style: TextStyle(color: context.textSubtle, fontSize: 10),
+                ),
+              ),
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                if (value <= meta.min || value >= meta.max) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  compactMoney(value, lensCurrency),
+                  style: TextStyle(color: context.textSubtle, fontSize: 10),
+                );
+              },
+              reservedSize: compactMoneyAxisWidth(minY, maxY, lensCurrency),
+            ),
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            preventCurveOverShooting: true,
+            gradient: LinearGradient(
+              colors: [
+                context.positive,
+                context.positive.withValues(alpha: 0.55),
+              ],
+            ),
+            barWidth: 3.5,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+          ),
+        ],
+        lineTouchData: standardLineTouch(
+          context,
+          items: (context, touchedSpots) {
+            return touchedSpots.map((spot) {
+              return LineTooltipItem(
+                '${DateFormat('MMM d, y').format(dateFor(spot.x))}\n'
+                '${lensFormat.displayMoney(spot.y)}',
+                TextStyle(
+                  color: context.tooltipOnSurface,
+                  fontWeight: FontWeight.bold,
+                ),
+              );
+            }).toList();
+          },
+        ),
+      ),
+    );
+
+    // Pointer-only canvas: mirror the lens read into the semantics tree.
+    return Semantics(
+      container: true,
+      label:
+          '${_lens == 'CONST' ? AppLocalizations.of(context).nwLensConstantFx : lensCurrency}: '
+          '${lensFormat.displayMoney(points.last.close)}',
+      child: ExcludeSemantics(child: chart),
     );
   }
 
