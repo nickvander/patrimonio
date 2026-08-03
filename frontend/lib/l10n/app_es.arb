@@ -1682,6 +1682,17 @@
       }
     }
   },
+  "lwChartScrubReading": "Lectura de la gráfica en {date}: {values}",
+  "@lwChartScrubReading": {
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      },
+      "values": {
+        "type": "Object"
+      }
+    }
+  },
   "ovByCurrency": "Por moneda",
   "lendingGlanceTitle": "Préstamos",
   "lendingGlanceOutstanding": "Pendiente",

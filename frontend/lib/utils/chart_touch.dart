@@ -180,6 +180,27 @@ LineTouchData standardLineTouch(
   );
 }
 
+/// A live scrub reading published by [TransientTooltipLineChart.onScrub]:
+/// the spots currently under the pointer (y-descending — the same order the
+/// tooltip rows use, so `barIndex` lookups match the tooltip's) plus whether
+/// the pointer driving them is a finger/stylus.
+///
+/// A host uses it to render the reading OUTSIDE the plot (see
+/// [TransientTooltipLineChart.suppressTooltipOnTouch]); `null` is published
+/// the moment the scrub ends, so a host can never keep a stale value on
+/// screen after the finger lifts.
+@immutable
+class ChartScrub {
+  const ChartScrub({required this.spots, required this.isTouch});
+
+  /// Touched spots, sorted y-descending.
+  final List<LineBarSpot> spots;
+
+  /// True when the active pointer is a finger/stylus (i.e. one that covers
+  /// what it touches), false for mouse/trackpad.
+  final bool isTouch;
+}
+
 /// Drop-in replacement for `LineChart(data)` whose tooltip is a *transient*
 /// scrub indicator (the projections-chart pattern, generalized): shown while
 /// hovering or while the finger is down, cleared whenever
@@ -196,12 +217,42 @@ LineTouchData standardLineTouch(
 /// It also owns tooltip *placement*: touch/stylus pointers pin the readout
 /// to the top of the chart box, mouse/trackpad keep the near-spot popover
 /// (see [chartTooltipPinsToTop]) — so every wrapped chart is pointer-kind
-/// aware for free.
+/// aware for free. Charts too SHORT for the pinned readout to clear the hand
+/// hoist the reading out of the plot entirely instead: see [onScrub] +
+/// [suppressTooltipOnTouch].
 class TransientTooltipLineChart extends StatefulWidget {
-  const TransientTooltipLineChart({super.key, required this.data});
+  const TransientTooltipLineChart({
+    super.key,
+    required this.data,
+    this.onScrub,
+    this.suppressTooltipOnTouch = false,
+  });
 
   /// The chart data, built exactly as it would be for a raw [LineChart].
   final LineChartData data;
+
+  /// Called whenever the scrubbed spots (or the pointer kind driving them)
+  /// change, and with `null` when the scrub ends. Lets a host mirror the
+  /// reading into its own header — the Robinhood / Copilot scrub pattern.
+  ///
+  /// Fires for mouse/trackpad too, with [ChartScrub.isTouch] false, so a host
+  /// that only wants the touch case can ignore those and leave desktop
+  /// behavior untouched. Invoked from the chart's touch callback (never
+  /// during build), and deduplicated: repeated events describing the same
+  /// spots don't re-notify.
+  final void Function(ChartScrub? scrub)? onScrub;
+
+  /// When true, a TOUCH/stylus scrub draws no in-chart tooltip at all — only
+  /// the vertical guide + highlighted dot, which stay as the position
+  /// feedback. For a chart ~120px tall (the performance card on a phone) a
+  /// 3-line tooltip pinned to the top of the box still lands under the
+  /// fingertip; the honest fix is to move the numbers out of the plot, so
+  /// hosts that set this MUST render the reading from [onScrub] somewhere
+  /// clear of the hand (their header).
+  ///
+  /// Mouse/trackpad are unaffected — a cursor doesn't occlude the spot it
+  /// points at, so the near-spot popover stays exactly as it is today.
+  final bool suppressTooltipOnTouch;
 
   @override
   State<TransientTooltipLineChart> createState() =>
@@ -212,12 +263,17 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
   /// Currently touched spots (sorted y-descending); null/empty = no tooltip.
   List<LineBarSpot>? _touched;
 
-  /// Whether the tooltip renders pinned to the top of the chart box
-  /// (touch/stylus — keeps the readout clear of the finger) instead of as
-  /// the near-spot popover (mouse/trackpad). Seeded per platform, then
-  /// tracks the active pointer's kind so runtime kind switches (touchscreen
-  /// laptop, mouse plugged into a tablet) flip the placement live.
-  late bool _pinToTop = chartTooltipDefaultPinsToTop;
+  /// True when the active pointer is a finger/stylus — one that COVERS the
+  /// spot it touches. Drives both the top-pinned tooltip placement and
+  /// [TransientTooltipLineChart.suppressTooltipOnTouch]. Seeded per platform,
+  /// then tracks the active pointer's kind so runtime kind switches
+  /// (touchscreen laptop, mouse plugged into a tablet) flip behavior live.
+  late bool _touchPointer = chartTooltipDefaultPinsToTop;
+
+  /// Identity of the last reading handed to [TransientTooltipLineChart
+  /// .onScrub] (null = "already published no-scrub"), so a drag that keeps
+  /// landing on the same spot doesn't re-notify the host every event.
+  String? _lastScrubKey;
 
   /// True when [spots] describes the same touched positions as the current
   /// state — used to skip no-op setState calls on every hover tick.
@@ -233,33 +289,52 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
     return true;
   }
 
+  /// Publishes [scrub] to the host, skipping repeats. The key covers the
+  /// touched positions and the pointer kind — exactly what the host's
+  /// rendering depends on.
+  void _notifyScrub(ChartScrub? scrub) {
+    final onScrub = widget.onScrub;
+    if (onScrub == null) return;
+    final key = scrub == null
+        ? null
+        : '${scrub.isTouch}:'
+              '${scrub.spots.map((s) => '${s.barIndex}/${s.spotIndex}').join(',')}';
+    if (key == _lastScrubKey) return;
+    _lastScrubKey = key;
+    onScrub(scrub);
+  }
+
   void _onTouch(FlTouchEvent event, LineTouchResponse? response) {
     widget.data.lineTouchData.touchCallback?.call(event, response);
     final kind = chartEventPointerKind(event);
-    final pin = kind == null ? _pinToTop : chartTooltipPinsToTop(kind);
+    final touch = kind == null ? _touchPointer : chartTooltipPinsToTop(kind);
     final spots = response?.lineBarSpots;
     if (chartTouchDismisses(event) || spots == null || spots.isEmpty) {
       if (_touched != null) {
         setState(() {
           _touched = null;
-          _pinToTop = pin;
+          _touchPointer = touch;
         });
       } else {
         // No tooltip visible — remember the kind without a rebuild.
-        _pinToTop = pin;
+        _touchPointer = touch;
       }
+      // The scrub is over: the host must drop its reading in the SAME frame
+      // the finger lifts, or a stale value survives the gesture.
+      _notifyScrub(null);
       return;
     }
     // Same y-descending order the built-in handler used, so the tooltip
     // rows / anchor spot are unchanged.
     final sorted = List<LineBarSpot>.of(spots)
       ..sort((a, b) => b.y.compareTo(a.y));
-    if (!_sameTouched(sorted) || pin != _pinToTop) {
+    if (!_sameTouched(sorted) || touch != _touchPointer) {
       setState(() {
         _touched = sorted;
-        _pinToTop = pin;
+        _touchPointer = touch;
       });
     }
+    _notifyScrub(ChartScrub(spots: sorted, isTouch: touch));
   }
 
   @override
@@ -273,6 +348,13 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
             s.spotIndex < raw.lineBarsData[s.barIndex].spots.length)
           s,
     ];
+    // The host renders this scrub outside the plot, so drawing a tooltip
+    // under the finger as well would be the very occlusion it fixes. The
+    // per-bar `showingIndicators` below are untouched: the vertical guide
+    // and the highlighted dot REMAIN — they're the position feedback that
+    // replaces the tooltip (fl_chart paints indicators from the bars and
+    // tooltips from `showingTooltipIndicators`, independently).
+    final hideTooltip = widget.suppressTooltipOnTouch && _touchPointer;
     return LineChart(
       raw.copyWith(
         lineBarsData: [
@@ -284,7 +366,7 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
               ],
             ),
         ],
-        showingTooltipIndicators: touched.isEmpty
+        showingTooltipIndicators: touched.isEmpty || hideTooltip
             ? const []
             : [ShowingTooltipIndicators(touched)],
         lineTouchData: raw.lineTouchData.copyWith(
@@ -295,7 +377,7 @@ class _TransientTooltipLineChartState extends State<TransientTooltipLineChart> {
           // near-spot popover ([chartTooltipPinsToTop]).
           touchTooltipData: lineTooltipPinnedToTop(
             raw.lineTouchData.touchTooltipData,
-            pinned: _pinToTop,
+            pinned: _touchPointer,
           ),
         ),
       ),

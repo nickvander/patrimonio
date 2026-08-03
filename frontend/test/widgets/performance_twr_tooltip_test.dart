@@ -63,6 +63,12 @@ bool _tooltipShowing(WidgetTester tester) {
       data.lineBarsData.any((bar) => bar.showingIndicators.isNotEmpty);
 }
 
+/// The vertical scrub guide + highlighted dot — drawn from the per-bar
+/// `showingIndicators`, independently of the tooltip.
+bool _indicatorShowing(WidgetTester tester) => _chartData(
+  tester,
+).lineBarsData.any((bar) => bar.showingIndicators.isNotEmpty);
+
 void _useSurface(WidgetTester tester, Size size) {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -115,9 +121,9 @@ void main() {
   });
 
   testWidgets(
-    'TWR chart: the tooltip shows while a finger is down and is DISMISSED '
-    'when it lifts — even on the web/desktop-like platform where fl_chart '
-    'keeps tap-up "interested" (the prod pinned-tooltip bug)',
+    'TWR chart: a finger scrub draws the guide/dot but NO in-chart tooltip, '
+    'and both are gone when it lifts — even on the web/desktop-like platform '
+    'where fl_chart keeps tap-up "interested" (the prod pinned-tooltip bug)',
     (tester) async {
       // macOS stands in for the isDesktopOrWeb branch of fl_chart's
       // isInterestedForInteractions — the same carve-out kIsWeb (mobile web
@@ -133,22 +139,34 @@ void main() {
       // Past the tap deadline so the press has registered (pan-down fires
       // immediately; tap-down at ~100ms).
       await tester.pump(const Duration(milliseconds: 200));
+      // The tooltip used to show here (pinned to the top of the box). It no
+      // longer does at all on touch: the 120px phone chart can't hold a
+      // readout that clears the hand, so the values move to the card header
+      // (performance_scrub_header_test.dart) and the plot keeps only the
+      // guide + dot.
+      expect(
+        _indicatorShowing(tester),
+        isTrue,
+        reason: 'the scrub guide + dot are the touch position feedback',
+      );
       expect(
         _tooltipShowing(tester),
-        isTrue,
-        reason: 'the tooltip must be visible while the finger is down',
+        isFalse,
+        reason: 'a finger must never get a tooltip under it',
       );
 
       await gesture.up();
       await tester.pump();
       expect(
-        _tooltipShowing(tester),
+        _indicatorShowing(tester),
         isFalse,
-        reason: 'finger lift must dismiss the tooltip, not leave it pinned',
+        reason: 'finger lift must clear the scrub, not leave it pinned',
       );
+      expect(_tooltipShowing(tester), isFalse);
       // The pinned-tooltip regression specifically: it stays cleared on later
       // frames, not just the release frame.
       await tester.pump(const Duration(milliseconds: 300));
+      expect(_indicatorShowing(tester), isFalse);
       expect(_tooltipShowing(tester), isFalse);
 
       debugDefaultTargetPlatformOverride = null;

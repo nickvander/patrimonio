@@ -5248,6 +5248,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String lwChartScrubReading(Object date, Object values) {
+    return 'Lectura de la gráfica en $date: $values';
+  }
+
+  @override
   String get ovByCurrency => 'Por moneda';
 
   @override

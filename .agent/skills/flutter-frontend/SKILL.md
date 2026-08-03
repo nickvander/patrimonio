@@ -215,6 +215,23 @@ fakes.
   either; use the helper. The copy↔helper equivalence is enforced by
   `test/conventions/chart_touch_equivalence_test.dart` (frozen variances documented there);
   new inline `LineTouchData`/`touchSpotThreshold` forks fail it.
+- **Touch scrubs never draw under the finger.** `TransientTooltipLineChart`
+  (`utils/chart_touch.dart`) tracks the active pointer kind: mouse/trackpad keep the
+  near-spot popover, touch/stylus pin the tooltip to the top of the chart box. That
+  is only enough for a TALL plot — for a short one (the performance card's is 120px
+  on phones; a 3-line tooltip is ~64) the pinned readout still lands under the hand.
+  Those charts pass **`suppressTooltipOnTouch: true`** (no in-chart tooltip on touch;
+  the vertical guide + dot REMAIN as position feedback) and **`onScrub:`**, and render
+  the reading in their own header — the Robinhood/Copilot pattern. Adopted by
+  `performance_card.dart` (headline + return pills swap to the scrubbed values, the
+  date replaces the caption) and `net_worth_card.dart` (hero number + label, or the
+  compact overline on phones). A host that sets `suppressTooltipOnTouch` **must**
+  render `onScrub` somewhere clear of the hand, must clear its reading whenever the
+  plotted series changes (range/benchmark/lens switch), and must expose it to screen
+  readers (`lwChartScrubReading` + `liveRegion`) — it replaces a tooltip they never
+  saw. Keep the host's scrub state in a `ValueNotifier` + `ValueListenableBuilder`
+  around the header only: a scrub fires per pointer move, and a `setState` would
+  re-run the whole card's series math each frame of the drag.
 - **Date-x charts use `utils/chart_time_axis.dart`** — never index-as-x (it hides gaps):
   - `dedupeDailyCloses(points)` — last close per calendar day, normalized to
     `DateTime.utc(y,m,d)` (avoids DST day-slip), sorted ascending.

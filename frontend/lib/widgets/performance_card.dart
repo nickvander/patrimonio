@@ -73,6 +73,17 @@ class _BenchmarkOption {
   const _BenchmarkOption(this.key, this.shortLabel);
 }
 
+/// One frame of a touch scrub, already formatted for display: the scrubbed
+/// [date], the headline figure at that point, and (TWR chart only) the two
+/// return pills. A record, so equality is structural and the header's
+/// [ValueListenableBuilder] skips no-op rebuilds.
+typedef _ScrubReading = ({
+  DateTime date,
+  String headline,
+  String? you,
+  String? bench,
+});
+
 final List<_BenchmarkOption> _benchmarkOptions = [
   _BenchmarkOption('SP500', (l) => l.lwPerfBenchSp500),
   _BenchmarkOption('NDX', (l) => l.lwPerfBenchNdx),
@@ -95,11 +106,35 @@ class _PerformanceCardState extends State<PerformanceCard> {
   // disclosure (collapsed by default). In-memory only — not persisted.
   bool _benchmarkExpanded = false;
 
+  /// The live touch-scrub reading, or null when no finger is on the chart.
+  ///
+  /// A ValueNotifier rather than setState: a scrub fires on every pointer
+  /// move, and only the header (headline + pills) depends on it — rebuilding
+  /// the whole card would re-run the series/downsample math ~60x a second
+  /// while the finger drags. Disposed in [dispose].
+  final ValueNotifier<_ScrubReading?> _scrub = ValueNotifier(null);
+
   @override
   void initState() {
     super.initState();
     _load();
   }
+
+  @override
+  void dispose() {
+    _scrub.dispose();
+    super.dispose();
+  }
+
+  /// Publish a scrub frame (null = the finger lifted). Anything that changes
+  /// which series is plotted must call `_setScrub(null)` too, or the header
+  /// keeps a reading that no longer belongs to the chart under it.
+  void _setScrub(_ScrubReading? reading) => _scrub.value = reading;
+
+  /// The scrubbed-date caption that replaces the headline's subtitle. Same
+  /// format the in-chart tooltip used, so the reading is recognizably the
+  /// tooltip's content, just relocated.
+  String _scrubDate(DateTime date) => DateFormat('MMM d, y').format(date);
 
   // Best-effort fetches, routed through the widget's test seams when present.
   Future<List<dynamic>> _fetchHistory() =>
@@ -135,6 +170,9 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // (dollar line) and upgrade to the time-weighted view when it resolves.
     final t = await _fetchTwr();
     if (!mounted) return;
+    // The TWR arriving swaps the dollar line for the indexed-return chart, so
+    // any in-flight scrub reading is about a series that no longer exists.
+    _setScrub(null);
     setState(() {
       _twr = (t == null || t.isEmpty) ? null : t;
     });
@@ -147,6 +185,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
   /// (a cold cache triggers a per-symbol Yahoo pull).
   Future<void> _onBenchmarkChanged(String key) async {
     if (key == _benchmark) return;
+    _setScrub(null);
     setState(() {
       _benchmark = key;
       _twr = null;
@@ -363,8 +402,16 @@ class _PerformanceCardState extends State<PerformanceCard> {
             // The headline is the current portfolio *value* in dollars — the
             // TWR % (which lwPerfTwrReturn correctly names) lives in the pill
             // below, so captioning this figure "Time-weighted return" was a
-            // mislabel.
-            _headline(context, headlineValue, l.rgxPerfPortfolioValue),
+            // mislabel. During a touch scrub it carries the scrubbed return
+            // and its date instead (see _headline).
+            _headline(
+              context,
+              l,
+              _money(headlineValue),
+              l.rgxPerfPortfolioValue,
+              scrubValues: (s) =>
+                  '${l.lwPerfTwrYou} ${s.you}, ${_benchmarkLabel(l)} ${s.bench}',
+            ),
             const SizedBox(height: 14),
             twrBody,
             const SizedBox(height: 8),
@@ -411,7 +458,8 @@ class _PerformanceCardState extends State<PerformanceCard> {
         // current total over the (possibly incomplete) last series point.
         _headline(
           context,
-          widget.totalValueUsd ?? lastV,
+          l,
+          _money(widget.totalValueUsd ?? lastV),
           l.lwPerfValueSubtitle,
         ),
         const SizedBox(height: 14),
@@ -421,8 +469,29 @@ class _PerformanceCardState extends State<PerformanceCard> {
             child: spots.length < 2
                 ? const SizedBox.shrink()
                 // Transient tooltip (dismisses on finger lift / pointer
-                // exit) — the raw LineChart pinned it on mobile web.
+                // exit) — the raw LineChart pinned it on mobile web. On
+                // TOUCH it draws no tooltip at all (this box is 120px on
+                // phones; nothing fits above a fingertip inside it) — the
+                // reading goes to the headline via onScrub, and the guide
+                // + dot stay as the position feedback.
                 : TransientTooltipLineChart(
+                    suppressTooltipOnTouch: true,
+                    onScrub: (scrub) {
+                      if (scrub == null || !scrub.isTouch) {
+                        // Mouse/trackpad keep the in-chart popover; the
+                        // header must not react to a hover at all.
+                        _setScrub(null);
+                        return;
+                      }
+                      final spot = scrub.spots.first;
+                      _setScrub((
+                        date: valueX0.add(Duration(days: spot.x.round())),
+                        // spot.y already carries conversionFactor.
+                        headline: widget.currencyFormat.displayMoney(spot.y),
+                        you: null,
+                        bench: null,
+                      ));
+                    },
                     data: LineChartData(
                       gridData: const FlGridData(show: false),
                       titlesData: const FlTitlesData(show: false),
@@ -506,12 +575,60 @@ class _PerformanceCardState extends State<PerformanceCard> {
     );
   }
 
-  Widget _headline(BuildContext context, double valueUsd, String subtitle) {
+  /// The card's headline figure + caption — and, while a finger is scrubbing
+  /// the chart, the scrubbed reading instead.
+  ///
+  /// This is the whole point of the touch treatment: a 120px-tall chart can't
+  /// hold a tooltip that clears the hand, so on touch the chart draws none
+  /// (guide + dot only) and the numbers surface HERE, ~200px above the plot.
+  /// The figure becomes the scrubbed value and the caption becomes its date
+  /// (replacing "Portfolio value") — unmistakable, but the same two lines in
+  /// the same place, so nothing jumps. It reverts the instant the finger
+  /// lifts, because [ChartScrub] publishes null on release.
+  ///
+  /// [scrubValues] renders the spoken value list for the screen reader when
+  /// the reading carries more than the headline (the TWR chart's two returns).
+  Widget _headline(
+    BuildContext context,
+    AppLocalizations l,
+    String liveValue,
+    String liveSubtitle, {
+    String Function(_ScrubReading scrub)? scrubValues,
+  }) {
+    return ValueListenableBuilder<_ScrubReading?>(
+      valueListenable: _scrub,
+      builder: (context, scrub, _) {
+        final block = _headlineText(
+          context,
+          scrub?.headline ?? liveValue,
+          scrub == null ? liveSubtitle : _scrubDate(scrub.date),
+        );
+        if (scrub == null) return block;
+        // The scrubbed readout replaces a tooltip that was already invisible
+        // to screen readers, so it has to announce itself: one live region
+        // carrying date + values, with the visual text excluded so it isn't
+        // read twice.
+        // gen-l10n orders these alphabetically → (date, values).
+        final label = l.lwChartScrubReading(
+          _scrubDate(scrub.date),
+          scrubValues?.call(scrub) ?? scrub.headline,
+        );
+        return Semantics(
+          container: true,
+          liveRegion: true,
+          label: label,
+          child: ExcludeSemantics(child: block),
+        );
+      },
+    );
+  }
+
+  Widget _headlineText(BuildContext context, String value, String subtitle) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _money(valueUsd),
+          value,
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,
@@ -537,7 +654,12 @@ class _PerformanceCardState extends State<PerformanceCard> {
         const Spacer(),
         DateRangeSelector(
           selectedRange: _range,
-          onRangeChanged: (r) => setState(() => _range = r),
+          onRangeChanged: (r) {
+            // A new window replots the series — drop any scrub reading with
+            // it so the header can't keep a value from the old one.
+            _setScrub(null);
+            setState(() => _range = r);
+          },
         ),
       ],
     );
@@ -637,28 +759,75 @@ class _PerformanceCardState extends State<PerformanceCard> {
     final spPct = spSpots.last.y;
     final coverage = (_twr!['coverage_pct'] as num?)?.toDouble() ?? 1.0;
     final yourColor = yourPct >= 0 ? context.positive : context.negative;
+    String pctText(double p) =>
+        '${p >= 0 ? '+' : ''}${formatPercent(context, p, digits: 1)}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _twrPill(context, l.lwPerfTwrYou, yourPct, yourColor),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _twrPill(context, _benchmarkLabel(l), spPct, context.info),
-            ),
-          ],
+        // The pills are the second half of the scrubbed reading: while a
+        // finger is down they show the two returns AT the scrubbed date
+        // instead of at the end of the window. Same tiles, same places —
+        // only the numbers move (and the pill hue stays keyed to the
+        // window's own sign, so the header doesn't flash colors mid-drag).
+        ValueListenableBuilder<_ScrubReading?>(
+          valueListenable: _scrub,
+          builder: (context, scrub, _) => Row(
+            children: [
+              Expanded(
+                child: _twrPill(
+                  context,
+                  l.lwPerfTwrYou,
+                  scrub?.you ?? pctText(yourPct),
+                  yourColor,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _twrPill(
+                  context,
+                  _benchmarkLabel(l),
+                  scrub?.bench ?? pctText(spPct),
+                  context.info,
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(
             height: MediaQuery.sizeOf(context).width < 720 ? 120.0 : 150.0,
             // Transient tooltip (dismisses on finger lift / pointer exit) —
-            // the raw LineChart kept it pinned on mobile web (prod bug).
+            // the raw LineChart kept it pinned on mobile web (prod bug). And
+            // on TOUCH there is no in-chart tooltip at all: this box is 120px
+            // on phones and the 3-line tooltip is ~64 of them, so even pinned
+            // to the top of the box it landed under the fingertip (the owner
+            // reported it twice). The reading goes to the header above via
+            // onScrub; the guide + dot remain as position feedback.
             child: TransientTooltipLineChart(
+              suppressTooltipOnTouch: true,
+              onScrub: (scrub) {
+                if (scrub == null || !scrub.isTouch) {
+                  // Mouse/trackpad: the near-spot popover is unchanged and
+                  // the header must not react.
+                  _setScrub(null);
+                  return;
+                }
+                // The "you" line is barIndex 1 (S&P is drawn under it) and
+                // carries the merged reading, exactly like the tooltip body.
+                final spot = scrub.spots.firstWhere(
+                  (s) => s.barIndex == 1,
+                  orElse: () => scrub.spots.first,
+                );
+                final day = spot.x.round();
+                _setScrub((
+                  date: twrX0.add(Duration(days: day)),
+                  headline: pctText(spot.y),
+                  you: pctText(spot.y),
+                  bench: pctText(spByDay[day] ?? 0.0),
+                ));
+              },
               data: LineChartData(
                 gridData: const FlGridData(show: false),
                 titlesData: const FlTitlesData(show: false),
@@ -673,8 +842,6 @@ class _PerformanceCardState extends State<PerformanceCard> {
                 lineTouchData: standardLineTouch(
                   context,
                   items: (ctx, touchedSpots) {
-                    String pct(double p) =>
-                        '${p >= 0 ? '+' : ''}${formatPercent(context, p, digits: 1)}';
                     return touchedSpots.map((spot) {
                       if (spot.barIndex != 1) return null;
                       final day = spot.x.round();
@@ -693,7 +860,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                             ),
                           ),
                           TextSpan(
-                            text: '${l.lwPerfTwrYou} ${pct(spot.y)}\n',
+                            text: '${l.lwPerfTwrYou} ${pctText(spot.y)}\n',
                             style: TextStyle(
                               color: spot.y >= 0
                                   ? ctx.tooltipPositive
@@ -706,7 +873,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                             ),
                           ),
                           TextSpan(
-                            text: '${_benchmarkLabel(l)} ${pct(benchY)}',
+                            text: '${_benchmarkLabel(l)} ${pctText(benchY)}',
                             style: TextStyle(
                               color: ctx.tooltipOnSurfaceMuted,
                               fontWeight: FontWeight.w600,
@@ -779,7 +946,16 @@ class _PerformanceCardState extends State<PerformanceCard> {
     );
   }
 
-  Widget _twrPill(BuildContext context, String label, double pct, Color color) {
+  /// One return tile. Takes the percentage ALREADY formatted (via the
+  /// caller's `pctText`, i.e. `utils/percent_format.dart` plus the explicit
+  /// sign) so the same tile can render either the window's return or the
+  /// scrubbed one without duplicating the formatting rule.
+  Widget _twrPill(
+    BuildContext context,
+    String label,
+    String pctText,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -796,7 +972,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
           ),
           const SizedBox(height: 4),
           Text(
-            '${pct >= 0 ? '+' : ''}${formatPercent(context, pct, digits: 1)}',
+            pctText,
             style: TextStyle(
               color: color,
               fontSize: 20,

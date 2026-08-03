@@ -8309,6 +8309,12 @@ abstract class AppLocalizations {
   /// **'Reflects {pct} of your portfolio we can price daily'**
   String lwPerfTwrCoverage(Object pct);
 
+  /// Screen-reader announcement while a finger scrubs a chart. On touch the in-chart tooltip is suppressed and the reading is shown in the card header instead, so this label is the only way the values reach a screen reader.
+  ///
+  /// In en, this message translates to:
+  /// **'Chart reading at {date}: {values}'**
+  String lwChartScrubReading(Object date, Object values);
+
   /// No description provided for @ovByCurrency.
   ///
   /// In en, this message translates to:

@@ -5205,6 +5205,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String lwChartScrubReading(Object date, Object values) {
+    return 'Chart reading at $date: $values';
+  }
+
+  @override
   String get ovByCurrency => 'By currency';
 
   @override

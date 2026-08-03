@@ -2338,6 +2338,18 @@
       }
     }
   },
+  "lwChartScrubReading": "Chart reading at {date}: {values}",
+  "@lwChartScrubReading": {
+    "description": "Screen-reader announcement while a finger scrubs a chart. On touch the in-chart tooltip is suppressed and the reading is shown in the card header instead, so this label is the only way the values reach a screen reader.",
+    "placeholders": {
+      "date": {
+        "type": "Object"
+      },
+      "values": {
+        "type": "Object"
+      }
+    }
+  },
   "ovByCurrency": "By currency",
   "lendingGlanceTitle": "Lending",
   "lendingGlanceOutstanding": "Outstanding",

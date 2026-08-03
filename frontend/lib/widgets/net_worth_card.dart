@@ -66,6 +66,12 @@ class NetWorthCard extends StatefulWidget {
   State<NetWorthCard> createState() => _NetWorthCardState();
 }
 
+/// One frame of a touch scrub on this card's chart, already formatted: the
+/// scrubbed [date] and the plotted value at that point (in whatever currency
+/// the active lens plots — the chart formats it, the header only displays
+/// it). A record, so equality is structural.
+typedef _ScrubReading = ({DateTime date, String value});
+
 class _NetWorthCardState extends State<NetWorthCard> {
   // The default view is the single green-line "simple" mode — the stacked
   // institution bands compete with the total line and get visually mushy
@@ -104,6 +110,15 @@ class _NetWorthCardState extends State<NetWorthCard> {
   String get _defaultLens =>
       widget.reportingCurrency.toUpperCase() == 'MXN' ? 'MXN' : 'USD';
 
+  /// The live touch-scrub reading, or null when no finger is on the chart.
+  ///
+  /// On touch the chart draws no tooltip (see [_renderLineChart]) and the
+  /// reading surfaces in the header instead. A ValueNotifier rather than
+  /// setState because a scrub fires on every pointer move and only the header
+  /// depends on it — a full card rebuild would re-run the stacked-series and
+  /// axis math each frame of the drag. Disposed in [dispose].
+  final ValueNotifier<_ScrubReading?> _scrub = ValueNotifier(null);
+
   @override
   void initState() {
     super.initState();
@@ -111,9 +126,17 @@ class _NetWorthCardState extends State<NetWorthCard> {
   }
 
   @override
+  void dispose() {
+    _scrub.dispose();
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(NetWorthCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Range switch or fresh history → the attribution window moved.
+    // Range switch or fresh history → the attribution window moved, and any
+    // scrub reading belongs to a series that is being replaced.
+    _scrub.value = null;
     _loadAttribution();
   }
 
@@ -349,7 +372,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
           selected: _lens,
           // Fires on re-taps too — short-circuit no-ops.
           onSelected: (v) {
-            if (v != _lens) setState(() => _lens = v);
+            if (v == _lens) return;
+            // A different lens replots in a different currency — drop any
+            // scrub reading with it.
+            _scrub.value = null;
+            setState(() => _lens = v);
           },
         ),
       ),
@@ -526,7 +553,18 @@ class _NetWorthCardState extends State<NetWorthCard> {
     DateTime dateFor(double x) =>
         points.first.date.add(Duration(days: x.toInt()));
 
+    // On touch this chart draws no tooltip — the reading goes to the card
+    // header (see `_scrubbable`), clear of the hand; the guide + dot stay.
     final chart = TransientTooltipLineChart(
+      suppressTooltipOnTouch: true,
+      onScrub: _scrubHandler(
+        (spot) => (
+          date: dateFor(spot.x),
+          // The lens plots its own currency (MXN / constant-FX USD), so the
+          // header shows the lens-formatted figure, matching the axis.
+          value: lensFormat.displayMoney(spot.y),
+        ),
+      ),
       data: LineChartData(
         minY: minY,
         maxY: maxY,
@@ -698,6 +736,55 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
   }
 
+  /// Renders [live] normally, and [scrubbed] while a touch scrub is active.
+  ///
+  /// The scrubbed branch also announces itself: it replaces an in-chart
+  /// tooltip that was invisible to screen readers, so the reading is wrapped
+  /// in a live region (with the visual text excluded, or it'd be read twice).
+  Widget _scrubbable({
+    required Widget live,
+    required Widget Function(_ScrubReading scrub) scrubbed,
+  }) {
+    return ValueListenableBuilder<_ScrubReading?>(
+      valueListenable: _scrub,
+      builder: (context, scrub, _) {
+        if (scrub == null) return live;
+        return Semantics(
+          container: true,
+          liveRegion: true,
+          // gen-l10n orders these alphabetically → (date, values).
+          label: AppLocalizations.of(context).lwChartScrubReading(
+            DateFormat('MMM d, y').format(scrub.date),
+            scrub.value,
+          ),
+          child: ExcludeSemantics(child: scrubbed(scrub)),
+        );
+      },
+    );
+  }
+
+  /// Handler for a chart's `onScrub`: publishes touch readings to the header
+  /// and clears on release (and on any mouse/trackpad event — a cursor
+  /// doesn't occlude what it points at, so desktop keeps the in-chart
+  /// popover and the header stays on the live numbers).
+  ///
+  /// [read] gets the first touched spot; every bar in these charts shares the
+  /// same x samples (the stacked bands are cumulative slices of one date
+  /// series), so which bar it lands on doesn't change the scrubbed date.
+  /// Returning null from [read] clears the header rather than showing a
+  /// half-resolved reading.
+  void Function(ChartScrub?) _scrubHandler(
+    _ScrubReading? Function(LineBarSpot spot) read,
+  ) {
+    return (scrub) {
+      if (scrub == null || !scrub.isTouch || scrub.spots.isEmpty) {
+        _scrub.value = null;
+        return;
+      }
+      _scrub.value = read(scrub.spots.first);
+    };
+  }
+
   Widget _buildHeader(
     bool isCompact,
     List<MapEntry<String, Color>> institutions,
@@ -728,16 +815,50 @@ class _NetWorthCardState extends State<NetWorthCard> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Flexible(
-            child: Semantics(
-              container: true,
-              header: true,
-              child: Text(
-                AppLocalizations.of(context).dashNetWorthHistory.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: context.textSubtle,
+            child: _scrubbable(
+              live: Semantics(
+                container: true,
+                header: true,
+                child: Text(
+                  AppLocalizations.of(
+                    context,
+                  ).dashNetWorthHistory.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: context.textSubtle,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // The phone header has no hero to swap (the dashboard block
+              // above owns it), so the overline title itself becomes the
+              // readout: "JUL 3 · $1,234,567" in the same slot, same
+              // baseline — nothing below the finger, nothing reflows.
+              scrubbed: (scrub) => Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '${DateFormat('MMM d').format(scrub.date)}  ',
+                      style: TextStyle(
+                        letterSpacing: 0.6,
+                        color: context.textSubtle,
+                      ),
+                    ),
+                    TextSpan(
+                      text: scrub.value,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -752,13 +873,16 @@ class _NetWorthCardState extends State<NetWorthCard> {
       );
     }
 
-    final summary = Column(
+    // Label + hero number. While a finger scrubs the chart the SAME pair
+    // reports the scrubbed point — the value at that date above, the date
+    // itself in place of the "Total net worth (USD)" label — so the reading
+    // lands ~250px above the plot instead of under the hand. Reverts the
+    // instant the finger lifts.
+    Widget heroBlock(String label, String value) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          AppLocalizations.of(
-            context,
-          ).pfTotalNetWorthCurrency(reportingCurrency),
+          label,
           // Inter label above the hero number, kept understated — the big
           // mono number is the star.
           style: brandSectionTitleStyle(
@@ -766,6 +890,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
             fontWeight: FontWeight.w600,
             color: context.textMuted,
           ).copyWith(letterSpacing: 0.3),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 4),
         // FittedBox shrinks the hero number down rather than ellipsing
@@ -775,7 +901,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: Text(
-            currencyFormat.displayMoney(netWorth),
+            value,
             // JetBrains Mono with tabular lining figures — the signature
             // "ledger" hero number. Tabular figures keep digit columns
             // aligned as the value changes.
@@ -787,6 +913,22 @@ class _NetWorthCardState extends State<NetWorthCard> {
             ),
             maxLines: 1,
           ),
+        ),
+      ],
+    );
+
+    final summary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _scrubbable(
+          live: heroBlock(
+            AppLocalizations.of(
+              context,
+            ).pfTotalNetWorthCurrency(reportingCurrency),
+            currencyFormat.displayMoney(netWorth),
+          ),
+          scrubbed: (scrub) =>
+              heroBlock(DateFormat('MMM d, y').format(scrub.date), scrub.value),
         ),
         // Trend chip — "↑ +$X (+Y%) vs 30d ago" — gives a one-line read
         // on whether net worth is moving up or down without making the
@@ -1391,8 +1533,23 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
     // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
     // LineChart's built-in handling kept it pinned on mobile web. The inline
-    // LineTouchData below is unchanged; the wrapper only owns show/dismiss.
+    // LineTouchData below is unchanged; the wrapper owns show/dismiss and,
+    // on TOUCH, suppresses the tooltip entirely: this one runs to 8+ lines
+    // in detailed mode (~175px of a 220px box), so even pinned to the top of
+    // the box it sits under the finger. The reading goes to the header
+    // instead; the vertical guide + dot remain as position feedback.
     final chart = TransientTooltipLineChart(
+      suppressTooltipOnTouch: true,
+      onScrub: _scrubHandler((spot) {
+        final idx = rowIndexByX[spot.x];
+        if (idx == null) return null;
+        final nw = rows[idx].row['net_worth'];
+        if (nw is! num) return null;
+        return (
+          date: rows[idx].date,
+          value: currencyFormat.displayMoney(nw.toDouble() * conversionFactor),
+        );
+      }),
       data: LineChartData(
         lineTouchData: LineTouchData(
           // Snap-to-nearest-x feel: a very large threshold makes the
