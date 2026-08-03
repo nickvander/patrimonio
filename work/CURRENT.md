@@ -1,7 +1,106 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-03 (deferral follow-ups: ApiService mixin split + detail-panel decoupling)
+> **Last updated:** 2026-08-03 (feature-research sweep + continuity dossier built; queue running)
 > **Branch:** `main`.
+
+## 2026-08-03 — Feature-research pipeline + implementation queue (UNCOMMITTED, pending review)
+
+* **Feature-research sweep shipped** — `work/research/2026-08-03-feature-research.md`:
+  19-agent pipeline (4 researchers → fit analyst → PM triage → 12 parallel
+  skeptics → PM synthesis), 39 raw candidates → 8 PM-vetted briefs with
+  evidence links, + an 18-item researched-and-rejected appendix so ideas
+  aren't re-researched. Reusable team defs in `.agent/agents/`
+  (competitor-analyst, user-voice-researcher, fit-and-feasibility-analyst,
+  feature-skeptic, pm-synthesizer) + saved pipeline
+  `.agent/workflows/feature-research.js`. FUTURE.md gained the 5 spec'd
+  proposals; NEXT.md carries the implementation queue (owner-approved:
+  dossier → transfer-cost report → net-worth attribution).
+* **Household continuity dossier built + verified** (queue item 1, brief 1) —
+  `GET /api/exports/continuity-dossier?lang=en|es`: bilingual printable HTML
+  on the tax_exports.rs FBAR recipe (cover with computed "data as of" +
+  no-secrets note; institutions/accounts with last native+USD balance via
+  per-account LATERAL newest-snapshot; manual-asset valuations; per-currency
+  holdings summary; lending book with derived outstanding; FBAR flags;
+  owner instructions via app_settings `continuity_notes`). New
+  `backend/src/api/exports.rs` + 7 integration tests (incl. planted-marker
+  no-encrypted-material assertion + XSS-escape round-trip);
+  `continuity_dossier_screen.dart` (instructions editor, en/es segments,
+  loan-agreement launchUrl delivery pattern) + Settings-tab entry + 14
+  `dossier*` keys in both arbs + 6 widget tests. Known caveat carried from
+  the existing printables: on the APK the system browser needs its own web
+  session. **Gates:** backend 565/565 (fmt + clippy clean), frontend 975/975
+  (format clean, analyze 18-info baseline). Nothing committed yet.
+* **Annual transfer-cost report built + verified** (queue item 2, brief 5) —
+  `GET /api/dashboard/fx-transfers/costs`: per-year / per-provider spread
+  cost vs mid-market over `cash_fx_transfers` (Decimal end-to-end, per-row
+  FX→USD before summing, ±7-day nearest-spot matching `list_fx_transfers`,
+  provider aliases folded, unknown bucket, transfers with no in-window spot
+  EXCLUDED and surfaced via `missing_spot_count` — never guessed). Fee-vs-
+  spread split explicitly out of scope per FUTURE.md. FX-center "Transfer
+  costs" section with caveat + missing-spot note; 7 `fxcCosts*` keys both
+  arbs (multi-placeholder call site matches the alphabetical signature).
+  +5 unit / +3 integration / +4 widget tests. **Gates:** backend 573/573
+  (fmt + clippy clean), frontend 979/979 (format clean, 18-info baseline).
+  Uncommitted with the rest.
+* **Net-worth change attribution built + verified** (queue item 3, brief 4) —
+  `GET /api/dashboard/net-worth-attribution?from&to` (new
+  `api/dashboard/attribution.rs`): FX / market / flows / residual
+  decomposition per currency + USD with the EXACT sum invariant (components
+  2-dp rounded, residual absorbs the remainder — tests assert equality in
+  Decimal parsed from the serialized JSON, incl. a pinned nonzero residual
+  from the snapshot-write-rate discrepancy). Convention documented in the
+  module comment: carry-forward endpoints, flows at tx-date rate (INVESTMENT
+  rows + split parents excluded), fx on opening balance, market at closing
+  rate. Weekly digest deferred. Net-worth card gained the "Why it changed"
+  chips (residual → "Other" only when nonzero) + USD / MXN / Constant-FX
+  lens toggle (chart-only, via `standardLineTouch` — the sanctioned inline
+  copy is byte-untouched); 8 `nwAttr*`/`nwLens*` keys both arbs. +5
+  integration / +8 widget tests. **Gates:** backend 578/578 (fmt + clippy
+  clean), frontend 987/987 (format clean, 18-info baseline). Uncommitted.
+* **Touch tooltip fix (owner-reported)** — chart tooltips rendered under the
+  finger on phones. `utils/chart_touch.dart` is now pointer-kind-aware:
+  touch/stylus pins the tooltip to the top of the chart box
+  (`showOnTopOfTheChartBoxArea`; `LineTouchTooltipData` has no `copyWith` in
+  fl_chart 0.70.2 → manual field-copy helper `lineTooltipPinnedToTop`),
+  mouse/trackpad popover byte-identical; seed from `defaultTargetPlatform`
+  so the first touch never flashes under the finger. All line charts
+  covered (wrapper-based + projections wired directly); a new conventions
+  test pins the invariant. Bar charts excluded — 0.70.2 has no chart-box
+  pinning for bar tooltips. Follow-up applied same sitting: the FX center's
+  history chart (raw `LineChart` from the transfer-cost batch) wrapped in
+  `TransientTooltipLineChart`. **Gates:** frontend 996/996 (format clean,
+  18-info baseline; backend untouched at 578).
+* **Bills calendar + 1–90-day projected balances built + verified** (queue
+  item 4, brief 3) — `GET /api/recurring/calendar?days=N` (clamped 1..90):
+  rule + loan-due expansion, loan_match-style expected↔posted matching
+  (10%/$1 amount band, ±5-day window, token bonus, score ≥50, greedy
+  earliest-first), states paid/upcoming/late(≤7d)/missed/**pending_import**
+  (manual-account freshness = newest transaction DATE, deliberately not
+  import time — documented on `AccountFreshness`; never false-red), per-
+  currency Decimal projection curve (latest-per-account depository
+  snapshots, liability signs, non-MXN → USD-equivalent bucket; missed/
+  pending excluded as unknowable), FX-crossing suggestion (deficit currency
+  + date + exact shortfall). `bills_calendar_card.dart`: compact month grid
+  (Monarch reference shape; beat a week-strip at ~300px) + day-tap agenda +
+  `TransientTooltipLineChart` curve + FX banner; `bc*` keys both arbs.
+  Trap found: `placeholder_declaration_order_test` wants arb metadata in
+  template order — reordered with comments. +4 unit / +3 integration / +9
+  widget tests. **Gates:** backend 585/585 (fmt + clippy clean), frontend
+  1005/1005 (format clean, 18-info baseline). Uncommitted.
+* **Rules-engine design ready** (queue item 5) — `work/RULES_ENGINE_DESIGN.md`:
+  provenance columns make manual-always-wins an SQL predicate; write-time
+  application on BOTH import + Plaid paths; Redis-token dry-run/apply
+  contract (fingerprint-matched, single-use); regex out for v1; 5-day MVP
+  phasing. §8 = 8 open questions. AWAITING OWNER SIGN-OFF before any code.
+* **Live-rig walkthrough of all five new surfaces — ALL PASS** (0 console
+  errors / 0 failed requests across 10+ sessions; repo diff byte-identical
+  after): dossier persists + renders EN/ES printable with no-secrets grep
+  clean; FX transfer-costs honest empty state; attribution chips + 3-lens
+  toggle with stable hero ($399,982) and correct constant-FX caption; bills
+  calendar grid/day-agenda/currency curve; touch drag pins tooltips to the
+  chart-box top and dismisses on lift while mouse popovers are unchanged.
+  Two minor observations parked in NEXT.md (lens x-axis spacing
+  inconsistency; bills MXN curve y-axis "$" notation).
 
 ## 2026-08-03 — The batch's own deferrals, closed same-session
 

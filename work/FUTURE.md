@@ -4,6 +4,148 @@
 
 ---
 
+# Feature-research sweep proposals — added 2026-08-03
+
+> Source: `work/research/2026-08-03-feature-research.md` (evidence links,
+> competitor landscape, and skeptic challenges per brief). Five of the eight
+> PM-vetted briefs are spec'd below; the other three (guided statement
+> reconciliation, sub-5s mobile quick-entry, FX-aware Sankey cash flow) live
+> in the report until they reach the front of the implementation queue in
+> NEXT.md.
+
+## User rules engine + dry-run auto-categorization (extends categorize.rs + learn-from-edits)
+
+**Status:** Proposed (feature-research sweep). Extension, not greenfield:
+curated categorize.rs (1,109 lines) and merchant_key learn-from-edits
+(imports.rs:481-505) already cover the import path; this adds explicit,
+persisted, user-defined rules with a previewable diff.
+**Tracking:** This file.
+
+### Why
+Dirty es-MX descriptors across nine MX parsers are the biggest recurring
+chore. Strongest converged external evidence in the research sweep
+(actual-ai 502★ bolt-on, Firefly HN thread, Monarch/Lunch Money rules docs).
+
+### Plan
+* `user_rules` table + CRUD; consulted before the curated engine.
+* "Save as rule" affordance in transaction_detail_panel.dart.
+* Rename actions ride the shipped cluster-rename machinery.
+* Retroactive apply gated behind a dry-run diff — the diff is the safety
+  mechanism, not polish. Cover BOTH import and Plaid (sync.rs) paths.
+
+### Acceptance
+* A rule created from a fixed Banamex row auto-applies on the next
+  statement import AND retroactively via a previewed, confirmed diff.
+* No historical totals change without an explicit confirm.
+
+---
+
+## Bills calendar + 1–90-day projected balances (extends the recurring MVP)
+
+**Status:** Proposed (feature-research sweep). Extends /api/recurring/upcoming,
+upcoming_bills_card, and loan due-pills; the missing pieces are the calendar
+surface, expected↔posted matching, and the per-account balance curve.
+**Tracking:** This file.
+
+### Why
+Verified 48–139-upvote asks across Actual/Firefly; users cite Monarch's
+calendar as a switch reason. Fills the acknowledged gap between recurring
+detection and FIRE-horizon projections.
+
+### Plan
+* Calendar widget on the cash-flow tab off /recurring/upcoming.
+* Expected→posted matching (loan_match.rs is the precedent) with
+  paid / late / missed states.
+* Per-currency projected-balance curve from balance_snapshots; FX-transfer
+  prompt ("move USD→MXN before the 15th").
+* Manual-import MX accounts get a distinct "pending import" state —
+  never render "missed" for a bill that may simply not be imported yet.
+
+### Acceptance
+* A detected CFE bill shows expected on the calendar, flips to paid when
+  the posted row matches, and never shows a false red on a stale manual
+  account.
+
+---
+
+## Net-worth change attribution: FX vs market vs flows
+
+**Status:** Proposed (feature-research sweep). All inputs stored
+(balance_snapshots native+USD per row, exchange_rates history, transactions);
+no self-hosted tool decomposes this. Evidence thin (Worthmap markets the
+SaaS equivalent); the case is internal fit.
+**Tracking:** This file.
+
+### Why
+"Was it the peso or was it me" is the household's defining recurring
+question; the 2026-08-02 balance-claim banners already do a mini version.
+
+### Plan
+* Dashboard endpoint decomposing period deltas into FX / market / flows
+  per currency; must sum exactly to the observed delta (show a residual
+  bucket rather than fudge).
+* Currency-lens toggle on the net-worth card (USD / MXN / FX-held-constant).
+* Optional weekly digest via the notifications bell (cron precedent exists).
+* Respect carry-forward snapshots and gap-y FX history — the rust-backend
+  skill's #1 bug class lives here; regression-test the sum invariant.
+
+### Acceptance
+* For any window: FX + market + flows (+ residual) == snapshot delta,
+  per currency and in USD, on seeded fixture data.
+
+---
+
+## Household continuity dossier (bilingual export; inactivity switch deferred)
+
+**Status:** Proposed (feature-research sweep). Dossier half only — no SMTP
+infra exists and the spouse already has a read_only login, so the dead-man
+switch is out of scope.
+**Tracking:** This file.
+
+### Why
+A binational estate is the worst case (FBAR inventory, CetesDirecto, two
+tax regimes); Bogleheads' "death binder" threads recur for a decade and
+Kubera productized it. Patrimonio already maintains the executor's checklist.
+
+### Plan
+* Export endpoint aggregating accounts/institutions/loans/people plus
+  owner-written instructions, rendered as printable bilingual HTML riding
+  the tax_exports.rs / loans.rs lang-toggle pattern.
+* Staleness note on the cover page ("data as of …") so the artifact is
+  honest off-server.
+
+### Acceptance
+* One click yields an en or es-MX printable packet listing every
+  institution/account/loan the app knows, suitable for a folder or safe.
+
+---
+
+## Annual transfer-cost report (spread analytics on cash_fx_transfers)
+
+**Status:** Proposed (feature-research sweep). S-effort aggregate over
+shipped implied-vs-spot machinery. Scoped to TOTAL cost vs mid-market —
+the fee-vs-spread split is not computable for deducted-fee providers and
+is explicitly out of scope for v1.
+**Tracking:** This file.
+
+### Why
+Nobody — including Wise — totals what moving money between the two
+countries costs per year. Demand evidence is thin (Firefly #5265 is the
+nearest ask); this ships on owner utility and moat, and that's stated.
+
+### Plan
+* Aggregation endpoint summing (implied vs spot) deltas per year and per
+  matched_keyword provider (with an "unknown" bucket for keywordless links).
+* Summary section in the FX center sheet.
+* Optional follow-up: manual per-transfer fee field, kept separate to
+  avoid double-counting against the spread delta.
+
+### Acceptance
+* FX center answers "what did moving money cost us in <year>, total and
+  by provider" with the ±7-day spot-rate caveat displayed.
+
+---
+
 ## Mobile / settings follow-ups — deferred 2026-07-14
 
 **Status:** Backlogged from the 2026-07-14 mobile UX + settings sprint

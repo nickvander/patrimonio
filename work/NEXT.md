@@ -4,14 +4,50 @@
 > state; [work/CURRENT.md](CURRENT.md) has the detailed log. This file is the
 > "what to do next" filter over [work/FUTURE.md](FUTURE.md)'s full backlog.
 >
-> **Last updated:** 2026-08-02 (sweep deferred-items batch: added ApiService
-> split recipe + detail-panel decoupling; see CURRENT.md)
+> **Last updated:** 2026-08-03 (feature-research implementation queue added;
+> FUTURE.md gained the five spec'd sweep proposals)
 > **Purpose:** Pickup-ready priorities, ordered by impact-per-effort. When one
 > of these ships, delete it here and log it in CURRENT.md — a stale backlog is
 > worse than none.
 
+## Feature-research implementation queue — 2026-08-03
+
+From `work/research/2026-08-03-feature-research.md` (8 PM-vetted briefs;
+FUTURE.md carries the five spec'd sections). Worked SEQUENTIALLY, one
+verified checkpoint per feature, in this order:
+
+1. ~~Household continuity dossier~~ — ✅ built + verified 2026-08-03
+   (backend 565/565, frontend 975/975; uncommitted pending review — see
+   CURRENT.md).
+2. ~~Annual transfer-cost report~~ — ✅ built + verified 2026-08-03
+   (backend 573/573, frontend 979/979; uncommitted — see CURRENT.md).
+3. ~~Net-worth change attribution~~ — ✅ built + verified 2026-08-03
+   (backend 578/578, frontend 987/987; sum invariant pinned in tests;
+   uncommitted — see CURRENT.md).
+4. ~~Bills calendar + 1–90-day projected balances~~ — ✅ built + verified
+   2026-08-03 (backend 585/585, frontend 1005/1005; pending_import
+   never-false-red pinned in tests; uncommitted — see CURRENT.md).
+5. **User rules engine + dry-run** (L) — ✎ DESIGN READY 2026-08-03:
+   `work/RULES_ENGINE_DESIGN.md` (rule model + provenance columns,
+   precedence with manual-always-wins enforced in SQL, write-time
+   application on BOTH import + Plaid paths, Redis-token dry-run/apply
+   contract, 5-day MVP phasing). **Awaiting owner sign-off — §8 lists the
+   8 open questions.** Implementation does not start before that.
+
+Briefs 6–8 (guided statement reconciliation, sub-5s quick-entry, FX Sankey)
+queue behind these — shapes live in the report only.
+
 ## Open items needing only a sitting
 
+- **Walkthrough observations (2026-08-03, minor):** (a) net-worth USD lens
+  x-axis is index-spaced over snapshots while MXN/Constant-FX lenses are
+  time-spaced — same history, different horizontal mapping across lenses;
+  (b) bills projection curve in MXN mode labels its y-axis "$100K" style
+  while the app elsewhere writes "MXN 100,000" — can read as USD at a
+  glance. Both cosmetic, neither blocks review.
+- ~~Chart tooltip hides under the finger on touch~~ — ✅ fixed 2026-08-03
+  (pointer-kind-aware pinning in chart_touch.dart, all line charts, new
+  conventions invariant; frontend 996/996 — see CURRENT.md).
 
 - **Audit tail findings still open** (from the 2026-07-26 five-agent audit;
   the truncated-filtered-totals one shipped 2026-08-02 as `X-Total-Count`,
