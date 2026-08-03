@@ -478,6 +478,10 @@ async fn calendar_states_matching_and_exact_projection() {
     let gym = occurrence(&json, "Gym", &d(-10).to_string());
     assert_eq!(gym["state"], "paid", "matched posted row → paid: {json}");
     assert_eq!(
+        gym["source"], "recurring",
+        "an explicit rule expansion keeps its own source tag: {json}"
+    );
+    assert_eq!(
         gym["matched_tx_id"],
         gym_tx.to_string(),
         "paid occurrence carries the matched tx id"
@@ -643,4 +647,289 @@ async fn calendar_days_param_is_clamped_1_to_90() {
     assert_eq!(res.status(), StatusCode::OK);
     let json = body_json(res.into_body()).await;
     assert_eq!(json["days"].as_i64(), Some(30));
+}
+
+// ---------------------------------------------------------------------------
+// Detected recurring charges (source: "detected")
+//
+// The owner-reported bug these pin: the calendar expanded ONLY explicit
+// `recurring_rules` + loan dues, so an owner with zero rules and five loans
+// saw a bills calendar of nothing but loan repayments while every real
+// subscription sat in the dashboard's "Recurring charges" card. The clusters
+// the detector already finds are now projected onto the calendar too.
+// ---------------------------------------------------------------------------
+
+/// Seed a detected-subscription cluster: `count` equal charges `cadence_days`
+/// apart, the most recent on `last_charge`. Three charges at a steady gap is
+/// the minimum shape the detector accepts as recurring. Returns the id of the
+/// most recent charge (the one an occurrence due on `last_charge` must match).
+#[allow(clippy::too_many_arguments)] // fixture builder, mirrors seed_rule
+async fn seed_detected_cluster(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    amount: f64,
+    currency: &str,
+    last_charge: NaiveDate,
+    cadence_days: i64,
+    count: i64,
+) -> uuid::Uuid {
+    let mut newest = None;
+    for i in 0..count {
+        let date = last_charge - chrono::Duration::days(cadence_days * i);
+        let id = seed_tx(
+            pool,
+            user_id,
+            account_id,
+            date,
+            amount,
+            currency,
+            description,
+        )
+        .await;
+        if i == 0 {
+            newest = Some(id);
+        }
+    }
+    newest.expect("cluster needs at least one charge")
+}
+
+/// Every occurrence tagged `source: "detected"`, for set-level assertions.
+fn detected_occurrences(json: &Value) -> Vec<&Value> {
+    json["occurrences"]
+        .as_array()
+        .expect("occurrences array")
+        .iter()
+        .filter(|o| o["source"] == "detected")
+        .collect()
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn calendar_projects_detected_charges_with_zero_rules() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let today = chrono::Utc::now().date_naive();
+    let d = |offset: i64| today + chrono::Duration::days(offset);
+
+    // The owner's exact production shape: NO recurring_rules at all.
+    let acct = seed_account(&pool, user_id, "Chase", "USD", "plaid").await;
+    seed_snapshot(&pool, user_id, acct, d(-1), 1000.0, "USD").await;
+
+    // Netflix: three charges, 30 days apart, the newest today.
+    let newest_tx = seed_detected_cluster(
+        &pool,
+        user_id,
+        acct,
+        "NETFLIX.COM",
+        -15.99,
+        "USD",
+        today,
+        30,
+        3,
+    )
+    .await;
+
+    let json = get_calendar(&app, &cookie, 30).await;
+
+    // The current cycle's charge has already posted → paid, carrying the id
+    // of the very transaction that produced the cluster.
+    let current = occurrence(&json, "NETFLIX.COM", &today.to_string());
+    assert_eq!(current["source"], "detected", "{json}");
+    assert_eq!(
+        current["state"], "paid",
+        "a detected charge already posted this cycle is paid, not upcoming: {json}"
+    );
+    assert_eq!(current["matched_tx_id"], newest_tx.to_string(), "{json}");
+    assert_eq!(current["amount"].as_f64(), Some(-15.99), "{json}");
+    assert_eq!(current["currency"], "USD", "{json}");
+    assert_eq!(current["account_name"], "Chase", "dominant account: {json}");
+    assert_eq!(
+        current["merchant_key"], "netflix.com",
+        "detected rows carry the ignore-endpoint key: {json}"
+    );
+
+    // Next expected = last charge + cadence_days (the detector's median gap).
+    let next = occurrence(&json, "NETFLIX.COM", &d(30).to_string());
+    assert_eq!(next["state"], "upcoming", "{json}");
+    assert_eq!(next["source"], "detected", "{json}");
+
+    // Exactly those two: projection starts AT the last observed charge and
+    // steps forward; earlier cycles are history, not calendar entries.
+    assert_eq!(
+        detected_occurrences(&json).len(),
+        2,
+        "one posted + one projected occurrence in a ±30-day window: {json}"
+    );
+
+    // The curve includes the detected outflow — and carries its cumulative
+    // contribution separately so a "hide detected charges" toggle can render
+    // `usd - usd_detected` without redoing FX or Decimal math.
+    let projection = json["projection"].as_array().expect("projection");
+    assert_eq!(projection[0]["usd"].as_f64(), Some(1000.0), "{json}");
+    assert_eq!(projection[0]["usd_detected"].as_f64(), Some(0.0), "{json}");
+    assert_eq!(projection[29]["usd"].as_f64(), Some(1000.0), "{json}");
+    assert_eq!(
+        projection[30]["usd"].as_f64(),
+        Some(984.01),
+        "detected charge clears on its projected date: {json}"
+    );
+    assert_eq!(
+        projection[30]["usd_detected"].as_f64(),
+        Some(-15.99),
+        "toggle-off curve = usd - usd_detected = 1000.00: {json}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn calendar_omits_cancelled_and_ignored_detected_clusters() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let today = chrono::Utc::now().date_naive();
+    let d = |offset: i64| today + chrono::Duration::days(offset);
+
+    let acct = seed_account(&pool, user_id, "Chase", "USD", "plaid").await;
+    seed_snapshot(&pool, user_id, acct, d(-1), 1000.0, "USD").await;
+
+    // Control: a live cluster that MUST show up.
+    seed_detected_cluster(
+        &pool,
+        user_id,
+        acct,
+        "ACTIVE GYM",
+        -50.0,
+        "USD",
+        today,
+        30,
+        3,
+    )
+    .await;
+
+    // Cancelled-age: last charged 140 days ago (the detector flags 91–548
+    // days "cancelled"). Stepping its 30-day cadence forward WOULD land
+    // inside the ±30-day window — projecting it would manufacture phantom
+    // bills for a service the user already cancelled.
+    seed_detected_cluster(
+        &pool,
+        user_id,
+        acct,
+        "OLD MAGAZINE",
+        -20.0,
+        "USD",
+        d(-140),
+        30,
+        3,
+    )
+    .await;
+
+    // Live cluster the user dismissed as "not a subscription".
+    seed_detected_cluster(&pool, user_id, acct, "SPOTIFY", -11.99, "USD", today, 30, 3).await;
+    sqlx::query(
+        "INSERT INTO ignored_subscription_merchants (user_id, merchant_key) VALUES ($1, $2)",
+    )
+    .bind(user_id)
+    .bind("spotify")
+    .execute(&pool)
+    .await
+    .expect("seed ignored merchant");
+
+    let json = get_calendar(&app, &cookie, 30).await;
+    let descriptions: Vec<String> = json["occurrences"]
+        .as_array()
+        .expect("occurrences")
+        .iter()
+        .map(|o| o["description"].as_str().unwrap_or_default().to_string())
+        .collect();
+
+    assert!(
+        descriptions.iter().any(|s| s == "ACTIVE GYM"),
+        "an active cluster must reach the calendar: {json}"
+    );
+    assert!(
+        !descriptions.iter().any(|s| s == "OLD MAGAZINE"),
+        "a cancelled-age cluster must never be projected: {json}"
+    );
+    assert!(
+        !descriptions.iter().any(|s| s == "SPOTIFY"),
+        "an ignored merchant must never reach the calendar: {json}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn detected_charge_on_stale_manual_account_is_pending_import_not_missed() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    let today = chrono::Utc::now().date_naive();
+    let d = |offset: i64| today + chrono::Duration::days(offset);
+
+    sqlx::query(
+        "INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at, source) \
+         VALUES ('USD', 'MXN', 20.0, NOW(), 'api')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed rate");
+
+    let manual_mxn = seed_account(&pool, user_id, "BBVA", "MXN", "manual").await;
+    let plaid_usd = seed_account(&pool, user_id, "Chase", "USD", "plaid").await;
+
+    // Identical shape on both accounts: three charges 30 days apart, the
+    // newest 40 days ago, so the next projected occurrence (d-10) is overdue
+    // and unmatched. The ONLY difference is how the account's data arrives.
+    seed_detected_cluster(
+        &pool,
+        user_id,
+        manual_mxn,
+        "CFE",
+        -400.0,
+        "MXN",
+        d(-40),
+        30,
+        3,
+    )
+    .await;
+    seed_detected_cluster(
+        &pool,
+        user_id,
+        plaid_usd,
+        "SYNCED GYM",
+        -50.0,
+        "USD",
+        d(-40),
+        30,
+        3,
+    )
+    .await;
+
+    let json = get_calendar(&app, &cookie, 30).await;
+
+    // THE hard requirement (FUTURE.md), now for detected charges too: the
+    // manual account's imported data only reaches d-40, so a d-10 charge may
+    // simply not be imported yet — amber, never a false red.
+    let cfe = occurrence(&json, "CFE", &d(-10).to_string());
+    assert_eq!(cfe["source"], "detected", "{json}");
+    assert_eq!(
+        cfe["state"], "pending_import",
+        "a detected charge on a stale manual-import account must never read missed: {json}"
+    );
+    // Per-row MXN→USD rides detected occurrences like every other row.
+    assert_eq!(cfe["amount"].as_f64(), Some(-400.0), "{json}");
+    assert_eq!(cfe["amount_usd"].as_f64(), Some(-20.0), "{json}");
+
+    // Same overdue shape on a SYNCED account: absence of a match is real
+    // evidence there, so the normal late/missed ladder applies.
+    let gym = occurrence(&json, "SYNCED GYM", &d(-10).to_string());
+    assert_eq!(
+        gym["state"], "missed",
+        "overdue + unmatched on a synced account stays missed: {json}"
+    );
 }

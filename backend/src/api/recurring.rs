@@ -7,6 +7,38 @@
 //!
 //! Sign convention matches `transactions.amount` everywhere: negative =
 //! outflow (expense), positive = inflow (income).
+//!
+//! ## Three occurrence sources (`source` on every calendar occurrence)
+//!
+//! * `"recurring"` — an explicit `recurring_rules` expansion.
+//! * `"loan"` — a `loan_payments` schedule due (an expected repayment INFLOW).
+//! * `"detected"` — a cluster from `services::subscription_detect`, i.e. a
+//!   charge the app inferred from transaction history rather than one the
+//!   user declared. Added because the calendar previously read ONLY the two
+//!   explicit sources: an owner with zero rules and five loans saw a calendar
+//!   of nothing but loan repayments, while every real subscription/bill sat
+//!   in the dashboard's "Recurring charges" card the calendar couldn't see.
+//!   Only `status: "active"` clusters are projected — projecting a
+//!   `"cancelled"` one would manufacture phantom bills.
+//!
+//! (`"recurring"`, not `"rule"`: the shipped frontend already parses that
+//! literal — `bills_calendar_card.dart` defaults `source` to `'recurring'` —
+//! so renaming it would be a silent client break for zero benefit. Detected
+//! occurrences are purely additive.)
+//!
+//! ## The projected-balance curve and the "hide detected" toggle
+//!
+//! Detected occurrences ARE included in the projection: they are real
+//! expected cash movements, and a curve that ignored them would understate
+//! the dip the user is looking at. To keep them **excludable without the
+//! frontend redoing FX or Decimal math**, every `ProjectionPoint` also
+//! carries `usd_detected` / `mxn_detected` — the cumulative detected-only
+//! contribution already *included* in `usd` / `mxn`. A toggle that hides
+//! detected charges renders `usd - usd_detected` (same for MXN); no second
+//! array, no recomputation, no cross-currency math client-side. The
+//! `fx_transfer_suggestion` is computed from the full (detected-inclusive)
+//! curve — it answers "will I actually run dry", which is the question that
+//! matters regardless of what the UI is currently showing.
 
 use std::collections::{HashMap, HashSet};
 
@@ -545,6 +577,15 @@ const BILL_DATE_WINDOW_DAYS: i64 = 5;
 /// beyond it, "missed". Both render as attention states — the split just
 /// lets the UI soften a bill that's two days behind vs. a month behind.
 const LATE_GRACE_DAYS: i64 = 7;
+/// Display cap on how many detected clusters the calendar projects, ranked by
+/// monthly USD spend (same 40 the subscriptions card shows). A response
+/// bounded by cluster count keeps the worst case sane: a 90-day window with
+/// weekly-cadence clusters would otherwise be occurrences ≈ clusters × 37.
+const MAX_DETECTED_CLUSTERS: usize = 40;
+/// Iteration cap when stepping a detected cadence across the window — the
+/// same hostile-input guard `occurrences_in_window` uses. The real bound is
+/// (2 × 90 days + 90 days of catch-up) / 5-day minimum cadence ≈ 54.
+const MAX_DETECTED_STEPS: usize = 400;
 
 /// Match confidence, 0–100 (same linear-ramp shape as
 /// `loan_match::score_disbursement` — that module is the house precedent
@@ -643,11 +684,22 @@ struct CalendarQuery {
 
 #[derive(Serialize)]
 struct CalendarOccurrence {
-    /// "recurring" (a recurring_rules expansion) or "loan" (a loan_payments
-    /// schedule row — an expected repayment INFLOW to the lender).
+    /// "recurring" (a recurring_rules expansion), "loan" (a loan_payments
+    /// schedule row — an expected repayment INFLOW to the lender), or
+    /// "detected" (a `subscription_detect` cluster projected forward). See
+    /// the module docs; the frontend filters on this for the
+    /// hide-detected-charges toggle.
     source: String,
-    /// rule id for recurring; loan_payments id for loans.
+    /// rule id for recurring; loan_payments id for loans; for detected, the
+    /// cluster's stable synthetic key ("{merchant_key}::{amount_band}") —
+    /// there is no row to point at.
     id: String,
+    /// Detected occurrences only: the exact key
+    /// `POST /api/dashboard/subscriptions/ignore` expects, so "this isn't a
+    /// bill" can be actioned straight from the calendar without the client
+    /// re-deriving the detector's normalisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merchant_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     account_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -674,6 +726,13 @@ struct ProjectionPoint {
     /// negative"); only `amount_usd` on occurrences converts.
     usd: Decimal,
     mxn: Decimal,
+    /// The part of `usd` contributed by `source: "detected"` occurrences
+    /// (cumulative, same sign convention — outflows make it negative). It is
+    /// already INCLUDED in `usd`; a client hiding detected charges renders
+    /// `usd - usd_detected`. See the module docs.
+    usd_detected: Decimal,
+    /// Same, for the MXN curve.
+    mxn_detected: Decimal,
 }
 
 #[derive(Serialize)]
@@ -714,6 +773,68 @@ struct BillCandidate {
     merchant_name: Option<String>,
 }
 
+/// Amount band around an expected magnitude: `BILL_AMOUNT_TOL` (10%) of it,
+/// floored at `BILL_AMOUNT_TOL_ABS` ($1) so tiny bills still match a
+/// near-exact posted row. Decimal end-to-end — f64 only ever feeds the score.
+fn amount_band_tolerance(expected_abs: Decimal) -> Decimal {
+    (expected_abs * Decimal::from_f64_retain(BILL_AMOUNT_TOL).unwrap_or_default())
+        .max(Decimal::from_f64_retain(BILL_AMOUNT_TOL_ABS).unwrap_or_default())
+}
+
+/// Best unused posted row for one expected occurrence, or None.
+///
+/// Hard gates first (account, currency, sign, date window, amount band), then
+/// the `loan_match`-style linear-ramp score with a 50-point floor. Shared by
+/// the rule and detected expansions so the two can never drift into different
+/// matching semantics — and callers claim rows into `used_tx` in emission
+/// order, which is what gives explicit rules first claim on a posted row.
+fn best_bill_match(
+    candidates: &[BillCandidate],
+    used_tx: &HashSet<uuid::Uuid>,
+    account_id: uuid::Uuid,
+    amount: Decimal,
+    currency: &str,
+    description: &str,
+    due: NaiveDate,
+) -> Option<uuid::Uuid> {
+    let mut best: Option<(i32, i64, uuid::Uuid)> = None; // (score, gap, tx id)
+    for c in candidates {
+        if used_tx.contains(&c.id)
+            || c.account_id != account_id
+            || !c.currency.eq_ignore_ascii_case(currency)
+            || c.amount.is_sign_negative() != amount.is_sign_negative()
+        {
+            continue;
+        }
+        let gap = (c.date - due).num_days().abs();
+        if gap > BILL_DATE_WINDOW_DAYS {
+            continue;
+        }
+        let expected_abs = amount.abs();
+        let diff = (c.amount.abs() - expected_abs).abs();
+        if diff > amount_band_tolerance(expected_abs) {
+            continue;
+        }
+        let amount_dev = if expected_abs > Decimal::ZERO {
+            (diff / expected_abs).to_f64().unwrap_or(1.0)
+        } else {
+            1.0
+        };
+        let hit = description_hit(description, &c.description, c.merchant_name.as_deref());
+        let score = score_bill_match(amount_dev, gap, hit);
+        if score < 50 {
+            continue;
+        }
+        if best
+            .map(|(s, g, _)| (score, -gap) > (s, -g))
+            .unwrap_or(true)
+        {
+            best = Some((score, gap, c.id));
+        }
+    }
+    best.map(|(_, _, id)| id)
+}
+
 /// GET /calendar?days=N — the bills-calendar feed: every expected
 /// occurrence (recurring rules + loan schedule dues) in [today-N, today+N]
 /// with a matched/paid/late/pending-import state, plus the per-currency
@@ -752,15 +873,20 @@ async fn calendar(
     .map_err(internal)?;
 
     // Data-coverage date per account: the newest posted transaction DATE
-    // (see AccountFreshness for why not updated_at / snapshots). One query
-    // for all of the user's accounts — the set is small.
+    // (see AccountFreshness for why not updated_at / snapshots), plus the
+    // manual-statement-import flag. One query for all of the user's accounts —
+    // the set is small — because detected occurrences aren't tied to a rule
+    // row and so have no join to inherit `is_manual` from.
     let coverage_rows = sqlx::query(
         r#"
-        SELECT a.id AS account_id, MAX(t.date) AS newest_tx_date
+        SELECT a.id AS account_id,
+               (i.integration_type = 'manual') AS is_manual,
+               MAX(t.date) AS newest_tx_date
         FROM accounts a
+        JOIN institutions i ON i.id = a.institution_id
         LEFT JOIN transactions t ON t.account_id = a.id AND t.user_id = $1
         WHERE a.user_id = $1
-        GROUP BY a.id
+        GROUP BY a.id, i.integration_type
         "#,
     )
     .bind(ctx.user_id)
@@ -768,20 +894,91 @@ async fn calendar(
     .await
     .map_err(internal)?;
     let mut coverage: HashMap<uuid::Uuid, Option<NaiveDate>> = HashMap::new();
+    let mut manual_accounts: HashSet<uuid::Uuid> = HashSet::new();
     for r in &coverage_rows {
-        coverage.insert(
-            r.try_get("account_id").map_err(internal)?,
-            r.try_get("newest_tx_date").ok(),
-        );
+        let account_id: uuid::Uuid = r.try_get("account_id").map_err(internal)?;
+        coverage.insert(account_id, r.try_get("newest_tx_date").ok());
+        if r.try_get::<bool, _>("is_manual").unwrap_or(false) {
+            manual_accounts.insert(account_id);
+        }
     }
 
-    // Posted-transaction candidates for matching: the rules' accounts,
-    // windowed to [from - match window, today] (an expected occurrence can
-    // be paid a few days early, so the window reaches slightly past any
-    // in-window due date that's already reachable by a posted row). Split
-    // parents are excluded like loan_match does — their children carry the
-    // real spend.
-    let rule_account_ids: Vec<uuid::Uuid> = {
+    let usd_mxn = latest_usd_mxn(&state.db).await.map_err(internal)?;
+    let to_usd = |amount: Decimal, currency: &str| -> Decimal {
+        // Per-row FX→USD BEFORE any summing (house invariant): MXN divides
+        // by the latest rate; every other currency is USD-equivalent
+        // ("trust the native amount"), matching AMOUNT_USD_SQL.
+        if currency.eq_ignore_ascii_case("MXN") {
+            (amount / usd_mxn).round_dp(2)
+        } else {
+            amount
+        }
+    };
+
+    // Detected recurring charges: clusters the subscription detector infers
+    // from transaction history. NOT best-effort — an empty detected set is
+    // exactly the bug this feature exists to fix, so a read failure surfaces
+    // as a 500 instead of silently reproducing "the calendar only shows
+    // loans". The detector applies the ignored-merchants predicate itself, so
+    // a dismissed merchant can never reach the calendar.
+    let detected_clusters =
+        crate::services::subscription_detect::detect_recurring_charges(&state.db, ctx.user_id)
+            .await
+            .map_err(internal)?;
+
+    /// One active cluster resolved onto the account it actually charges.
+    struct DetectedProjection<'a> {
+        cluster: &'a crate::services::subscription_detect::DetectedCluster,
+        account_id: uuid::Uuid,
+        account_name: String,
+        /// Signed native amount — negative, because a detected cluster is by
+        /// construction an outflow (the detector only clusters expenses).
+        amount: Decimal,
+        /// Ranking key for the display cap only (never summed).
+        monthly_usd: Decimal,
+    }
+    let mut detected: Vec<DetectedProjection> = detected_clusters
+        .iter()
+        // ONLY active clusters. The detector flags 91–548-day-stale clusters
+        // "cancelled"; projecting those forward would invent bills for
+        // services the user already cancelled.
+        .filter(|c| c.status == "active")
+        .filter_map(|c| {
+            // Dominant account (by_account is sorted descending by spend) —
+            // the channel actually paying, so the pending_import/freshness
+            // rules resolve against the right account.
+            let dominant = c.by_account.first()?;
+            if c.last_amount_dec.is_zero() {
+                return None;
+            }
+            Some(DetectedProjection {
+                cluster: c,
+                account_id: dominant.account_id,
+                account_name: dominant.account_name.clone(),
+                amount: -c.last_amount_dec,
+                monthly_usd: to_usd(
+                    Decimal::from_f64_retain(c.avg_per_month_native).unwrap_or_default(),
+                    &c.currency,
+                ),
+            })
+        })
+        .collect();
+    // Biggest monthly spend first, then capped — a bounded response, and the
+    // charges that matter most survive the cap.
+    detected.sort_by(|a, b| {
+        b.monthly_usd
+            .cmp(&a.monthly_usd)
+            .then(a.cluster.key.cmp(&b.cluster.key))
+    });
+    detected.truncate(MAX_DETECTED_CLUSTERS);
+
+    // Posted-transaction candidates for matching: every account a rule or a
+    // detected cluster expects to charge, windowed to [from - match window,
+    // today] (an expected occurrence can be paid a few days early, so the
+    // window reaches slightly past any in-window due date that's already
+    // reachable by a posted row). Split parents are excluded like loan_match
+    // does — their children carry the real spend.
+    let match_account_ids: Vec<uuid::Uuid> = {
         let mut ids: Vec<uuid::Uuid> = Vec::new();
         for r in &rule_rows {
             let id: uuid::Uuid = r.try_get("account_id").map_err(internal)?;
@@ -789,10 +986,18 @@ async fn calendar(
                 ids.push(id);
             }
         }
+        // Detected clusters need their own accounts in the candidate set or
+        // the charge that PRODUCED the cluster couldn't match its own
+        // occurrence — every detected bill would render unpaid.
+        for dp in &detected {
+            if !ids.contains(&dp.account_id) {
+                ids.push(dp.account_id);
+            }
+        }
         ids
     };
     let mut candidates: Vec<BillCandidate> = Vec::new();
-    if !rule_account_ids.is_empty() {
+    if !match_account_ids.is_empty() {
         let tx_rows = sqlx::query(
             r#"
             SELECT t.id, t.account_id, t.date, t.amount, t.currency,
@@ -807,7 +1012,7 @@ async fn calendar(
             "#,
         )
         .bind(ctx.user_id)
-        .bind(&rule_account_ids)
+        .bind(&match_account_ids)
         .bind(from - chrono::Duration::days(BILL_DATE_WINDOW_DAYS))
         .bind(today)
         .fetch_all(&state.db)
@@ -825,18 +1030,6 @@ async fn calendar(
             });
         }
     }
-
-    let usd_mxn = latest_usd_mxn(&state.db).await.map_err(internal)?;
-    let to_usd = |amount: Decimal, currency: &str| -> Decimal {
-        // Per-row FX→USD BEFORE any summing (house invariant): MXN divides
-        // by the latest rate; every other currency is USD-equivalent
-        // ("trust the native amount"), matching AMOUNT_USD_SQL.
-        if currency.eq_ignore_ascii_case("MXN") {
-            (amount / usd_mxn).round_dp(2)
-        } else {
-            amount
-        }
-    };
 
     // Expand rule occurrences, then greedily match each (date-ascending, so
     // an earlier occurrence gets first claim) against the best-scoring
@@ -859,6 +1052,10 @@ async fn calendar(
 
     let mut used_tx: HashSet<uuid::Uuid> = HashSet::new();
     let mut occurrences: Vec<CalendarOccurrence> = Vec::new();
+    // (account, currency, due, expected magnitude) of every emitted RULE
+    // occurrence — the dedupe key that stops a detected cluster from
+    // double-booking a bill the user already declared explicitly.
+    let mut rule_slots: Vec<(uuid::Uuid, String, NaiveDate, Decimal)> = Vec::new();
     for p in &pending {
         let r = &rule_rows[p.rule_idx];
         let account_id: uuid::Uuid = r.try_get("account_id").map_err(internal)?;
@@ -867,47 +1064,15 @@ async fn calendar(
         let description: String = r.try_get("description").map_err(internal)?;
         let is_manual: bool = r.try_get("is_manual").unwrap_or(false);
 
-        let mut best: Option<(i32, i64, uuid::Uuid)> = None; // (score, gap, tx id)
-        for c in &candidates {
-            if used_tx.contains(&c.id)
-                || c.account_id != account_id
-                || !c.currency.eq_ignore_ascii_case(&currency)
-                || c.amount.is_sign_negative() != amount.is_sign_negative()
-            {
-                continue;
-            }
-            let gap = (c.date - p.due).num_days().abs();
-            if gap > BILL_DATE_WINDOW_DAYS {
-                continue;
-            }
-            // Amount band: 10% of the expected magnitude, floored at $1
-            // absolute (Decimal math end-to-end; f64 only for the score).
-            let expected_abs = amount.abs();
-            let diff = (c.amount.abs() - expected_abs).abs();
-            let tol = (expected_abs
-                * Decimal::from_f64_retain(BILL_AMOUNT_TOL).unwrap_or_default())
-            .max(Decimal::from_f64_retain(BILL_AMOUNT_TOL_ABS).unwrap_or_default());
-            if diff > tol {
-                continue;
-            }
-            let amount_dev = if expected_abs > Decimal::ZERO {
-                (diff / expected_abs).to_f64().unwrap_or(1.0)
-            } else {
-                1.0
-            };
-            let hit = description_hit(&description, &c.description, c.merchant_name.as_deref());
-            let score = score_bill_match(amount_dev, gap, hit);
-            if score < 50 {
-                continue;
-            }
-            if best
-                .map(|(s, g, _)| (score, -gap) > (s, -g))
-                .unwrap_or(true)
-            {
-                best = Some((score, gap, c.id));
-            }
-        }
-        let matched_tx_id = best.map(|(_, _, id)| id);
+        let matched_tx_id = best_bill_match(
+            &candidates,
+            &used_tx,
+            account_id,
+            amount,
+            &currency,
+            &description,
+            p.due,
+        );
         if let Some(id) = matched_tx_id {
             used_tx.insert(id);
         }
@@ -918,18 +1083,105 @@ async fn calendar(
             AccountFreshness::Synced
         };
         let state_str = occurrence_state(p.due, today, matched_tx_id.is_some(), freshness);
+        rule_slots.push((account_id, currency.clone(), p.due, amount.abs()));
         occurrences.push(CalendarOccurrence {
             source: "recurring".to_string(),
             id: r
                 .try_get::<uuid::Uuid, _>("id")
                 .map_err(internal)?
                 .to_string(),
+            merchant_key: None,
             account_id: Some(account_id.to_string()),
             account_name: r.try_get("account_name").ok(),
             description,
             amount,
             currency: currency.clone(),
             amount_usd: to_usd(amount, &currency),
+            due_date: p.due.to_string(),
+            state: state_str.to_string(),
+            matched_tx_id: matched_tx_id.map(|id| id.to_string()),
+        });
+    }
+
+    // Detected-cluster occurrences. Cadence stepping starts AT the cluster's
+    // last observed charge, not one cadence past it: that occurrence matches
+    // the very transaction that produced it, so a charge already posted this
+    // cycle reads `paid` instead of vanishing from the calendar. Everything
+    // after it is a projection (last charge + n × median gap).
+    //
+    // Rules are matched first (above), so an explicit rule always wins the
+    // claim on a posted row — a detected cluster can never steal it and leave
+    // the user's own rule showing a false `missed`.
+    struct PendingDetected {
+        idx: usize,
+        due: NaiveDate,
+    }
+    let mut pending_detected: Vec<PendingDetected> = Vec::new();
+    for (idx, dp) in detected.iter().enumerate() {
+        let cadence = dp.cluster.cadence_days.max(1);
+        let mut due = dp.cluster.last_charge_date;
+        for _ in 0..MAX_DETECTED_STEPS {
+            if due > to {
+                break;
+            }
+            if due >= from {
+                pending_detected.push(PendingDetected { idx, due });
+            }
+            due += chrono::Duration::days(cadence);
+        }
+    }
+    pending_detected.sort_by_key(|p| p.due);
+
+    for p in &pending_detected {
+        let dp = &detected[p.idx];
+        // Skip anything an explicit rule already covers (same account +
+        // currency, within the match date window, amount inside the same
+        // tolerance band). Without this, a user who wrote a "Netflix" rule
+        // for a charge the detector also clusters would see the bill twice —
+        // and the two occurrences would fight over the one posted row,
+        // painting one of them a false red.
+        let duplicated_by_rule = rule_slots.iter().any(|(acct, cur, due, expected_abs)| {
+            *acct == dp.account_id
+                && cur.eq_ignore_ascii_case(&dp.cluster.currency)
+                && (*due - p.due).num_days().abs() <= BILL_DATE_WINDOW_DAYS
+                && (dp.amount.abs() - *expected_abs).abs() <= amount_band_tolerance(*expected_abs)
+        });
+        if duplicated_by_rule {
+            continue;
+        }
+
+        let matched_tx_id = best_bill_match(
+            &candidates,
+            &used_tx,
+            dp.account_id,
+            dp.amount,
+            &dp.cluster.currency,
+            &dp.cluster.merchant,
+            p.due,
+        );
+        if let Some(id) = matched_tx_id {
+            used_tx.insert(id);
+        }
+
+        // Same freshness rule as rules: a manual statement-import account
+        // whose imported data doesn't reach the due date reads
+        // pending_import, never a false missed.
+        let freshness = if manual_accounts.contains(&dp.account_id) {
+            AccountFreshness::ManualCoveredThrough(coverage.get(&dp.account_id).copied().flatten())
+        } else {
+            AccountFreshness::Synced
+        };
+        let state_str = occurrence_state(p.due, today, matched_tx_id.is_some(), freshness);
+        occurrences.push(CalendarOccurrence {
+            source: "detected".to_string(),
+            id: dp.cluster.key.clone(),
+            merchant_key: Some(dp.cluster.merchant_key.clone()),
+            account_id: Some(dp.account_id.to_string()),
+            account_name: Some(dp.account_name.clone()),
+            description: dp.cluster.merchant.clone(),
+            amount: dp.amount,
+            currency: dp.cluster.currency.clone(),
+            amount_usd: to_usd(dp.amount, &dp.cluster.currency),
             due_date: p.due.to_string(),
             state: state_str.to_string(),
             matched_tx_id: matched_tx_id.map(|id| id.to_string()),
@@ -984,6 +1236,7 @@ async fn calendar(
                 .try_get::<uuid::Uuid, _>("id")
                 .map_err(internal)?
                 .to_string(),
+            merchant_key: None,
             account_id: None,
             account_name: None,
             description: r.try_get("borrower_name").unwrap_or_default(),
@@ -1060,7 +1313,19 @@ async fn calendar(
     // "upcoming" only. Paid rows are already in the balances; late/missed/
     // pending_import ones have unknowable timing, and silently projecting
     // them forward would double-book the pessimism the states already show.
-    let mut delta_by_day: HashMap<NaiveDate, (Decimal, Decimal)> = HashMap::new();
+    //
+    // Detected occurrences count toward the curve — they are real expected
+    // cash movements — but their contribution is ALSO accumulated separately
+    // so a client hiding them can subtract it without redoing any math (see
+    // the module docs).
+    #[derive(Default, Clone, Copy)]
+    struct DayDelta {
+        usd: Decimal,
+        mxn: Decimal,
+        usd_detected: Decimal,
+        mxn_detected: Decimal,
+    }
+    let mut delta_by_day: HashMap<NaiveDate, DayDelta> = HashMap::new();
     for o in &occurrences {
         if o.state != "upcoming" {
             continue;
@@ -1071,28 +1336,39 @@ async fn calendar(
         if due < today || due > to {
             continue;
         }
-        let entry = delta_by_day
-            .entry(due)
-            .or_insert((Decimal::ZERO, Decimal::ZERO));
+        let entry = delta_by_day.entry(due).or_default();
+        let is_detected = o.source == "detected";
         if o.currency.eq_ignore_ascii_case("MXN") {
-            entry.1 += o.amount;
+            entry.mxn += o.amount;
+            if is_detected {
+                entry.mxn_detected += o.amount;
+            }
         } else {
-            entry.0 += o.amount;
+            entry.usd += o.amount;
+            if is_detected {
+                entry.usd_detected += o.amount;
+            }
         }
     }
     let mut projection = Vec::with_capacity(days as usize + 1);
     let mut run_usd = start_usd;
     let mut run_mxn = start_mxn;
+    let mut run_usd_detected = Decimal::ZERO;
+    let mut run_mxn_detected = Decimal::ZERO;
     for offset in 0..=days {
         let d = today + chrono::Duration::days(offset);
-        if let Some((du, dm)) = delta_by_day.get(&d) {
-            run_usd += *du;
-            run_mxn += *dm;
+        if let Some(delta) = delta_by_day.get(&d) {
+            run_usd += delta.usd;
+            run_mxn += delta.mxn;
+            run_usd_detected += delta.usd_detected;
+            run_mxn_detected += delta.mxn_detected;
         }
         projection.push(ProjectionPoint {
             date: d.to_string(),
             usd: run_usd.round_dp(2),
             mxn: run_mxn.round_dp(2),
+            usd_detected: run_usd_detected.round_dp(2),
+            mxn_detected: run_mxn_detected.round_dp(2),
         });
     }
 

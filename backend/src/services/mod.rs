@@ -25,6 +25,7 @@ pub mod recovery;
 pub mod rules;
 pub mod sessions;
 pub mod staleness;
+pub mod subscription_detect;
 pub mod sync;
 pub mod tax;
 pub mod totp;
