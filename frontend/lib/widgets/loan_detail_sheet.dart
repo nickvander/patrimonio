@@ -10,6 +10,18 @@ import '../utils/theme_colors.dart';
 import 'edit_loan_dialog.dart';
 import 'record_payment_sheet.dart';
 
+/// Inner-width breakpoint for the payment-schedule table, measured against
+/// the sheet's OWN `LayoutBuilder` constraint — never `MediaQuery` (skill
+/// §4/§5). This is a modal bottom sheet: Material 3 caps it at 640dp wide
+/// and centres it, so on a 1440dp window the screen width says "desktop"
+/// while the table only ever gets ~590dp, and on a 700dp window the screen
+/// says "phone" while the sheet is that same 640dp.
+///
+/// Below it the table can't hold its six columns (they collide and the money
+/// truncates), so the Interest/Balance columns fold into a per-row subtitle
+/// and a long schedule collapses behind a "view N installments" disclosure.
+const double kScheduleNarrowWidth = 520.0;
+
 class LoanDetailSheet extends StatefulWidget {
   final ApiService apiService;
   final Map<String, dynamic> loan;
@@ -38,9 +50,10 @@ class _LoanDetailSheetState extends State<LoanDetailSheet> {
   List<dynamic> _disbSuggestions = [];
   List<dynamic> _repaySuggestions = [];
   bool _loading = true;
-  // Phones collapse the amortization table behind a tap so the schedule
-  // controls + due-date stay visible without a wall of rows. Short
-  // schedules (≤3 rows) are treated as expanded — see _buildScheduleSection.
+  // A sheet narrower than [kScheduleNarrowWidth] collapses the amortization
+  // table behind a tap so the schedule controls + due-date stay visible
+  // without a wall of rows. Short schedules (≤3 rows) are treated as
+  // expanded — see _buildScheduleSection.
   bool _scheduleExpanded = false;
 
   String get _loanId => widget.loan['id'].toString();
@@ -179,9 +192,13 @@ class _LoanDetailSheetState extends State<LoanDetailSheet> {
             children: [
               Icon(Icons.check_circle, size: 18, color: context.positive),
               const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context).lendDisbursementLinked,
-                style: TextStyle(fontSize: 13, color: context.textMuted),
+              // Expanded, not a bare Text: the en string needs ~397dp and
+              // overflowed this Row by 39px on a 390dp phone.
+              Expanded(
+                child: Text(
+                  AppLocalizations.of(context).lendDisbursementLinked,
+                  style: TextStyle(fontSize: 13, color: context.textMuted),
+                ),
               ),
             ],
           )
@@ -671,10 +688,42 @@ class _LoanDetailSheetState extends State<LoanDetailSheet> {
     // Custom loans carry an explicit schedule but no term/frequency; still
     // offer export + copy whenever there's actually a schedule to export.
     final canExport = hasTerms || scheduled.isNotEmpty;
-    final phone = MediaQuery.sizeOf(context).width < 720;
     final shortSchedule = scheduled.length <= 3;
-    final showTable = !phone || shortSchedule || _scheduleExpanded;
 
+    // Both width branches (collapse the table behind a disclosure, and drop
+    // the Interest/Balance columns) read the width the table ACTUALLY gets —
+    // this sheet's inner constraint — not the window. See
+    // [kScheduleNarrowWidth].
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < kScheduleNarrowWidth;
+        final showTable = !narrow || shortSchedule || _scheduleExpanded;
+        return _buildScheduleBody(
+          scheduled: scheduled,
+          l10n: l10n,
+          hasInterest: hasInterest,
+          hasTerms: hasTerms,
+          canExport: canExport,
+          narrow: narrow,
+          shortSchedule: shortSchedule,
+          showTable: showTable,
+        );
+      },
+    );
+  }
+
+  /// The schedule section's content, once the width branches are resolved
+  /// from the sheet's own constraint by [_buildScheduleSection].
+  Widget _buildScheduleBody({
+    required List<dynamic> scheduled,
+    required AppLocalizations l10n,
+    required bool hasInterest,
+    required bool hasTerms,
+    required bool canExport,
+    required bool narrow,
+    required bool shortSchedule,
+    required bool showTable,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -745,9 +794,10 @@ class _LoanDetailSheetState extends State<LoanDetailSheet> {
         else ...[
           _buildScheduleProgress(scheduled),
           const SizedBox(height: 12),
-          // Phones with a longer schedule collapse the table behind a
-          // count-aware tap; short plans (≤3 rows) and wide screens show it.
-          if (phone && !shortSchedule)
+          // A narrow sheet with a longer schedule collapses the table behind
+          // a count-aware tap; short plans (≤3 rows) and sheets wide enough
+          // for the full table show it inline.
+          if (narrow && !shortSchedule)
             InkWell(
               onTap: () =>
                   setState(() => _scheduleExpanded = !_scheduleExpanded),
@@ -780,8 +830,12 @@ class _LoanDetailSheetState extends State<LoanDetailSheet> {
               ),
             ),
           if (showTable) ...[
-            if (phone && !shortSchedule) const SizedBox(height: 8),
-            _buildScheduleTable(scheduled, showInterest: hasInterest),
+            if (narrow && !shortSchedule) const SizedBox(height: 8),
+            _buildScheduleTable(
+              scheduled,
+              showInterest: hasInterest,
+              narrow: narrow,
+            ),
           ],
         ],
         _buildDueDateRow(),
@@ -966,14 +1020,19 @@ class _LoanDetailSheetState extends State<LoanDetailSheet> {
     );
   }
 
-  Widget _buildScheduleTable(List<dynamic> rows, {bool showInterest = true}) {
+  /// Renders the schedule. [narrow] — resolved by the caller from the
+  /// sheet's own [LayoutBuilder] constraint, never the window — drops the
+  /// Interest/Balance columns: below [kScheduleNarrowWidth] there's no room
+  /// for 5-6 columns, the money truncates and those two collide. The amount
+  /// remaining already shows in the progress line above, and each row
+  /// carries a compact "int · balance" subtitle, so no data is lost.
+  Widget _buildScheduleTable(
+    List<dynamic> rows, {
+    bool showInterest = true,
+    required bool narrow,
+  }) {
     final l10n = AppLocalizations.of(context);
     final nextDue = _nextDueIndex(rows);
-    // On a phone there's no room for 5-6 columns — the money truncates and
-    // the Interest/Balance columns collide. Drop those two on narrow (the
-    // amount remaining already shows in the progress line above); each row
-    // instead carries a compact "int · balance" subtitle so nothing is lost.
-    final narrow = MediaQuery.sizeOf(context).width < 520;
     // Totals footer.
     var totalPayment = 0.0;
     for (final p in rows) {
