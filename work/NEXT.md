@@ -53,6 +53,50 @@ quarterly rather than ad hoc.
 
 ## Open items needing only a sitting
 
+### 🔴 CONFIRMED BUG 2026-08-04 — credit-card payments counted as spending
+
+**Cash-flow spending is materially overstated when a card is paid from
+checking and the payment carries a spending category.** Verified against prod:
+July `RENT_AND_UTILITIES` totals **$8,951.77** under the real cash-flow filter,
+for a rent of **$3,038.13/mo** — roughly 3x, ~$5,900 overstated in one month.
+
+Mechanism (all rows real, same month):
+- `-3038.13` "Bilt Housing Payment" on the **Bilt Blue Card** (credit card),
+  `RENT_AND_UTILITIES_RENT` → the actual rent charge. **Correct spend.**
+- `-3038.13` "BILT CARD" from **Checking**, also `RENT_AND_UTILITIES_RENT` →
+  this is **paying the card**, counted a second time as rent.
+- `-2552.85` "BILT CARD" from another checking account, same story → a third.
+- `+3038.13` "Payment - Bilt Housing" on the card is correctly excluded by the
+  existing `NOT (amount > 0 AND is_liability_account_type(...))` anti-join.
+
+Root cause: `CASHFLOW_ROW_ANTI_JOINS_SQL` excludes card payments **only by
+`category_detailed = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'`**. These payment legs
+are categorized as RENT by the provider (the merchant is literally "BILT
+CARD"), so they slip through. Any card paid from checking whose payment leg
+gets a spending category has the same problem — Bilt is just the visible case
+because rent is large.
+
+**Fix options (owner's call):**
+1. **Systemic, preferred** — recognize a card-payment leg structurally rather
+   than by category: an outflow from a non-liability account that matches an
+   inflow on one of the SAME user's liability accounts (equal absolute amount,
+   within a few days) is a payment, not spending. `services/fx_transfer_link.rs`
+   is the existing precedent for pair-matching, and the inflow side is already
+   excluded, so only the outflow leg needs suppressing. Must not suppress a
+   genuine purchase that happens to equal a payment amount — require the
+   liability-account counterpart to exist.
+2. **Immediate, no code** — the rules engine shipped 2026-08-03 can do it
+   today: a rule matching "BILT CARD" scoped to the checking accounts, setting
+   the category to `TRANSFER_OUT`, which `NON_CASHFLOW_CATEGORIES_SQL` already
+   excludes. Retroactive apply is previewed, so the blast radius is visible
+   first.
+
+**Also visible in the recurring card:** the same rent is detected as TWO
+clusters ("Bilt" and "Bilt Housing Payment", both $3,038.13) because the
+card-side and checking-side descriptors differ — so the monthly recurring
+estimate is inflated by the same duplication. Fixing the classification should
+be checked against the detector output afterwards.
+
 ### Owner-reported 2026-08-04 — cash-flow / Sankey, INVESTIGATED against prod
 
 A phone screenshot raised three concerns. Checked read-only against the prod
