@@ -12766,6 +12766,144 @@ abstract class AppLocalizations {
   /// **'Couldn\'t remove that entry — it\'s still saved.'**
   String get qeUndoFailed;
 
+  /// No description provided for @impReconTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Statement check'**
+  String get impReconTitle;
+
+  /// No description provided for @impReconAdvisory.
+  ///
+  /// In en, this message translates to:
+  /// **'Advisory only — this never blocks an import. Real statements carry fees and adjustments the reader can miss.'**
+  String get impReconAdvisory;
+
+  /// Date range covered by one statement file. Placeholder names are chosen so template order and gen-l10n's alphabetical order agree: (from, to).
+  ///
+  /// In en, this message translates to:
+  /// **'{from} – {to}'**
+  String impReconPeriod(String from, String to);
+
+  /// No description provided for @impReconRows.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 row} other{{count} rows}}'**
+  String impReconRows(int count);
+
+  /// No description provided for @impReconReconciled.
+  ///
+  /// In en, this message translates to:
+  /// **'Balances to the centavo'**
+  String get impReconReconciled;
+
+  /// No description provided for @impReconReconciledDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'The bank\'s closing balance matches what this account will hold once this statement is imported.'**
+  String get impReconReconciledDetail;
+
+  /// No description provided for @impReconDuplicateSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Balances once already-imported rows are skipped'**
+  String get impReconDuplicateSkip;
+
+  /// No description provided for @impReconDuplicateSkipDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 row on this statement is already in this account and will be skipped, so it is counted once.} other{{count} rows on this statement are already in this account and will be skipped, so they are counted once.}}'**
+  String impReconDuplicateSkipDetail(int count);
+
+  /// No description provided for @impReconExplained.
+  ///
+  /// In en, this message translates to:
+  /// **'Explained by transactions you already have'**
+  String get impReconExplained;
+
+  /// gen-l10n orders placeholders ALPHABETICALLY (count, difference) regardless of the template order used here (difference first) — call sites must pass count first.
+  ///
+  /// In en, this message translates to:
+  /// **'This statement is off by exactly {difference} — the total of {count, plural, =1{1 transaction} other{{count} transactions}} this account already holds. Likely duplicates to delete, or one is dated in the wrong month.'**
+  String impReconExplainedDetail(String difference, int count);
+
+  /// No description provided for @impReconUnexplained.
+  ///
+  /// In en, this message translates to:
+  /// **'Difference we can\'t explain'**
+  String get impReconUnexplained;
+
+  /// No description provided for @impReconUnexplainedDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in this account adds up to the gap. Usually a fee or adjustment the statement reader missed — importing is still fine.'**
+  String get impReconUnexplainedDetail;
+
+  /// No description provided for @impReconUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not checked'**
+  String get impReconUnavailable;
+
+  /// No description provided for @impReconUnavailableNoBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'We can\'t check this statement — this bank\'s format carries no running balance to compare against.'**
+  String get impReconUnavailableNoBalance;
+
+  /// No description provided for @impReconUnavailableMarker.
+  ///
+  /// In en, this message translates to:
+  /// **'We can\'t check this statement — it prints only a period-total balance, not a running one.'**
+  String get impReconUnavailableMarker;
+
+  /// No description provided for @impReconUnavailableMixed.
+  ///
+  /// In en, this message translates to:
+  /// **'We can\'t check this statement — it mixes currencies, and adding across currencies would be meaningless.'**
+  String get impReconUnavailableMixed;
+
+  /// No description provided for @impReconUnavailableGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'We can\'t check this statement.'**
+  String get impReconUnavailableGeneric;
+
+  /// No description provided for @impReconStatementClosing.
+  ///
+  /// In en, this message translates to:
+  /// **'Statement closing balance'**
+  String get impReconStatementClosing;
+
+  /// No description provided for @impReconAppClosing.
+  ///
+  /// In en, this message translates to:
+  /// **'After this import'**
+  String get impReconAppClosing;
+
+  /// No description provided for @impReconDifference.
+  ///
+  /// In en, this message translates to:
+  /// **'Difference'**
+  String get impReconDifference;
+
+  /// No description provided for @impReconCandidatesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transactions that add up to the difference'**
+  String get impReconCandidatesTitle;
+
+  /// No description provided for @impReconCandidateDoubleEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Already here, not on the statement'**
+  String get impReconCandidateDoubleEntry;
+
+  /// No description provided for @impReconCandidateMisdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Dated outside this statement\'s period'**
+  String get impReconCandidateMisdated;
+
   /// Quick-entry inline confirmation. {amount} is the SIGNED, pre-formatted stored amount (negative for a spend, so the strip states exactly what was written); {label} is the transaction description. Placeholder names are chosen so declaration order, template order and alphabetical order all agree: (amount, label).
   ///
   /// In en, this message translates to:

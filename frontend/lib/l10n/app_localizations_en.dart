@@ -8020,6 +8020,113 @@ class AppLocalizationsEn extends AppLocalizations {
   String get qeUndoFailed => 'Couldn\'t remove that entry — it\'s still saved.';
 
   @override
+  String get impReconTitle => 'Statement check';
+
+  @override
+  String get impReconAdvisory =>
+      'Advisory only — this never blocks an import. Real statements carry fees and adjustments the reader can miss.';
+
+  @override
+  String impReconPeriod(String from, String to) {
+    return '$from – $to';
+  }
+
+  @override
+  String impReconRows(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rows',
+      one: '1 row',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get impReconReconciled => 'Balances to the centavo';
+
+  @override
+  String get impReconReconciledDetail =>
+      'The bank\'s closing balance matches what this account will hold once this statement is imported.';
+
+  @override
+  String get impReconDuplicateSkip =>
+      'Balances once already-imported rows are skipped';
+
+  @override
+  String impReconDuplicateSkipDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count rows on this statement are already in this account and will be skipped, so they are counted once.',
+      one:
+          '1 row on this statement is already in this account and will be skipped, so it is counted once.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get impReconExplained => 'Explained by transactions you already have';
+
+  @override
+  String impReconExplainedDetail(String difference, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transactions',
+      one: '1 transaction',
+    );
+    return 'This statement is off by exactly $difference — the total of $_temp0 this account already holds. Likely duplicates to delete, or one is dated in the wrong month.';
+  }
+
+  @override
+  String get impReconUnexplained => 'Difference we can\'t explain';
+
+  @override
+  String get impReconUnexplainedDetail =>
+      'Nothing in this account adds up to the gap. Usually a fee or adjustment the statement reader missed — importing is still fine.';
+
+  @override
+  String get impReconUnavailable => 'Not checked';
+
+  @override
+  String get impReconUnavailableNoBalance =>
+      'We can\'t check this statement — this bank\'s format carries no running balance to compare against.';
+
+  @override
+  String get impReconUnavailableMarker =>
+      'We can\'t check this statement — it prints only a period-total balance, not a running one.';
+
+  @override
+  String get impReconUnavailableMixed =>
+      'We can\'t check this statement — it mixes currencies, and adding across currencies would be meaningless.';
+
+  @override
+  String get impReconUnavailableGeneric => 'We can\'t check this statement.';
+
+  @override
+  String get impReconStatementClosing => 'Statement closing balance';
+
+  @override
+  String get impReconAppClosing => 'After this import';
+
+  @override
+  String get impReconDifference => 'Difference';
+
+  @override
+  String get impReconCandidatesTitle =>
+      'Transactions that add up to the difference';
+
+  @override
+  String get impReconCandidateDoubleEntry =>
+      'Already here, not on the statement';
+
+  @override
+  String get impReconCandidateMisdated =>
+      'Dated outside this statement\'s period';
+
+  @override
   String qeSaved(String amount, String label) {
     return 'Saved $amount · $label';
   }

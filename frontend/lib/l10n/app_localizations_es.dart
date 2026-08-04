@@ -8088,6 +8088,112 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo eliminar el movimiento — sigue guardado.';
 
   @override
+  String get impReconTitle => 'Revisión del estado de cuenta';
+
+  @override
+  String get impReconAdvisory =>
+      'Solo informativo — esto nunca bloquea una importación. Los estados reales traen comisiones y ajustes que el lector puede omitir.';
+
+  @override
+  String impReconPeriod(String from, String to) {
+    return '$from – $to';
+  }
+
+  @override
+  String impReconRows(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count movimientos',
+      one: '1 movimiento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get impReconReconciled => 'Cuadra al centavo';
+
+  @override
+  String get impReconReconciledDetail =>
+      'El saldo final del banco coincide con lo que tendrá esta cuenta al importar este estado.';
+
+  @override
+  String get impReconDuplicateSkip =>
+      'Cuadra al omitir los movimientos ya importados';
+
+  @override
+  String impReconDuplicateSkipDetail(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count movimientos de este estado ya están en la cuenta y se omitirán, así que se cuentan una sola vez.',
+      one:
+          '1 movimiento de este estado ya está en la cuenta y se omitirá, así que se cuenta una sola vez.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get impReconExplained => 'Explicada por movimientos que ya tienes';
+
+  @override
+  String impReconExplainedDetail(String difference, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count movimientos',
+      one: '1 movimiento',
+    );
+    return 'Este estado difiere por exactamente $difference — el total de $_temp0 que esta cuenta ya tiene. Probablemente son duplicados que conviene borrar, o uno quedó con el mes equivocado.';
+  }
+
+  @override
+  String get impReconUnexplained => 'Diferencia que no podemos explicar';
+
+  @override
+  String get impReconUnexplainedDetail =>
+      'Nada en esta cuenta suma esa diferencia. Suele ser una comisión o un ajuste que el lector del estado omitió — de todos modos puedes importar.';
+
+  @override
+  String get impReconUnavailable => 'Sin verificar';
+
+  @override
+  String get impReconUnavailableNoBalance =>
+      'No podemos verificar este estado — el formato de este banco no trae saldo corriente con el cual comparar.';
+
+  @override
+  String get impReconUnavailableMarker =>
+      'No podemos verificar este estado — solo imprime un saldo total del periodo, no uno corriente.';
+
+  @override
+  String get impReconUnavailableMixed =>
+      'No podemos verificar este estado — mezcla monedas, y sumar entre monedas no tendría sentido.';
+
+  @override
+  String get impReconUnavailableGeneric =>
+      'No podemos verificar este estado de cuenta.';
+
+  @override
+  String get impReconStatementClosing => 'Saldo final del estado';
+
+  @override
+  String get impReconAppClosing => 'Después de esta importación';
+
+  @override
+  String get impReconDifference => 'Diferencia';
+
+  @override
+  String get impReconCandidatesTitle => 'Movimientos que suman la diferencia';
+
+  @override
+  String get impReconCandidateDoubleEntry => 'Ya está aquí, no en el estado';
+
+  @override
+  String get impReconCandidateMisdated =>
+      'Fechado fuera del periodo del estado';
+
+  @override
   String qeSaved(String amount, String label) {
     return 'Guardado $amount · $label';
   }

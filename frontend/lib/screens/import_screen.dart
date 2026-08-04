@@ -13,6 +13,7 @@ import '../utils/mask_aware_name.dart';
 import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../widgets/add_account_dialog.dart';
+import '../widgets/import_reconciliation_panel.dart';
 import 'import_cleanup_screen.dart';
 
 /// Outcome of the post-parse account auto-match, surfaced as a cue under
@@ -22,14 +23,18 @@ import 'import_cleanup_screen.dart';
 enum _AccountCue { none, matched, created, noMatch }
 
 class ImportScreen extends StatefulWidget {
-  const ImportScreen({super.key});
+  const ImportScreen({super.key, this.api});
+
+  /// Test seam — house `extends ApiService` fake pattern (see
+  /// `RulesScreen`). Production always leaves it null.
+  final ApiService? api;
 
   @override
   State<ImportScreen> createState() => _ImportScreenState();
 }
 
 class _ImportScreenState extends State<ImportScreen> {
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService = widget.api ?? ApiService();
   bool _isUploading = false;
   // Multi-file support: a single upload can include many statements
   // (e.g. all 12 monthly Banamex PDFs at once). Parsed transactions
@@ -42,6 +47,12 @@ class _ImportScreenState extends State<ImportScreen> {
   // dedup signature). Flagged + auto-deselected so the user doesn't
   // re-import them; recomputed whenever the account changes.
   Set<int> _duplicateIndices = {};
+
+  /// Advisory statement reconciliation for the rows in the preview, fetched
+  /// at the same stage as the duplicate check (see [_recheckDuplicates]).
+  /// Empty = not fetched, or the backend couldn't be reached — the panel
+  /// simply doesn't render, and the import is never gated on it.
+  List<AccountReconciliation> _reconciliation = const [];
   // source_file → its row indices, computed ONCE when the preview loads.
   // Avoids re-grouping all rows on every rebuild (the per-file chips read
   // this), which was a chunk of the lag with 1000+ transactions.
@@ -378,6 +389,7 @@ class _ImportScreenState extends State<ImportScreen> {
       _isUploading = true;
       _message = null;
       _duplicateIndices = {};
+      _reconciliation = const [];
       _fileStatuses = [
         for (final f in _selectedFiles) ImportFileStatus(f.name, 'waiting'),
       ];
@@ -619,8 +631,11 @@ class _ImportScreenState extends State<ImportScreen> {
                       child: _accountItemLabel(acc),
                     );
                   }).toList(),
-                  onChanged: (val) =>
-                      setState(() => _secondaryAccountIds[label] = val),
+                  onChanged: (val) {
+                    setState(() => _secondaryAccountIds[label] = val);
+                    // A newly-routed section becomes reconcilable.
+                    _refreshReconciliation();
+                  },
                 ),
               Align(
                 alignment: Alignment.centerLeft,
@@ -662,6 +677,9 @@ class _ImportScreenState extends State<ImportScreen> {
       if (_duplicateIndices.isNotEmpty) {
         setState(() => _duplicateIndices = {});
       }
+      if (_reconciliation.isNotEmpty) {
+        setState(() => _reconciliation = const []);
+      }
       return;
     }
     final dups = await _apiService.checkImportDuplicates(acct, txs);
@@ -671,6 +689,42 @@ class _ImportScreenState extends State<ImportScreen> {
       // Don't re-import what's already there.
       _selectedIndices = _selectedIndices.difference(dups);
     });
+    // Same preview stage, same trigger: whenever the destination changes we
+    // re-ask both "which rows are already here" and "does each statement
+    // balance against this account".
+    await _refreshReconciliation();
+  }
+
+  /// Ask the backend whether each statement in the preview reconciles
+  /// against its destination account. Advisory: the answer is rendered by
+  /// [ImportReconciliationPanel] and never gates the confirm button.
+  ///
+  /// Rows are grouped by destination exactly as [_confirmImport] groups
+  /// them — primary section to `_selectedAccountId`, each bundled secondary
+  /// section to the account chosen for its label — but over ALL parsed rows
+  /// rather than the live selection, so the check describes the statement as
+  /// the bank wrote it instead of shifting with every checkbox.
+  Future<void> _refreshReconciliation() async {
+    final txs = _previewTransactions;
+    if (txs == null || txs.isEmpty) {
+      if (_reconciliation.isNotEmpty && mounted) {
+        setState(() => _reconciliation = const []);
+      }
+      return;
+    }
+    final byAccount = <String, List<dynamic>>{};
+    for (final tx in txs) {
+      final label = (tx['account_label'] ?? '').toString();
+      final accountId = label.isEmpty
+          ? _selectedAccountId
+          : _secondaryAccountIds[label];
+      // A section with no destination yet simply isn't reconciled.
+      if (accountId == null || accountId.isEmpty) continue;
+      byAccount.putIfAbsent(accountId, () => []).add(tx);
+    }
+    final result = await _apiService.reconcileImport(byAccount);
+    if (!mounted) return;
+    setState(() => _reconciliation = result);
   }
 
   /// Upload header: "Processing X of Y" + a DETERMINATE bar + the running
@@ -2060,6 +2114,14 @@ class _ImportScreenState extends State<ImportScreen> {
                       ),
                     ),
                   ),
+                  // Advisory statement check for the chosen destination:
+                  // does each statement balance against the bank's own
+                  // closing SALDO once this import lands? Renders only once
+                  // the answer is in — and never disables the import.
+                  if (_reconciliation.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    ImportReconciliationPanel(accounts: _reconciliation),
+                  ],
                   const SizedBox(height: 24),
 
                   // Header row with title and selection controls

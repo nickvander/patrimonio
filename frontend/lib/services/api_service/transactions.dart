@@ -932,6 +932,49 @@ mixin _TxApi on _ApiServiceBase {
     return <int>{};
   }
 
+  /// Preview-time statement reconciliation: for each destination account,
+  /// ask the backend whether every statement in the batch balances against
+  /// the bank's own closing SALDO once this import lands, and which stored
+  /// transactions explain a gap when one exists.
+  ///
+  /// [transactionsByAccount] maps an account id to the preview rows destined
+  /// for it (the same raw rows `confirmImport` posts, including
+  /// `source_file` — the backend groups one result per statement file).
+  ///
+  /// Read-only and **advisory**: the backend writes nothing and confirm is
+  /// unchanged. Best-effort like [checkImportDuplicates] — any failure
+  /// returns an empty list so the import flow keeps working.
+  Future<List<AccountReconciliation>> reconcileImport(
+    Map<String, List<dynamic>> transactionsByAccount,
+  ) async {
+    if (transactionsByAccount.isEmpty) return const [];
+    try {
+      final response = await _post(
+        Uri.parse('$_baseUrl/imports/reconcile'),
+        headers: _withCsrf({'Content-Type': 'application/json'}),
+        body: json.encode({
+          'accounts': [
+            for (final entry in transactionsByAccount.entries)
+              {'account_id': entry.key, 'transactions': entry.value},
+          ],
+        }),
+      );
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body) as Map<String, dynamic>;
+        final accounts = (body['accounts'] as List?) ?? const [];
+        return accounts
+            .whereType<Map>()
+            .map(
+              (a) => AccountReconciliation.fromJson(a.cast<String, dynamic>()),
+            )
+            .toList();
+      }
+    } catch (_) {
+      // Best-effort; a reconciliation we couldn't fetch simply isn't shown.
+    }
+    return const [];
+  }
+
   /// Bump an account's `current_balance` and write a `balance_snapshots`
   /// row. `notes` (when set) is stored alongside the snapshot — used by
   /// manual-asset revaluations to capture "why this value moved" without
@@ -1346,3 +1389,214 @@ mixin _TxApi on _ApiServiceBase {
     }
   }
 }
+
+// --- Statement reconciliation (POST /imports/reconcile) -----------------
+//
+// A typed model rather than the stringly-typed maps most endpoints use:
+// the response is a closed vocabulary the UI switches on, and getting
+// "we couldn't check this" confused with "it balances" is exactly the
+// failure this feature exists to prevent.
+
+/// Outcome of reconciling ONE statement (and, rolled up worst-of, of an
+/// account). Mirrors the backend's `ReconcileStatus`.
+enum ReconcileStatus {
+  /// Balances to the centavo and every incoming row is new.
+  reconciled,
+
+  /// Balances, but only because some incoming rows are already stored and
+  /// confirm will skip them.
+  reconciledAfterDuplicateSkip,
+
+  /// There is a gap and specific stored transactions sum to exactly it.
+  explainedByExistingTransactions,
+
+  /// There is a gap and nothing on file explains it.
+  unexplained,
+
+  /// The statement could not be checked at all. NEVER a stand-in for
+  /// "it reconciles" — see `unavailableReason`.
+  unavailable,
+}
+
+/// Why a statement could not be checked. `null` when the backend sent a
+/// reason this client doesn't know (forward compatibility) — the UI then
+/// says only that it couldn't check.
+enum ReconcileUnavailableReason {
+  /// No row in the statement carries a running balance.
+  noRunningBalance,
+
+  /// The only balance-bearing row is a period-total marker, so there is no
+  /// opening balance to anchor on.
+  balanceMarkerOnly,
+
+  /// The statement (or the account's rows in its period) spans more than
+  /// one currency; summing across currencies is banned here.
+  mixedCurrency,
+}
+
+/// How a candidate transaction would explain the gap.
+enum ReconcileCandidateKind {
+  /// Inside the period and not on the statement — a likely double entry.
+  doubleEntryInPeriod,
+
+  /// Just outside the period — a likely misdated row.
+  misdatedNearPeriod,
+}
+
+/// A stored transaction offered as an explanation for a statement's gap.
+class ReconcileCandidate {
+  const ReconcileCandidate({
+    required this.transactionId,
+    required this.date,
+    required this.description,
+    required this.amount,
+    required this.kind,
+  });
+
+  factory ReconcileCandidate.fromJson(Map<String, dynamic> j) =>
+      ReconcileCandidate(
+        transactionId: (j['transaction_id'] ?? '').toString(),
+        date: (j['date'] ?? '').toString(),
+        description: (j['description'] ?? '').toString(),
+        amount: _reconMoney(j['amount']) ?? 0,
+        kind: switch ((j['kind'] ?? '').toString()) {
+          'misdated_near_period' => ReconcileCandidateKind.misdatedNearPeriod,
+          _ => ReconcileCandidateKind.doubleEntryInPeriod,
+        },
+      );
+
+  final String transactionId;
+
+  /// ISO `YYYY-MM-DD`, as the backend sends it.
+  final String date;
+  final String description;
+  final double amount;
+  final ReconcileCandidateKind kind;
+}
+
+/// One statement file's reconciliation result. Every money field is
+/// nullable because the backend serializes them explicitly as `null` when
+/// it has no value — an absent closing balance must not read as 0.
+class StatementReconciliation {
+  const StatementReconciliation({
+    required this.file,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.status,
+    this.currency,
+    this.unavailableReason,
+    this.statementOpeningBalance,
+    this.statementClosingBalance,
+    this.computedClosingBalance,
+    this.difference,
+    this.incomingRows = 0,
+    this.duplicateRows = 0,
+    this.existingRowsInPeriod = 0,
+    this.candidates = const [],
+  });
+
+  factory StatementReconciliation.fromJson(Map<String, dynamic> j) =>
+      StatementReconciliation(
+        file: (j['file'] ?? '').toString(),
+        periodStart: (j['period_start'] ?? '').toString(),
+        periodEnd: (j['period_end'] ?? '').toString(),
+        currency: j['currency']?.toString(),
+        status: reconcileStatusFromWire(j['status']),
+        unavailableReason: switch ((j['unavailable_reason'] ?? '').toString()) {
+          'no_running_balance' => ReconcileUnavailableReason.noRunningBalance,
+          'balance_marker_only' => ReconcileUnavailableReason.balanceMarkerOnly,
+          'mixed_currency' => ReconcileUnavailableReason.mixedCurrency,
+          _ => null,
+        },
+        statementOpeningBalance: _reconMoney(j['statement_opening_balance']),
+        statementClosingBalance: _reconMoney(j['statement_closing_balance']),
+        computedClosingBalance: _reconMoney(j['computed_closing_balance']),
+        difference: _reconMoney(j['difference']),
+        incomingRows: (j['incoming_rows'] as num?)?.toInt() ?? 0,
+        duplicateRows: (j['duplicate_rows'] as num?)?.toInt() ?? 0,
+        existingRowsInPeriod:
+            (j['existing_rows_in_period'] as num?)?.toInt() ?? 0,
+        candidates: ((j['candidates'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((c) => ReconcileCandidate.fromJson(c.cast<String, dynamic>()))
+            .toList(),
+      );
+
+  final String file;
+
+  /// ISO `YYYY-MM-DD` bounds of the rows in this file.
+  final String periodStart;
+  final String periodEnd;
+
+  /// The statement's single currency, or null when its rows disagree.
+  final String? currency;
+  final ReconcileStatus status;
+  final ReconcileUnavailableReason? unavailableReason;
+  final double? statementOpeningBalance;
+  final double? statementClosingBalance;
+  final double? computedClosingBalance;
+
+  /// `statementClosingBalance − computedClosingBalance`. Positive means the
+  /// app is SHORT of the bank.
+  final double? difference;
+  final int incomingRows;
+  final int duplicateRows;
+  final int existingRowsInPeriod;
+  final List<ReconcileCandidate> candidates;
+}
+
+/// Per-account roll-up: one entry per statement file plus a worst-of
+/// verdict (the backend ranks `unavailable` ABOVE both green states).
+class AccountReconciliation {
+  const AccountReconciliation({
+    required this.accountId,
+    required this.accountName,
+    required this.currency,
+    required this.status,
+    this.statements = const [],
+  });
+
+  factory AccountReconciliation.fromJson(Map<String, dynamic> j) =>
+      AccountReconciliation(
+        accountId: (j['account_id'] ?? '').toString(),
+        accountName: (j['account_name'] ?? '').toString(),
+        currency: (j['currency'] ?? '').toString(),
+        status: reconcileStatusFromWire(j['status']),
+        statements: ((j['statements'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(
+              (s) =>
+                  StatementReconciliation.fromJson(s.cast<String, dynamic>()),
+            )
+            .toList(),
+      );
+
+  final String accountId;
+  final String accountName;
+  final String currency;
+  final ReconcileStatus status;
+  final List<StatementReconciliation> statements;
+}
+
+/// Wire (`snake_case`) → [ReconcileStatus]. An unrecognized value falls
+/// back to [ReconcileStatus.unavailable] — "we can't say" — never to a
+/// green state.
+ReconcileStatus reconcileStatusFromWire(Object? wire) =>
+    switch ((wire ?? '').toString()) {
+      'reconciled' => ReconcileStatus.reconciled,
+      'reconciled_after_duplicate_skip' =>
+        ReconcileStatus.reconciledAfterDuplicateSkip,
+      'explained_by_existing_transactions' =>
+        ReconcileStatus.explainedByExistingTransactions,
+      'unexplained' => ReconcileStatus.unexplained,
+      _ => ReconcileStatus.unavailable,
+    };
+
+/// Money off the wire. `rust_decimal` is built with `serde-float` so these
+/// arrive as JSON numbers, but a string is accepted too rather than
+/// silently reading as null.
+double? _reconMoney(Object? v) => switch (v) {
+  final num n => n.toDouble(),
+  final String s => double.tryParse(s),
+  _ => null,
+};

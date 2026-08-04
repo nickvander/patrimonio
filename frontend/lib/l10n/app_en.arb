@@ -4609,6 +4609,65 @@
   "qeFullForm": "More options",
   "qeUndone": "Entry removed",
   "qeUndoFailed": "Couldn't remove that entry — it's still saved.",
+  "impReconTitle": "Statement check",
+  "impReconAdvisory": "Advisory only — this never blocks an import. Real statements carry fees and adjustments the reader can miss.",
+  "impReconPeriod": "{from} – {to}",
+  "@impReconPeriod": {
+    "description": "Date range covered by one statement file. Placeholder names are chosen so template order and gen-l10n's alphabetical order agree: (from, to).",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "impReconRows": "{count, plural, =1{1 row} other{{count} rows}}",
+  "@impReconRows": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "impReconReconciled": "Balances to the centavo",
+  "impReconReconciledDetail": "The bank's closing balance matches what this account will hold once this statement is imported.",
+  "impReconDuplicateSkip": "Balances once already-imported rows are skipped",
+  "impReconDuplicateSkipDetail": "{count, plural, =1{1 row on this statement is already in this account and will be skipped, so it is counted once.} other{{count} rows on this statement are already in this account and will be skipped, so they are counted once.}}",
+  "@impReconDuplicateSkipDetail": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "impReconExplained": "Explained by transactions you already have",
+  "impReconExplainedDetail": "This statement is off by exactly {difference} — the total of {count, plural, =1{1 transaction} other{{count} transactions}} this account already holds. Likely duplicates to delete, or one is dated in the wrong month.",
+  "@impReconExplainedDetail": {
+    "description": "Two placeholders: {difference} is pre-formatted money, {count} the number of explaining transactions. gen-l10n only alphabetizes placeholders it has to INFER — with this explicit metadata the generated parameter order is the declaration order below, which is deliberately the same as the template order (difference, count). Keep them in step, and keep the types distinct (String/int) so a transposition is a compile error rather than a silent swap.",
+    "placeholders": {
+      "difference": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "impReconUnexplained": "Difference we can't explain",
+  "impReconUnexplainedDetail": "Nothing in this account adds up to the gap. Usually a fee or adjustment the statement reader missed — importing is still fine.",
+  "impReconUnavailable": "Not checked",
+  "impReconUnavailableNoBalance": "We can't check this statement — this bank's format carries no running balance to compare against.",
+  "impReconUnavailableMarker": "We can't check this statement — it prints only a period-total balance, not a running one.",
+  "impReconUnavailableMixed": "We can't check this statement — it mixes currencies, and adding across currencies would be meaningless.",
+  "impReconUnavailableGeneric": "We can't check this statement.",
+  "impReconStatementClosing": "Statement closing balance",
+  "impReconAppClosing": "After this import",
+  "impReconDifference": "Difference",
+  "impReconCandidatesTitle": "Transactions that add up to the difference",
+  "impReconCandidateDoubleEntry": "Already here, not on the statement",
+  "impReconCandidateMisdated": "Dated outside this statement's period",
   "qeSaved": "Saved {amount} · {label}",
   "@qeSaved": {
     "description": "Quick-entry inline confirmation. {amount} is the SIGNED, pre-formatted stored amount (negative for a spend, so the strip states exactly what was written); {label} is the transaction description. Placeholder names are chosen so declaration order, template order and alphabetical order all agree: (amount, label).",
