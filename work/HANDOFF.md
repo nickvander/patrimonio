@@ -66,9 +66,10 @@ vault's secret policy live in Vaultwarden, config in
 
 **Two pre-existing issues that run surfaced (NOT introduced by the change):**
 1. `finance_tracker` dumps to **669 bytes** — effectively an empty database.
-   Fine if it's a legacy leftover; alarming if it's supposed to hold data.
-   Size checks can't catch this class: it is a *valid* dump of nothing.
-   **Still open — needs the owner to say whether that DB should hold data.**
+   **Owner's call 2026-08-04: "I don't think it is anything"** — treated as a
+   legacy leftover, not a data-loss risk. Not flagged again. (Recorded because
+   the symptom will recur on every backup inspection: it is a *valid* dump of
+   nothing, so no size or exit-code check can distinguish it from a real one.)
 2. ~~Restic `permission denied` on two stack paths~~ — ✅ resolved 2026-08-04.
    `adguard/workdir/data` and `ntfy/cache/attachments` are `drwx------ root`,
    and there is **no passwordless sudo on thelab**, so they cannot be chmod'd
