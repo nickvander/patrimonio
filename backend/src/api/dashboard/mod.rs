@@ -220,10 +220,17 @@ pub(crate) const NON_CASHFLOW_CATEGORIES_SQL: &str =
 /// the user's own money); a positive inflow into a liability/credit-card
 /// account (payment / refund / reward — card purchases, being negative, still
 /// count as spend); a split parent; a personal-loan disbursement/repayment leg;
-/// or a confirmed cross-currency FX transfer pair. The transfer/investment
+/// or a confirmed cross-currency FX transfer pair; and — structurally, see
+/// below — the paying leg of a credit-card payment made from a cash account.
+/// The transfer/investment
 /// CATEGORY exclusion is applied SEPARATELY (via `EFFECTIVE_CATEGORY_SQL`) so
 /// `cash_flow_trends` can still bucket those rows into invested/transferred.
 /// The query must alias transactions `t` and accounts `a`.
+///
+/// The fragment adds no bind parameters — the structural card-payment clause
+/// correlates on `t.user_id`, so it inherits whatever user scoping the caller
+/// already applies (`WHERE t.user_id = $1` at every call site) and can never
+/// pair two different users' rows.
 pub(crate) const CASHFLOW_ROW_ANTI_JOINS_SQL: &str = r#"
           AND COALESCE(t.category_detailed, '') NOT IN ('LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', 'INCOME_TAX_REFUND')
           AND NOT (t.amount > 0 AND is_liability_account_type(a.account_type))
@@ -234,6 +241,47 @@ pub(crate) const CASHFLOW_ROW_ANTI_JOINS_SQL: &str = r#"
               SELECT 1 FROM cash_fx_transfers f
               WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
                 AND (f.user_confirmed OR f.detection_confidence >= 70)
+          )
+          -- Card payments recognized STRUCTURALLY, not by category. The
+          -- category guard above only fires when the provider tagged the leg
+          -- `LOAN_PAYMENTS_CREDIT_CARD_PAYMENT` — and it frequently doesn't:
+          -- the owner's Bilt rent card is paid from checking under the
+          -- merchant "BILT CARD", which Plaid categorizes
+          -- `RENT_AND_UTILITIES_RENT`. The genuine card charge plus two
+          -- checking->card payment legs then ALL counted as rent, so July 2026
+          -- showed $8,951.77 of RENT_AND_UTILITIES against a $3,038.13/mo
+          -- lease (~$5,900 of phantom spending in one month).
+          --
+          -- Rule: an outflow from a NON-liability (cash) account is a payment
+          -- leg when the SAME user has a matching inflow on one of their
+          -- LIABILITY accounts — equal absolute amount, same account currency,
+          -- within +/-5 days. The counterpart must EXIST; we never suppress on
+          -- category or merchant text, so a genuine purchase that merely
+          -- happens to equal a payment amount still counts as spending.
+          -- +/-5 days is the house pair-matching window
+          -- (`services::fx_transfer_link::MAX_WINDOW_DAYS`): a payment
+          -- initiated on a Friday can post to the card the following
+          -- Wednesday, while a wider window would start swallowing unrelated
+          -- same-amount purchases.
+          -- Matching is leg-to-leg, so a partial payment ($2,552.85 against a
+          -- $3,038.13 balance) is matched by its own card-side inflow — the
+          -- card balance is never involved.
+          -- The inflow leg is already dropped by the liability-inflow clause
+          -- above, so only the outflow side needs this.
+          AND NOT (
+              t.amount < 0
+              AND NOT is_liability_account_type(a.account_type)
+              AND EXISTS (
+                  SELECT 1
+                  FROM transactions pay
+                  JOIN accounts pa ON pa.id = pay.account_id
+                  WHERE pay.user_id = t.user_id
+                    AND pay.id <> t.id
+                    AND is_liability_account_type(pa.account_type)
+                    AND pay.amount = -t.amount
+                    AND pa.currency = a.currency
+                    AND pay.date BETWEEN t.date - 5 AND t.date + 5
+              )
           )
 "#;
 
