@@ -3,6 +3,69 @@
 > **Last updated:** 2026-08-03 (feature-research sweep, 4 features + tooltip fix committed; rules-engine MVP built)
 > **Branch:** `main`.
 
+## 2026-08-04 — Brief 6 made visible and independent; glyph consistency
+
+Deployed through `76511d2`; backend **666/666** (fmt + clippy clean, under
+the CI-pinned 1.88.0), frontend **1294/1294**.
+
+* **Reconciliation UI (`5b48fcd`)** — brief 6's backend had shipped with
+  nothing calling it. The "Statement check" panel now renders in the import
+  preview, fired inside `_recheckDuplicates` right after the duplicate check
+  (no new user step), grouping rows by destination exactly as `_confirmImport`
+  does but over ALL parsed rows so the verdict can't flicker per checkbox.
+  Design rule enforced three ways: **"we can't check this" never looks like
+  "it balances"** — different icon FAMILY, neutral grey vs the positive
+  accent, and no money rows at all (the backend sends explicit nulls, so
+  nothing renders as `$0.00`). Unknown status degrades to `unavailable`,
+  never green. Confirm stays enabled in every state, proven non-vacuous by
+  injecting a gate and watching 4 of 5 tests fail.
+* **Declared closing balance (`56858f1`)** — the check was self-referential:
+  it derived the closing balance from the last row the parser kept, so it
+  could not catch a parser that dropped trailing rows. `ParsedTransaction.
+  declared_closing_balance` (Decimal, transient, serde-skipped when absent →
+  wire shape byte-identical for parsers that don't set it); `reconcile.rs`
+  prefers it and reports `closing_balance_source` + both raw figures.
+  **The proof:** a Santander statement missing its −190.00 trailing row reads
+  running 22,591.60 (self-consistent → green under the old check) vs declared
+  22,401.60 → difference −190.00, `unexplained`. Pinned end-to-end, unit, and
+  over the wire.
+  **Coverage is narrow on purpose:** only `santander_layout` and
+  `nu_mexico_pdf`'s OLD layout — the only fixtures containing a declared line
+  with its amount, and in both the value was already parsed and discarded, so
+  no regex was invented. banorte/hsbc/both banamex recognise SALDO FINAL only
+  as a blacklist substring with no fixture showing where the amount sits →
+  left on the fallback (a plausible wrong number is worse). cetes excluded on
+  MEANING: its "Total final" is a portfolio value, not a cash-ledger closing.
+  Those four unblock the moment a real statement PDF yields a fixture.
+* **The panel names its source (`76511d2`)** — "Balances to the centavo"
+  meant two different things and didn't say which. Now: "Checked against the
+  closing balance printed on the statement" vs "Checked against the running
+  balance in the rows we read — that can't detect rows the reader missed."
+  Subordinate by size/weight/colour, deliberately not alarming (the weaker
+  case is normal today). **Degradation is one-directional by construction:**
+  only the exact wire string `declared` maps to the stronger wording; null,
+  missing and unknown all fall to `running_balance`, and the field is
+  non-nullable with that default — no path can claim independence the backend
+  didn't assert. Tested by asserting the declared wording is ABSENT for
+  unknown input.
+  Deliberate sequencing note: the UI agent refused to consume these fields
+  while they were another agent's uncommitted diff, and they were wired only
+  after `56858f1` landed verified.
+* **Money glyph consistency (`5ddd4b7`)** — four user-facing sites still built
+  `NumberFormat` with `MX$` while the house map renders `MXN `, so a loan card
+  and its own interest sheet disagreed on screen. Root cause was in the source
+  of truth: `currency.dart`'s OWN docstrings still described the glyph it had
+  stopped returning. New `moneyFieldPrefix(code)` replaces a one-liner
+  repeated in three lending dialogs (the `trimRight` now lives in the helper,
+  not at each call site). Sabotage-checked twice; note the pre-existing
+  lending test derived its expectation with the same expression as the code,
+  so it would have passed against the double-space bug — the new test asserts
+  the literal string.
+* Homelab: restic's permission-denied paths resolved by **exclusion, not
+  chmod** (no passwordless sudo on thelab; configs were already captured, only
+  container runtime data is skipped) — a full run now logs 0 read warnings.
+  `finance_tracker`'s 669-byte dump judged legacy by the owner.
+
 ## 2026-08-03 (late) — Briefs 6+7, consolidation sweep, and two corrections
 
 Deployed through `50cec87`; backend **648/648**, frontend **1251/1251**

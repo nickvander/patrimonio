@@ -7,16 +7,16 @@
 
 ## TL;DR — current state
 
-**As of 2026-08-03:** `main` @ `50cec87`, pushed. **Prod runs on the homelab
+**As of 2026-08-04:** `main` @ `76511d2`, pushed. **Prod runs on the homelab
 host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
 `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
-`50cec87`** via the host's own `update.sh` (the same script its 3am cron
+`76511d2`** via the host's own `update.sh` (the same script its 3am cron
 runs: `git pull` + `docker compose up -d --build`). Verified after: api
 health 200, frontend 200, no errors in the api log, migration
 `2026080401 user rules` recorded `success=t`. Its provenance backfill was a
 **no-op on prod** — prod carries 0 hand-edited categories/descriptions
 across 2,520 transactions, so no existing row was rewritten. The latest APK
-is cut from `50cec87` (`app-arm64-v8a-release.apk`, 28.5MB; the 65-file diff
+is cut from `76511d2` (`app-arm64-v8a-release.apk`, 28.6MB; the 65-file diff
 touched no Android dep/Gradle/proguard file, so the emulator smoke gate
 wasn't triggered).
 
@@ -95,6 +95,13 @@ build commands live in the repo-root [AGENTS.md](../AGENTS.md) (and the
 
 ## Shipped recently (newest first — detail in CURRENT.md)
 
+- **2026-08-04 (`76511d2`):** brief 6 made VISIBLE and INDEPENDENT — the
+  import preview gained a statement-check panel (unavailable never looks like
+  reconciled; confirm never blocked), the MX parsers now capture the bank's
+  printed closing balance where a fixture proves it (santander + old Nu only,
+  on purpose), and the panel says which balance it checked against so a green
+  verdict can't overclaim. Plus one money glyph everywhere. Backend
+  648→**666**, frontend 1251→**1294**.
 - **2026-08-03 (late, `50cec87`):** research briefs 6 (guided statement
   reconciliation — classifies the gap, never blocks an import) and 7
   (quick-entry sheet, 3 taps + digits) shipped; responsive-convention pass
