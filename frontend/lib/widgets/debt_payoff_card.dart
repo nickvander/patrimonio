@@ -4,22 +4,13 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../theme/buttons.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
 import '../utils/debt_payoff.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
-
-/// Card width below which this card takes its touch layout: 16px of padding
-/// instead of 24, the two strategy tiles stacked instead of side by side, a
-/// 2-up summary strip instead of 3-up, and the what-if simulator behind a
-/// tap-to-expand header instead of inline.
-///
-/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
-/// constraint rather than `MediaQuery` (skill §4/§5) — same signal as
-/// `performance_card.dart`.
-const double _kCompactCardBelow = 720;
 
 /// Rolls a monthly due-date [anchor] forward to its next occurrence on or after
 /// [today]. The comparison is date-only, so a due date that lands on today
@@ -321,7 +312,10 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
     // wide window is no promise that the two strategy tiles fit side by side.
     return LayoutBuilder(
       builder: (context, outer) {
-        final isPhone = outer.maxWidth < _kCompactCardBelow;
+        // Touch layout: 16px of padding instead of 24, the two strategy tiles
+        // stacked instead of side by side, a 2-up summary strip instead of
+        // 3-up, and the what-if simulator behind a tap-to-expand header.
+        final isPhone = outer.maxWidth < kCompactCardBelow;
         final pad = isPhone ? 16.0 : 24.0;
 
         // The strategy comparison: side-by-side on wide cards, stacked

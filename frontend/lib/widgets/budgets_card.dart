@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../theme/buttons.dart';
 import '../utils/budget_suggestions.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
@@ -62,15 +63,6 @@ const _kSuggestPreselect = 6;
 // Budget rows shown before the list collapses behind a "show all" toggle.
 const _kBudgetCollapseLimit = 6;
 
-/// Card width below which this card takes its touch layout: 16px of padding
-/// instead of 24, and only 4 budget rows before the "show all" toggle.
-///
-/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
-/// constraint rather than `MediaQuery` (skill §4/§5) — the same signal
-/// `performance_card.dart` uses. It is load-bearing here: the wrong branch
-/// doesn't just mis-pad the card, it decides how many categories the user
-/// can see at all.
-const double _kCompactCardBelow = 720;
 // Spend must exceed this multiple of the prorated expected-to-date budget to
 // count as "on track to exceed" — tolerates normal early-month lumpiness.
 const _kPaceTolerance = 1.15;
@@ -451,7 +443,9 @@ class _BudgetsCardState extends State<BudgetsCard> {
     // how many categories render before the "show all" toggle.
     return LayoutBuilder(
       builder: (context, outer) {
-        final isPhone = outer.maxWidth < _kCompactCardBelow;
+        // Load-bearing here: the wrong branch doesn't just mis-pad the card,
+        // it decides how many categories the user can see at all.
+        final isPhone = outer.maxWidth < kCompactCardBelow;
         final pad = isPhone ? 16.0 : 24.0;
         // Show fewer rows before the "show all" toggle on narrow cards so the
         // card doesn't dominate the cash-flow tab; wide cards keep the full

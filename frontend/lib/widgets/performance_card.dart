@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/buttons.dart';
 import '../utils/chart_time_axis.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
@@ -96,15 +97,6 @@ typedef _ScrubReading = ({
 /// Row→Column header-stack breakpoint; the pair needs ~465px content-sized,
 /// so this also leaves headroom for the widest localized benchmark label.
 const double _rangeStackBelow = 520;
-
-/// Card width below which this card takes its touch layout: 16px of padding
-/// instead of 24, a 120px plot instead of 150, and the money-weighted
-/// benchmark block behind a tap-to-expand disclosure instead of inline.
-///
-/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
-/// constraint rather than `MediaQuery`: a card in a narrow column on a wide
-/// window is narrow, and a wide sheet on a phone is not.
-const double _compactCardBelow = 720;
 
 /// Minimum `coverage_pct` at which the TWR payload's daily `value_usd` may be
 /// shown as the portfolio's value.
@@ -431,7 +423,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // width says nothing useful about how much room the plot has.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isPhone = constraints.maxWidth < _compactCardBelow;
+        // Touch layout: 16px of padding instead of 24, a 120px plot instead
+        // of 150, and the money-weighted benchmark block behind a
+        // tap-to-expand disclosure instead of inline.
+        final isPhone = constraints.maxWidth < kCompactCardBelow;
         final pad = isPhone ? 16.0 : 24.0;
         // Short plot on touch-width cards — see the scrub notes on the charts
         // below, which assume the 120px box has no room for a tooltip.
@@ -552,7 +547,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
 
   /// [chartHeight] is derived from the card's own `LayoutBuilder` constraint
   /// in `build` and passed down — the plot must size to the card, not the
-  /// window (see [_compactCardBelow]).
+  /// window (see [kCompactCardBelow]).
   Widget _valueSection(
     BuildContext context,
     AppLocalizations l,

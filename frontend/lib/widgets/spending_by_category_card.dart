@@ -4,18 +4,12 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/buttons.dart';
 import '../utils/category.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/spending_window.dart';
 import '../utils/theme_colors.dart';
-
-/// Card width below which this card takes its touch layout: 16px of padding
-/// instead of 24 and a 200px plot instead of 240.
-///
-/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
-/// constraint rather than `MediaQuery` (skill §4/§5).
-const double _kCompactCardBelow = 720;
 
 /// "Where's my money going?" — per-category spending stacked by month.
 ///
@@ -109,7 +103,9 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
     // padding and the 1600px content clamp narrow well below the window.
     return LayoutBuilder(
       builder: (context, outer) {
-        final isPhone = outer.maxWidth < _kCompactCardBelow;
+        // Touch layout: 16px of padding instead of 24 and a 200px plot
+        // instead of 240.
+        final isPhone = outer.maxWidth < kCompactCardBelow;
         final pad = isPhone ? 16.0 : 24.0;
 
         return Card(

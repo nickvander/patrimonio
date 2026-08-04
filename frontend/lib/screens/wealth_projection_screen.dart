@@ -8,18 +8,12 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../theme/buttons.dart';
 import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/projection_axis.dart';
 import '../utils/theme_colors.dart';
-
-/// Width below which the assumptions card takes its dense layout: 16px of
-/// padding instead of 24 and 20px dividers instead of 32.
-///
-/// The house ~720 breakpoint, measured on that card's OWN `LayoutBuilder`
-/// constraint rather than `MediaQuery` (skill §4/§5).
-const double _kCompactControlsBelow = 720;
 
 /// Which FIRE "flavor" the user is focusing on. Purely a view choice — it
 /// switches which target the headline + chart line emphasize; the underlying
@@ -1042,7 +1036,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // 24px of padding + 32px dividers on a column with none to spare.
     return LayoutBuilder(
       builder: (context, box) {
-        final isNarrow = box.maxWidth < _kCompactControlsBelow;
+        // Dense assumptions card: 16px of padding instead of 24 and 20px
+        // dividers instead of 32.
+        final isNarrow = box.maxWidth < kCompactCardBelow;
         final pad = isNarrow ? 16.0 : 24.0;
         final divH = isNarrow ? 20.0 : 32.0;
         final collapseAdvanced = isNarrow && collapseAdvancedWhenNarrow;

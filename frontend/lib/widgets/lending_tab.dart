@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/buttons.dart';
 import '../utils/currency.dart' show MoneyDisplayFormat, moneyFormat;
 import '../utils/lending_summary.dart';
 import '../utils/loan_dates.dart';
@@ -9,18 +10,6 @@ import '../utils/theme_colors.dart';
 import 'add_loan_dialog.dart';
 import 'interest_income_sheet.dart';
 import 'loan_detail_sheet.dart';
-
-/// Tab width below which the lending tab takes its touch layout: the header's
-/// labelled "Add loan" button and the interest-income button collapse (the
-/// former into a bottom-right FAB, the latter into an icon), the four summary
-/// stats lay out 2-up instead of as a Wrap, and cards use 16px of padding
-/// instead of 24.
-///
-/// The house ~720 breakpoint, measured on the tab's OWN `LayoutBuilder`
-/// constraint rather than `MediaQuery` (skill §4/§5): the tab renders inside
-/// the dashboard's tab container, whose 16/24px padding and 1600px content
-/// clamp keep it narrower than the window.
-const double _kCompactTabBelow = 720;
 
 /// Personal lending tab — only mounted when the user enables the
 /// module (app_settings 'lending_enabled'). Lists money the user has
@@ -202,7 +191,11 @@ class _LendingTabState extends State<LendingTab> {
     // two independent reads could show both affordances or neither.
     return LayoutBuilder(
       builder: (context, outer) {
-        final phone = outer.maxWidth < _kCompactTabBelow;
+        // Touch layout: the header's labelled "Add loan" button and the
+        // interest-income button collapse (the former into a bottom-right
+        // FAB, the latter into an icon), the four summary stats lay out 2-up
+        // instead of as a Wrap, and cards use 16px of padding instead of 24.
+        final phone = outer.maxWidth < kCompactCardBelow;
         final list = RefreshIndicator(
           onRefresh: _load,
           child: ListView(

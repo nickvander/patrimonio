@@ -3638,16 +3638,17 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   /// "Make recurring" from a transaction's detail-panel action: opens the
-  /// Add-recurring-rule dialog pre-filled from the tx.
+  /// Add-recurring-rule panel pre-filled from the tx.
+  ///
+  /// Sheet-on-narrow / dialog-on-wide via the shared helper — the same
+  /// split [_openFullAddTransaction] takes.
   void _openMakeRecurring(dynamic tx) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AddRecurringRuleDialog(
-        accounts: (_overview?['accounts'] as List?) ?? const [],
-        apiService: _apiService,
-        sourceTx: tx is Map ? Map<String, dynamic>.from(tx) : null,
-        onCreated: _refreshRecurring,
-      ),
+    openAddRecurringRulePanel(
+      context,
+      accounts: (_overview?['accounts'] as List?) ?? const [],
+      apiService: _apiService,
+      sourceTx: tx is Map ? Map<String, dynamic>.from(tx) : null,
+      onCreated: _refreshRecurring,
     );
   }
 

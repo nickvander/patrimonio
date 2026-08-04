@@ -201,10 +201,18 @@ fakes.
   to prevent.
 - **Responsiveness is width-driven — off the INNER `LayoutBuilder` constraint, not the
   screen.** The trends mobile-overflow fix reads `outer.maxWidth`, not `MediaQuery`. Established
-  breakpoints: **~420** (phone), **~520** (Row→Column header stack), **~720** (outer padding
-  16 vs 24). Derive `chartHeight` / `barWidth` / label-thinning from the constraint. To avoid
-  x-label overlap, compute an adaptive step (~1 label per 46px phone / 62px wide) and skip
-  labels that don't land on it (always keep the last).
+  breakpoints: **~420** (phone), **~520** (Row→Column header stack, `kActionButtonStackBelow`),
+  **~720** (card density — padding 16 vs 24, shorter plots, side-by-side folded; the shared
+  `kCompactCardBelow` in `theme/buttons.dart`, next to `kCompactLayoutBelow` = 560; don't
+  re-declare a private 720). Derive `chartHeight` / `barWidth` / label-thinning from the
+  constraint. To avoid x-label overlap, compute an adaptive step (~1 label per 46px phone /
+  62px wide) and skip labels that don't land on it (always keep the last).
+- **A `LayoutBuilder` cannot live under an `IntrinsicHeight`** (or any intrinsic-dimension
+  query) — Flutter asserts *"LayoutBuilder does not support returning intrinsic dimensions"*.
+  When a widget inside an equal-height row needs a width-derived flag, **thread the flag down**
+  from the nearest legal constraint instead of nesting a builder: `tax_planning_screen.dart`'s
+  `_kpiCard` / `_compactLiabilityTile` take a `dense` bool computed once in `build` for exactly
+  this reason (and their density is a property of the row anyway).
 - **Phone idioms (below the ~420 inner breakpoint):** touch targets ≥48dp with 8dp gaps;
   card titles compress to a compact overline (12px w700 `context.textSubtle` — the bottom
   nav already names the surface); gate every phone-only change on the inner `LayoutBuilder`

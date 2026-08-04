@@ -33,6 +33,18 @@ import 'package:flutter/material.dart';
 /// label, ≈550px with gaps, rounded up (see `CashFlowPeriodSelector`).
 const double kCompactLayoutBelow = 560;
 
+/// Card-density threshold: below this inner width a card (or tab) takes its
+/// touch layout — 16px of padding instead of 24, shorter plots, side-by-side
+/// blocks folded or moved behind a tap-to-expand disclosure, and fewer rows
+/// before a "show all" toggle.
+///
+/// Per the house convention it is measured against the widget's OWN
+/// `LayoutBuilder` constraint, never `MediaQuery` screen width (skill §4/§5):
+/// a card in a narrow column on a wide window is narrow, and a wide sheet on
+/// a phone is not. It was a private 720 copied into six files before this
+/// promotion; keep new card-density branches pointed here.
+const double kCompactCardBelow = 720;
+
 /// Card inner width below which a card is treated as touch-shaped and its
 /// action buttons go full-bleed and stacked.
 ///
