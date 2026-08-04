@@ -2896,6 +2896,205 @@ async fn fbar_uses_sum_of_per_account_maxes_not_same_day_aggregate() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn fbar_peak_contribution_carries_forward_over_sparse_snapshots() {
+    // Regression for the per-account exact-date lookup: `peak_contribution_usd`
+    // used to be `SELECT balance_usd WHERE as_of_date = <peak date>`, so an
+    // account with no snapshot on that exact day contributed ZERO — a foreign
+    // account silently under-reporting on the one report where a wrong number
+    // has legal consequences. Snapshots are written opportunistically (sync /
+    // import / manual revalue), so sparse rows are the norm, not an edge case.
+    // Contribution must be the account's nearest-PRIOR (carried-forward)
+    // balance, matching the carried aggregate that picks the peak date.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // Sparse account: snapshots only in January and late March.
+    let sparse =
+        seed_account_with_country_currency(&pool, user_id, "Banamex", "MX", "Cuenta rala", "MXN")
+            .await;
+    // Dense account: snapshots around the peak day itself.
+    let dense =
+        seed_account_with_country_currency(&pool, user_id, "BBVA MX", "MX", "Cuenta densa", "MXN")
+            .await;
+
+    seed_snapshot(&pool, user_id, sparse, "2026-01-03", "MXN", "9000").await;
+    seed_snapshot(&pool, user_id, sparse, "2026-03-20", "MXN", "500").await;
+    seed_snapshot(&pool, user_id, dense, "2026-02-26", "MXN", "3000").await;
+    seed_snapshot(&pool, user_id, dense, "2026-02-28", "MXN", "4000").await;
+    seed_snapshot(&pool, user_id, dense, "2026-03-20", "MXN", "100").await;
+
+    // Carried aggregate by day: Jan 3 = 9,000; Feb 26 = 12,000;
+    // Feb 28 = 13,000 (peak); Mar 20 = 600.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "fbar body: {body}");
+    assert_eq!(body["peak_date"], serde_json::json!("2026-02-28"), "{body}");
+
+    let accts = body["foreign_accounts"].as_array().expect("array");
+    assert_eq!(accts.len(), 2, "{body}");
+    let contrib = |n: &str| {
+        accts
+            .iter()
+            .find(|a| a["name"] == n)
+            .unwrap_or_else(|| panic!("missing account {n}: {body}"))["peak_contribution_usd"]
+            .as_f64()
+            .unwrap()
+    };
+    assert!(
+        (contrib("Cuenta rala") - 9000.0).abs() < 0.01,
+        "sparse account must carry its Jan 3 balance forward to the Feb 28 peak, \
+         not contribute 0: {body}"
+    );
+    assert!(
+        (contrib("Cuenta densa") - 4000.0).abs() < 0.01,
+        "dense account contributes its own Feb 28 snapshot: {body}"
+    );
+    // The per-account contributions reconstruct the carried peak aggregate.
+    let contrib_sum: f64 = accts
+        .iter()
+        .map(|a| a["peak_contribution_usd"].as_f64().unwrap())
+        .sum();
+    assert!(
+        (contrib_sum - 13000.0).abs() < 0.01,
+        "contributions must sum to the carried aggregate on the peak day: {body}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fbar_account_with_no_snapshot_before_peak_contributes_zero() {
+    // Contract (deliberate): an account whose first snapshot of the year lands
+    // AFTER the peak date has no known balance to carry forward on that day, so
+    // it contributes 0 — exactly what the Rust carry-forward loop does for the
+    // aggregate (an account only enters `carried` once it has been seen). It is
+    // still LISTED, with its own ytd_max_usd, because the FBAR aggregate is the
+    // sum of per-account annual maxes, not of the peak-day contributions.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    let early =
+        seed_account_with_country_currency(&pool, user_id, "Banamex", "MX", "Temprana", "MXN")
+            .await;
+    let late =
+        seed_account_with_country_currency(&pool, user_id, "BBVA MX", "MX", "Tardía", "MXN").await;
+
+    // Peak day is Feb 1 (12,000). By the time `late` first appears (Nov 1),
+    // `early` has fallen to 100, so the carried Nov 1 aggregate is only 5,100.
+    seed_snapshot(&pool, user_id, early, "2026-02-01", "MXN", "12000").await;
+    seed_snapshot(&pool, user_id, early, "2026-10-01", "MXN", "100").await;
+    seed_snapshot(&pool, user_id, late, "2026-11-01", "MXN", "5000").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["peak_date"], serde_json::json!("2026-02-01"), "{body}");
+
+    let accts = body["foreign_accounts"].as_array().expect("array");
+    assert_eq!(accts.len(), 2, "both accounts are listed: {body}");
+    let by_name = |n: &str| {
+        accts
+            .iter()
+            .find(|a| a["name"] == n)
+            .unwrap_or_else(|| panic!("missing account {n}: {body}"))
+    };
+    let late_row = by_name("Tardía");
+    assert!(
+        late_row["peak_contribution_usd"].as_f64().unwrap().abs() < 0.01,
+        "no snapshot at or before the peak date → contributes 0: {body}"
+    );
+    assert!(
+        (late_row["ytd_max_usd"].as_f64().unwrap() - 5000.0).abs() < 0.01,
+        "but its own annual max still counts toward the aggregate: {body}"
+    );
+    assert!(
+        (by_name("Temprana")["peak_contribution_usd"]
+            .as_f64()
+            .unwrap()
+            - 12000.0)
+            .abs()
+            < 0.01,
+        "{body}"
+    );
+    // Aggregate is the sum of per-account maxes (12,000 + 5,000).
+    assert!(
+        (body["peak_aggregate_usd"].as_f64().unwrap() - 17000.0).abs() < 0.01,
+        "{body}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fbar_peak_contribution_is_user_scoped() {
+    // The carried-forward contribution lookup must stay scoped to the caller:
+    // another user's foreign account — snapshotted on the very peak date —
+    // must not appear, and must not inflate any contribution.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let other_user: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (username, email, password_hash) \
+         VALUES ('bob', 'bob@example.com', 'doesnt-matter-for-this-test') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("seed second user");
+
+    let mine =
+        seed_account_with_country_currency(&pool, user_id, "Banamex", "MX", "Mía", "MXN").await;
+    let theirs =
+        seed_account_with_country_currency(&pool, other_user, "BBVA MX", "MX", "Suya", "MXN").await;
+    seed_snapshot(&pool, user_id, mine, "2026-01-05", "MXN", "11000").await;
+    seed_snapshot(&pool, other_user, theirs, "2026-01-05", "MXN", "99000").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let accts = body["foreign_accounts"].as_array().expect("array");
+    assert_eq!(accts.len(), 1, "only the caller's account: {body}");
+    assert_eq!(accts[0]["name"], serde_json::json!("Mía"), "{body}");
+    assert!(
+        (accts[0]["peak_contribution_usd"].as_f64().unwrap() - 11000.0).abs() < 0.01,
+        "{body}"
+    );
+    assert!(
+        (body["peak_aggregate_usd"].as_f64().unwrap() - 11000.0).abs() < 0.01,
+        "the other user's 99,000 must not leak into the aggregate: {body}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn fbar_below_threshold_and_empty_case() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
         return;

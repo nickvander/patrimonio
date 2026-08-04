@@ -1790,9 +1790,12 @@ impl TaxService {
     /// for the comparison.)
     ///
     /// AGGREGATE-MAX METHOD: for each day that has ANY foreign snapshot, sum
-    /// the foreign accounts' `balance_usd`, then take the MAX of those daily
-    /// sums over the year — the peak aggregate. The peak date's per-account
-    /// contributions are reported, plus each account's own YTD max. This is a
+    /// the foreign accounts' `balance_usd` **carried forward** (each account at
+    /// its last-known value, not only the ones that snapshotted that day), then
+    /// take the MAX of those daily sums over the year — the peak date. The peak
+    /// date's per-account contributions are reported (also carried forward, so
+    /// a sparsely-snapshotted account contributes its real balance rather than
+    /// zero), plus each account's own YTD max. This is a
     /// daily-snapshot proxy for FBAR's "maximum value during the year" rule
     /// (which has its own valuation + year-end-rate mechanics this does NOT
     /// implement — see [`FBAR_THRESHOLD_USD`]'s doc). INFORMATIONAL ONLY.
@@ -1871,10 +1874,10 @@ impl TaxService {
         }
         close_day(cur, &carried, &mut peak_date, &mut peak_carried_agg);
 
-        // Per foreign account: its balance on the peak date (its contribution
-        // to the peak aggregate; 0 if it had no snapshot that exact day) and
-        // its own YTD max balance. Only accounts that have at least one
-        // foreign snapshot in the year appear.
+        // Per foreign account: its carried-forward balance on the peak date
+        // (its contribution to the peak aggregate) and its own YTD max
+        // balance. Only accounts that have at least one foreign snapshot in
+        // the year appear.
         let accounts = sqlx::query(
             r#"
             SELECT
@@ -1883,9 +1886,30 @@ impl TaxService {
                 i.name AS institution,
                 UPPER(COALESCE(i.country, '')) AS country,
                 UPPER(COALESCE(a.currency, '')) AS currency,
+                -- CARRY-FORWARD, not an exact-date lookup. Snapshots are
+                -- written opportunistically (on sync, on import, on manual
+                -- revalue), so an account usually has NO row on the peak day;
+                -- the old `AND b2.as_of_date = $4` then contributed 0 and the
+                -- account silently under-reported on the one report where a
+                -- wrong number has legal consequences. Take the account's
+                -- nearest-PRIOR snapshot instead — the same value the Rust
+                -- carry-forward loop above holds in `carried` on that day, so
+                -- the contributions reconstruct the carried peak aggregate.
+                -- Bounded below by $2 (Jan 1) to stay in lockstep with that
+                -- loop, which only ever carries rows from inside the year.
+                -- Ordered by id as a tiebreak (the (account_id, as_of_date)
+                -- UNIQUE makes it moot today, matching the loop's "last row
+                -- wins"). A NULL balance_usd carries 0, as it does there.
+                -- When there is no peak date at all ($4 IS NULL) the
+                -- comparison is NULL, no row matches, and this is 0.
                 COALESCE((
                     SELECT b2.balance_usd FROM balance_snapshots b2
-                    WHERE b2.account_id = a.id AND b2.as_of_date = $4
+                    WHERE b2.account_id = a.id
+                      AND b2.user_id = $1
+                      AND b2.as_of_date >= $2
+                      AND b2.as_of_date <= $4
+                    ORDER BY b2.as_of_date DESC, b2.id DESC
+                    LIMIT 1
                 ), 0) AS peak_contribution_usd,
                 COALESCE(MAX(b.balance_usd), 0) AS ytd_max_usd
             FROM balance_snapshots b
@@ -2332,8 +2356,12 @@ pub struct FbarAccount {
     /// The account's currency (upper-cased) — the fallback foreign signal
     /// (only consulted when the institution's country is unknown).
     pub currency: String,
-    /// This account's `balance_usd` on the peak aggregate date (0 if it had no
-    /// snapshot that exact day).
+    /// This account's `balance_usd` on the peak aggregate date, CARRIED
+    /// FORWARD from its nearest-prior snapshot in the year (snapshots are
+    /// sparse, so an exact-date lookup would report 0 for an account that
+    /// simply didn't sync that day). 0 only when the account had no snapshot
+    /// at or before the peak date — its first row of the year lands later, so
+    /// there is no known balance to carry; its `ytd_max_usd` still counts.
     #[serde(with = "rust_decimal::serde::float")]
     pub peak_contribution_usd: Decimal,
     /// This account's OWN maximum `balance_usd` across the year.
