@@ -1,11 +1,11 @@
 # Next session — what to actually do
 
-> **⇒ START HERE: [work/HANDOFF.md](HANDOFF.md)** has the current (2026-08-02)
+> **⇒ START HERE: [work/HANDOFF.md](HANDOFF.md)** has the current (2026-08-04)
 > state; [work/CURRENT.md](CURRENT.md) has the detailed log. This file is the
 > "what to do next" filter over [work/FUTURE.md](FUTURE.md)'s full backlog.
 >
-> **Last updated:** 2026-08-03 (feature-research implementation queue added;
-> FUTURE.md gained the five spec'd sweep proposals)
+> **Last updated:** 2026-08-04 (closeout batch; the sitting-sized list pruned
+> to what genuinely remains — all 8 research briefs are shipped)
 > **Purpose:** Pickup-ready priorities, ordered by impact-per-effort. When one
 > of these ships, delete it here and log it in CURRENT.md — a stale backlog is
 > worse than none.
@@ -36,119 +36,61 @@ verified checkpoint per feature, in this order:
    Live-rig verified 7/7 (DEC-027 "manual edits win" and both token attacks
    checked against the DB — see CURRENT.md).
 
-Briefs 6–8 (guided statement reconciliation, sub-5s quick-entry, FX Sankey)
-queue behind these — shapes live in the report only.
+6. ~~Guided statement reconciliation~~ — ✅ shipped 2026-08-03/04. Backend
+   `48e906f` classifies the gap (and names the existing transactions that
+   explain it); UI `5b48fcd`; the MX parsers now capture the bank's PRINTED
+   closing balance where a fixture proves it (`56858f1`), and the panel says
+   which balance it checked against (`76511d2`) so a green verdict can't
+   overclaim.
+7. ~~Sub-5s mobile quick entry~~ — ✅ shipped `42a629e` (3 taps + digits;
+   2 taps for a second in a row).
+8. ~~FX-aware Sankey~~ — ✅ shipped `2787b2d`, labels fixed `3eb8ddd`.
+
+**All eight briefs are shipped and deployed.** The report's Appendix A lists
+18 researched-and-rejected ideas with reasons — read it before proposing new
+feature work, and re-run the pipeline (`.agent/workflows/feature-research.js`)
+quarterly rather than ad hoc.
 
 ## Open items needing only a sitting
 
-- **⚠ The walkthrough rig can report false hit-region defects.** On
-  2026-08-03 a sweep reported (12/12 "reproductions") an invisible region
-  below the app bar that flipped the reporting currency and made the Cash
-  flow "This year" chip unusable. **It does not exist** — disproved in
-  `9db7001` by pumping the real `DashboardScreen` at the same viewports and
-  measuring: the currency control never leaves the app bar, a 4px lattice
-  sweep of the accused rect hits it zero times, and tapping its centre
-  selects the chip. The rig's **x** coordinates landed exactly on the real
-  control while its **y** were displaced downward — a coordinate-space
-  offset between how it measures rects and where it injects taps, and its
-  own observations were internally inconsistent. The compact chip's 3-line
-  Tooltip renders a band at almost exactly the reported rect and is the
-  likely visual culprit. **Before acting on a rig geometry claim, reproduce
-  it in a widget test with `tapAt`.**
-- **Hardcoded `MX$` glyph still in 4 user-facing files** (found 2026-08-03
-  while fixing the lending dialogs, `cf66546`). Each builds a `NumberFormat`
-  with `symbol: currency == 'MXN' ? r'MX$' : r'$'`, so they render `MX$`
-  while the rest of the app renders `MXN `:
-  `interest_income_sheet.dart:66,77` · `instrument_detail_sheet.dart:269` ·
-  `dividend_detail_sheet.dart:102`. **Visible inconsistency today:**
-  interest_income_sheet is reachable from the lending tab, so a loan card
-  reads `MXN 30,000` and its own interest sheet reads `MX$30,000`.
-  Also: `utils/currency.dart:26,37,47` — the helper's OWN docstrings still
-  describe the glyph it no longer returns, which is the most misleading of
-  the set since that file is the source of truth. Stale `MX$` comments also
-  in `import_screen.dart:1611`, `portfolio_card.dart:824,826`,
-  `monthly_cash_flow_card.dart:292`, `cash_flow_sankey_card.dart:267`,
-  `dashboard_screen.dart:869,4825`.
-  Do it as one pass that adds `moneyFieldPrefix(code)` to
-  `utils/currency.dart`, points the three lending getters at it (they're a
-  repeated one-liner now), fixes the four `NumberFormat` sites, and
-  corrects the docstrings.
-- **`MediaQuery` layout-branch inventory** (from the 2026-08-03 responsive
-  pass; `performance_card` + `date_range_selector` already fixed in
-  `f86c30e`). ~~`loan_detail_sheet.dart`~~ ✅ fixed `4dac37e` — and my
-  entry there was **overstated**: it never made the schedule unreachable
-  (the same branch renders a "View N installments" disclosure). The real
-  defect was that a modal sheet is capped at 640dp by M3, so on a 1440dp
-  window the code read 1440 while the table had 592 — an ACTIVE wrong
-  branch, not a latent one. Bucket **B — remaining, by consequence**:
-  `budgets_card.dart:436` (also controls row count
-  before "show all"), `wealth_projection_screen.dart:1018`,
-  `tax_planning_screen.dart:564`, `debt_payoff_card.dart:308`,
-  `spending_by_category_card.dart:100`, `lending_tab.dart:183,262`,
-  `dashboard_screen.dart:6231`. Bucket **C — cosmetic** (card padding
-  16/24 read off the screen) spans ~35 call sites across the widgets and
-  screens; sweep opportunistically when a file is open for another reason.
-  Legitimately screen-based (do NOT "fix"): dialog/route sizing in
-  `import_screen.dart:2165`, `add_transaction_dialog.dart:47`,
-  `notifications_panel.dart:797`, and the screen-spanning
-  `dashboard_screen.dart:4424,4831,4837,5648`.
-- **UNVERIFIED, possibly severe: a Notifications bottom sheet auto-opened
-  over the Cash tab and swallowed all input** — seen 2026-08-03 by the
-  Sankey rig on a true 390×844 **touch** context at boot. Escape, barrier
-  tap and handle-drag all failed; the rig worked around it by booting at
-  1440 and resizing. It may be a headless/touch-emulation artifact — the
-  owner uses the APK daily and has not reported it, which argues artifact —
-  but if it reproduces on a real phone it's a hard input lock. **Verify on
-  the emulator or a device before assuming it's the rig.**
-- ~~Performance card range selector overflows at phone width~~ — ✅ fixed
-  2026-08-03 (`dd38536`): stacks below a 520px inner width; verified at 11
-  widths × both locales, sabotage-checked. **Left open in the same file:**
-  `performance_card.dart` still derives `isPhone` and its chart height from
-  `MediaQuery.sizeOf(context).width < 720`, and `DateRangeSelector` picks its
-  padding off `MediaQuery` too — the §4/§5 screen-width-vs-inner-constraint
-  pattern, not implicated in this overflow but worth its own pass.
-- ~~Rules-engine apply-button copy~~, ~~net-worth lens x-axis spacing~~,
-  ~~bills MXN axis notation~~, ~~allocation-header truncation~~ — ✅ all
-  fixed 2026-08-03 (`8da7d3d`, frontend 1047). Standing note kept from that
-  pass: `skipped` in the APPLY response is structurally always 0 outside the
-  preview→apply race, so `ruleAppliedSkipped` is near-unreachable — correct
-  by design; **don't "fix" it by inflating the number.**
-- **Calendar-detection follow-ups** (from the 2026-08-03 live-rig pass, all
-  minor): the ignore endpoint's JSON body key is `merchant` but the value it
-  carries is the *merchant_key* — a reader could plausibly send a display
-  name; `/api/dashboard/subscriptions` omits `merchant_key` from its items,
-  so any other client wanting to ignore a merchant must re-derive the
-  detector's normalization (exactly the coupling the calendar's field
-  avoids — being fixed 2026-08-03); and the detected-vs-rule dedupe
-  (`duplicated_by_rule`) has **no live evidence** — the rig's data never
-  triggered it, only tests cover it. ~~detected ring too subtle at 1×~~ ✅
-  fixed `dd38536` (8px/2px stroke on pixel boundaries).
-- ~~Bills calendar showed only loan repayments~~ — ✅ fixed 2026-08-03
-  (`a3915e3` + `56308db`): it read explicit rules only, never the detector.
-  Follow-ups the fix deliberately left: detected occurrences project from
-  the cluster's last observed charge forward only (earlier cycles aren't
-  emitted, to avoid phantom `missed` rows on irregular gaps), and detected
-  clusters are capped at 40 by monthly spend — revisit either if a real
-  charge goes missing from the calendar.
-- ~~Chart tooltip hides under the finger on touch~~ — ✅ fixed 2026-08-03
-  (pointer-kind-aware pinning in chart_touch.dart, all line charts, new
-  conventions invariant; frontend 996/996 — see CURRENT.md).
+> Pruned 2026-08-04 after the closeout batch. Everything the previous list
+> held as actionable is now done — see CURRENT.md's 2026-08-03/04 entries.
+> What remains here is genuinely small or genuinely blocked.
 
-- **Audit tail findings still open** (from the 2026-07-26 five-agent audit;
-  the truncated-filtered-totals one shipped 2026-08-02 as `X-Total-Count`,
-  DEC-025): `import_cleanup` claims "No recent imports" on a load *failure*;
-  FBAR per-account contribution uses an exact-date lookup (same
-  sparse-snapshot class the aggregate already fixed).
+- **Four bare `720` literals in `tax_planning_screen.dart`** (≈:485, :1243,
+  :2183, :2989) mean the card-density rule but were never named consts, so
+  the 2026-08-04 consolidation (`b7a0bfc`, six copies → shared
+  `kCompactCardBelow` in `theme/buttons.dart`) couldn't sweep them. Point
+  them at the shared const when that file is next open.
 - **Sync-row scroll-to-institution** — the one deferred P1 from the
-  2026-08-01 notifications work that didn't ship with the rest (insight
-  sheet, comparison banner, account scoping, and net-worth tap all did).
-- **Dialog-consistency leftovers** (2026-08-02 sweep's own deferrals):
-  `split_transaction_dialog` (custom two-pane layout), lending's own
-  `_decoration` idiom, recurring dialog sheet-on-narrow.
-- **Mobile / settings follow-ups** (FUTURE.md, deferred 2026-07-14): Android
-  per-app language; server-side sync of theme/locale prefs; fold the inline
-  auto-archived-accounts card into Hidden items; lending amount fields
-  hardcode the "MX$" glyph instead of the locale-aware helper.
+  2026-08-01 notifications work. Not attempted since; needs a look at where
+  the sync row's tap target should land.
+- **Mobile / settings follow-ups** (FUTURE.md, deferred 2026-07-14) — these
+  are NOT sittings, they need real infrastructure: **Android per-app
+  language** (`android:localeConfig` + `AppCompatDelegate.setApplicationLocales`
+  via a plugin or MethodChannel, plus an emulator smoke test per the AGENTS.md
+  Android rule); **server-side sync of theme/locale prefs** (needs a backend
+  `app_settings` endpoint, same pattern as `projection_assumptions`); **fold
+  the inline auto-archived-accounts card into HiddenItemsScreen**.
+- **Detected-charge dedupe has no live evidence** — `duplicated_by_rule` in
+  the bills calendar is covered by tests only; the rig's data never triggered
+  it. Watch for it the first time a detected charge and an explicit rule
+  cover the same bill.
+- **⚠ The walkthrough rig can report false hit-region defects.** 2026-08-03:
+  a sweep reported 12/12 "reproductions" of an invisible region flipping the
+  reporting currency. **It does not exist** — disproved in `9db7001` by
+  pumping the real screen and measuring (lattice sweep hits the control zero
+  times; tapping the accused centre selects the chip). The rig's x landed on
+  the real control while its y was displaced — a coordinate-space offset,
+  internally inconsistent with its own control probe. **Reproduce any rig
+  geometry claim in a widget test with `tapAt` before acting on it.**
+- **Don't "fix" these — they are correct as they stand:** `skipped` in the
+  rules apply response is structurally 0 outside the preview→apply race, so
+  `ruleAppliedSkipped` is near-unreachable (don't inflate it); the four MX
+  parsers left on the running-balance fallback need a REAL statement PDF to
+  build a fixture, not more code (`banorte`, `hsbc`, both `banamex`); cetes'
+  "Total final" is a portfolio value and must never be compared to a cash
+  ledger.
 
 ## Needs a product/design call first (don't just start coding)
 
