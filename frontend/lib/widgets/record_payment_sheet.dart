@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/fields.dart';
 import '../utils/currency.dart' show moneyFieldPrefix, moneyFormat;
 import '../utils/theme_colors.dart';
 import 'connected_segments.dart';
@@ -193,15 +194,14 @@ class _RecordPaymentSheetState extends State<RecordPaymentSheet> {
           child: TextField(
             controller: _searchCtrl,
             onChanged: (_) => _onSearchChanged(),
-            decoration: InputDecoration(
-              isDense: true,
+            // The one house field with no label: a search box carries its
+            // hint and leading glyph instead.
+            decoration: houseFieldDecoration(
+              context,
               hintText: _isRepayment
                   ? AppLocalizations.of(context).lendSearchInflows
                   : AppLocalizations.of(context).lendSearchOutflows,
-              prefixIcon: const Icon(Icons.search, size: 18),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+              prefixIcon: Icons.search,
             ),
           ),
         ),
@@ -266,22 +266,21 @@ class _RecordPaymentSheetState extends State<RecordPaymentSheet> {
         TextField(
           controller: _cashAmountCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
+          decoration: houseFieldDecoration(
+            context,
             labelText: AppLocalizations.of(context).lendFieldAmountReceived,
             prefixText: _amountPrefix,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
         const SizedBox(height: 12),
         InkWell(
           onTap: _pickCashDate,
-          borderRadius: BorderRadius.circular(10),
+          // Match the field's own corners so the splash stays inside.
+          borderRadius: BorderRadius.circular(kHouseFieldRadius),
           child: InputDecorator(
-            decoration: InputDecoration(
+            decoration: houseFieldDecoration(
+              context,
               labelText: AppLocalizations.of(context).lendFieldReceivedOn,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
             ),
             child: Text(
               DateFormat.yMMMd().format(_cashDate),

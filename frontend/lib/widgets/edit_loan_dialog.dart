@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../theme/fields.dart';
 import '../theme/menus.dart';
 import '../utils/currency.dart' show moneyFieldPrefix;
 import '../utils/theme_colors.dart';
@@ -89,7 +90,8 @@ class _EditLoanDialogState extends State<EditLoanDialog> {
         Expanded(
           child: InkWell(
             onTap: _pickExpectedDate,
-            borderRadius: BorderRadius.circular(10),
+            // Match the field's own corners so the splash stays inside.
+            borderRadius: BorderRadius.circular(kHouseFieldRadius),
             child: InputDecorator(
               decoration: _decoration(
                 AppLocalizations.of(context).lendFieldPayBackBy,
@@ -388,7 +390,10 @@ class _EditLoanDialogState extends State<EditLoanDialog> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: context.tileSurface,
+            // Outline only, no fill: the house field decoration draws its
+            // inputs with a `tileSurface` fill and no border, so a
+            // `tileSurface` card behind them would erase the one thing
+            // that makes a field visible.
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: context.hairline),
           ),
@@ -401,33 +406,24 @@ class _EditLoanDialogState extends State<EditLoanDialog> {
     );
   }
 
-  /// Shared filled, rounded input styling (mirrors AddLoanDialog).
+  /// The house field decoration ([houseFieldDecoration]), reached through
+  /// this dialog's existing positional-label signature so the ~7 call
+  /// sites below stay unchanged. This used to be a local fork — a
+  /// `tint(0.03)` fill inside a radius-10 hairline box with a teal focus
+  /// ring — which is why lending inputs never looked like the rest of the
+  /// app's.
   InputDecoration _decoration(
     String label, {
     String? hint,
     String? prefixText,
     IconData? icon,
   }) {
-    return InputDecoration(
+    return houseFieldDecoration(
+      context,
       labelText: label,
       hintText: hint,
       prefixText: prefixText,
-      prefixIcon: icon == null ? null : Icon(icon, size: 18),
-      isDense: true,
-      filled: true,
-      fillColor: context.tint(0.03),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: context.hairline),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: context.hairline),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: context.tealAccent, width: 1.5),
-      ),
+      prefixIcon: icon,
     );
   }
 

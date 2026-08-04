@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/fields.dart';
 import '../theme/menus.dart';
+import '../theme/palette.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -280,11 +282,7 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
       isDense: true,
       dropdownColor: houseDropdownColor(context),
       borderRadius: kMenuRadius,
-      decoration: InputDecoration(
-        isDense: true,
-        labelText: l.txCategory,
-        border: const OutlineInputBorder(),
-      ),
+      decoration: houseFieldDecoration(context, labelText: l.txCategory),
       style: TextStyle(
         fontSize: 13,
         color: Theme.of(context).colorScheme.onSurface,
@@ -305,6 +303,12 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     );
 
     return AlertDialog(
+      // House dialog shell (the recipe AddTransactionDialog._dialogShell
+      // settled on): the card tone instead of the seeded M3 container,
+      // and an explicit titleLarge so this dialog's header is the same
+      // size as every other panel's.
+      backgroundColor: BrandPalette.cardSurface(Theme.of(context).brightness),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge,
       title: Row(
         children: [
           Expanded(
@@ -353,6 +357,13 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
         ],
       ),
       content: SizedBox(
+        // DELIBERATELY wider than the 420 the single-column house panels
+        // use, and the one piece of this dialog's old layout kept as-is:
+        // a split row is three controls abreast (description | amount |
+        // remove) with the category picker tucked under them, so 420
+        // squeezes the description to ~150px and the amount to ~100px.
+        // The SizedBox is still clamped by the parent's constraint, so on
+        // a phone-width dialog it simply takes what's available.
         width: 480,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -402,10 +413,9 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                                   child: TextFormField(
                                     controller:
                                         _drafts[i].descriptionController,
-                                    decoration: InputDecoration(
-                                      isDense: true,
+                                    decoration: houseFieldDecoration(
+                                      context,
                                       labelText: l.txSplitDescription,
-                                      border: const OutlineInputBorder(),
                                     ),
                                     // Text lives in the controller; the
                                     // setState only refreshes _canSave.
@@ -417,11 +427,10 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                                   flex: 2,
                                   child: TextFormField(
                                     controller: _drafts[i].amountController,
-                                    decoration: InputDecoration(
-                                      isDense: true,
+                                    decoration: houseFieldDecoration(
+                                      context,
                                       labelText: l.txSplitAmount,
                                       suffixText: widget.parentCurrency,
-                                      border: const OutlineInputBorder(),
                                     ),
                                     keyboardType:
                                         const TextInputType.numberWithOptions(
@@ -585,6 +594,10 @@ Future<int?> _promptEvenSplitCount(BuildContext context) async {
       return StatefulBuilder(
         builder: (ctx, setLocal) {
           return AlertDialog(
+            // Same house shell as its parent dialog, so the nested
+            // prompt doesn't land on the seeded container tone.
+            backgroundColor: BrandPalette.cardSurface(Theme.of(ctx).brightness),
+            titleTextStyle: Theme.of(ctx).textTheme.titleLarge,
             title: Text(l.txSplitEvenlyTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,

@@ -169,6 +169,29 @@ fakes.
   every `DropdownButton` / `DropdownButtonFormField` site must pass
   `dropdownColor: houseDropdownColor(context)` + `borderRadius: kMenuRadius` — never
   inline a color or radius at a dropdown site.
+- **Form-field decoration is centralized in `theme/fields.dart`** —
+  `houseFieldDecoration(context, labelText: …)` is the house recipe (filled on
+  `context.tileSurface`, `kHouseFieldRadius` = 12 rounded, `BorderSide.none`,
+  `isDense`). Every dialog/sheet field goes through it; a tappable
+  `InputDecorator` gives its `InkWell` `borderRadius: BorderRadius.circular(
+  kHouseFieldRadius)`. Two consequences: **don't put house fields on a
+  `tileSurface` background** (same tone, no border ⇒ invisible field — the
+  lending `_section` cards went outline-only for this), and there is **no focus
+  ring** by design. The 2026-08-02 sweep landed this recipe as a private
+  `_fieldDecoration` copied into five panels; those copies are still there
+  (`add_transaction_dialog`, `add_account_dialog`, `add_crypto_dialog`,
+  `quick_entry_sheet`) — point new code at the shared helper, and fold a copy in
+  when you're already editing its file. Enforced for the panels that adopted it
+  by `test/widgets/dialog_house_idiom_test.dart`.
+- **Form panels present sheet-on-narrow, dialog-on-wide** via an
+  `open…Panel(context, …)` helper that does the split at
+  `kCompactLayoutBelow` (`openAddTransactionPanel`,
+  `openAddRecurringRulePanel`). This is the one sanctioned `MediaQuery` read
+  in layout code — it picks which MODAL to launch over the whole screen, not
+  how to lay out content in a card. The widget takes an `asSheet` flag and
+  renders `_dialogShell` / `_sheetShell` off it; the sheet pins a full-bleed
+  ≥48dp primary above `MediaQuery.viewInsetsOf(context).bottom`. Route ALL
+  hosts through the helper or the two presentations diverge.
 - **Standalone action buttons follow `theme/buttons.dart`:** touch-width layouts (inner
   card width < `kActionButtonStackBelow` = 520) go full-bleed and stacked;
   pointer-width layouts size to the label, bounded by
