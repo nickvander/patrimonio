@@ -7,7 +7,7 @@
 
 ## TL;DR — current state
 
-**As of 2026-08-04:** `main` @ `e29459e`, pushed. **Prod runs on the homelab
+**As of 2026-08-04:** `main` is pushed and the tree is clean. **Prod is deployed through `b7a0bfc`**, and every commit on `main` after it is **documentation only** — verified with `git diff b7a0bfc..HEAD -- backend/ frontend/ scripts/` returning empty. So prod is NOT behind on code; don't redeploy on the strength of the commit count alone. **Prod runs on the homelab
 host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
 `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
 `b7a0bfc`** via the host's own `update.sh` (the same script its 3am cron
