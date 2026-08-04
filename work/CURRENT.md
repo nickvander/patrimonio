@@ -3,6 +3,61 @@
 > **Last updated:** 2026-08-03 (feature-research sweep, 4 features + tooltip fix committed; rules-engine MVP built)
 > **Branch:** `main`.
 
+## 2026-08-04 (closeout) — Backlog burn-down; FBAR under-reporting fixed
+
+Deployed through `b7a0bfc`; backend **669/669**, frontend **1325/1325**,
+both verified on the final clean tree. The sitting-sized backlog is now
+genuinely empty — what's left in NEXT.md needs infrastructure or a product
+call.
+
+* **FBAR per-account under-reporting (`8076d49`) — the consequential one.**
+  `fbar_status`'s `peak_contribution_usd` matched the peak date EXACTLY, and
+  snapshots are opportunistic, so a foreign account with no row on that day
+  contributed **0**. The pre-fix test failure shows it: a $9,000 account with
+  `peak_contribution_usd: 0.0` beside `ytd_max_usd: 9000.0`. Now nearest-prior
+  per account, in lockstep with the Rust carry-forward the aggregate side
+  already used; also added the `user_id` scoping that subquery lacked (safe
+  only transitively via the join before).
+  **Reported, not decided:** `ytd_max_usd` still draws candidates from
+  snapshotted days only, so a true peak on an unsnapshotted day reports low —
+  and carry-forward CANNOT fix it, since carrying a known value forward only
+  repeats values already in the MAX candidate set. That needs daily
+  reconstruction or a different FinCEN basis = the existing product call.
+* **Inner-constraint sweep (`2819d5b`).** Headline: `budgets_card` read the
+  SCREEN to decide how many rows show before "show all", so a 380px card on a
+  wide window crammed in 6 and a 900px card on a small window **hid 2**.
+  Sabotage run prints it verbatim. Most sites move only in the [720, 768)
+  band; two mattered more — projection controls live in a fixed 320px sidebar
+  and were spending desktop padding because they read 1440 (every window
+  ≥800 changes), and two Overview cards sit in a ~440px flex column.
+  Three deliberate non-conversions, each commented: `_kpiCard`/
+  `_compactLiabilityTile` sit under `IntrinsicHeight` (**Flutter asserts a
+  LayoutBuilder cannot return intrinsic dimensions** — they take a threaded
+  `dense` flag; now in the skill), the dashboard's inter-card gap is the
+  container's rhythm not the card's, and `loan_detail_sheet`'s padding was
+  RETUNED to 520 rather than moved to 720 because M3 caps that sheet at 640.
+* **Dialog consistency (`582051c`).** The 2026-08-02 sweep had settled a
+  recipe but landed it as a private `_fieldDecoration` **copied into five
+  files** — which is exactly why three dialogs drifted. Extracted
+  `theme/fields.dart`. Two things deliberately left non-uniform and stated:
+  the split dialog keeps its 480px box (a split row is three controls abreast;
+  420 squeezes description to ~150px) and doesn't go sheet-on-narrow (needs
+  call sites in another file). Trap caught: the loan dialogs' section cards
+  were filled with `tileSurface`, the same tone the house field fill uses, so
+  the fields would have gone invisible once their border went — sections are
+  now outline-only.
+* **Closeout (`b7a0bfc`).** The recurring sheet-on-narrow helper was complete,
+  tested and **called by nothing** — the app still showed a dialog at every
+  width, i.e. work that reads as done in a report and isn't in the product.
+  Wired, plus a conventions test that fails if either form panel is
+  constructed outside its owning file, so the next helper can't be stranded.
+  The 720 breakpoint had **six** private copies (not the five counted); all
+  merged into `kCompactCardBelow` after verifying each MEANT the card-density
+  rule rather than merging on a shared number.
+* Homelab: restic's permission-denied paths resolved by **exclusion, not
+  chmod** (no passwordless sudo on thelab; only container runtime data is
+  skipped, configs were already captured) — a run now logs 0 read warnings.
+
 ## 2026-08-04 — Brief 6 made visible and independent; glyph consistency
 
 Deployed through `76511d2`; backend **666/666** (fmt + clippy clean, under

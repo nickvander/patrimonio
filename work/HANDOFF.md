@@ -7,16 +7,16 @@
 
 ## TL;DR — current state
 
-**As of 2026-08-04:** `main` @ `76511d2`, pushed. **Prod runs on the homelab
+**As of 2026-08-04:** `main` @ `e29459e`, pushed. **Prod runs on the homelab
 host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
 `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
-`76511d2`** via the host's own `update.sh` (the same script its 3am cron
+`b7a0bfc`** via the host's own `update.sh` (the same script its 3am cron
 runs: `git pull` + `docker compose up -d --build`). Verified after: api
 health 200, frontend 200, no errors in the api log, migration
 `2026080401 user rules` recorded `success=t`. Its provenance backfill was a
 **no-op on prod** — prod carries 0 hand-edited categories/descriptions
 across 2,520 transactions, so no existing row was rewritten. The latest APK
-is cut from `76511d2` (`app-arm64-v8a-release.apk`, 28.6MB; the 65-file diff
+is cut from `b7a0bfc` (`app-arm64-v8a-release.apk`, 28.6MB; the 65-file diff
 touched no Android dep/Gradle/proguard file, so the emulator smoke gate
 wasn't triggered).
 
@@ -95,6 +95,14 @@ build commands live in the repo-root [AGENTS.md](../AGENTS.md) (and the
 
 ## Shipped recently (newest first — detail in CURRENT.md)
 
+- **2026-08-04 closeout (`b7a0bfc`):** backlog burn-down — **FBAR
+  per-account contribution was under-reporting** (exact-date snapshot lookup
+  → a foreign account with no row on the peak date contributed 0; now
+  carry-forward, `8076d49`); cards branch on their own width (budgets_card was
+  HIDING rows, `2819d5b`); dialog decoration extracted and three dialogs
+  conformed (`582051c`); the stranded recurring sheet-helper wired with a
+  conventions test so it can't recur (`b7a0bfc`). Backend 666→**669**,
+  frontend 1294→**1325**. NEXT.md pruned: the sitting-sized list is empty.
 - **2026-08-04 (`76511d2`):** brief 6 made VISIBLE and INDEPENDENT — the
   import preview gained a statement-check panel (unavailable never looks like
   reconciled; confirm never blocked), the MX parsers now capture the bank's
