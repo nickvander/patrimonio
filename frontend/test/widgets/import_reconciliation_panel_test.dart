@@ -24,6 +24,11 @@ Map<String, dynamic> _statement({
   int incomingRows = 42,
   int duplicateRows = 0,
   List<Map<String, dynamic>> candidates = const [],
+  // Left absent by default, exactly as an older backend would leave it —
+  // the panel must then make the WEAKER claim, never the stronger one.
+  String? closingBalanceSource,
+  double? declaredClosing,
+  double? runningClosing,
 }) => {
   'file': file,
   'period_start': '2026-01-01',
@@ -33,6 +38,9 @@ Map<String, dynamic> _statement({
   'unavailable_reason': unavailableReason,
   'statement_opening_balance': statementClosing == null ? null : 1000.0,
   'statement_closing_balance': statementClosing,
+  'closing_balance_source': closingBalanceSource,
+  'declared_closing_balance': declaredClosing,
+  'running_closing_balance': runningClosing,
   'computed_closing_balance': computedClosing,
   'difference': difference,
   'incoming_rows': incomingRows,
@@ -40,6 +48,15 @@ Map<String, dynamic> _statement({
   'existing_rows_in_period': 3,
   'candidates': candidates,
 };
+
+/// The two qualifier sentences, by the fragment that carries their MEANING.
+/// `_declaredCopy` is the claim of an independent check; asserting it absent
+/// is the load-bearing half of every degradation test below.
+const String _declaredCopy = 'closing balance printed on the statement';
+const String _runningCopy = 'running balance in the rows we read';
+const String _runningCaveat = "can't detect rows the reader missed";
+const String _declaredCopyEs = 'saldo final impreso en el estado de cuenta';
+const String _runningCopyEs = 'saldo corriente de los movimientos que leímos';
 
 Map<String, dynamic> _account(
   List<Map<String, dynamic>> statements, {
@@ -518,6 +535,365 @@ void main() {
         find.textContaining('Fechado fuera del periodo del estado'),
         findsOneWidget,
       );
+    });
+  });
+
+  // WHICH balance the check compared against. A `running_balance` check is
+  // self-referential — the last row the reader kept defines the figure it is
+  // compared to — so "Balances to the centavo" there means "the rows we read
+  // agree with each other", not "this matches your bank". The panel must not
+  // let the user read the weaker result as the stronger one.
+  group('closing-balance provenance qualifier', () {
+    testWidgets('declared source claims the independent check, and only it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'reconciled',
+              statementClosing: 1150.0,
+              computedClosing: 1150.0,
+              difference: 0.0,
+              closingBalanceSource: 'declared',
+              declaredClosing: 1150.0,
+              runningClosing: 1150.0,
+            ),
+          ]),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(_declaredCopy), findsOneWidget);
+      expect(find.textContaining(_runningCopy), findsNothing);
+      // Still subordinate: the verdict is what the eye lands on.
+      expect(find.text('Balances to the centavo'), findsOneWidget);
+    });
+
+    testWidgets('running_balance source states the weaker guarantee', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'reconciled',
+              statementClosing: 1150.0,
+              computedClosing: 1150.0,
+              difference: 0.0,
+              closingBalanceSource: 'running_balance',
+              runningClosing: 1150.0,
+            ),
+          ]),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(_runningCopy), findsOneWidget);
+      expect(find.textContaining(_runningCaveat), findsOneWidget);
+      // The failure that matters: claiming an independence we don't have.
+      expect(find.textContaining(_declaredCopy), findsNothing);
+    });
+
+    testWidgets('a missing source degrades to the weaker wording', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'reconciled',
+              statementClosing: 1150.0,
+              computedClosing: 1150.0,
+              difference: 0.0,
+            ),
+          ]),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(_declaredCopy), findsNothing);
+      expect(find.textContaining(_runningCopy), findsOneWidget);
+    });
+
+    testWidgets('an unknown source degrades to the weaker wording too', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'reconciled',
+              statementClosing: 1150.0,
+              computedClosing: 1150.0,
+              difference: 0.0,
+              closingBalanceSource: 'some_future_source_we_dont_know',
+              declaredClosing: 1150.0,
+            ),
+          ]),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(_declaredCopy), findsNothing);
+      expect(find.textContaining(_runningCopy), findsOneWidget);
+    });
+
+    testWidgets('every state that compared a balance carries the qualifier', (
+      tester,
+    ) async {
+      for (final status in const [
+        'reconciled',
+        'reconciled_after_duplicate_skip',
+        'explained_by_existing_transactions',
+        'unexplained',
+      ]) {
+        await tester.pumpWidget(
+          _host([
+            _account([
+              _statement(
+                status: status,
+                statementClosing: 1150.0,
+                computedClosing: 1100.0,
+                difference: 50.0,
+                duplicateRows: 2,
+                closingBalanceSource: 'running_balance',
+                runningClosing: 1150.0,
+              ),
+            ], status: status),
+          ]),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining(_runningCopy),
+          findsOneWidget,
+          reason: '$status compared a balance, so it must say which one',
+        );
+        expect(find.textContaining(_declaredCopy), findsNothing);
+      }
+    });
+
+    testWidgets('unavailable gets no qualifier — nothing was compared', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'unavailable',
+              unavailableReason: 'no_running_balance',
+            ),
+          ], status: 'unavailable'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(_declaredCopy), findsNothing);
+      expect(find.textContaining(_runningCopy), findsNothing);
+      expect(find.text('Rows we read end at'), findsNothing);
+    });
+
+    testWidgets('an unknown STATUS also gets no qualifier (it lands on '
+        'unavailable)', (tester) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'some_future_status_we_dont_know',
+              closingBalanceSource: 'declared',
+              declaredClosing: 1150.0,
+            ),
+          ], status: 'some_future_status_we_dont_know'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not checked'), findsOneWidget);
+      expect(find.textContaining(_declaredCopy), findsNothing);
+      expect(find.textContaining(_runningCopy), findsNothing);
+    });
+
+    testWidgets('declared and running disagreeing shows both figures', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'unexplained',
+              statementClosing: 1150.0,
+              computedClosing: 1100.0,
+              difference: 50.0,
+              closingBalanceSource: 'declared',
+              declaredClosing: 1150.0,
+              runningClosing: 1100.0,
+            ),
+          ], status: 'unexplained'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      // The bank's printed total disagrees with where our rows end — the
+      // fingerprint of a parse that lost trailing rows.
+      expect(find.text('Statement closing balance'), findsOneWidget);
+      expect(find.text(_mxn(1150)), findsOneWidget);
+      expect(find.text('Rows we read end at'), findsOneWidget);
+      expect(find.text(_mxn(1100)), findsAtLeast(1));
+      expect(find.textContaining(_declaredCopy), findsOneWidget);
+    });
+
+    testWidgets('agreeing figures do not earn a second row', (tester) async {
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'reconciled',
+              statementClosing: 1150.0,
+              computedClosing: 1150.0,
+              difference: 0.0,
+              closingBalanceSource: 'declared',
+              declaredClosing: 1150.0,
+              runningClosing: 1150.0,
+            ),
+          ]),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rows we read end at'), findsNothing);
+    });
+
+    testWidgets('the running-source row is never shown, even when the two '
+        'figures differ', (tester) async {
+      // A running-column check has no independent figure to contrast with,
+      // so the extra row would imply a comparison that never happened.
+      await tester.pumpWidget(
+        _host([
+          _account([
+            _statement(
+              status: 'reconciled',
+              statementClosing: 1100.0,
+              computedClosing: 1100.0,
+              difference: 0.0,
+              closingBalanceSource: 'running_balance',
+              declaredClosing: 1150.0,
+              runningClosing: 1100.0,
+            ),
+          ]),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rows we read end at'), findsNothing);
+      expect(find.textContaining(_runningCopy), findsOneWidget);
+    });
+
+    testWidgets('es-MX: both qualifiers render in Spanish', (tester) async {
+      await tester.pumpWidget(
+        _host(locale: const Locale('es'), [
+          _account([
+            _statement(
+              status: 'reconciled',
+              file: 'A.pdf',
+              statementClosing: 1150.0,
+              computedClosing: 1150.0,
+              difference: 0.0,
+              closingBalanceSource: 'declared',
+              declaredClosing: 1150.0,
+              runningClosing: 1150.0,
+            ),
+            _statement(
+              status: 'unexplained',
+              file: 'B.pdf',
+              statementClosing: 1150.0,
+              computedClosing: 1100.0,
+              difference: 50.0,
+              closingBalanceSource: 'running_balance',
+              runningClosing: 1150.0,
+            ),
+          ], status: 'unexplained'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(_declaredCopyEs), findsOneWidget);
+      expect(find.textContaining(_runningCopyEs), findsOneWidget);
+      expect(
+        find.textContaining(
+          'no detecta movimientos que el lector haya '
+          'omitido',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('es-MX: a missing source never claims the printed total', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(locale: const Locale('es'), [
+          _account([
+            _statement(
+              status: 'reconciled',
+              statementClosing: 1150.0,
+              computedClosing: 1150.0,
+              difference: 0.0,
+            ),
+          ]),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(_declaredCopyEs), findsNothing);
+      expect(find.textContaining(_runningCopyEs), findsOneWidget);
+    });
+
+    testWidgets('es-MX: the extra figure row is labelled in Spanish', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(locale: const Locale('es'), [
+          _account([
+            _statement(
+              status: 'unexplained',
+              statementClosing: 1150.0,
+              computedClosing: 1100.0,
+              difference: 50.0,
+              closingBalanceSource: 'declared',
+              declaredClosing: 1150.0,
+              runningClosing: 1100.0,
+            ),
+          ], status: 'unexplained'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Los movimientos leídos terminan en'), findsOneWidget);
+    });
+
+    testWidgets('the qualifier survives phone width without overflow', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(width: 360, [
+          _account([
+            _statement(
+              status: 'unexplained',
+              statementClosing: 1150.0,
+              computedClosing: 1100.0,
+              difference: 50.0,
+              closingBalanceSource: 'declared',
+              declaredClosing: 1150.0,
+              runningClosing: 1100.0,
+            ),
+          ], status: 'unexplained'),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining(_declaredCopy), findsOneWidget);
+      expect(find.text('Rows we read end at'), findsOneWidget);
     });
   });
 }

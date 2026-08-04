@@ -8106,7 +8106,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get impReconUnavailableGeneric => 'We can\'t check this statement.';
 
   @override
+  String get impReconSourceDeclared =>
+      'Checked against the closing balance printed on the statement.';
+
+  @override
+  String get impReconSourceRunning =>
+      'Checked against the running balance in the rows we read — that can\'t detect rows the reader missed.';
+
+  @override
   String get impReconStatementClosing => 'Statement closing balance';
+
+  @override
+  String get impReconRunningClosing => 'Rows we read end at';
 
   @override
   String get impReconAppClosing => 'After this import';

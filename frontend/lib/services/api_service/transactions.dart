@@ -1434,6 +1434,24 @@ enum ReconcileUnavailableReason {
   mixedCurrency,
 }
 
+/// Which closing balance the check actually compared against — the single
+/// most important qualifier on a green result.
+///
+/// Mirrors the backend's `ClosingBalanceSource`. The two are NOT equally
+/// strong claims, so the UI must say which one happened.
+enum ReconcileClosingBalanceSource {
+  /// The statement's own printed total (`SALDO FINAL DEL PERIODO`, …). It is
+  /// not derived from the rows we read, so it *does* catch a reader that
+  /// dropped trailing rows: an independent check.
+  declared,
+
+  /// The last value of the bank's running balance column. It proves the rows
+  /// we read are internally consistent and nothing more — the last row we
+  /// kept defines the balance being checked, so a dropped trailing row is
+  /// invisible to it.
+  runningBalance,
+}
+
 /// How a candidate transaction would explain the gap.
 enum ReconcileCandidateKind {
   /// Inside the period and not on the statement — a likely double entry.
@@ -1487,6 +1505,9 @@ class StatementReconciliation {
     this.unavailableReason,
     this.statementOpeningBalance,
     this.statementClosingBalance,
+    this.closingBalanceSource = ReconcileClosingBalanceSource.runningBalance,
+    this.declaredClosingBalance,
+    this.runningClosingBalance,
     this.computedClosingBalance,
     this.difference,
     this.incomingRows = 0,
@@ -1510,6 +1531,11 @@ class StatementReconciliation {
         },
         statementOpeningBalance: _reconMoney(j['statement_opening_balance']),
         statementClosingBalance: _reconMoney(j['statement_closing_balance']),
+        closingBalanceSource: reconcileClosingBalanceSourceFromWire(
+          j['closing_balance_source'],
+        ),
+        declaredClosingBalance: _reconMoney(j['declared_closing_balance']),
+        runningClosingBalance: _reconMoney(j['running_closing_balance']),
         computedClosingBalance: _reconMoney(j['computed_closing_balance']),
         difference: _reconMoney(j['difference']),
         incomingRows: (j['incoming_rows'] as num?)?.toInt() ?? 0,
@@ -1534,6 +1560,19 @@ class StatementReconciliation {
   final ReconcileUnavailableReason? unavailableReason;
   final double? statementOpeningBalance;
   final double? statementClosingBalance;
+
+  /// Provenance of [statementClosingBalance]. Never null: an absent or
+  /// unrecognized wire value degrades to [ReconcileClosingBalanceSource
+  /// .runningBalance], the WEAKER claim — telling the user we checked
+  /// against an independent printed total when we didn't is the failure
+  /// that matters here.
+  final ReconcileClosingBalanceSource closingBalanceSource;
+
+  /// The two closing-balance candidates, reported separately by the backend.
+  /// When both are present and DIFFER, the bank's own total disagrees with
+  /// where our rows end — the fingerprint of a parse that lost rows.
+  final double? declaredClosingBalance;
+  final double? runningClosingBalance;
   final double? computedClosingBalance;
 
   /// `statementClosingBalance − computedClosingBalance`. Positive means the
@@ -1591,6 +1630,19 @@ ReconcileStatus reconcileStatusFromWire(Object? wire) =>
       'unexplained' => ReconcileStatus.unexplained,
       _ => ReconcileStatus.unavailable,
     };
+
+/// Wire (`snake_case`) → [ReconcileClosingBalanceSource]. Anything other
+/// than the exact string `declared` — including `null`, which the backend
+/// sends when it couldn't check the statement at all — falls back to
+/// [ReconcileClosingBalanceSource.runningBalance], the weaker of the two
+/// claims. Never the other way round: a future/garbled value must not make
+/// the UI promise an independent check we didn't perform.
+ReconcileClosingBalanceSource reconcileClosingBalanceSourceFromWire(
+  Object? wire,
+) => switch ((wire ?? '').toString()) {
+  'declared' => ReconcileClosingBalanceSource.declared,
+  _ => ReconcileClosingBalanceSource.runningBalance,
+};
 
 /// Money off the wire. `rust_decimal` is built with `serde-float` so these
 /// arrive as JSON numbers, but a string is accepted too rather than

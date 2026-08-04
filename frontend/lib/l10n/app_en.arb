@@ -4662,7 +4662,19 @@
   "impReconUnavailableMarker": "We can't check this statement — it prints only a period-total balance, not a running one.",
   "impReconUnavailableMixed": "We can't check this statement — it mixes currencies, and adding across currencies would be meaningless.",
   "impReconUnavailableGeneric": "We can't check this statement.",
+  "impReconSourceDeclared": "Checked against the closing balance printed on the statement.",
+  "@impReconSourceDeclared": {
+    "description": "Qualifier under the verdict when the check used the statement's own declared total (closing_balance_source == declared). That figure is not derived from the rows we parsed, so this IS an independent check — say so plainly, but keep it subordinate to the headline verdict."
+  },
+  "impReconSourceRunning": "Checked against the running balance in the rows we read — that can't detect rows the reader missed.",
+  "@impReconSourceRunning": {
+    "description": "Qualifier under the verdict when the check used the last value of the bank's running balance column (closing_balance_source == running_balance, also the safe fallback for a missing/unknown source). The rows we kept define the balance being compared, so the check is self-consistent rather than independent. This is the normal case for most banks today: accurate, not alarming."
+  },
   "impReconStatementClosing": "Statement closing balance",
+  "impReconRunningClosing": "Rows we read end at",
+  "@impReconRunningClosing": {
+    "description": "Balance-row label for the running-column closing balance, shown only when a declared total was used AND the two disagree — the fingerprint of a parse that lost trailing rows."
+  },
   "impReconAppClosing": "After this import",
   "impReconDifference": "Difference",
   "impReconCandidatesTitle": "Transactions that add up to the difference",

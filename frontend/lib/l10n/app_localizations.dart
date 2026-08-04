@@ -12820,7 +12820,7 @@ abstract class AppLocalizations {
   /// **'Explained by transactions you already have'**
   String get impReconExplained;
 
-  /// gen-l10n orders placeholders ALPHABETICALLY (count, difference) regardless of the template order used here (difference first) — call sites must pass count first.
+  /// Two placeholders: {difference} is pre-formatted money, {count} the number of explaining transactions. gen-l10n only alphabetizes placeholders it has to INFER — with this explicit metadata the generated parameter order is the declaration order below, which is deliberately the same as the template order (difference, count). Keep them in step, and keep the types distinct (String/int) so a transposition is a compile error rather than a silent swap.
   ///
   /// In en, this message translates to:
   /// **'This statement is off by exactly {difference} — the total of {count, plural, =1{1 transaction} other{{count} transactions}} this account already holds. Likely duplicates to delete, or one is dated in the wrong month.'**
@@ -12868,11 +12868,29 @@ abstract class AppLocalizations {
   /// **'We can\'t check this statement.'**
   String get impReconUnavailableGeneric;
 
+  /// Qualifier under the verdict when the check used the statement's own declared total (closing_balance_source == declared). That figure is not derived from the rows we parsed, so this IS an independent check — say so plainly, but keep it subordinate to the headline verdict.
+  ///
+  /// In en, this message translates to:
+  /// **'Checked against the closing balance printed on the statement.'**
+  String get impReconSourceDeclared;
+
+  /// Qualifier under the verdict when the check used the last value of the bank's running balance column (closing_balance_source == running_balance, also the safe fallback for a missing/unknown source). The rows we kept define the balance being compared, so the check is self-consistent rather than independent. This is the normal case for most banks today: accurate, not alarming.
+  ///
+  /// In en, this message translates to:
+  /// **'Checked against the running balance in the rows we read — that can\'t detect rows the reader missed.'**
+  String get impReconSourceRunning;
+
   /// No description provided for @impReconStatementClosing.
   ///
   /// In en, this message translates to:
   /// **'Statement closing balance'**
   String get impReconStatementClosing;
+
+  /// Balance-row label for the running-column closing balance, shown only when a declared total was used AND the two disagree — the fingerprint of a parse that lost trailing rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Rows we read end at'**
+  String get impReconRunningClosing;
 
   /// No description provided for @impReconAppClosing.
   ///

@@ -8175,7 +8175,18 @@ class AppLocalizationsEs extends AppLocalizations {
       'No podemos verificar este estado de cuenta.';
 
   @override
+  String get impReconSourceDeclared =>
+      'Verificado contra el saldo final impreso en el estado de cuenta.';
+
+  @override
+  String get impReconSourceRunning =>
+      'Verificado contra el saldo corriente de los movimientos que leímos — eso no detecta movimientos que el lector haya omitido.';
+
+  @override
   String get impReconStatementClosing => 'Saldo final del estado';
+
+  @override
+  String get impReconRunningClosing => 'Los movimientos leídos terminan en';
 
   @override
   String get impReconAppClosing => 'Después de esta importación';

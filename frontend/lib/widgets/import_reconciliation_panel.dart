@@ -19,6 +19,12 @@ import '../utils/theme_colors.dart';
 ///    renders. The confirm button's enablement never reads this data (real
 ///    statements carry fees and adjustments the parsers miss, so a hard gate
 ///    would block legitimate imports).
+/// 3. **A green verdict says WHICH balance it checked against.** Against the
+///    bank's declared total the check is independent; against the running
+///    column it only proves the rows we read are self-consistent, so it
+///    cannot notice rows the reader dropped. Both are honest results, but
+///    they are not the same promise — the qualifier line under the verdict
+///    is what keeps "Balances to the centavo" from overclaiming.
 class ImportReconciliationPanel extends StatelessWidget {
   const ImportReconciliationPanel({super.key, required this.accounts});
 
@@ -245,6 +251,7 @@ class _StatementTile extends StatelessWidget {
               color: context.textMuted,
             ),
           ),
+          ..._sourceQualifier(context, l),
           ..._balanceRows(context, l, currency),
           if (statement.candidates.isNotEmpty)
             _CandidateList(
@@ -287,6 +294,70 @@ class _StatementTile extends StatelessWidget {
     }
   }
 
+  /// Which balance the check actually compared against — the qualifier that
+  /// keeps a green verdict from overclaiming.
+  ///
+  /// Only for the states where a balance was genuinely compared:
+  /// `unavailable` compared nothing, so it says nothing here (it already
+  /// renders no balance rows). Deliberately quieter than both the headline
+  /// and the detail sentence — this qualifies the verdict, it does not
+  /// compete with it — and the running-balance wording is written to be
+  /// accurate rather than alarming, because it is the normal case for most
+  /// banks today.
+  List<Widget> _sourceQualifier(BuildContext context, AppLocalizations l) {
+    if (statement.status == ReconcileStatus.unavailable) return const [];
+    final declared =
+        statement.closingBalanceSource ==
+        ReconcileClosingBalanceSource.declared;
+    return [
+      const SizedBox(height: 6),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(
+              declared ? Icons.verified_outlined : Icons.rule,
+              size: 13,
+              color: context.textFaint,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              declared ? l.impReconSourceDeclared : l.impReconSourceRunning,
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.3,
+                color: context.textFaint,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  /// Whether the running column's own closing balance earns a row of its
+  /// own: only when a DECLARED total was what we checked against and the two
+  /// figures disagree. That gap is the bank's printed total contradicting
+  /// where our rows end — the fingerprint of a parse that lost rows, and the
+  /// one case where showing both figures tells the user something the
+  /// difference row alone doesn't.
+  bool get _showRunningClosing {
+    if (statement.status == ReconcileStatus.unavailable) return false;
+    if (statement.closingBalanceSource !=
+        ReconcileClosingBalanceSource.declared) {
+      return false;
+    }
+    final declared = statement.declaredClosingBalance;
+    final running = statement.runningClosingBalance;
+    if (declared == null || running == null) return false;
+    // Half-a-centavo tolerance: the backend rounds to 2dp, so anything below
+    // this is float noise, not a disagreement worth a row.
+    return (declared - running).abs() >= 0.005;
+  }
+
   /// Statement closing / after-import / difference, shown only when the
   /// backend actually produced them (an `unavailable` statement has none —
   /// printing a 0 there would be the very confusion this panel avoids).
@@ -300,6 +371,12 @@ class _StatementTile extends StatelessWidget {
         (
           label: l.impReconStatementClosing,
           value: _money(statement.statementClosingBalance, currency),
+          tone: null,
+        ),
+      if (_showRunningClosing)
+        (
+          label: l.impReconRunningClosing,
+          value: _money(statement.runningClosingBalance, currency),
           tone: null,
         ),
       if (statement.computedClosingBalance != null)
