@@ -53,132 +53,148 @@ class RecurringCard extends StatelessWidget {
     final outflowsUsd =
         (upcoming?['expected_outflows_usd'] as num?)?.toDouble() ?? 0;
 
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Width-responsive off the card's OWN constraint (inner
-        // LayoutBuilder, per the skill rule), not MediaQuery.
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final isPhone = c.maxWidth < 420;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Width-responsive off the card's OWN constraint (inner
+            // LayoutBuilder, per the skill rule), not MediaQuery.
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final isPhone = c.maxWidth < 420;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isPhone) ...[
-                      Icon(
-                        Icons.autorenew_rounded,
-                        color: context.info,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              isPhone ? l.recTitle.toUpperCase() : l.recTitle,
-                              style: isPhone
-                                  ? TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.6,
-                                      color: context.textSubtle,
-                                    )
-                                  : TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: context.textPrimary,
-                                    ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                    Row(
+                      children: [
+                        if (!isPhone) ...[
+                          Icon(
+                            Icons.autorenew_rounded,
+                            color: context.info,
+                            size: 18,
                           ),
                           const SizedBox(width: 8),
-                          // "Expected" chip — the card's contract with the
-                          // user: these are projections, not postings.
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: context.tint(0.08),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: context.hairline),
-                            ),
-                            child: Text(
-                              l.recExpectedChip,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.4,
-                                color: context.textSubtle,
+                        ],
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  isPhone
+                                      ? l.recTitle.toUpperCase()
+                                      : l.recTitle,
+                                  style: isPhone
+                                      ? TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.6,
+                                          color: context.textSubtle,
+                                        )
+                                      : TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: context.textPrimary,
+                                        ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              // "Expected" chip — the card's contract with the
+                              // user: these are projections, not postings.
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: context.tint(0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: context.hairline),
+                                ),
+                                child: Text(
+                                  l.recExpectedChip,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.4,
+                                    color: context.textSubtle,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                        TextButton(
+                          onPressed: () => _openManageSheet(context),
+                          child: Text(l.recManage),
+                        ),
+                      ],
                     ),
-                    TextButton(
-                      onPressed: () => _openManageSheet(context),
-                      child: Text(l.recManage),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  l.recExpectedNote,
-                  style: TextStyle(fontSize: 11, color: context.textFaint),
-                ),
-                SizedBox(height: isPhone ? 10 : 14),
-                if (rules.isEmpty)
-                  Text(
-                    l.recNoRules,
-                    style: TextStyle(fontSize: 12, color: context.textMuted),
-                  )
-                else ...[
-                  _totalsRow(context, l, isPhone, inflowsUsd, outflowsUsd),
-                  SizedBox(height: isPhone ? 10 : 14),
-                  if (items.isEmpty)
+                    const SizedBox(height: 4),
                     Text(
-                      l.recNothingUpcoming,
-                      style: TextStyle(fontSize: 12, color: context.textMuted),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: context.tileSurface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: context.hairline),
-                      ),
-                      child: Column(
-                        children: [
-                          for (var i = 0; i < items.length; i++) ...[
-                            if (i > 0)
-                              Divider(height: 1, color: context.hairline),
-                            _itemRow(context, items[i] as Map, isPhone),
-                          ],
-                        ],
-                      ),
+                      l.recExpectedNote,
+                      style: TextStyle(fontSize: 11, color: context.textFaint),
                     ),
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+                    SizedBox(height: isPhone ? 10 : 14),
+                    if (rules.isEmpty)
+                      Text(
+                        l.recNoRules,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textMuted,
+                        ),
+                      )
+                    else ...[
+                      _totalsRow(context, l, isPhone, inflowsUsd, outflowsUsd),
+                      SizedBox(height: isPhone ? 10 : 14),
+                      if (items.isEmpty)
+                        Text(
+                          l.recNothingUpcoming,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.textMuted,
+                          ),
+                        )
+                      else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: context.tileSurface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: context.hairline),
+                          ),
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < items.length; i++) ...[
+                                if (i > 0)
+                                  Divider(height: 1, color: context.hairline),
+                                _itemRow(context, items[i] as Map, isPhone),
+                              ],
+                            ],
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -10,6 +10,18 @@ import 'add_loan_dialog.dart';
 import 'interest_income_sheet.dart';
 import 'loan_detail_sheet.dart';
 
+/// Tab width below which the lending tab takes its touch layout: the header's
+/// labelled "Add loan" button and the interest-income button collapse (the
+/// former into a bottom-right FAB, the latter into an icon), the four summary
+/// stats lay out 2-up instead of as a Wrap, and cards use 16px of padding
+/// instead of 24.
+///
+/// The house ~720 breakpoint, measured on the tab's OWN `LayoutBuilder`
+/// constraint rather than `MediaQuery` (skill §4/§5): the tab renders inside
+/// the dashboard's tab container, whose 16/24px padding and 1600px content
+/// clamp keep it narrower than the window.
+const double _kCompactTabBelow = 720;
+
 /// Personal lending tab — only mounted when the user enables the
 /// module (app_settings 'lending_enabled'). Lists money the user has
 /// lent, with auto-suggested reconciliation against real bank
@@ -176,43 +188,57 @@ class _LendingTabState extends State<LendingTab> {
       );
     }
 
-    // Thumb-zone creation on phones: the header drops its labelled
-    // "Add loan" button (it overflowed at 390px) and the affordance moves
-    // to a FAB pinned bottom-right. The list keeps 88dp of clearance so
+    // Thumb-zone creation on touch-width layouts: the header drops its
+    // labelled "Add loan" button (it overflowed at 390px) and the affordance
+    // moves to a FAB pinned bottom-right. The list keeps 88dp of clearance so
     // the last loan card is never hidden under the FAB.
-    final phone = MediaQuery.sizeOf(context).width < 720;
-    final list = RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: EdgeInsets.only(bottom: phone ? 96 : 32),
-        children: [
-          _buildHeader(),
-          if (_buildAgingSection() case final w?) ...[
-            const SizedBox(height: 16),
-            w,
-          ],
-          const SizedBox(height: 16),
-          if (_loans.isEmpty)
-            _buildEmptyState()
-          else
-            ..._loans.map((l) => _buildLoanCard(l as Map<String, dynamic>)),
-        ],
-      ),
-    );
-    if (!phone) return list;
-    return Stack(
-      children: [
-        list,
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton(
-            onPressed: _openAddLoanDialog,
-            tooltip: AppLocalizations.of(context).lendingAddLoan,
-            child: const Icon(Icons.add),
+    //
+    // Measured on the tab's OWN `LayoutBuilder` constraint, never
+    // `MediaQuery` (skill §4/§5): the tab renders inside the dashboard's tab
+    // container, whose padding and 1600px clamp put its real width below the
+    // window's. The flag is computed ONCE here and threaded into
+    // [_buildHeader] because the two must agree — the header renders the
+    // labelled button exactly when this method does not render the FAB, so
+    // two independent reads could show both affordances or neither.
+    return LayoutBuilder(
+      builder: (context, outer) {
+        final phone = outer.maxWidth < _kCompactTabBelow;
+        final list = RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: EdgeInsets.only(bottom: phone ? 96 : 32),
+            children: [
+              _buildHeader(phone),
+              if (_buildAgingSection() case final w?) ...[
+                const SizedBox(height: 16),
+                w,
+              ],
+              const SizedBox(height: 16),
+              if (_loans.isEmpty)
+                _buildEmptyState()
+              else
+                ..._loans.map(
+                  (l) => _buildLoanCard(l as Map<String, dynamic>, phone),
+                ),
+            ],
           ),
-        ),
-      ],
+        );
+        if (!phone) return list;
+        return Stack(
+          children: [
+            list,
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: FloatingActionButton(
+                onPressed: _openAddLoanDialog,
+                tooltip: AppLocalizations.of(context).lendingAddLoan,
+                child: const Icon(Icons.add),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -229,7 +255,11 @@ class _LendingTabState extends State<LendingTab> {
     return widget.targetCurrency;
   }
 
-  Widget _buildHeader() {
+  /// [phone] is the tab's own touch-width flag, computed once in [build] from
+  /// the tab's `LayoutBuilder` constraint and passed down so the header's
+  /// labelled "Add loan" button and build()'s FAB can never both appear (or
+  /// both vanish).
+  Widget _buildHeader(bool phone) {
     // Single-currency portfolios show their native currency untouched;
     // only a genuinely mixed (USD + MXN) portfolio is converted to the
     // display currency at the spot rate (with the caveat note below).
@@ -258,8 +288,7 @@ class _LendingTabState extends State<LendingTab> {
       widget.usdMxnRate,
     );
     final active = (_summary['active_count'] as num?)?.toInt() ?? 0;
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    final phone = MediaQuery.sizeOf(context).width < 720;
+    final pad = phone ? 16.0 : 24.0;
     final outstandingTile = _stat(
       AppLocalizations.of(context).lendingOutstanding,
       _money(totalOut, summaryCur),
@@ -677,7 +706,9 @@ class _LendingTabState extends State<LendingTab> {
     );
   }
 
-  Widget _buildLoanCard(Map<String, dynamic> loan) {
+  /// [phone] is the tab's touch-width flag from [build] — the loan card is a
+  /// full-width row of the tab's list, so the tab's constraint IS this card's.
+  Widget _buildLoanCard(Map<String, dynamic> loan, bool phone) {
     final currency = (loan['currency'] ?? 'USD').toString();
     // "Outstanding" here means the TOTAL still owed (principal + unpaid
     // interest) so the card matches the loan detail + agreement — a
@@ -705,7 +736,7 @@ class _LendingTabState extends State<LendingTab> {
       loan['total_owed'] as num?,
       loan['outstanding'] as num?,
     );
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    final pad = phone ? 16.0 : 24.0;
 
     return Card(
       elevation: 0,

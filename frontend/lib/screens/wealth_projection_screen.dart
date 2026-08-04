@@ -14,6 +14,13 @@ import '../utils/percent_format.dart';
 import '../utils/projection_axis.dart';
 import '../utils/theme_colors.dart';
 
+/// Width below which the assumptions card takes its dense layout: 16px of
+/// padding instead of 24 and 20px dividers instead of 32.
+///
+/// The house ~720 breakpoint, measured on that card's OWN `LayoutBuilder`
+/// constraint rather than `MediaQuery` (skill §4/§5).
+const double _kCompactControlsBelow = 720;
+
 /// Which FIRE "flavor" the user is focusing on. Purely a view choice — it
 /// switches which target the headline + chart line emphasize; the underlying
 /// projection math is identical for all three.
@@ -717,7 +724,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: 320, child: _buildControls()),
+                  SizedBox(
+                    width: 320,
+                    child: _buildControls(collapseAdvancedWhenNarrow: false),
+                  ),
                   const SizedBox(width: 24),
                   Expanded(
                     child: LayoutBuilder(
@@ -1013,356 +1023,379 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     );
   }
 
-  Widget _buildControls({bool scrollable = true}) {
+  /// The assumptions card.
+  ///
+  /// [collapseAdvancedWhenNarrow] gates the phone-only "Advanced assumptions"
+  /// disclosure. The wide two-column layout passes false deliberately: there
+  /// this card is a fixed 320px-wide full-height sidebar, so its own width
+  /// says "narrow" while the surface is a pointer one that already exposes
+  /// the fold through an always-visible scrollbar (F9). Hiding 9 of the 12
+  /// controls there would be a discoverability regression, not a fix.
+  Widget _buildControls({
+    bool scrollable = true,
+    bool collapseAdvancedWhenNarrow = true,
+  }) {
     final l = AppLocalizations.of(context);
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
-    final pad = isPhone ? 16.0 : 24.0;
-    final divH = isPhone ? 20.0 : 32.0;
-    Widget div() => Divider(height: divH, color: context.hairline);
+    // Density keys off the width this card was GIVEN, never `MediaQuery`
+    // (skill §4/§5): on the wide layout the card is a 320px sidebar inside a
+    // 1440px window, so the screen width was reading "desktop" and spending
+    // 24px of padding + 32px dividers on a column with none to spare.
+    return LayoutBuilder(
+      builder: (context, box) {
+        final isNarrow = box.maxWidth < _kCompactControlsBelow;
+        final pad = isNarrow ? 16.0 : 24.0;
+        final divH = isNarrow ? 20.0 : 32.0;
+        final collapseAdvanced = isNarrow && collapseAdvancedWhenNarrow;
+        Widget div() => Divider(height: divH, color: context.hairline);
 
-    // U3: savings-rate caption — the CURRENT contribution against tracked
-    // annual income, capped at 100% for display; hidden without income data.
-    // Recomputed on every rebuild so it tracks the slider live (onChanged
-    // runs setState on each drag tick).
-    String? savingsRateCaption;
-    if (_annualIncome > 0) {
-      final pct = (_monthlyContribution * 12 / _annualIncome * 100).clamp(
-        0.0,
-        100.0,
-      );
-      savingsRateCaption = l.projSavingsRateCaption(
-        formatPercent(context, pct, digits: 0),
-      );
-    }
+        // U3: savings-rate caption — the CURRENT contribution against tracked
+        // annual income, capped at 100% for display; hidden without income data.
+        // Recomputed on every rebuild so it tracks the slider live (onChanged
+        // runs setState on each drag tick).
+        String? savingsRateCaption;
+        if (_annualIncome > 0) {
+          final pct = (_monthlyContribution * 12 / _annualIncome * 100).clamp(
+            0.0,
+            100.0,
+          );
+          savingsRateCaption = l.projSavingsRateCaption(
+            formatPercent(context, pct, digits: 0),
+          );
+        }
 
-    // The 3 primary sliders stay visible at all widths.
-    final primary = <Widget>[
-      _buildSliderControl(
-        label: l.projMonthlySavings,
-        value: _monthlyContribution,
-        min: 0,
-        max: _savingsMax,
-        isCurrency: true,
-        // F3: honest provenance — the hint names how much history backs the
-        // adopted value; no hint when the static default stands.
-        hint: _contributionFromMonths != null
-            ? l.projBasedOnMonths(_contributionFromMonths!)
-            : null,
-        caption: savingsRateCaption,
-        onChanged: (val) => setState(() => _monthlyContribution = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        // U2: tap the value label to type an exact figure.
-        onTapValue: () => _editMoneyValue(
-          label: l.projMonthlySavings,
-          currentUsd: _monthlyContribution,
-          minUsd: 0,
-          commit: (v) {
-            _monthlyContribution = v;
-            _savingsMax = _grownMax(_savingsMax, v, 1000.0);
-          },
-        ),
-      ),
-      div(),
-      _buildSliderControl(
-        label: l.projExpectedReturnNominal,
-        value: _annualReturnRate,
-        min: 0,
-        max: 0.15,
-        isPercent: true,
-        help: '${l.projHelpExpectedReturn}\n${_fisherHelp(l)}',
-        onChanged: (val) => setState(() => _annualReturnRate = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editPercentValue(
-          label: l.projExpectedReturnNominal,
-          currentFraction: _annualReturnRate,
-          minFraction: 0,
-          maxFraction: 0.15,
-          commit: (v) => _annualReturnRate = v,
-        ),
-      ),
-      div(),
-      _buildSliderControl(
-        label: l.projYearsToRetirement,
-        value: _yearsToRetirement.toDouble().clamp(
-          0,
-          _projectionYears.toDouble(),
-        ),
-        min: 0,
-        max: _projectionYears.toDouble(),
-        divisions: _projectionYears,
-        help: l.projHelpYearsToRetirement,
-        onChanged: (val) => setState(() => _yearsToRetirement = val.toInt()),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editYearsValue(
-          label: l.projYearsToRetirement,
-          current: _yearsToRetirement.clamp(0, _projectionYears),
-          min: 0,
-          max: _projectionYears,
-          commit: (v) => _yearsToRetirement = v,
-        ),
-      ),
-    ];
+        // The 3 primary sliders stay visible at all widths.
+        final primary = <Widget>[
+          _buildSliderControl(
+            label: l.projMonthlySavings,
+            value: _monthlyContribution,
+            min: 0,
+            max: _savingsMax,
+            isCurrency: true,
+            // F3: honest provenance — the hint names how much history backs the
+            // adopted value; no hint when the static default stands.
+            hint: _contributionFromMonths != null
+                ? l.projBasedOnMonths(_contributionFromMonths!)
+                : null,
+            caption: savingsRateCaption,
+            onChanged: (val) => setState(() => _monthlyContribution = val),
+            onChangeEnd: (_) => _assumptionChanged(),
+            // U2: tap the value label to type an exact figure.
+            onTapValue: () => _editMoneyValue(
+              label: l.projMonthlySavings,
+              currentUsd: _monthlyContribution,
+              minUsd: 0,
+              commit: (v) {
+                _monthlyContribution = v;
+                _savingsMax = _grownMax(_savingsMax, v, 1000.0);
+              },
+            ),
+          ),
+          div(),
+          _buildSliderControl(
+            label: l.projExpectedReturnNominal,
+            value: _annualReturnRate,
+            min: 0,
+            max: 0.15,
+            isPercent: true,
+            help: '${l.projHelpExpectedReturn}\n${_fisherHelp(l)}',
+            onChanged: (val) => setState(() => _annualReturnRate = val),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editPercentValue(
+              label: l.projExpectedReturnNominal,
+              currentFraction: _annualReturnRate,
+              minFraction: 0,
+              maxFraction: 0.15,
+              commit: (v) => _annualReturnRate = v,
+            ),
+          ),
+          div(),
+          _buildSliderControl(
+            label: l.projYearsToRetirement,
+            value: _yearsToRetirement.toDouble().clamp(
+              0,
+              _projectionYears.toDouble(),
+            ),
+            min: 0,
+            max: _projectionYears.toDouble(),
+            divisions: _projectionYears,
+            help: l.projHelpYearsToRetirement,
+            onChanged: (val) =>
+                setState(() => _yearsToRetirement = val.toInt()),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editYearsValue(
+              label: l.projYearsToRetirement,
+              current: _yearsToRetirement.clamp(0, _projectionYears),
+              min: 0,
+              max: _projectionYears,
+              commit: (v) => _yearsToRetirement = v,
+            ),
+          ),
+        ];
 
-    // Everything else — collapsed behind a disclosure on phones, inline on wide.
-    final advanced = <Widget>[
-      _buildSliderControl(
-        label: l.projInflation,
-        value: _annualInflation,
-        min: 0,
-        max: 0.06,
-        isPercent: true,
-        help: l.projHelpInflation,
-        onChanged: (val) => setState(() => _annualInflation = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editPercentValue(
-          label: l.projInflation,
-          currentFraction: _annualInflation,
-          minFraction: 0,
-          maxFraction: 0.06,
-          commit: (v) => _annualInflation = v,
-        ),
-      ),
-      div(),
-      _buildSliderControl(
-        label: l.projVolatility,
-        value: _returnVolatility,
-        min: 0,
-        max: 0.25,
-        isPercent: true,
-        help: l.projHelpVolatility,
-        onChanged: (val) => setState(() => _returnVolatility = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editPercentValue(
-          label: l.projVolatility,
-          currentFraction: _returnVolatility,
-          minFraction: 0,
-          maxFraction: 0.25,
-          commit: (v) => _returnVolatility = v,
-        ),
-      ),
-      div(),
-      // The Mexico scenario REPLACES the single expense input with the
-      // USD/MXN split, so exactly one expense representation is on screen and
-      // the inactive one can't mislead.
-      if (!_mxScenario) ...[
-        _buildSliderControl(
-          label: l.projAnnualExpenses,
-          value: _annualExpenses,
-          min: _expensesFloor,
-          max: _expensesMax,
-          isCurrency: true,
-          help: l.projHelpAnnualExpenses,
-          // F3: adopted → say how much data backs it; static $40k default →
-          // say it's an estimate instead of implying it came from tracked
-          // data. Restored user-saved assumptions (F10) carry no hint: the
-          // value is the user's own, neither derived nor a stock estimate.
-          hint: _expensesFromMonths != null
-              ? l.projBasedOnMonths(_expensesFromMonths!)
-              : (_assumptionsRestored ? null : l.projExpensesEstimateHint),
-          onChanged: (val) => setState(() => _annualExpenses = val),
-          onChangeEnd: (_) => _assumptionChanged(),
-          onTapValue: () => _editMoneyValue(
-            label: l.projAnnualExpenses,
-            currentUsd: _annualExpenses,
-            minUsd: _expensesFloor,
-            commit: (v) {
-              _annualExpenses = v;
-              if (v > _expensesMax) {
-                _expensesTypedMax = _grownMax(0.0, v, 50000.0);
+        // Everything else — collapsed behind a disclosure on phones, inline on wide.
+        final advanced = <Widget>[
+          _buildSliderControl(
+            label: l.projInflation,
+            value: _annualInflation,
+            min: 0,
+            max: 0.06,
+            isPercent: true,
+            help: l.projHelpInflation,
+            onChanged: (val) => setState(() => _annualInflation = val),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editPercentValue(
+              label: l.projInflation,
+              currentFraction: _annualInflation,
+              minFraction: 0,
+              maxFraction: 0.06,
+              commit: (v) => _annualInflation = v,
+            ),
+          ),
+          div(),
+          _buildSliderControl(
+            label: l.projVolatility,
+            value: _returnVolatility,
+            min: 0,
+            max: 0.25,
+            isPercent: true,
+            help: l.projHelpVolatility,
+            onChanged: (val) => setState(() => _returnVolatility = val),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editPercentValue(
+              label: l.projVolatility,
+              currentFraction: _returnVolatility,
+              minFraction: 0,
+              maxFraction: 0.25,
+              commit: (v) => _returnVolatility = v,
+            ),
+          ),
+          div(),
+          // The Mexico scenario REPLACES the single expense input with the
+          // USD/MXN split, so exactly one expense representation is on screen and
+          // the inactive one can't mislead.
+          if (!_mxScenario) ...[
+            _buildSliderControl(
+              label: l.projAnnualExpenses,
+              value: _annualExpenses,
+              min: _expensesFloor,
+              max: _expensesMax,
+              isCurrency: true,
+              help: l.projHelpAnnualExpenses,
+              // F3: adopted → say how much data backs it; static $40k default →
+              // say it's an estimate instead of implying it came from tracked
+              // data. Restored user-saved assumptions (F10) carry no hint: the
+              // value is the user's own, neither derived nor a stock estimate.
+              hint: _expensesFromMonths != null
+                  ? l.projBasedOnMonths(_expensesFromMonths!)
+                  : (_assumptionsRestored ? null : l.projExpensesEstimateHint),
+              onChanged: (val) => setState(() => _annualExpenses = val),
+              onChangeEnd: (_) => _assumptionChanged(),
+              onTapValue: () => _editMoneyValue(
+                label: l.projAnnualExpenses,
+                currentUsd: _annualExpenses,
+                minUsd: _expensesFloor,
+                commit: (v) {
+                  _annualExpenses = v;
+                  if (v > _expensesMax) {
+                    _expensesTypedMax = _grownMax(0.0, v, 50000.0);
+                  }
+                },
+              ),
+            ),
+            div(),
+          ],
+          _buildMxToggle(),
+          if (_mxScenario) ...[
+            div(),
+            // Both portions render in their NATIVE currency with the ISO code
+            // (never the display-currency conversion) — "USD 12,000" next to
+            // "MXN 400,000" — because the split is defined per currency.
+            _buildSliderControl(
+              label: l.projMxUsdPortion,
+              value: _mxUsdPortion,
+              min: 0,
+              max: _mxUsdMax,
+              currencyCode: 'USD',
+              help: l.projMxHelpUsdPortion,
+              onChanged: (val) => setState(() => _mxUsdPortion = val),
+              onChangeEnd: (_) => _assumptionChanged(),
+              onTapValue: () => _editNativeMoneyValue(
+                label: l.projMxUsdPortion,
+                current: _mxUsdPortion,
+                code: 'USD',
+                commit: (v) {
+                  _mxUsdPortion = v;
+                  _mxUsdMax = _grownMax(_mxUsdMax, v, 10000.0);
+                },
+              ),
+            ),
+            div(),
+            _buildSliderControl(
+              label: l.projMxMxnPortion,
+              value: _mxMxnPortion,
+              min: 0,
+              max: _mxMxnMax,
+              currencyCode: 'MXN',
+              help: l.projMxHelpMxnPortion,
+              onChanged: (val) => setState(() => _mxMxnPortion = val),
+              onChangeEnd: (_) => _assumptionChanged(),
+              onTapValue: () => _editNativeMoneyValue(
+                label: l.projMxMxnPortion,
+                current: _mxMxnPortion,
+                code: 'MXN',
+                commit: (v) {
+                  _mxMxnPortion = v;
+                  _mxMxnMax = _grownMax(_mxMxnMax, v, 100000.0);
+                },
+              ),
+            ),
+            div(),
+            _buildSliderControl(
+              label: l.projMxFxDrift,
+              value: _fxAnnualDrift,
+              min: _fxDriftMin,
+              max: _fxDriftMax,
+              isPercent: true,
+              divisions: 40, // 0.5%/yr steps across the ±10% range
+              help: l.projMxHelpFxDrift,
+              onChanged: (val) => setState(() => _fxAnnualDrift = val),
+              onChangeEnd: (_) => _assumptionChanged(),
+              onTapValue: () => _editPercentValue(
+                label: l.projMxFxDrift,
+                currentFraction: _fxAnnualDrift,
+                minFraction: _fxDriftMin,
+                maxFraction: _fxDriftMax,
+                commit: (v) => _fxAnnualDrift = v,
+              ),
+            ),
+          ],
+          div(),
+          _buildSliderControl(
+            label: l.projSafeWithdrawalRate,
+            value: _withdrawalRate,
+            min: 0.02,
+            max: 0.06,
+            isPercent: true,
+            help: l.projHelpSwr,
+            onChanged: (val) => setState(() => _withdrawalRate = val),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editPercentValue(
+              label: l.projSafeWithdrawalRate,
+              currentFraction: _withdrawalRate,
+              minFraction: 0.02,
+              maxFraction: 0.06,
+              commit: (v) => _withdrawalRate = v,
+            ),
+          ),
+          div(),
+          _buildSliderControl(
+            label: l.projBaristaIncome,
+            value: _baristaMonthlyIncome,
+            min: 0,
+            max: _baristaMax,
+            isCurrency: true,
+            help: l.projHelpBaristaIncome,
+            onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editMoneyValue(
+              label: l.projBaristaIncome,
+              currentUsd: _baristaMonthlyIncome,
+              minUsd: 0,
+              commit: (v) {
+                _baristaMonthlyIncome = v;
+                _baristaMax = _grownMax(_baristaMax, v, 1000.0);
+              },
+            ),
+          ),
+          div(),
+          _buildSliderControl(
+            label: l.projTaxDrag,
+            value: _annualTaxDrag,
+            min: 0,
+            max: 0.03,
+            isPercent: true,
+            help: l.projHelpTaxDrag,
+            onChanged: (val) => setState(() => _annualTaxDrag = val),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editPercentValue(
+              label: l.projTaxDrag,
+              currentFraction: _annualTaxDrag,
+              minFraction: 0,
+              maxFraction: 0.03,
+              commit: (v) => _annualTaxDrag = v,
+            ),
+          ),
+          div(),
+          _buildGuardrailsToggle(),
+          div(),
+          _buildDividendOutlookToggle(),
+          div(),
+          _buildSliderControl(
+            label: l.projProjectionYears,
+            value: _projectionYears.toDouble(),
+            min: 5,
+            max: 50,
+            divisions: 9,
+            onChanged: (val) => setState(() {
+              _projectionYears = val.toInt();
+              if (_yearsToRetirement > _projectionYears) {
+                _yearsToRetirement = _projectionYears;
               }
-            },
+            }),
+            onChangeEnd: (_) => _assumptionChanged(),
+            onTapValue: () => _editYearsValue(
+              label: l.projProjectionYears,
+              current: _projectionYears,
+              min: 5,
+              max: 50,
+              commit: (v) {
+                // Mirror the slider's invariant: retirement can't sit past the
+                // horizon.
+                _projectionYears = v;
+                if (_yearsToRetirement > _projectionYears) {
+                  _yearsToRetirement = _projectionYears;
+                }
+              },
+            ),
           ),
-        ),
-        div(),
-      ],
-      _buildMxToggle(),
-      if (_mxScenario) ...[
-        div(),
-        // Both portions render in their NATIVE currency with the ISO code
-        // (never the display-currency conversion) — "USD 12,000" next to
-        // "MXN 400,000" — because the split is defined per currency.
-        _buildSliderControl(
-          label: l.projMxUsdPortion,
-          value: _mxUsdPortion,
-          min: 0,
-          max: _mxUsdMax,
-          currencyCode: 'USD',
-          help: l.projMxHelpUsdPortion,
-          onChanged: (val) => setState(() => _mxUsdPortion = val),
-          onChangeEnd: (_) => _assumptionChanged(),
-          onTapValue: () => _editNativeMoneyValue(
-            label: l.projMxUsdPortion,
-            current: _mxUsdPortion,
-            code: 'USD',
-            commit: (v) {
-              _mxUsdPortion = v;
-              _mxUsdMax = _grownMax(_mxUsdMax, v, 10000.0);
-            },
-          ),
-        ),
-        div(),
-        _buildSliderControl(
-          label: l.projMxMxnPortion,
-          value: _mxMxnPortion,
-          min: 0,
-          max: _mxMxnMax,
-          currencyCode: 'MXN',
-          help: l.projMxHelpMxnPortion,
-          onChanged: (val) => setState(() => _mxMxnPortion = val),
-          onChangeEnd: (_) => _assumptionChanged(),
-          onTapValue: () => _editNativeMoneyValue(
-            label: l.projMxMxnPortion,
-            current: _mxMxnPortion,
-            code: 'MXN',
-            commit: (v) {
-              _mxMxnPortion = v;
-              _mxMxnMax = _grownMax(_mxMxnMax, v, 100000.0);
-            },
-          ),
-        ),
-        div(),
-        _buildSliderControl(
-          label: l.projMxFxDrift,
-          value: _fxAnnualDrift,
-          min: _fxDriftMin,
-          max: _fxDriftMax,
-          isPercent: true,
-          divisions: 40, // 0.5%/yr steps across the ±10% range
-          help: l.projMxHelpFxDrift,
-          onChanged: (val) => setState(() => _fxAnnualDrift = val),
-          onChangeEnd: (_) => _assumptionChanged(),
-          onTapValue: () => _editPercentValue(
-            label: l.projMxFxDrift,
-            currentFraction: _fxAnnualDrift,
-            minFraction: _fxDriftMin,
-            maxFraction: _fxDriftMax,
-            commit: (v) => _fxAnnualDrift = v,
-          ),
-        ),
-      ],
-      div(),
-      _buildSliderControl(
-        label: l.projSafeWithdrawalRate,
-        value: _withdrawalRate,
-        min: 0.02,
-        max: 0.06,
-        isPercent: true,
-        help: l.projHelpSwr,
-        onChanged: (val) => setState(() => _withdrawalRate = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editPercentValue(
-          label: l.projSafeWithdrawalRate,
-          currentFraction: _withdrawalRate,
-          minFraction: 0.02,
-          maxFraction: 0.06,
-          commit: (v) => _withdrawalRate = v,
-        ),
-      ),
-      div(),
-      _buildSliderControl(
-        label: l.projBaristaIncome,
-        value: _baristaMonthlyIncome,
-        min: 0,
-        max: _baristaMax,
-        isCurrency: true,
-        help: l.projHelpBaristaIncome,
-        onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editMoneyValue(
-          label: l.projBaristaIncome,
-          currentUsd: _baristaMonthlyIncome,
-          minUsd: 0,
-          commit: (v) {
-            _baristaMonthlyIncome = v;
-            _baristaMax = _grownMax(_baristaMax, v, 1000.0);
-          },
-        ),
-      ),
-      div(),
-      _buildSliderControl(
-        label: l.projTaxDrag,
-        value: _annualTaxDrag,
-        min: 0,
-        max: 0.03,
-        isPercent: true,
-        help: l.projHelpTaxDrag,
-        onChanged: (val) => setState(() => _annualTaxDrag = val),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editPercentValue(
-          label: l.projTaxDrag,
-          currentFraction: _annualTaxDrag,
-          minFraction: 0,
-          maxFraction: 0.03,
-          commit: (v) => _annualTaxDrag = v,
-        ),
-      ),
-      div(),
-      _buildGuardrailsToggle(),
-      div(),
-      _buildDividendOutlookToggle(),
-      div(),
-      _buildSliderControl(
-        label: l.projProjectionYears,
-        value: _projectionYears.toDouble(),
-        min: 5,
-        max: 50,
-        divisions: 9,
-        onChanged: (val) => setState(() {
-          _projectionYears = val.toInt();
-          if (_yearsToRetirement > _projectionYears) {
-            _yearsToRetirement = _projectionYears;
-          }
-        }),
-        onChangeEnd: (_) => _assumptionChanged(),
-        onTapValue: () => _editYearsValue(
-          label: l.projProjectionYears,
-          current: _projectionYears,
-          min: 5,
-          max: 50,
-          commit: (v) {
-            // Mirror the slider's invariant: retirement can't sit past the
-            // horizon.
-            _projectionYears = v;
-            if (_yearsToRetirement > _projectionYears) {
-              _yearsToRetirement = _projectionYears;
-            }
-          },
-        ),
-      ),
-      div(),
-      _buildGoalEditor(),
-    ];
+          div(),
+          _buildGoalEditor(),
+        ];
 
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ...primary,
-        if (isPhone) ...[
-          div(),
-          _buildAdvancedDisclosure(l, advanced),
-        ] else ...[
-          div(),
-          ...advanced,
-        ],
-      ],
-    );
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // F9: always-visible scrollbar so the fold in the controls column is
-        // discoverable (7 of 12 controls hide below it on short windows).
-        child: scrollable
-            ? Scrollbar(
-                controller: _controlsScrollController,
-                thumbVisibility: true,
-                child: SingleChildScrollView(
-                  controller: _controlsScrollController,
-                  child: body,
-                ),
-              )
-            : body,
-      ),
+        final body = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ...primary,
+            if (collapseAdvanced) ...[
+              div(),
+              _buildAdvancedDisclosure(l, advanced),
+            ] else ...[
+              div(),
+              ...advanced,
+            ],
+          ],
+        );
+        return Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // F9: always-visible scrollbar so the fold in the controls column is
+            // discoverable (7 of 12 controls hide below it on short windows).
+            child: scrollable
+                ? Scrollbar(
+                    controller: _controlsScrollController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _controlsScrollController,
+                      child: body,
+                    ),
+                  )
+                : body,
+          ),
+        );
+      },
     );
   }
 
@@ -2269,74 +2302,83 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
 
   Widget _buildChartCard() {
     final l = AppLocalizations.of(context);
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: LayoutBuilder(
-          builder: (context, box) {
-            // Two hosting contexts: the desktop flex branch grants a bounded
-            // height (the plot fills it, as before), while the phone scroll
-            // column is unbounded — there the card sizes itself with a
-            // guaranteed, width-derived plot height. The old fixed
-            // SizedBox(320) around this card let a wrapped legend (es-MX with
-            // band + goal on) starve the Expanded plot to a sliver.
-            final bounded = box.maxHeight.isFinite;
-            final chartHeight = (box.maxWidth * 0.55).clamp(220.0, 320.0);
-            Widget plotSized(Widget child) => bounded
-                ? Expanded(child: child)
-                : SizedBox(height: chartHeight, child: child);
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: LayoutBuilder(
+              builder: (context, box) {
+                // Two hosting contexts: the desktop flex branch grants a bounded
+                // height (the plot fills it, as before), while the phone scroll
+                // column is unbounded — there the card sizes itself with a
+                // guaranteed, width-derived plot height. The old fixed
+                // SizedBox(320) around this card let a wrapped legend (es-MX with
+                // band + goal on) starve the Expanded plot to a sliver.
+                final bounded = box.maxHeight.isFinite;
+                final chartHeight = (box.maxWidth * 0.55).clamp(220.0, 320.0);
+                Widget plotSized(Widget child) => bounded
+                    ? Expanded(child: child)
+                    : SizedBox(height: chartHeight, child: child);
 
-            if (_isLoading) {
-              const spinner = Center(child: CircularProgressIndicator());
-              return bounded
-                  ? spinner
-                  : SizedBox(height: chartHeight, child: spinner);
-            }
-            // F2: a failed load with nothing cached used to leave a silently
-            // blank card (empty Container from _buildChart, shrunk FIRE strip
-            // and tiles). Say so, and offer a retry.
-            if (_loadFailed && _projectionData == null) {
-              final error = _buildLoadError(l);
-              return bounded
-                  ? error
-                  : SizedBox(height: chartHeight, child: error);
-            }
-            return Column(
-              mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+                if (_isLoading) {
+                  const spinner = Center(child: CircularProgressIndicator());
+                  return bounded
+                      ? spinner
+                      : SizedBox(height: chartHeight, child: spinner);
+                }
+                // F2: a failed load with nothing cached used to leave a silently
+                // blank card (empty Container from _buildChart, shrunk FIRE strip
+                // and tiles). Say so, and offer a retry.
+                if (_loadFailed && _projectionData == null) {
+                  final error = _buildLoadError(l);
+                  return bounded
+                      ? error
+                      : SizedBox(height: chartHeight, child: error);
+                }
+                return Column(
+                  mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        l.projNetWorthProjection,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l.projNetWorthProjection,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
+                        FilterChip(
+                          label: Text(l.projRange),
+                          selected: _showBand,
+                          onSelected: (v) => setState(() => _showBand = v),
+                          avatar: Icon(
+                            _showBand ? Icons.area_chart : Icons.show_chart,
+                            size: 16,
+                          ),
+                        ),
+                      ],
                     ),
-                    FilterChip(
-                      label: Text(l.projRange),
-                      selected: _showBand,
-                      onSelected: (v) => setState(() => _showBand = v),
-                      avatar: Icon(
-                        _showBand ? Icons.area_chart : Icons.show_chart,
-                        size: 16,
-                      ),
-                    ),
+                    _buildChartLegend(l),
+                    const SizedBox(height: 18),
+                    plotSized(RepaintBoundary(child: _buildChart())),
                   ],
-                ),
-                _buildChartLegend(l),
-                const SizedBox(height: 18),
-                plotSized(RepaintBoundary(child: _buildChart())),
-              ],
-            );
-          },
-        ),
-      ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -561,7 +561,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final holdingsWithoutBasis =
         (summary['holdings_without_basis'] as num?)?.toInt() ?? 0;
 
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    // `stackControls` is this screen's OWN ~720 `LayoutBuilder` reading (see
+    // [build]) — never `MediaQuery` (skill §4/§5). The screen renders inside
+    // the dashboard's tab container, whose padding and 1600px clamp put its
+    // real width well below the window's, so the two disagreed in the
+    // 720–768px band: the header already stacked while the sections below
+    // still rendered in their wide, always-inline form.
+    final isPhone = stackControls;
     final gap = isPhone ? 16.0 : 24.0;
 
     return SingleChildScrollView(
@@ -573,6 +579,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           _buildKpiRow(
             l,
             stackKpis: stackKpis,
+            dense: isPhone,
             totalTaxable: totalTaxable,
             ordinaryIncome: ordinaryIncome,
             capitalGains: capitalGains,
@@ -830,6 +837,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   Widget _buildKpiRow(
     AppLocalizations l, {
     required bool stackKpis,
+    required bool dense,
     required double totalTaxable,
     required double ordinaryIncome,
     required double capitalGains,
@@ -846,6 +854,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     required bool gainsFromLots,
   }) {
     final taxableCard = _kpiCard(
+      dense: dense,
       label: l.taxTotalTaxableIncome,
       value: totalTaxable,
       child: Column(
@@ -905,6 +914,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
 
     final usCard = _kpiCard(
+      dense: dense,
       label: l.taxUsEstimatedLiability,
       value: liabUs,
       // Owed tax is not "good news": render neutral (primary text), reserving
@@ -941,6 +951,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
 
     final mxCard = _kpiCard(
+      dense: dense,
       label: l.taxMxEstimatedLiability,
       value: liabMx,
       // Owed tax is not "good news": render neutral (primary text), reserving
@@ -995,6 +1006,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       // their multi-line explanatory prose folds into a tap-to-open info
       // tooltip so the row stays glanceable.
       final usTile = _compactLiabilityTile(
+        dense: dense,
         l,
         label: l.taxUsEstimatedLiability,
         value: liabUs,
@@ -1004,6 +1016,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         showRoughBadge: !gainsFromLots,
       );
       final mxTile = _compactLiabilityTile(
+        dense: dense,
         l,
         label: l.taxMxEstimatedLiability,
         value: liabMx,
@@ -1054,13 +1067,21 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
   }
 
+  /// [dense] is the screen's own ~720 `LayoutBuilder` reading, threaded down
+  /// from [build] rather than measured here: these tiles render inside an
+  /// `IntrinsicHeight` row (so the columns come out equal-height), and Flutter
+  /// asserts on a `LayoutBuilder` under an intrinsic-dimension query —
+  /// "LayoutBuilder does not support returning intrinsic dimensions". Their
+  /// density is a property of the ROW anyway (3-up / 2-up / stacked), which
+  /// the screen's constraint already decides. No `MediaQuery` either way.
   Widget _kpiCard({
+    required bool dense,
     required String label,
     required double value,
     Color? valueColor,
     required Widget child,
   }) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    final pad = dense ? 16.0 : 24.0;
     return Card(
       child: Padding(
         padding: EdgeInsets.all(pad),
@@ -1100,13 +1121,17 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     required String rateLine,
     Widget? extra,
     required bool showRoughBadge,
+
+    /// Threaded, not measured — see [_kpiCard]: this tile also renders
+    /// inside an `IntrinsicHeight` row, where a `LayoutBuilder` asserts.
+    required bool dense,
   }) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     // The scenario prose (what the estimate assumes + its caveat) doesn't
     // fit a half-width tile; it lives behind a tap-to-open tooltip instead.
     // The manual key lets the 48dp IconButton (which wins the tap in the
     // gesture arena over the Tooltip's own tap trigger) surface it.
     final tooltipKey = GlobalKey<TooltipState>();
+    final pad = dense ? 16.0 : 24.0;
     return Card(
       child: Padding(
         padding: EdgeInsets.all(pad),
@@ -1176,7 +1201,6 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     double? ltcg15Room,
     double? ltcgNextRate,
   }) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     final lines = <Widget>[];
     void addLine(String text) {
       if (lines.isNotEmpty) lines.add(const SizedBox(height: 6));
@@ -1211,26 +1235,34 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       );
     }
 
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l.taxHeadroomTitle,
-              style: TextStyle(color: context.textMuted),
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.taxHeadroomTitle,
+                  style: TextStyle(color: context.textMuted),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l.taxHeadroomSubtitle,
+                  style: TextStyle(fontSize: 11, color: context.textFaint),
+                ),
+                const SizedBox(height: 10),
+                ...lines,
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              l.taxHeadroomSubtitle,
-              style: TextStyle(fontSize: 11, color: context.textFaint),
-            ),
-            const SizedBox(height: 10),
-            ...lines,
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -2138,130 +2170,142 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           _sectionTitle(l.taxFbarTitle),
           const SizedBox(height: 12),
         ],
-        Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(
-              MediaQuery.sizeOf(context).width < 720 ? 16.0 : 20.0,
+        // Padding off this card's OWN LayoutBuilder constraint, never the
+        // window (skill §4/§5) — the tax screen renders inside the tab
+        // container's padding + 1600px clamp.
+        LayoutBuilder(
+          builder: (_, outer) => Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l.taxFbarPeakAggregate,
-                  style: TextStyle(color: context.textMuted, fontSize: 12),
-                ),
-                const SizedBox(height: 6),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    widget.currencyFormat.format(
-                      peak * widget.conversionFactor,
-                    ),
-                    style: brandDisplayStyle(fontSize: 26, color: statusColor),
+            child: Padding(
+              padding: EdgeInsets.all(outer.maxWidth < 720 ? 16.0 : 20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.taxFbarPeakAggregate,
+                    style: TextStyle(color: context.textMuted, fontSize: 12),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      noData
-                          ? Icons.info_outline
-                          : (exceeded
-                                ? Icons.flag_outlined
-                                : Icons.check_circle_outline),
-                      size: 14,
-                      color: statusColor,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        noData
-                            ? l.taxFbarNoData
-                            : (exceeded ? l.taxFbarExceeded : l.taxFbarUnder),
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  const SizedBox(height: 6),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      widget.currencyFormat.format(
+                        peak * widget.conversionFactor,
+                      ),
+                      style: brandDisplayStyle(
+                        fontSize: 26,
+                        color: statusColor,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        l.taxFbarThreshold(
-                          widget.currencyFormat.format(
-                            threshold * widget.conversionFactor,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        noData
+                            ? Icons.info_outline
+                            : (exceeded
+                                  ? Icons.flag_outlined
+                                  : Icons.check_circle_outline),
+                        size: 14,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          noData
+                              ? l.taxFbarNoData
+                              : (exceeded ? l.taxFbarExceeded : l.taxFbarUnder),
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        style: TextStyle(
-                          color: context.textSubtle,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                    if (unverified) ...[
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        size: 12,
-                        color: context.warning,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        l.taxConstantsUnverified,
-                        style: TextStyle(color: context.warning, fontSize: 10),
                       ),
                     ],
-                  ],
-                ),
-                if (peakDate != null && peakDate.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    l.taxFbarPeakDate(_fmtDate(peakDate)),
-                    style: TextStyle(color: context.textFaint, fontSize: 11),
                   ),
-                ],
-                if (accounts.isEmpty) ...[
-                  if (!noData) ...[
-                    const SizedBox(height: 10),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          l.taxFbarThreshold(
+                            widget.currencyFormat.format(
+                              threshold * widget.conversionFactor,
+                            ),
+                          ),
+                          style: TextStyle(
+                            color: context.textSubtle,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      if (unverified) ...[
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 12,
+                          color: context.warning,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          l.taxConstantsUnverified,
+                          style: TextStyle(
+                            color: context.warning,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (peakDate != null && peakDate.isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     Text(
-                      l.taxFbarNoForeignAccounts,
+                      l.taxFbarPeakDate(_fmtDate(peakDate)),
                       style: TextStyle(color: context.textFaint, fontSize: 11),
                     ),
                   ],
-                ] else ...[
+                  if (accounts.isEmpty) ...[
+                    if (!noData) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        l.taxFbarNoForeignAccounts,
+                        style: TextStyle(
+                          color: context.textFaint,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    Divider(height: 1, color: context.hairline),
+                    for (final a in accounts) _fbarAccountRow(l, a),
+                  ],
                   const SizedBox(height: 12),
-                  Divider(height: 1, color: context.hairline),
-                  for (final a in accounts) _fbarAccountRow(l, a),
+                  Text(
+                    l.taxFbarInformational,
+                    style: TextStyle(
+                      color: context.textFaint,
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l.taxFbarFatcaNote,
+                    style: TextStyle(
+                      color: context.textFaint,
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
                 ],
-                const SizedBox(height: 12),
-                Text(
-                  l.taxFbarInformational,
-                  style: TextStyle(
-                    color: context.textFaint,
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  l.taxFbarFatcaNote,
-                  style: TextStyle(
-                    color: context.textFaint,
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -2937,26 +2981,33 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   }
 
   Widget _emptyCard(String text, IconData icon) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 20, color: context.tint(0.2)),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  text,
-                  style: TextStyle(color: context.textSubtle, fontSize: 13),
-                ),
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 20, color: context.tint(0.2)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      text,
+                      style: TextStyle(color: context.textSubtle, fontSize: 13),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

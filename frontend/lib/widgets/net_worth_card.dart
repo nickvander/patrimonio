@@ -279,75 +279,84 @@ class _NetWorthCardState extends State<NetWorthCard> {
   Widget build(BuildContext context) {
     // House card chrome: radius 20 everywhere, 16px interior on phones
     // (matches accounts_list_widget), 24px on wide screens.
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isCompact = constraints.maxWidth < 640;
-            // The chart's height is guaranteed, not "whatever the header
-            // leaves over": on phones the compact header stacks (hero,
-            // delta chips, currency chips, toggle + legend) to 300px+, and
-            // an Expanded chart inside a fixed-height card collapsed to a
-            // sliver with overlapping y labels. Width-derived, clamped so
-            // the plot area stays readable from 320px phones to desktop.
-            final chartHeight = (constraints.maxWidth * 0.5).clamp(
-              220.0,
-              280.0,
-            );
-            final filtered = _filterByRange(history);
-            // Only compute the per-institution slices when the detailed
-            // view is actually being shown — saves a meaningful chunk of
-            // work on the simple path.
-            final institutions = _detailed
-                ? _topInstitutions(context, filtered, max: 4)
-                : const <MapEntry<String, Color>>[];
-            // Non-default lens: swap the plot for the attribution endpoint's
-            // lens series (single line, day-offset x). Falls back to the
-            // default chart while the series hasn't loaded (or errored).
-            final lensSeries = _lens == _defaultLens
-                ? null
-                : _attribution?['series'] as List<dynamic>?;
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(isCompact, institutions),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: chartHeight,
-                  // Chart repaints (tooltip scrubbing, touch guides) stay
-                  // inside this boundary instead of invalidating the whole
-                  // card/scroll layer — noticeably less raster work on
-                  // Android while scrubbing.
-                  child: RepaintBoundary(
-                    child: lensSeries != null && lensSeries.isNotEmpty
-                        ? _renderLensChart(lensSeries, constraints.maxWidth)
-                        : _buildChart(
-                            filtered,
-                            institutions,
-                            constraints.maxWidth,
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildLensToggle(),
-                if (_lens == 'CONST') _buildConstantFxCaption(),
-                _buildAttributionSection(),
-                // Phone layout: the range selector lives inside the card,
-                // right under the plot it controls (thumb-reachable).
-                if (widget.rangeSelector != null) ...[
-                  const SizedBox(height: 12),
-                  widget.rangeSelector!,
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isCompact = constraints.maxWidth < 640;
+                // The chart's height is guaranteed, not "whatever the header
+                // leaves over": on phones the compact header stacks (hero,
+                // delta chips, currency chips, toggle + legend) to 300px+, and
+                // an Expanded chart inside a fixed-height card collapsed to a
+                // sliver with overlapping y labels. Width-derived, clamped so
+                // the plot area stays readable from 320px phones to desktop.
+                final chartHeight = (constraints.maxWidth * 0.5).clamp(
+                  220.0,
+                  280.0,
+                );
+                final filtered = _filterByRange(history);
+                // Only compute the per-institution slices when the detailed
+                // view is actually being shown — saves a meaningful chunk of
+                // work on the simple path.
+                final institutions = _detailed
+                    ? _topInstitutions(context, filtered, max: 4)
+                    : const <MapEntry<String, Color>>[];
+                // Non-default lens: swap the plot for the attribution endpoint's
+                // lens series (single line, day-offset x). Falls back to the
+                // default chart while the series hasn't loaded (or errored).
+                final lensSeries = _lens == _defaultLens
+                    ? null
+                    : _attribution?['series'] as List<dynamic>?;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(isCompact, institutions),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: chartHeight,
+                      // Chart repaints (tooltip scrubbing, touch guides) stay
+                      // inside this boundary instead of invalidating the whole
+                      // card/scroll layer — noticeably less raster work on
+                      // Android while scrubbing.
+                      child: RepaintBoundary(
+                        child: lensSeries != null && lensSeries.isNotEmpty
+                            ? _renderLensChart(lensSeries, constraints.maxWidth)
+                            : _buildChart(
+                                filtered,
+                                institutions,
+                                constraints.maxWidth,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildLensToggle(),
+                    if (_lens == 'CONST') _buildConstantFxCaption(),
+                    _buildAttributionSection(),
+                    // Phone layout: the range selector lives inside the card,
+                    // right under the plot it controls (thumb-reachable).
+                    if (widget.rangeSelector != null) ...[
+                      const SizedBox(height: 12),
+                      widget.rangeSelector!,
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

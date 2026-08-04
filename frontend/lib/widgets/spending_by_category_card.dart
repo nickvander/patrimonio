@@ -10,6 +10,13 @@ import '../utils/currency.dart';
 import '../utils/spending_window.dart';
 import '../utils/theme_colors.dart';
 
+/// Card width below which this card takes its touch layout: 16px of padding
+/// instead of 24 and a 200px plot instead of 240.
+///
+/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
+/// constraint rather than `MediaQuery` (skill §4/§5).
+const double _kCompactCardBelow = 720;
+
 /// "Where's my money going?" — per-category spending stacked by month.
 ///
 /// Reads `/dashboard/spending-by-category`, which already applies the same
@@ -97,130 +104,143 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
     final l = AppLocalizations.of(context);
     final months = (_data?['months'] as List<dynamic>?) ?? const [];
     final cats = (_data?['categories'] as List<dynamic>?) ?? const [];
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
-    final pad = isPhone ? 16.0 : 24.0;
+    // Padding and plot height key off the width this card was GIVEN, never
+    // `MediaQuery` (skill §4/§5): the card sits in a tab column that the tab
+    // padding and the 1600px content clamp narrow well below the window.
+    return LayoutBuilder(
+      builder: (context, outer) {
+        final isPhone = outer.maxWidth < _kCompactCardBelow;
+        final pad = isPhone ? 16.0 : 24.0;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Width-responsive off the card's OWN constraint (inner
-        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
-        // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(
-          builder: (context, c) {
-            // House ~420 phone breakpoint off the card interior: compact
-            // chrome — no leading icon, title compressed to a small uppercase
-            // overline (the portfolio_card idiom). Distinct from the <720
-            // MediaQuery `isPhone` above, which only drives padding/height.
-            final isPhoneCard = c.maxWidth < 420;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Inner constraint again, this time the card's INTERIOR (what is
+            // left after `pad`), for the compact-chrome breakpoint.
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // House ~420 phone breakpoint off the card interior: compact
+                // chrome — no leading icon, title compressed to a small
+                // uppercase overline (the portfolio_card idiom). Distinct from
+                // the ~720 `isPhone` above, which drives padding/height.
+                final isPhoneCard = c.maxWidth < 420;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isPhoneCard) ...[
-                      Icon(
-                        Icons.bar_chart_rounded,
-                        color: context.tealAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        isPhoneCard
-                            ? l.spendByCatTitle.toUpperCase()
-                            : l.spendByCatTitle,
-                        style: isPhoneCard
-                            ? TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: context.textSubtle,
-                              )
-                            : TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: context.textPrimary,
-                              ),
-                        // maxLines only on the phone overline; wider layouts
-                        // keep the original wrap behaviour pixel-identical.
-                        maxLines: isPhoneCard ? 1 : null,
-                        overflow: isPhoneCard ? TextOverflow.ellipsis : null,
-                      ),
-                    ),
-                    // Hidden when the window is driven by the Cash Flow period
-                    // selector (item #11) — the two selectors would otherwise
-                    // disagree on screen.
-                    if (widget.months == null) _rangeSelector(),
-                  ],
-                ),
-                // Header→content gap tightens with the phone overline header.
-                SizedBox(height: isPhoneCard ? 12 : 16),
-                if (_loading)
-                  const SizedBox(
-                    height: 220,
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (months.isEmpty || cats.isEmpty)
-                  SizedBox(
-                    height: 180,
-                    child: Center(
-                      child: Text(
-                        l.spendByCatEmpty,
-                        style: TextStyle(color: context.textMuted),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  )
-                else ...[
-                  LayoutBuilder(
-                    builder: (context, outer) {
-                      // Bar width and month-label density derive from the inner
-                      // width (house rule: ~1 label per 46px phone / 62px wide,
-                      // always keep the last) — hardcoded 22px bars + a label on
-                      // every month overlapped on narrow phones with 6-12 months.
-                      final narrow = outer.maxWidth < 420;
-                      final count = months.isEmpty ? 1 : months.length;
-                      final minLabels = count < 2 ? count : 2;
-                      final maxLabels =
-                          (outer.maxWidth / (narrow ? 46.0 : 62.0))
-                              .floor()
-                              .clamp(minLabels, count);
-                      final labelStep = (count / maxLabels).ceil().clamp(
-                        1,
-                        count,
-                      );
-                      final barWidth = narrow ? 14.0 : 22.0;
-                      return SizedBox(
-                        height: isPhone ? 200.0 : 240.0,
-                        child: _buildChart(
-                          months,
-                          cats,
-                          barWidth: barWidth,
-                          labelStep: labelStep,
+                    Row(
+                      children: [
+                        if (!isPhoneCard) ...[
+                          Icon(
+                            Icons.bar_chart_rounded,
+                            color: context.tealAccent,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            isPhoneCard
+                                ? l.spendByCatTitle.toUpperCase()
+                                : l.spendByCatTitle,
+                            style: isPhoneCard
+                                ? TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: context.textSubtle,
+                                  )
+                                : TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: context.textPrimary,
+                                  ),
+                            // maxLines only on the phone overline; wider layouts
+                            // keep the original wrap behaviour pixel-identical.
+                            maxLines: isPhoneCard ? 1 : null,
+                            overflow: isPhoneCard
+                                ? TextOverflow.ellipsis
+                                : null,
+                          ),
                         ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // The figures next to each category are an average PER MONTH,
-                  // not the window total — the bare window sum (e.g. 6× a $3k
-                  // rent) reads as wildly inflated otherwise.
-                  Text(
-                    l.spendByCatAvgPerMonth,
-                    style: TextStyle(color: context.textMuted, fontSize: 11),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildLegend(cats),
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+                        // Hidden when the window is driven by the Cash Flow period
+                        // selector (item #11) — the two selectors would otherwise
+                        // disagree on screen.
+                        if (widget.months == null) _rangeSelector(),
+                      ],
+                    ),
+                    // Header→content gap tightens with the phone overline header.
+                    SizedBox(height: isPhoneCard ? 12 : 16),
+                    if (_loading)
+                      const SizedBox(
+                        height: 220,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (months.isEmpty || cats.isEmpty)
+                      SizedBox(
+                        height: 180,
+                        child: Center(
+                          child: Text(
+                            l.spendByCatEmpty,
+                            style: TextStyle(color: context.textMuted),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    else ...[
+                      LayoutBuilder(
+                        builder: (context, outer) {
+                          // Bar width and month-label density derive from the inner
+                          // width (house rule: ~1 label per 46px phone / 62px wide,
+                          // always keep the last) — hardcoded 22px bars + a label on
+                          // every month overlapped on narrow phones with 6-12 months.
+                          final narrow = outer.maxWidth < 420;
+                          final count = months.isEmpty ? 1 : months.length;
+                          final minLabels = count < 2 ? count : 2;
+                          final maxLabels =
+                              (outer.maxWidth / (narrow ? 46.0 : 62.0))
+                                  .floor()
+                                  .clamp(minLabels, count);
+                          final labelStep = (count / maxLabels).ceil().clamp(
+                            1,
+                            count,
+                          );
+                          final barWidth = narrow ? 14.0 : 22.0;
+                          return SizedBox(
+                            height: isPhone ? 200.0 : 240.0,
+                            child: _buildChart(
+                              months,
+                              cats,
+                              barWidth: barWidth,
+                              labelStep: labelStep,
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      // The figures next to each category are an average PER MONTH,
+                      // not the window total — the bare window sum (e.g. 6× a $3k
+                      // rent) reads as wildly inflated otherwise.
+                      Text(
+                        l.spendByCatAvgPerMonth,
+                        style: TextStyle(
+                          color: context.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildLegend(cats),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

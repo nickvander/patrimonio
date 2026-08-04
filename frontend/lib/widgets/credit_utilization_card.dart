@@ -73,66 +73,75 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
     final totalUtilization = hasLimits
         ? (totalBalance / totalLimit) * 100
         : 0.0;
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  l.cfCreditUtilizationHeader,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: context.textSubtle,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      l.cfCreditUtilizationHeader,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.textSubtle,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    Text(
+                      hasLimits
+                          ? formatPercent(context, totalUtilization, digits: 1)
+                          : '—',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: !hasLimits
+                            ? context.textSubtle
+                            : totalUtilization > 30
+                            ? context.warning
+                            : context.positive,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  hasLimits
-                      ? formatPercent(context, totalUtilization, digits: 1)
-                      : '—',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: !hasLimits
-                        ? context.textSubtle
-                        : totalUtilization > 30
-                        ? context.warning
-                        : context.positive,
+                const SizedBox(height: 8),
+                // The overall bar only makes sense when at least one card reports a
+                // limit; otherwise it'd be a permanently-empty 0% bar.
+                if (hasLimits) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: (totalUtilization / 100).clamp(0.0, 1.0),
+                      backgroundColor: context.hairline,
+                      color: totalUtilization > 30
+                          ? context.warning
+                          : context.positive,
+                      minHeight: 8,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 24),
+                ] else
+                  const SizedBox(height: 16),
+                ..._buildCreditRows(),
               ],
             ),
-            const SizedBox(height: 8),
-            // The overall bar only makes sense when at least one card reports a
-            // limit; otherwise it'd be a permanently-empty 0% bar.
-            if (hasLimits) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: (totalUtilization / 100).clamp(0.0, 1.0),
-                  backgroundColor: context.hairline,
-                  color: totalUtilization > 30
-                      ? context.warning
-                      : context.positive,
-                  minHeight: 8,
-                ),
-              ),
-              const SizedBox(height: 24),
-            ] else
-              const SizedBox(height: 16),
-            ..._buildCreditRows(),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

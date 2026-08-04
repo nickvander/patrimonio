@@ -214,41 +214,49 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     final bands = _bandsFor(dim, l);
     final activeTotal = bands.fold<double>(0, (sum, b) => sum + b.value);
 
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-
-    return Card(
-      elevation: 6,
-      shadowColor: Colors.black45,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header(context, l, activeTotal),
-            if (hasToggle) ...[
-              const SizedBox(height: 16),
-              _dimensionToggle(dim, hasType, hasInst, l),
-            ],
-            // Permanent tap affordance / active-filter indicator — the
-            // filtered table lives below the fold, so the state has to be
-            // readable up here.
-            const SizedBox(height: 14),
-            _filterStatusRow(bands, l),
-            if (showConcentration && topHolding != null) ...[
-              const SizedBox(height: 16),
-              _concentrationBanner(
-                context,
-                l,
-                topHolding.subCategory,
-                topShare,
-              ),
-            ],
-            const SizedBox(height: 24),
-            ...bands.map((b) => _bandWidget(b, activeTotal, l)),
-          ],
-        ),
-      ),
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 6,
+          shadowColor: Colors.black45,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _header(context, l, activeTotal),
+                if (hasToggle) ...[
+                  const SizedBox(height: 16),
+                  _dimensionToggle(dim, hasType, hasInst, l),
+                ],
+                // Permanent tap affordance / active-filter indicator — the
+                // filtered table lives below the fold, so the state has to be
+                // readable up here.
+                const SizedBox(height: 14),
+                _filterStatusRow(bands, l),
+                if (showConcentration && topHolding != null) ...[
+                  const SizedBox(height: 16),
+                  _concentrationBanner(
+                    context,
+                    l,
+                    topHolding.subCategory,
+                    topShare,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                ...bands.map((b) => _bandWidget(b, activeTotal, l)),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -764,16 +772,18 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         : null;
 
     Widget withPreviewAndMargin(Widget core) {
-      return Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0,
+      // Inter-band rhythm off the band's OWN constraint (the card interior),
+      // never the window (skill §4/§5).
+      return LayoutBuilder(
+        builder: (_, outer) => Padding(
+          padding: EdgeInsets.only(bottom: outer.maxWidth < 720 ? 16.0 : 24.0),
+          child: preview == null
+              ? core
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [core, preview],
+                ),
         ),
-        child: preview == null
-            ? core
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [core, preview],
-              ),
       );
     }
 

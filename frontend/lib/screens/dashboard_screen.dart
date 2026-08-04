@@ -880,8 +880,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     // panel that opens from the palette uses the same reporting context.
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
-    // Idiomatic symbol ($/MX$) via the shared helper so the hero number and
-    // every card fed this formatter read "$1,234.00" not "USD 1,234.00".
+    // Idiomatic symbol ($ for USD, the "MXN " ISO prefix for pesos) via the
+    // shared helper, so the hero number and every card fed this formatter read
+    // "$1,234.00" / "MXN 1,234.00" rather than "USD 1,234.00".
     final currencyFormat = moneyFormat(_targetCurrency);
 
     // Jump-to-section items, driven by the live destination list so the
@@ -2269,50 +2270,51 @@ class _DashboardScreenState extends State<DashboardScreen>
     final l = AppLocalizations.of(context);
     final ignored = _ignoredSubscriptions ?? const [];
     if (ignored.isEmpty) return const SizedBox.shrink();
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        // Same responsive 16/24 padding as the tab's other cards
-        // (e.g. monthly_cash_flow_card.dart).
-        padding: EdgeInsets.all(
-          MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.visibility_off_outlined,
-                  size: 18,
-                  color: context.textSubtle,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  l.dashHiddenFromSubscriptions,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: context.textPrimary,
+    // Same responsive 16/24 padding as the tab's other cards
+    // (e.g. monthly_cash_flow_card.dart), read off the card's OWN constraint
+    // rather than the window (skill §4/§5).
+    return LayoutBuilder(
+      builder: (_, outer) => Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: EdgeInsets.all(outer.maxWidth < 720 ? 16.0 : 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.visibility_off_outlined,
+                    size: 18,
+                    color: context.textSubtle,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${ignored.length}',
-                  style: TextStyle(fontSize: 12, color: context.textSubtle),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l.dashHiddenFromSubscriptionsHint,
-              style: TextStyle(fontSize: 11, color: context.textSubtle),
-            ),
-            const SizedBox(height: 8),
-            for (final raw in ignored)
-              _buildIgnoredRow(raw as Map<String, dynamic>),
-          ],
+                  const SizedBox(width: 8),
+                  Text(
+                    l.dashHiddenFromSubscriptions,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${ignored.length}',
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                l.dashHiddenFromSubscriptionsHint,
+                style: TextStyle(fontSize: 11, color: context.textSubtle),
+              ),
+              const SizedBox(height: 8),
+              for (final raw in ignored)
+                _buildIgnoredRow(raw as Map<String, dynamic>),
+            ],
+          ),
         ),
       ),
     );
@@ -4836,8 +4838,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
-    // Idiomatic symbol ($/MX$) via the shared helper so the hero number and
-    // every card fed this formatter read "$1,234.00" not "USD 1,234.00".
+    // Idiomatic symbol ($ for USD, the "MXN " ISO prefix for pesos) via the
+    // shared helper, so the hero number and every card fed this formatter read
+    // "$1,234.00" / "MXN 1,234.00" rather than "USD 1,234.00".
     final currencyFormat = moneyFormat(_targetCurrency);
     // Same compact signal the Scaffold uses for the bottom bar + FAB, so
     // the Activity tab's hostProvidesAddFab flips in lockstep with the
@@ -5229,7 +5232,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     Widget buildSetupStatusCard() {
-      final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       final checks = (_setupStatus?['checks'] as List?) ?? [];
       final blocking = checks
           .where(
@@ -5276,174 +5278,182 @@ class _DashboardScreenState extends State<DashboardScreen>
       final ready = blocking.isEmpty;
       final showDetails = !ready || _setupExpanded;
 
-      return Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: EdgeInsets.all(pad),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    ready
-                        ? Icons.verified_user_outlined
-                        : Icons.warning_amber_rounded,
-                    color: ready ? context.positive : context.warning,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      l.dashLaunchSetup,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
+      // Card padding off the card's OWN constraint, not the window
+      // (skill §4/§5) — the tab pads and clamps its content.
+      return LayoutBuilder(
+        builder: (_, outer) => Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(outer.maxWidth < 720 ? 16.0 : 24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      ready
+                          ? Icons.verified_user_outlined
+                          : Icons.warning_amber_rounded,
+                      color: ready ? context.positive : context.warning,
+                      size: 20,
                     ),
-                  ),
-                  if (ready) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: context.positive.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: Text(
-                        l.dashSetupReadyPill,
-                        style: TextStyle(
-                          color: context.positive,
-                          fontSize: 11,
+                        l.dashLaunchSetup,
+                        style: const TextStyle(
+                          fontSize: 16,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                    IconButton(
-                      onPressed: () =>
-                          setState(() => _setupExpanded = !_setupExpanded),
-                      icon: Icon(
-                        _setupExpanded ? Icons.expand_less : Icons.expand_more,
+                    if (ready) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.positive.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          l.dashSetupReadyPill,
+                          style: TextStyle(
+                            color: context.positive,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                      tooltip: _setupExpanded
-                          ? l.dashSetupHideDetails
-                          : l.dashSetupShowDetails,
-                      visualDensity: VisualDensity.compact,
-                      color: context.textMuted,
+                      IconButton(
+                        onPressed: () =>
+                            setState(() => _setupExpanded = !_setupExpanded),
+                        icon: Icon(
+                          _setupExpanded
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                        ),
+                        tooltip: _setupExpanded
+                            ? l.dashSetupHideDetails
+                            : l.dashSetupShowDetails,
+                        visualDensity: VisualDensity.compact,
+                        color: context.textMuted,
+                      ),
+                    ],
+                  ],
+                ),
+                if (showDetails) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    ready ? l.dashLaunchSetupReady : l.dashLaunchSetupBlocked,
+                    style: TextStyle(color: context.textMuted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  ...visibleChecks.map((raw) {
+                    final check = raw as Map<String, dynamic>;
+                    final configured = check['configured'] == true;
+                    final key = check['key']?.toString() ?? '';
+                    // Per-row trailing action. Today only the plaid_webhook
+                    // row gets one; designed as a switch so future checks
+                    // can hook in the same way without growing a wrapper
+                    // layer per check.
+                    Widget? trailing;
+                    if (key == 'plaid_webhook' &&
+                        configured &&
+                        plaidInstitutionCount > 0) {
+                      trailing = TextButton.icon(
+                        onPressed: () => _pushWebhookToAllInstitutions(),
+                        icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                        label: Text(
+                          l.dashPushToInstitutions(plaidInstitutionCount),
+                        ),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      );
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            configured
+                                ? Icons.check_circle
+                                : check['severity'] == 'optional'
+                                ? Icons.radio_button_unchecked
+                                : Icons.error_outline,
+                            color: configured
+                                ? context.positive
+                                : check['severity'] == 'optional'
+                                ? context.textFaint
+                                : context.warning,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  // Localize by stable key; the server's English
+                                  // `label` is only the fallback for keys this
+                                  // build doesn't know (newer backend).
+                                  setupCheckLabel(
+                                    l,
+                                    key,
+                                    check['label']?.toString() ?? '',
+                                  ),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  check['detail'] ?? '',
+                                  style: TextStyle(
+                                    color: context.textSubtle,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (trailing != null) ...[
+                            const SizedBox(width: 8),
+                            trailing,
+                          ],
+                        ],
+                      ),
+                    );
+                  }),
+                  if (recommended.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    // Dynamic recap of what's still recommended-but-not-set.
+                    // Lists labels from the recommended set; falls back to a
+                    // generic line if all the labels happen to be missing.
+                    Text(
+                      l.dashRecommendedBeforeProduction(
+                        recommended
+                            .map(
+                              (c) => setupCheckLabel(
+                                l,
+                                (c as Map)['key']?.toString() ?? '',
+                                c['label']?.toString() ?? '',
+                              ),
+                            )
+                            .where((s) => s.isNotEmpty)
+                            .join(', '),
+                      ),
+                      style: TextStyle(color: context.textSubtle, fontSize: 12),
                     ),
                   ],
                 ],
-              ),
-              if (showDetails) ...[
-                const SizedBox(height: 12),
-                Text(
-                  ready ? l.dashLaunchSetupReady : l.dashLaunchSetupBlocked,
-                  style: TextStyle(color: context.textMuted, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                ...visibleChecks.map((raw) {
-                  final check = raw as Map<String, dynamic>;
-                  final configured = check['configured'] == true;
-                  final key = check['key']?.toString() ?? '';
-                  // Per-row trailing action. Today only the plaid_webhook
-                  // row gets one; designed as a switch so future checks
-                  // can hook in the same way without growing a wrapper
-                  // layer per check.
-                  Widget? trailing;
-                  if (key == 'plaid_webhook' &&
-                      configured &&
-                      plaidInstitutionCount > 0) {
-                    trailing = TextButton.icon(
-                      onPressed: () => _pushWebhookToAllInstitutions(),
-                      icon: const Icon(Icons.cloud_upload_outlined, size: 16),
-                      label: Text(
-                        l.dashPushToInstitutions(plaidInstitutionCount),
-                      ),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    );
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          configured
-                              ? Icons.check_circle
-                              : check['severity'] == 'optional'
-                              ? Icons.radio_button_unchecked
-                              : Icons.error_outline,
-                          color: configured
-                              ? context.positive
-                              : check['severity'] == 'optional'
-                              ? context.textFaint
-                              : context.warning,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                // Localize by stable key; the server's English
-                                // `label` is only the fallback for keys this
-                                // build doesn't know (newer backend).
-                                setupCheckLabel(
-                                  l,
-                                  key,
-                                  check['label']?.toString() ?? '',
-                                ),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                check['detail'] ?? '',
-                                style: TextStyle(
-                                  color: context.textSubtle,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (trailing != null) ...[
-                          const SizedBox(width: 8),
-                          trailing,
-                        ],
-                      ],
-                    ),
-                  );
-                }),
-                if (recommended.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  // Dynamic recap of what's still recommended-but-not-set.
-                  // Lists labels from the recommended set; falls back to a
-                  // generic line if all the labels happen to be missing.
-                  Text(
-                    l.dashRecommendedBeforeProduction(
-                      recommended
-                          .map(
-                            (c) => setupCheckLabel(
-                              l,
-                              (c as Map)['key']?.toString() ?? '',
-                              c['label']?.toString() ?? '',
-                            ),
-                          )
-                          .where((s) => s.isNotEmpty)
-                          .join(', '),
-                    ),
-                    style: TextStyle(color: context.textSubtle, fontSize: 12),
-                  ),
-                ],
               ],
-            ],
+            ),
           ),
         ),
       );
@@ -5963,6 +5973,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     // Dedicated cash-flow page: monthly summary, the bar-chart of
     // recent months, and per-category budgets. These used to crowd the
     // Overview; pulling them out keeps Overview focused on net worth.
+    //
+    // Inter-card rhythm for the cash-flow AND data-management tabs. Left on
+    // MediaQuery on purpose (2026-08-04 responsive sweep): this is tab chrome,
+    // the sibling of buildTabContainer's own padding and the Invest tab's
+    // `cardGap` above — all three key off the window so the tabs agree with
+    // each other. The CARDS inside them read their own constraint; the gaps
+    // BETWEEN them are the container's business.
     final gap = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     // Effective cash-flow series: the period-specific fetch once the user
     // touches the selector, else the shared 12-month series (current default).
@@ -6241,587 +6258,637 @@ class _DashboardScreenState extends State<DashboardScreen>
       scrollable: false,
     );
 
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    // Data-management tab. Its cards' density and the phone-only
+    // "details behind a disclosure" grouping key off the width the tab
+    // CONTENT was given — never `MediaQuery` (skill §4/§5). buildTabContainer
+    // pads the tab by 16/24 and clamps it to 1600px, so the window width
+    // overstates the room these cards actually have.
     final managementTab = buildTabContainer(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l.dashDataSources,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          // All "get data in" actions live in one card so the tab reads as a
-          // tidy set of sections (matching Overview/Transactions) instead of
-          // bare buttons floating on the background. Banks/manual and crypto
-          // are split into labelled sub-groups.
-          Card(
-            child: Padding(
-              padding: EdgeInsets.all(pad),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+      // NB: the builder deliberately does NOT bind a `context` of its own —
+      // the subtree keeps using this State's context, so the async-gap
+      // `mounted` guards further down stay the State's own.
+      LayoutBuilder(
+        builder: (_, outer) {
+          final isPhone = outer.maxWidth < 720;
+          final pad = isPhone ? 16.0 : 24.0;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.dashDataSources,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // All "get data in" actions live in one card so the tab reads as a
+              // tidy set of sections (matching Overview/Transactions) instead of
+              // bare buttons floating on the background. Banks/manual and crypto
+              // are split into labelled sub-groups.
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(pad),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.add_link, size: 18, color: context.tealAccent),
-                      const SizedBox(width: 8),
-                      Text(
-                        l.dashAddAccountsTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.add_link,
+                            size: 18,
+                            color: context.tealAccent,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            l.dashAddAccountsTitle,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      LayoutBuilder(
+                        builder: (ctx, c) {
+                          // Full-bleed and stacked while the card is touch-shaped;
+                          // content-sized (bounded) once there is pointer room. The
+                          // old rule was `(c.maxWidth - 16) / 2` with no cap, which
+                          // stretched a two-word label to 565px at 1440. See
+                          // theme/buttons.dart.
+                          final constraints = actionButtonConstraints(
+                            c.maxWidth,
+                          );
+                          Widget tile(
+                            IconData icon,
+                            String label, {
+                            required Color bg,
+                            Color? fg,
+                            Color? iconColor,
+                            VoidCallback? onPressed,
+                          }) {
+                            final foreground = fg ?? context.textPrimary;
+                            return ConstrainedBox(
+                              constraints: constraints,
+                              child: ElevatedButton.icon(
+                                icon: Icon(
+                                  icon,
+                                  size: 18,
+                                  color: iconColor ?? foreground,
+                                ),
+                                label: Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  // M3 Expressive "Small" (40dp). The tiles were on
+                                  // vertical: 13 + icon 24 ≈ 50dp, which that ramp
+                                  // reserves for a hero action.
+                                  minimumSize: const Size(
+                                    0,
+                                    kActionButtonHeight,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                  ),
+                                  elevation: 0,
+                                  backgroundColor: bg,
+                                  // Pin foreground so the label stays legible on
+                                  // every tinted tile (ElevatedButton's default
+                                  // light-mode tonal grey fades into the tint).
+                                  foregroundColor: foreground,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: onPressed,
+                              ),
+                            );
+                          }
+
+                          Widget subLabel(String text) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              text.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: context.textSubtle,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          );
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              subLabel(l.dashConnectStandardAccounts),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 10,
+                                children: [
+                                  tile(
+                                    Icons.add_link,
+                                    l.dashLinkPlaidUsBanks,
+                                    bg: context.accentSoft(context.tealAccent),
+                                    onPressed: plaidReady()
+                                        ? () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    const ConnectBankScreen(),
+                                              ),
+                                            ).then(
+                                              (_) => _loadAllData(silent: true),
+                                            );
+                                          }
+                                        : null,
+                                  ),
+                                  tile(
+                                    Icons.upload_file,
+                                    l.dashImportMxShort,
+                                    bg: context.hairline,
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const ImportScreen(),
+                                        ),
+                                      ).then((_) => _loadAllData(silent: true));
+                                    },
+                                  ),
+                                  tile(
+                                    Icons.add_circle_outline,
+                                    l.dashAddManualAccountShort,
+                                    bg: context.hairline,
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AddAccountDialog(
+                                          onAccountCreated: _loadAllData,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              Divider(color: context.hairline, height: 1),
+                              const SizedBox(height: 20),
+                              subLabel(l.dashConnectCryptoExchanges),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 10,
+                                children: [
+                                  tile(
+                                    Icons.login,
+                                    l.dashLinkCoinbase,
+                                    // Coinbase brand blue (#0052FF) rides the ICON,
+                                    // not the fill. As a saturated full-width fill
+                                    // it was the loudest element on the page and
+                                    // outranked the user's own primary actions —
+                                    // a partner's brand colour shouldn't win the
+                                    // hierarchy inside our surface. Tonal fill keeps
+                                    // this level with its siblings; the mark still
+                                    // identifies it.
+                                    bg: context.accentSoft(
+                                      const Color(0xFF0052FF),
+                                    ),
+                                    iconColor: const Color(0xFF0052FF),
+                                    onPressed: () {
+                                      final baseUrl = _apiService.baseUrl;
+                                      navigateTo('$baseUrl/auth/coinbase');
+                                    },
+                                  ),
+                                  tile(
+                                    Icons.currency_exchange,
+                                    l.dashConnectBitso,
+                                    bg: context.positive.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    iconColor: context.positive,
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AddCryptoDialog(
+                                          exchange: 'bitso',
+                                          onLinked: _loadAllData,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ],
+                  ),
+                ),
+              ),
+              SizedBox(height: gap),
+              // Your name — used as the lender on loan agreements.
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(pad),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.badge_outlined,
+                            size: 18,
+                            color: context.tealAccent,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            l.dashLenderNameTitle,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l.dashLenderNameSubtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSubtle,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _lenderNameCtrl,
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _saveLenderName(),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                hintText: l.dashLenderNameHint,
+                                border: const OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton(
+                            onPressed: _savingLenderName
+                                ? null
+                                : _saveLenderName,
+                            child: _savingLenderName
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(l.dashSave),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: gap),
+              // Data export + import management. Mirrors the add-accounts card so
+              // "get data out" reads as a sibling section. CSV/PDF downloads go
+              // through the same-origin openUrlSameTab seam (Content-Disposition:
+              // attachment, session cookie sent) used by the per-account screen
+              // and tax-planning exports — so they work under the nginx /api proxy.
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(pad),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.download,
+                            size: 18,
+                            color: context.tealAccent,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            l.dashDataExportTitle,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l.dashDataExportSubtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textSubtle,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.table_chart_outlined),
+                            label: Text(l.dashExportTransactionsCsv),
+                            onPressed: () => openUrlSameTab(
+                              _apiService.exportTransactionsCsvUrl(),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.receipt_long_outlined),
+                            label: Text(l.dashExportTaxCsv),
+                            onPressed: () => openUrlSameTab(
+                              '${_apiService.baseUrl}/tax/export',
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.picture_as_pdf_outlined),
+                            label: Text(l.dashExportTaxPdf),
+                            onPressed: () => openUrlSameTab(
+                              '${_apiService.baseUrl}/tax/export/pdf',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Divider(color: context.hairline, height: 1),
+                      const SizedBox(height: 8),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          Icons.inventory_2_outlined,
+                          color: context.tealAccent,
+                        ),
+                        title: Text(l.dashImportedBatchesTitle),
+                        subtitle: Text(l.dashImportedBatchesSubtitle),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ImportCleanupScreen(),
+                            ),
+                          ).then((_) => _loadAllData(silent: true));
+                        },
+                      ),
+                      // Household continuity dossier — the printable emergency
+                      // packet lives on its own small screen (instructions text +
+                      // language choice + generate).
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          Icons.health_and_safety_outlined,
+                          color: context.tealAccent,
+                        ),
+                        title: Text(l.dossierTitle),
+                        subtitle: Text(l.dossierEntrySubtitle),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const ContinuityDossierScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Secondary Settings controls (sync-all, sync-status, FX, modules).
+              // On phones these fold behind a "Connections & sync" disclosure so
+              // the default view leads with the add-account actions; on wide
+              // screens they stay inline exactly as before. The setup-status card
+              // stays an always-visible sibling below either way.
+              ...(() {
+                final List<Widget> secondaryControls = <Widget>[
+                  // "Sync all" acts on already-connected accounts, so it sits with
+                  // the sync-status / FX monitoring row rather than the add-account
+                  // actions. Inline spinner instead of a blocking SnackBar.
+                  // Content-sized once there's pointer room, full-bleed on a phone.
+                  // This was `width: double.infinity` + `vertical: 18`, i.e. a
+                  // 1650x56 slab at desktop width — the single worst offender on the
+                  // Settings page. See theme/buttons.dart.
+                  LayoutBuilder(
+                    builder: (ctx, c) {
+                      final button = ElevatedButton.icon(
+                        icon: _isSyncing
+                            ? SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    context.textPrimary,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.sync, size: 18),
+                        label: Text(
+                          _isSyncing
+                              ? (_syncTotal > 0
+                                    ? l.dashSyncingProgress(
+                                        _syncDone,
+                                        _syncTotal,
+                                      )
+                                    : l.dashSyncingAll)
+                              : l.dashSyncAllAccounts,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(0, kActionButtonHeight),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          elevation: 0,
+                          backgroundColor: context.accentSoft(context.info),
+                          foregroundColor: context.textPrimary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _isSyncing ? null : runSync,
+                      );
+                      final width = actionButtonWidth(c.maxWidth);
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: width == null
+                            ? button
+                            : SizedBox(width: width, child: button),
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   LayoutBuilder(
                     builder: (ctx, c) {
-                      // Full-bleed and stacked while the card is touch-shaped;
-                      // content-sized (bounded) once there is pointer room. The
-                      // old rule was `(c.maxWidth - 16) / 2` with no cap, which
-                      // stretched a two-word label to 565px at 1440. See
-                      // theme/buttons.dart.
-                      final constraints = actionButtonConstraints(c.maxWidth);
-                      Widget tile(
-                        IconData icon,
-                        String label, {
-                        required Color bg,
-                        Color? fg,
-                        Color? iconColor,
-                        VoidCallback? onPressed,
-                      }) {
-                        final foreground = fg ?? context.textPrimary;
-                        return ConstrainedBox(
-                          constraints: constraints,
-                          child: ElevatedButton.icon(
-                            icon: Icon(
-                              icon,
-                              size: 18,
-                              color: iconColor ?? foreground,
-                            ),
-                            label: Text(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              // M3 Expressive "Small" (40dp). The tiles were on
-                              // vertical: 13 + icon 24 ≈ 50dp, which that ramp
-                              // reserves for a hero action.
-                              minimumSize: const Size(0, kActionButtonHeight),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
+                      // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
+                      // into unreadability when forced side-by-side. Stack them.
+                      final isNarrow = c.maxWidth < 720;
+                      final sync = SyncStatusCard(
+                        syncData: _syncData ?? [],
+                        onRetrySync: runSync,
+                        onRetrySingle: (id) async {
+                          try {
+                            await _apiService.syncInstitution(id);
+                            await _refreshData();
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(l.dashRetryFailed(e.toString())),
                               ),
-                              elevation: 0,
-                              backgroundColor: bg,
-                              // Pin foreground so the label stays legible on
-                              // every tinted tile (ElevatedButton's default
-                              // light-mode tonal grey fades into the tint).
-                              foregroundColor: foreground,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                            );
+                          }
+                        },
+                        onRetryBatch: (ids) async {
+                          try {
+                            await _apiService.syncInstitutionsBatch(ids);
+                            await _refreshData();
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(l.dashRetryFailed(e.toString())),
                               ),
+                            );
+                          }
+                        },
+                        onReconnect: handleReconnect,
+                        onDelete: (id) async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Text(l.dashDeleteInstitutionTitle),
+                              content: Text(l.dashDeleteInstitutionBody),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: Text(l.actionCancel),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: context.negative,
+                                  ),
+                                  child: Text(l.dashDeleteEverything),
+                                ),
+                              ],
                             ),
-                            onPressed: onPressed,
-                          ),
+                          );
+
+                          if (confirm == true) {
+                            try {
+                              await _apiService.deleteInstitution(id);
+                              _loadAllData(silent: true);
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    l.dashDeleteFailed(e.toString()),
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      );
+                      final fx = FxWidget(
+                        latestRate: _fxRate ?? {},
+                        onRefresh: () async {
+                          try {
+                            final fresh = await _apiService.getExchangeRate(
+                              'USD',
+                              'MXN',
+                              force: true,
+                            );
+                            if (!mounted) return;
+                            setState(() => _fxRate = fresh);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(l.dashFxRateRefreshed)),
+                            );
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  l.dashRefreshFailed(e.toString()),
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      );
+                      if (isNarrow) {
+                        return Column(
+                          children: [sync, const SizedBox(height: 16), fx],
                         );
                       }
-
-                      Widget subLabel(String text) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          text.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: context.textSubtle,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                      );
-
-                      return Column(
+                      return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          subLabel(l.dashConnectStandardAccounts),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 10,
-                            children: [
-                              tile(
-                                Icons.add_link,
-                                l.dashLinkPlaidUsBanks,
-                                bg: context.accentSoft(context.tealAccent),
-                                onPressed: plaidReady()
-                                    ? () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const ConnectBankScreen(),
-                                          ),
-                                        ).then(
-                                          (_) => _loadAllData(silent: true),
-                                        );
-                                      }
-                                    : null,
-                              ),
-                              tile(
-                                Icons.upload_file,
-                                l.dashImportMxShort,
-                                bg: context.hairline,
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          const ImportScreen(),
-                                    ),
-                                  ).then((_) => _loadAllData(silent: true));
-                                },
-                              ),
-                              tile(
-                                Icons.add_circle_outline,
-                                l.dashAddManualAccountShort,
-                                bg: context.hairline,
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => AddAccountDialog(
-                                      onAccountCreated: _loadAllData,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Divider(color: context.hairline, height: 1),
-                          const SizedBox(height: 20),
-                          subLabel(l.dashConnectCryptoExchanges),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 10,
-                            children: [
-                              tile(
-                                Icons.login,
-                                l.dashLinkCoinbase,
-                                // Coinbase brand blue (#0052FF) rides the ICON,
-                                // not the fill. As a saturated full-width fill
-                                // it was the loudest element on the page and
-                                // outranked the user's own primary actions —
-                                // a partner's brand colour shouldn't win the
-                                // hierarchy inside our surface. Tonal fill keeps
-                                // this level with its siblings; the mark still
-                                // identifies it.
-                                bg: context.accentSoft(const Color(0xFF0052FF)),
-                                iconColor: const Color(0xFF0052FF),
-                                onPressed: () {
-                                  final baseUrl = _apiService.baseUrl;
-                                  navigateTo('$baseUrl/auth/coinbase');
-                                },
-                              ),
-                              tile(
-                                Icons.currency_exchange,
-                                l.dashConnectBitso,
-                                bg: context.positive.withValues(alpha: 0.12),
-                                iconColor: context.positive,
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => AddCryptoDialog(
-                                      exchange: 'bitso',
-                                      onLinked: _loadAllData,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
+                          Expanded(child: sync),
+                          const SizedBox(width: 24),
+                          Expanded(child: fx),
                         ],
                       );
                     },
                   ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: gap),
-          // Your name — used as the lender on loan agreements.
-          Card(
-            child: Padding(
-              padding: EdgeInsets.all(pad),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.badge_outlined,
-                        size: 18,
-                        color: context.tealAccent,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        l.dashLenderNameTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l.dashLenderNameSubtitle,
-                    style: TextStyle(fontSize: 12, color: context.textSubtle),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _lenderNameCtrl,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _saveLenderName(),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            hintText: l.dashLenderNameHint,
-                            border: const OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        onPressed: _savingLenderName ? null : _saveLenderName,
-                        child: _savingLenderName
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(l.dashSave),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(height: gap),
-          // Data export + import management. Mirrors the add-accounts card so
-          // "get data out" reads as a sibling section. CSV/PDF downloads go
-          // through the same-origin openUrlSameTab seam (Content-Disposition:
-          // attachment, session cookie sent) used by the per-account screen
-          // and tax-planning exports — so they work under the nginx /api proxy.
-          Card(
-            child: Padding(
-              padding: EdgeInsets.all(pad),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.download, size: 18, color: context.tealAccent),
-                      const SizedBox(width: 8),
-                      Text(
-                        l.dashDataExportTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l.dashDataExportSubtitle,
-                    style: TextStyle(fontSize: 12, color: context.textSubtle),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.table_chart_outlined),
-                        label: Text(l.dashExportTransactionsCsv),
-                        onPressed: () => openUrlSameTab(
-                          _apiService.exportTransactionsCsvUrl(),
-                        ),
-                      ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.receipt_long_outlined),
-                        label: Text(l.dashExportTaxCsv),
-                        onPressed: () =>
-                            openUrlSameTab('${_apiService.baseUrl}/tax/export'),
-                      ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.picture_as_pdf_outlined),
-                        label: Text(l.dashExportTaxPdf),
-                        onPressed: () => openUrlSameTab(
-                          '${_apiService.baseUrl}/tax/export/pdf',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(color: context.hairline, height: 1),
-                  const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      Icons.inventory_2_outlined,
-                      color: context.tealAccent,
-                    ),
-                    title: Text(l.dashImportedBatchesTitle),
-                    subtitle: Text(l.dashImportedBatchesSubtitle),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ImportCleanupScreen(),
-                        ),
-                      ).then((_) => _loadAllData(silent: true));
-                    },
-                  ),
-                  // Household continuity dossier — the printable emergency
-                  // packet lives on its own small screen (instructions text +
-                  // language choice + generate).
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      Icons.health_and_safety_outlined,
-                      color: context.tealAccent,
-                    ),
-                    title: Text(l.dossierTitle),
-                    subtitle: Text(l.dossierEntrySubtitle),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ContinuityDossierScreen(),
-                        ),
+                  SizedBox(height: gap),
+                  _buildModulesCard(),
+                ];
+                if (isPhone) {
+                  return [
+                    SizedBox(height: gap),
+                    _buildManagementDetails(secondaryControls),
+                  ];
+                }
+                return [const SizedBox(height: 24), ...secondaryControls];
+              }()),
+              // Auto-archived accounts — a recovery affordance for accounts the
+              // sync closed at the bank. Rendered only when something's been
+              // archived; collapsed by default.
+              ?(() {
+                final section = _buildArchivedAccountsSection();
+                return section == null
+                    ? null
+                    : Padding(
+                        padding: EdgeInsets.only(top: gap),
+                        child: section,
                       );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Secondary Settings controls (sync-all, sync-status, FX, modules).
-          // On phones these fold behind a "Connections & sync" disclosure so
-          // the default view leads with the add-account actions; on wide
-          // screens they stay inline exactly as before. The setup-status card
-          // stays an always-visible sibling below either way.
-          ...(() {
-            final List<Widget> secondaryControls = <Widget>[
-              // "Sync all" acts on already-connected accounts, so it sits with
-              // the sync-status / FX monitoring row rather than the add-account
-              // actions. Inline spinner instead of a blocking SnackBar.
-              // Content-sized once there's pointer room, full-bleed on a phone.
-              // This was `width: double.infinity` + `vertical: 18`, i.e. a
-              // 1650x56 slab at desktop width — the single worst offender on the
-              // Settings page. See theme/buttons.dart.
-              LayoutBuilder(
-                builder: (ctx, c) {
-                  final button = ElevatedButton.icon(
-                    icon: _isSyncing
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                context.textPrimary,
-                              ),
-                            ),
-                          )
-                        : const Icon(Icons.sync, size: 18),
-                    label: Text(
-                      _isSyncing
-                          ? (_syncTotal > 0
-                                ? l.dashSyncingProgress(_syncDone, _syncTotal)
-                                : l.dashSyncingAll)
-                          : l.dashSyncAllAccounts,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(0, kActionButtonHeight),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      elevation: 0,
-                      backgroundColor: context.accentSoft(context.info),
-                      foregroundColor: context.textPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: _isSyncing ? null : runSync,
-                  );
-                  final width = actionButtonWidth(c.maxWidth);
-                  return Align(
-                    alignment: Alignment.centerLeft,
-                    child: width == null
-                        ? button
-                        : SizedBox(width: width, child: button),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (ctx, c) {
-                  // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
-                  // into unreadability when forced side-by-side. Stack them.
-                  final isNarrow = c.maxWidth < 720;
-                  final sync = SyncStatusCard(
-                    syncData: _syncData ?? [],
-                    onRetrySync: runSync,
-                    onRetrySingle: (id) async {
-                      try {
-                        await _apiService.syncInstitution(id);
-                        await _refreshData();
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(l.dashRetryFailed(e.toString())),
-                          ),
-                        );
-                      }
-                    },
-                    onRetryBatch: (ids) async {
-                      try {
-                        await _apiService.syncInstitutionsBatch(ids);
-                        await _refreshData();
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(l.dashRetryFailed(e.toString())),
-                          ),
-                        );
-                      }
-                    },
-                    onReconnect: handleReconnect,
-                    onDelete: (id) async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text(l.dashDeleteInstitutionTitle),
-                          content: Text(l.dashDeleteInstitutionBody),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: Text(l.actionCancel),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: TextButton.styleFrom(
-                                foregroundColor: context.negative,
-                              ),
-                              child: Text(l.dashDeleteEverything),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm == true) {
-                        try {
-                          await _apiService.deleteInstitution(id);
-                          _loadAllData(silent: true);
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(l.dashDeleteFailed(e.toString())),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                  );
-                  final fx = FxWidget(
-                    latestRate: _fxRate ?? {},
-                    onRefresh: () async {
-                      try {
-                        final fresh = await _apiService.getExchangeRate(
-                          'USD',
-                          'MXN',
-                          force: true,
-                        );
-                        if (!mounted) return;
-                        setState(() => _fxRate = fresh);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(l.dashFxRateRefreshed)),
-                        );
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(l.dashRefreshFailed(e.toString())),
-                          ),
-                        );
-                      }
-                    },
-                  );
-                  if (isNarrow) {
-                    return Column(
-                      children: [sync, const SizedBox(height: 16), fx],
-                    );
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: sync),
-                      const SizedBox(width: 24),
-                      Expanded(child: fx),
-                    ],
-                  );
-                },
-              ),
+              }()),
               SizedBox(height: gap),
-              _buildModulesCard(),
-            ];
-            if (isPhone) {
-              return [
-                SizedBox(height: gap),
-                _buildManagementDetails(secondaryControls),
-              ];
-            }
-            return [const SizedBox(height: 24), ...secondaryControls];
-          }()),
-          // Auto-archived accounts — a recovery affordance for accounts the
-          // sync closed at the bank. Rendered only when something's been
-          // archived; collapsed by default.
-          ?(() {
-            final section = _buildArchivedAccountsSection();
-            return section == null
-                ? null
-                : Padding(
-                    padding: EdgeInsets.only(top: gap),
-                    child: section,
-                  );
-          }()),
-          SizedBox(height: gap),
-          // Deployment diagnostics sit below the data-management sections —
-          // they collapse to a single "Ready" row once required checks pass,
-          // so they no longer crowd the top of the tab.
-          buildSetupStatusCard(),
-          // App-level settings close the tab: preferences (language, theme)
-          // and account & security (Security, Hidden items, Server, and the
-          // deliberately low-prominence confirmed sign-out as the final row).
-          SizedBox(height: gap),
-          _buildPreferencesCard(),
-          SizedBox(height: gap),
-          _buildAccountCard(),
-        ],
+              // Deployment diagnostics sit below the data-management sections —
+              // they collapse to a single "Ready" row once required checks pass,
+              // so they no longer crowd the top of the tab.
+              buildSetupStatusCard(),
+              // App-level settings close the tab: preferences (language, theme)
+              // and account & security (Security, Hidden items, Server, and the
+              // deliberately low-prominence confirmed sign-out as the final row).
+              SizedBox(height: gap),
+              _buildPreferencesCard(),
+              SizedBox(height: gap),
+              _buildAccountCard(),
+            ],
+          );
+        },
       ),
     );
 

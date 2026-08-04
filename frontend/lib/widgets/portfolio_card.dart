@@ -649,27 +649,36 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   /// Holdings slice: search/toolbar + the holdings table (flat or grouped).
   Widget _buildHoldingsCard(BuildContext context) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Theme(
-          data: Theme.of(context).copyWith(
-            cardTheme: CardThemeData(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            dividerColor: context.hairline,
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 6,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
           ),
-          child: _groupByAccount
-              ? _buildGroupedHoldings()
-              : _buildHoldingsTable(),
-        ),
-      ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                cardTheme: CardThemeData(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                dividerColor: context.hairline,
+              ),
+              child: _groupByAccount
+                  ? _buildGroupedHoldings()
+                  : _buildHoldingsTable(),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -821,9 +830,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // Phone-width variant: ONE compact single-line row (~48dp) instead of a
     // full 4-row tile. Surface styling matches KpiTile so the row sits
     // visually inside the KPI grid above it. Reads as an FX equivalence
-    // ("Total value in pesos  ≈ MX$…"): a plain-language label carries the
+    // ("Total value in pesos  ≈ MXN …"): a plain-language label carries the
     // meaning and the money string alone carries the currency — a code on
-    // the left would just repeat the MX$/$ symbol. The P/L is dropped —
+    // the left would just repeat the "MXN "/"$" glyph. The P/L is dropped —
     // converted at one spot rate its percentage is identical to the hero
     // pill right above, so repeating it here cost cramped type for no
     // information. The >=520 branch keeps the full side-by-side comparison.

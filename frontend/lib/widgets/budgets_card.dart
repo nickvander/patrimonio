@@ -61,6 +61,16 @@ class BudgetsCard extends StatefulWidget {
 const _kSuggestPreselect = 6;
 // Budget rows shown before the list collapses behind a "show all" toggle.
 const _kBudgetCollapseLimit = 6;
+
+/// Card width below which this card takes its touch layout: 16px of padding
+/// instead of 24, and only 4 budget rows before the "show all" toggle.
+///
+/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
+/// constraint rather than `MediaQuery` (skill §4/§5) — the same signal
+/// `performance_card.dart` uses. It is load-bearing here: the wrong branch
+/// doesn't just mis-pad the card, it decides how many categories the user
+/// can see at all.
+const double _kCompactCardBelow = 720;
 // Spend must exceed this multiple of the prorated expected-to-date budget to
 // count as "on track to exceed" — tolerates normal early-month lumpiness.
 const _kPaceTolerance = 1.15;
@@ -433,272 +443,303 @@ class _BudgetsCardState extends State<BudgetsCard> {
       }
     }
 
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
-    final pad = isPhone ? 16.0 : 24.0;
-    // Show fewer rows before the "show all" toggle on phones so the card
-    // doesn't dominate the cash-flow tab; desktop keeps the full limit.
-    final collapseLimit = isPhone ? 4 : _kBudgetCollapseLimit;
+    // Every layout decision below keys off the width this card was GIVEN,
+    // never `MediaQuery` (skill §4/§5): the card sits in a tab column that
+    // the tab's own padding and the 1600px content clamp narrow well below
+    // the window, so the screen width says nothing about how much room the
+    // budget rows have. Getting this wrong hid data — `collapseLimit` decides
+    // how many categories render before the "show all" toggle.
+    return LayoutBuilder(
+      builder: (context, outer) {
+        final isPhone = outer.maxWidth < _kCompactCardBelow;
+        final pad = isPhone ? 16.0 : 24.0;
+        // Show fewer rows before the "show all" toggle on narrow cards so the
+        // card doesn't dominate the cash-flow tab; wide cards keep the full
+        // limit.
+        final collapseLimit = isPhone ? 4 : _kBudgetCollapseLimit;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Width-responsive off the card's OWN constraint (inner
-        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
-        // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(
-          builder: (context, c) {
-            // House ~420 phone breakpoint off the card interior: compact
-            // chrome — no leading icon, title compressed to a small uppercase
-            // overline (the portfolio_card idiom), and the two labelled header
-            // actions collapse to plain 48dp IconButtons. Distinct from the
-            // <720 MediaQuery `isPhone` above (padding/collapse limit only).
-            final isPhoneCard = c.maxWidth < 420;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Inner constraint again, this time the card's INTERIOR (the
+            // width left after `pad`), for the compact-chrome breakpoint.
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // House ~420 phone breakpoint off the card interior: compact
+                // chrome — no leading icon, title compressed to a small
+                // uppercase overline (the portfolio_card idiom), and the two
+                // labelled header actions collapse to plain 48dp IconButtons.
+                // Distinct from the ~720 `isPhone` above (padding + collapse
+                // limit only).
+                final isPhoneCard = c.maxWidth < 420;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isPhoneCard) ...[
-                      Icon(
-                        Icons.donut_small,
-                        color: context.tealAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        isPhoneCard
-                            ? l.cfBudgetsTitle.toUpperCase()
-                            : l.cfBudgetsTitle,
-                        style: isPhoneCard
-                            ? TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: context.textSubtle,
-                              )
-                            : const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        // maxLines only on the phone overline; wider layouts
-                        // keep the original wrap behaviour pixel-identical.
-                        maxLines: isPhoneCard ? 1 : null,
-                        overflow: isPhoneCard ? TextOverflow.ellipsis : null,
-                      ),
-                    ),
-                    // NB: use a glyph that's actually in this build's bundled
-                    // MaterialIcons font. The "magic/idea" icons
-                    // (auto_awesome_outlined, auto_fix_high, lightbulb_outline)
-                    // render blank here — their glyphs aren't present in the
-                    // SDK font this image builds with — whereas the classic set
-                    // (add_circle_outline, edit_outlined, donut_small) render
-                    // fine. add_circle_outline reads as "add budgets".
-                    //
-                    // Phones: the two labelled actions crowd the overline out of
-                    // the row, so they collapse to icon-only buttons (default
-                    // constraints = the 48dp touch floor; the label moves into
-                    // the tooltip). Wide keeps the labelled TextButtons.
-                    if (widget.apiService != null)
-                      if (isPhoneCard)
-                        IconButton(
-                          onPressed: _suggesting ? null : _suggestBudgets,
-                          icon: const Icon(Icons.add_circle_outline, size: 20),
-                          tooltip: l.cfBudgetsSuggest,
-                        )
-                      else
-                        TextButton.icon(
-                          onPressed: _suggesting ? null : _suggestBudgets,
-                          icon: const Icon(Icons.add_circle_outline, size: 16),
-                          label: Text(l.cfBudgetsSuggest),
+                    Row(
+                      children: [
+                        if (!isPhoneCard) ...[
+                          Icon(
+                            Icons.donut_small,
+                            color: context.tealAccent,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            isPhoneCard
+                                ? l.cfBudgetsTitle.toUpperCase()
+                                : l.cfBudgetsTitle,
+                            style: isPhoneCard
+                                ? TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: context.textSubtle,
+                                  )
+                                : const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            // maxLines only on the phone overline; wider layouts
+                            // keep the original wrap behaviour pixel-identical.
+                            maxLines: isPhoneCard ? 1 : null,
+                            overflow: isPhoneCard
+                                ? TextOverflow.ellipsis
+                                : null,
+                          ),
                         ),
-                    if (isPhoneCard)
-                      IconButton(
-                        onPressed: () => _openEditor(spend),
-                        icon: const Icon(Icons.edit_outlined, size: 20),
-                        tooltip: hasBudgets ? l.cfBudgetsEdit : l.actionAdd,
-                      )
-                    else
-                      TextButton.icon(
-                        onPressed: () => _openEditor(spend),
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: Text(hasBudgets ? l.cfBudgetsEdit : l.actionAdd),
+                        // NB: use a glyph that's actually in this build's bundled
+                        // MaterialIcons font. The "magic/idea" icons
+                        // (auto_awesome_outlined, auto_fix_high, lightbulb_outline)
+                        // render blank here — their glyphs aren't present in the
+                        // SDK font this image builds with — whereas the classic set
+                        // (add_circle_outline, edit_outlined, donut_small) render
+                        // fine. add_circle_outline reads as "add budgets".
+                        //
+                        // Phones: the two labelled actions crowd the overline out of
+                        // the row, so they collapse to icon-only buttons (default
+                        // constraints = the 48dp touch floor; the label moves into
+                        // the tooltip). Wide keeps the labelled TextButtons.
+                        if (widget.apiService != null)
+                          if (isPhoneCard)
+                            IconButton(
+                              onPressed: _suggesting ? null : _suggestBudgets,
+                              icon: const Icon(
+                                Icons.add_circle_outline,
+                                size: 20,
+                              ),
+                              tooltip: l.cfBudgetsSuggest,
+                            )
+                          else
+                            TextButton.icon(
+                              onPressed: _suggesting ? null : _suggestBudgets,
+                              icon: const Icon(
+                                Icons.add_circle_outline,
+                                size: 16,
+                              ),
+                              label: Text(l.cfBudgetsSuggest),
+                            ),
+                        if (isPhoneCard)
+                          IconButton(
+                            onPressed: () => _openEditor(spend),
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            tooltip: hasBudgets ? l.cfBudgetsEdit : l.actionAdd,
+                          )
+                        else
+                          TextButton.icon(
+                            onPressed: () => _openEditor(spend),
+                            icon: const Icon(Icons.edit_outlined, size: 16),
+                            label: Text(
+                              hasBudgets ? l.cfBudgetsEdit : l.actionAdd,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (hasBudgets &&
+                        (overCount > 0 ||
+                            nearCount > 0 ||
+                            pacingCount > 0)) ...[
+                      _alertBanner(
+                        context,
+                        l,
+                        overCount,
+                        overTotalUsd,
+                        nearCount,
+                        pacingCount,
                       ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (hasBudgets &&
-                    (overCount > 0 || nearCount > 0 || pacingCount > 0)) ...[
-                  _alertBanner(
-                    context,
-                    l,
-                    overCount,
-                    overTotalUsd,
-                    nearCount,
-                    pacingCount,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (!hasBudgets)
-                  Text(
-                    l.cfBudgetsEmpty,
-                    style: TextStyle(color: context.textMuted, fontSize: 13),
-                  )
-                else ...[
-                  ...(_showAllBudgets
-                          ? _budgets.entries
-                          : _budgets.entries.take(collapseLimit))
-                      .map((e) {
-                        final cat = e.key;
-                        final budgetUsd = e.value;
-                        final spentUsd = spend[cat] ?? 0.0;
-                        final pct = budgetUsd <= 0
-                            ? 0.0
-                            : (spentUsd / budgetUsd).clamp(0.0, 1.5);
-                        final state = _budgetStateFor(
-                          spentUsd,
-                          budgetUsd,
-                          pace,
-                        );
-                        final over = state == _BudgetState.over;
-                        final color = _budgetStateColor(context, state);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                      const SizedBox(height: 12),
+                    ],
+                    if (!hasBudgets)
+                      Text(
+                        l.cfBudgetsEmpty,
+                        style: TextStyle(
+                          color: context.textMuted,
+                          fontSize: 13,
+                        ),
+                      )
+                    else ...[
+                      ...(_showAllBudgets
+                              ? _budgets.entries
+                              : _budgets.entries.take(collapseLimit))
+                          .map((e) {
+                            final cat = e.key;
+                            final budgetUsd = e.value;
+                            final spentUsd = spend[cat] ?? 0.0;
+                            final pct = budgetUsd <= 0
+                                ? 0.0
+                                : (spentUsd / budgetUsd).clamp(0.0, 1.5);
+                            final state = _budgetStateFor(
+                              spentUsd,
+                              budgetUsd,
+                              pace,
+                            );
+                            final over = state == _BudgetState.over;
+                            final color = _budgetStateColor(context, state);
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      cat,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          cat,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                      const SizedBox(width: 8),
+                                      // Spent/budget pair can be a 20+ char string at
+                                      // long currency values; clamp + ellipsise so a
+                                      // phone-width card doesn't crowd the category
+                                      // out to a single character.
+                                      Flexible(
+                                        child: Text(
+                                          '${widget.currencyFormat.displayMoney(spentUsd * widget.conversionFactor)} '
+                                          '/ ${widget.currencyFormat.displayMoney(budgetUsd * widget.conversionFactor)}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: color,
+                                            fontWeight: FontWeight.w700,
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.end,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  // Bar with a thin "expected-to-date" pace marker: where
+                                  // a category should be if spend were even across the
+                                  // month. Spend bar pushing past the marker is the
+                                  // "on track to exceed" signal the colour/label echo.
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Stack(
+                                      children: [
+                                        LinearProgressIndicator(
+                                          value: pct > 1.0 ? 1.0 : pct,
+                                          backgroundColor: context.tileSurface,
+                                          color: color,
+                                          minHeight: 8,
+                                        ),
+                                        if (showPaceMarker)
+                                          Positioned.fill(
+                                            child: LayoutBuilder(
+                                              builder: (context, constraints) {
+                                                return Align(
+                                                  alignment: Alignment(
+                                                    pace * 2 - 1,
+                                                    0,
+                                                  ),
+                                                  child: Container(
+                                                    width: 2,
+                                                    height: 8,
+                                                    color: context.textMuted
+                                                        .withValues(
+                                                          alpha: 0.55,
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  // Spent/budget pair can be a 20+ char string at
-                                  // long currency values; clamp + ellipsise so a
-                                  // phone-width card doesn't crowd the category
-                                  // out to a single character.
-                                  Flexible(
-                                    child: Text(
-                                      '${widget.currencyFormat.displayMoney(spentUsd * widget.conversionFactor)} '
-                                      '/ ${widget.currencyFormat.displayMoney(budgetUsd * widget.conversionFactor)}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: color,
-                                        fontWeight: FontWeight.w700,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures(),
-                                        ],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.end,
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    over
+                                        ? l.cfBudgetsOverBy(
+                                            widget.currencyFormat.displayMoney(
+                                              (spentUsd - budgetUsd) *
+                                                  widget.conversionFactor,
+                                            ),
+                                          )
+                                        : state == _BudgetState.pacing
+                                        ? l.cfBudgetsPacingToExceed
+                                        : l.cfBudgetsLeft(
+                                            widget.currencyFormat.displayMoney(
+                                              (budgetUsd - spentUsd).clamp(
+                                                    0,
+                                                    double.infinity,
+                                                  ) *
+                                                  widget.conversionFactor,
+                                            ),
+                                          ),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: over
+                                          ? context.pinkAccent
+                                          : state == _BudgetState.pacing
+                                          ? context.warning
+                                          : context.textFaint,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
-                              // Bar with a thin "expected-to-date" pace marker: where
-                              // a category should be if spend were even across the
-                              // month. Spend bar pushing past the marker is the
-                              // "on track to exceed" signal the colour/label echo.
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Stack(
-                                  children: [
-                                    LinearProgressIndicator(
-                                      value: pct > 1.0 ? 1.0 : pct,
-                                      backgroundColor: context.tileSurface,
-                                      color: color,
-                                      minHeight: 8,
+                            );
+                          }),
+                      // Collapse a long budget list so the card doesn't dominate the
+                      // cash-flow tab — show the first few, with a toggle for the rest.
+                      if (_budgets.length > collapseLimit)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: () => setState(
+                              () => _showAllBudgets = !_showAllBudgets,
+                            ),
+                            child: Text(
+                              _showAllBudgets
+                                  ? l.cfBudgetsShowFewer
+                                  : l.cfBudgetsShowAll(
+                                      _budgets.length - collapseLimit,
                                     ),
-                                    if (showPaceMarker)
-                                      Positioned.fill(
-                                        child: LayoutBuilder(
-                                          builder: (context, constraints) {
-                                            return Align(
-                                              alignment: Alignment(
-                                                pace * 2 - 1,
-                                                0,
-                                              ),
-                                              child: Container(
-                                                width: 2,
-                                                height: 8,
-                                                color: context.textMuted
-                                                    .withValues(alpha: 0.55),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                over
-                                    ? l.cfBudgetsOverBy(
-                                        widget.currencyFormat.displayMoney(
-                                          (spentUsd - budgetUsd) *
-                                              widget.conversionFactor,
-                                        ),
-                                      )
-                                    : state == _BudgetState.pacing
-                                    ? l.cfBudgetsPacingToExceed
-                                    : l.cfBudgetsLeft(
-                                        widget.currencyFormat.displayMoney(
-                                          (budgetUsd - spentUsd).clamp(
-                                                0,
-                                                double.infinity,
-                                              ) *
-                                              widget.conversionFactor,
-                                        ),
-                                      ),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: over
-                                      ? context.pinkAccent
-                                      : state == _BudgetState.pacing
-                                      ? context.warning
-                                      : context.textFaint,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        );
-                      }),
-                  // Collapse a long budget list so the card doesn't dominate the
-                  // cash-flow tab — show the first few, with a toggle for the rest.
-                  if (_budgets.length > collapseLimit)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton(
-                        onPressed: () =>
-                            setState(() => _showAllBudgets = !_showAllBudgets),
-                        child: Text(
-                          _showAllBudgets
-                              ? l.cfBudgetsShowFewer
-                              : l.cfBudgetsShowAll(
-                                  _budgets.length - collapseLimit,
-                                ),
                         ),
-                      ),
-                    ),
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

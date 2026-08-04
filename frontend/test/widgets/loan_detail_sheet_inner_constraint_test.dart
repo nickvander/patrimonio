@@ -219,4 +219,45 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  // The sheet's 16/24 padding was the last `MediaQuery` read in this file. It
+  // could not simply move onto the sheet's own width against the house ~720
+  // card breakpoint: M3 caps a modal bottom sheet at 640dp, so this surface is
+  // NEVER 720 wide and every desktop window would have silently dropped from
+  // 24px to the touch padding it has never had.
+  //
+  // It is therefore retuned deliberately onto [kScheduleNarrowWidth], the
+  // breakpoint this file already owns, so the sheet has exactly two layouts
+  // rather than three. Windows in the 520–720px band (sheet 520–640) move
+  // from 16px to 24px; below 520 and at/above 720 nothing changes.
+  group(
+    'LoanDetailSheet — padding is retuned to the sheet\'s own breakpoint',
+    () {
+      /// The sheet's outer padding — the `ListView.padding` the sheet body
+      /// scrolls inside (`EdgeInsets.fromLTRB(pad, 16, pad, 32)`).
+      EdgeInsets outerPadding(WidgetTester tester) =>
+          tester.widget<ListView>(find.byType(ListView).first).padding
+              as EdgeInsets;
+
+      testWidgets('a 640dp sheet keeps 24px on ANY window', (tester) async {
+        // The M3 cap. Pinned at a window that used to say "phone" (700) — the
+        // whole point of the retune.
+        _useSurface(tester, const Size(700, 2000));
+        await tester.pumpWidget(_host(sheetWidth: 640));
+        await tester.pumpAndSettle();
+        expect(outerPadding(tester).left, 24.0);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('a phone-width sheet still gets 16px on a WIDE window', (
+        tester,
+      ) async {
+        _useSurface(tester, const Size(1400, 2000));
+        await tester.pumpWidget(_host(sheetWidth: 390));
+        await tester.pumpAndSettle();
+        expect(outerPadding(tester).left, 16.0);
+        expect(tester.takeException(), isNull);
+      });
+    },
+  );
 }

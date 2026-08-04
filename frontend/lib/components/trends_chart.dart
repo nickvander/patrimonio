@@ -29,406 +29,444 @@ class CashFlowTrendsChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: LayoutBuilder(
-          builder: (ctx, outer) {
-            // Below ~420 the bars themselves and the bottom-axis "Mar 'yy"
-            // labels eat into the chart canvas; trim the chart height and
-            // tighten the bar width so 3 month groups still read clearly.
-            final isPhone = outer.maxWidth < 420;
-            final chartHeight = isPhone ? 200.0 : 250.0;
-            final barWidth = isPhone ? 14.0 : 22.0;
-            // Thin the x-axis month labels so they don't overlap on narrow
-            // screens: roughly one label per ~46px (phone) / ~62px (wide) of
-            // chart width. With many months this shows every Nth label instead
-            // of cramming all of them into the same strip.
-            final approxPerLabel = isPhone ? 46.0 : 62.0;
-            final count = trends.isEmpty ? 1 : trends.length;
-            // Aim for >=2 labels, but a single-month chart only has room for 1 —
-            // and int.clamp throws if lowerLimit > upperLimit, so the floor must
-            // not exceed `count` (a one-month portfolio would otherwise crash the
-            // whole card with "Invalid argument(s): 2").
-            final minLabels = count < 2 ? count : 2;
-            final maxLabels = (outer.maxWidth / approxPerLabel).floor().clamp(
-              minLabels,
-              count,
-            );
-            final bottomLabelStep = (count / maxLabels).ceil().clamp(1, count);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final legend = Wrap(
-                      spacing: 16,
-                      runSpacing: 8,
-                      children: [
-                        _buildLegendItem(
-                          context,
-                          context.tealAccent,
-                          l.lwTrendsIncome,
-                        ),
-                        _buildLegendItem(
-                          context,
-                          context.pinkAccent,
-                          l.lwTrendsSpending,
-                        ),
-                      ],
-                    );
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: LayoutBuilder(
+              builder: (ctx, outer) {
+                // Below ~420 the bars themselves and the bottom-axis "Mar 'yy"
+                // labels eat into the chart canvas; trim the chart height and
+                // tighten the bar width so 3 month groups still read clearly.
+                final isPhone = outer.maxWidth < 420;
+                final chartHeight = isPhone ? 200.0 : 250.0;
+                final barWidth = isPhone ? 14.0 : 22.0;
+                // Thin the x-axis month labels so they don't overlap on narrow
+                // screens: roughly one label per ~46px (phone) / ~62px (wide) of
+                // chart width. With many months this shows every Nth label instead
+                // of cramming all of them into the same strip.
+                final approxPerLabel = isPhone ? 46.0 : 62.0;
+                final count = trends.isEmpty ? 1 : trends.length;
+                // Aim for >=2 labels, but a single-month chart only has room for 1 —
+                // and int.clamp throws if lowerLimit > upperLimit, so the floor must
+                // not exceed `count` (a one-month portfolio would otherwise crash the
+                // whole card with "Invalid argument(s): 2").
+                final minLabels = count < 2 ? count : 2;
+                final maxLabels = (outer.maxWidth / approxPerLabel)
+                    .floor()
+                    .clamp(minLabels, count);
+                final bottomLabelStep = (count / maxLabels).ceil().clamp(
+                  1,
+                  count,
+                );
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final legend = Wrap(
+                          spacing: 16,
+                          runSpacing: 8,
+                          children: [
+                            _buildLegendItem(
+                              context,
+                              context.tealAccent,
+                              l.lwTrendsIncome,
+                            ),
+                            _buildLegendItem(
+                              context,
+                              context.pinkAccent,
+                              l.lwTrendsSpending,
+                            ),
+                          ],
+                        );
 
-                    if (constraints.maxWidth < 520) {
-                      // Stacked header (title row, then legend). Below the ~420
-                      // phone breakpoint the title further compresses to the
-                      // small uppercase overline (portfolio_card idiom); the
-                      // 420–520 band keeps the regular 16px title.
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                        if (constraints.maxWidth < 520) {
+                          // Stacked header (title row, then legend). Below the ~420
+                          // phone breakpoint the title further compresses to the
+                          // small uppercase overline (portfolio_card idiom); the
+                          // 420–520 band keeps the regular 16px title.
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Flexible(
-                                child: Text(
-                                  isPhone
-                                      ? l.lwTrendsTitle.toUpperCase()
-                                      : l.lwTrendsTitle,
-                                  overflow: TextOverflow.ellipsis,
-                                  // maxLines only on the phone overline; the
-                                  // 420–520 band keeps the original (unbounded)
-                                  // wrap behaviour pixel-identical.
-                                  maxLines: isPhone ? 1 : null,
-                                  style: isPhone
-                                      ? TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.6,
-                                          color: context.textSubtle,
-                                        )
-                                      : const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              _buildInfoTooltip(context, l.lwTrendsInfoTooltip),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          legend,
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Flexible + ellipsis: the longer es-MX title
-                        // ("Tendencias de flujo de efectivo") plus the legend
-                        // otherwise overflow the row by a few px at mid widths
-                        // (~520–760). Let the title shrink rather than overflow.
-                        Flexible(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  l.lwTrendsTitle,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              _buildInfoTooltip(context, l.lwTrendsInfoTooltip),
-                            ],
-                          ),
-                        ),
-                        legend,
-                      ],
-                    );
-                  },
-                ),
-                // Header→chart gap tightens with the phone overline header.
-                SizedBox(height: isPhone ? 12 : 24),
-                // Screen readers can't see the bar geometry or reach the
-                // pointer-only hover tooltip, so we mirror the data as text:
-                // a one-line summary on the container plus an offstage,
-                // focus-order list of per-month income/spending values.
-                Semantics(
-                  container: true,
-                  label: _semanticSummary(context),
-                  child: Stack(
-                    children: [
-                      ExcludeSemantics(
-                        child: SizedBox(
-                          height: chartHeight,
-                          child: Builder(
-                            builder: (context) {
-                              final maxY = _getMaxValue();
-                              // Transient tooltip (dismisses on finger lift / pointer
-                              // exit) — the raw BarChart pinned it on mobile web. The
-                              // tap-to-filter touchCallback below still fires (the
-                              // wrapper chains it).
-                              return TransientTooltipBarChart(
-                                data: BarChartData(
-                                  alignment: BarChartAlignment.spaceEvenly,
-                                  groupsSpace: 16,
-                                  maxY: maxY,
-                                  barTouchData: BarTouchData(
-                                    touchTooltipData: BarTouchTooltipData(
-                                      getTooltipColor: (_) =>
-                                          context.tooltipSurface,
-                                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                        // Add a "tap to filter" hint to the bottom of the
-                                        // tooltip so the click affordance is discoverable —
-                                        // most users don't expect chart bars to be tappable.
-                                        final headerLine = rodIndex == 0
-                                            ? l.lwTrendsIncome
-                                            : l.lwTrendsSpending;
-                                        final amountLine = currencyFormat
-                                            .displayMoney(
-                                              rod.toY * conversionFactor,
-                                            );
-                                        final hint = onMonthSelected == null
-                                            ? ''
-                                            : '\n${l.lwTrendsTapToView}';
-                                        return BarTooltipItem(
-                                          '$headerLine\n$amountLine$hint',
-                                          TextStyle(
-                                            color: context.tooltipOnSurface,
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    // Wire bar taps to the filter callback. fl_chart
-                                    // gives us `groupIndex` (which month group) — we
-                                    // look that up in `trends` and emit the YYYY-MM
-                                    // string back to the caller.
-                                    touchCallback: onMonthSelected == null
-                                        ? null
-                                        : (event, response) {
-                                            // Only act on tap-up events — drags and hovers
-                                            // should not change the filter.
-                                            if (event is! FlTapUpEvent) return;
-                                            final spot = response?.spot;
-                                            if (spot == null) return;
-                                            final idx =
-                                                spot.touchedBarGroupIndex;
-                                            if (idx < 0 ||
-                                                idx >= trends.length) {
-                                              return;
-                                            }
-                                            final month = trends[idx]['month'];
-                                            if (month is String &&
-                                                month.isNotEmpty) {
-                                              onMonthSelected!(month);
-                                            }
-                                          },
-                                  ),
-                                  titlesData: FlTitlesData(
-                                    show: true,
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        interval: bottomLabelStep.toDouble(),
-                                        getTitlesWidget: (value, meta) {
-                                          final idx = value.toInt();
-                                          if (idx >= 0 && idx < trends.length) {
-                                            // Only render every Nth label (plus the last), so
-                                            // labels never overlap on narrow screens.
-                                            final isLast =
-                                                idx == trends.length - 1;
-                                            if (idx % bottomLabelStep != 0 &&
-                                                !isLast) {
-                                              return const SizedBox.shrink();
-                                            }
-                                            // as String? ?? '': a null month would otherwise
-                                            // throw and crash the axis builder; the empty
-                                            // string falls through the try/catch below safely.
-                                            final monthStr =
-                                                (trends[idx]['month']
-                                                    as String?) ??
-                                                '';
-                                            final parts = monthStr.split('-');
-                                            String label;
-                                            try {
-                                              final date = DateTime(
-                                                int.parse(parts[0]),
-                                                int.parse(parts[1]),
-                                              );
-                                              // "Mar" for most; "Mar '26" (compact 2-digit year)
-                                              // for January, the first, or the last group.
-                                              final isFirst = idx == 0;
-                                              final isJan = parts[1] == '01';
-                                              label =
-                                                  (isFirst || isLast || isJan)
-                                                  ? DateFormat(
-                                                      "MMM ''yy",
-                                                    ).format(date)
-                                                  : DateFormat(
-                                                      'MMM',
-                                                    ).format(date);
-                                            } catch (_) {
-                                              label = parts.length > 1
-                                                  ? parts[1]
-                                                  : monthStr;
-                                            }
-                                            return SideTitleWidget(
-                                              meta: meta,
-                                              child: Text(
-                                                label,
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: context.textSubtle,
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                          return const SizedBox();
-                                        },
-                                      ),
-                                    ),
-                                    leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        // Fit the box to the widest possible tick — a fixed
-                                        // 48 clipped MXN K-scale ticks mid-number ("MXN 2.61K"
-                                        // read as "MXN 2."). Ticks render
-                                        // value * conversionFactor, so the width is computed
-                                        // on the converted extent.
-                                        reservedSize: compactMoneyAxisWidth(
-                                          0,
-                                          maxY * conversionFactor,
-                                          currencyFormat.currencyName ?? 'USD',
-                                        ),
-                                        getTitlesWidget: (value, meta) {
-                                          // Skip zero (visual baseline) and any tick that
-                                          // sits within 8% of maxY — those get squished
-                                          // against the top of the chart frame.
-                                          if (value == 0) {
-                                            return const SizedBox();
-                                          }
-                                          if (maxY > 0 &&
-                                              value >= maxY * 0.92) {
-                                            return const SizedBox();
-                                          }
-                                          return SideTitleWidget(
-                                            meta: meta,
-                                            child: Text(
-                                              // House compact ticks — compactSimpleCurrency
-                                              // shows a bare "$" for MXN and stray decimals
-                                              // on some magnitudes (see compactMoney).
-                                              compactMoney(
-                                                value * conversionFactor,
-                                                currencyFormat.currencyName ??
-                                                    'USD',
-                                              ),
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: context.textSubtle,
-                                              ),
-                                              maxLines: 1,
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      isPhone
+                                          ? l.lwTrendsTitle.toUpperCase()
+                                          : l.lwTrendsTitle,
+                                      overflow: TextOverflow.ellipsis,
+                                      // maxLines only on the phone overline; the
+                                      // 420–520 band keeps the original (unbounded)
+                                      // wrap behaviour pixel-identical.
+                                      maxLines: isPhone ? 1 : null,
+                                      style: isPhone
+                                          ? TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.6,
+                                              color: context.textSubtle,
+                                            )
+                                          : const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                    topTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
-                                    ),
-                                    rightTitles: const AxisTitles(
-                                      sideTitles: SideTitles(showTitles: false),
                                     ),
                                   ),
-                                  gridData: const FlGridData(show: false),
-                                  borderData: FlBorderData(show: false),
-                                  barGroups: trends.asMap().entries.map((e) {
-                                    return BarChartGroupData(
-                                      x: e.key,
-                                      barRods: [
-                                        BarChartRodData(
-                                          // Coerce via num: a whole-number amount arrives from
-                                          // JSON as an int, and fl_chart's toY wants a double —
-                                          // passing the raw dynamic throws "int is not a subtype
-                                          // of double".
-                                          toY: (e.value['income'] as num? ?? 0)
-                                              .toDouble(),
-                                          // Teal gradient → darker variant at the top so the
-                                          // bar gives the eye somewhere to land. Reads
-                                          // correctly on white in light mode because
-                                          // tealAccent already shifts to its darker shade.
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              context.tealAccent,
-                                              context.tealAccent.withValues(
-                                                alpha: 0.6,
+                                  const SizedBox(width: 6),
+                                  _buildInfoTooltip(
+                                    context,
+                                    l.lwTrendsInfoTooltip,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              legend,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Flexible + ellipsis: the longer es-MX title
+                            // ("Tendencias de flujo de efectivo") plus the legend
+                            // otherwise overflow the row by a few px at mid widths
+                            // (~520–760). Let the title shrink rather than overflow.
+                            Flexible(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      l.lwTrendsTitle,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _buildInfoTooltip(
+                                    context,
+                                    l.lwTrendsInfoTooltip,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            legend,
+                          ],
+                        );
+                      },
+                    ),
+                    // Header→chart gap tightens with the phone overline header.
+                    SizedBox(height: isPhone ? 12 : 24),
+                    // Screen readers can't see the bar geometry or reach the
+                    // pointer-only hover tooltip, so we mirror the data as text:
+                    // a one-line summary on the container plus an offstage,
+                    // focus-order list of per-month income/spending values.
+                    Semantics(
+                      container: true,
+                      label: _semanticSummary(context),
+                      child: Stack(
+                        children: [
+                          ExcludeSemantics(
+                            child: SizedBox(
+                              height: chartHeight,
+                              child: Builder(
+                                builder: (context) {
+                                  final maxY = _getMaxValue();
+                                  // Transient tooltip (dismisses on finger lift / pointer
+                                  // exit) — the raw BarChart pinned it on mobile web. The
+                                  // tap-to-filter touchCallback below still fires (the
+                                  // wrapper chains it).
+                                  return TransientTooltipBarChart(
+                                    data: BarChartData(
+                                      alignment: BarChartAlignment.spaceEvenly,
+                                      groupsSpace: 16,
+                                      maxY: maxY,
+                                      barTouchData: BarTouchData(
+                                        touchTooltipData: BarTouchTooltipData(
+                                          getTooltipColor: (_) =>
+                                              context.tooltipSurface,
+                                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                            // Add a "tap to filter" hint to the bottom of the
+                                            // tooltip so the click affordance is discoverable —
+                                            // most users don't expect chart bars to be tappable.
+                                            final headerLine = rodIndex == 0
+                                                ? l.lwTrendsIncome
+                                                : l.lwTrendsSpending;
+                                            final amountLine = currencyFormat
+                                                .displayMoney(
+                                                  rod.toY * conversionFactor,
+                                                );
+                                            final hint = onMonthSelected == null
+                                                ? ''
+                                                : '\n${l.lwTrendsTapToView}';
+                                            return BarTooltipItem(
+                                              '$headerLine\n$amountLine$hint',
+                                              TextStyle(
+                                                color: context.tooltipOnSurface,
                                               ),
-                                            ],
-                                            begin: Alignment.bottomCenter,
-                                            end: Alignment.topCenter,
-                                          ),
-                                          width: barWidth,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          backDrawRodData:
-                                              BackgroundBarChartRodData(
-                                                show: true,
-                                                toY: maxY,
-                                                color: context.tint(0.05),
-                                              ),
+                                            );
+                                          },
                                         ),
-                                        BarChartRodData(
-                                          toY:
-                                              (e.value['spending'] as num? ?? 0)
-                                                  .toDouble(),
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              context.pinkAccent,
-                                              context.negative.withValues(
-                                                alpha: 0.85,
-                                              ),
-                                            ],
-                                            begin: Alignment.bottomCenter,
-                                            end: Alignment.topCenter,
+                                        // Wire bar taps to the filter callback. fl_chart
+                                        // gives us `groupIndex` (which month group) — we
+                                        // look that up in `trends` and emit the YYYY-MM
+                                        // string back to the caller.
+                                        touchCallback: onMonthSelected == null
+                                            ? null
+                                            : (event, response) {
+                                                // Only act on tap-up events — drags and hovers
+                                                // should not change the filter.
+                                                if (event is! FlTapUpEvent) {
+                                                  return;
+                                                }
+                                                final spot = response?.spot;
+                                                if (spot == null) return;
+                                                final idx =
+                                                    spot.touchedBarGroupIndex;
+                                                if (idx < 0 ||
+                                                    idx >= trends.length) {
+                                                  return;
+                                                }
+                                                final month =
+                                                    trends[idx]['month'];
+                                                if (month is String &&
+                                                    month.isNotEmpty) {
+                                                  onMonthSelected!(month);
+                                                }
+                                              },
+                                      ),
+                                      titlesData: FlTitlesData(
+                                        show: true,
+                                        bottomTitles: AxisTitles(
+                                          sideTitles: SideTitles(
+                                            showTitles: true,
+                                            interval: bottomLabelStep
+                                                .toDouble(),
+                                            getTitlesWidget: (value, meta) {
+                                              final idx = value.toInt();
+                                              if (idx >= 0 &&
+                                                  idx < trends.length) {
+                                                // Only render every Nth label (plus the last), so
+                                                // labels never overlap on narrow screens.
+                                                final isLast =
+                                                    idx == trends.length - 1;
+                                                if (idx % bottomLabelStep !=
+                                                        0 &&
+                                                    !isLast) {
+                                                  return const SizedBox.shrink();
+                                                }
+                                                // as String? ?? '': a null month would otherwise
+                                                // throw and crash the axis builder; the empty
+                                                // string falls through the try/catch below safely.
+                                                final monthStr =
+                                                    (trends[idx]['month']
+                                                        as String?) ??
+                                                    '';
+                                                final parts = monthStr.split(
+                                                  '-',
+                                                );
+                                                String label;
+                                                try {
+                                                  final date = DateTime(
+                                                    int.parse(parts[0]),
+                                                    int.parse(parts[1]),
+                                                  );
+                                                  // "Mar" for most; "Mar '26" (compact 2-digit year)
+                                                  // for January, the first, or the last group.
+                                                  final isFirst = idx == 0;
+                                                  final isJan =
+                                                      parts[1] == '01';
+                                                  label =
+                                                      (isFirst ||
+                                                          isLast ||
+                                                          isJan)
+                                                      ? DateFormat(
+                                                          "MMM ''yy",
+                                                        ).format(date)
+                                                      : DateFormat(
+                                                          'MMM',
+                                                        ).format(date);
+                                                } catch (_) {
+                                                  label = parts.length > 1
+                                                      ? parts[1]
+                                                      : monthStr;
+                                                }
+                                                return SideTitleWidget(
+                                                  meta: meta,
+                                                  child: Text(
+                                                    label,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: context.textSubtle,
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                              return const SizedBox();
+                                            },
                                           ),
-                                          width: barWidth,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          backDrawRodData:
-                                              BackgroundBarChartRodData(
-                                                show: true,
-                                                toY: maxY,
-                                                color: context.tint(0.05),
-                                              ),
                                         ),
-                                      ],
-                                    );
-                                  }).toList(),
-                                ),
-                              );
-                            },
+                                        leftTitles: AxisTitles(
+                                          sideTitles: SideTitles(
+                                            showTitles: true,
+                                            // Fit the box to the widest possible tick — a fixed
+                                            // 48 clipped MXN K-scale ticks mid-number ("MXN 2.61K"
+                                            // read as "MXN 2."). Ticks render
+                                            // value * conversionFactor, so the width is computed
+                                            // on the converted extent.
+                                            reservedSize: compactMoneyAxisWidth(
+                                              0,
+                                              maxY * conversionFactor,
+                                              currencyFormat.currencyName ??
+                                                  'USD',
+                                            ),
+                                            getTitlesWidget: (value, meta) {
+                                              // Skip zero (visual baseline) and any tick that
+                                              // sits within 8% of maxY — those get squished
+                                              // against the top of the chart frame.
+                                              if (value == 0) {
+                                                return const SizedBox();
+                                              }
+                                              if (maxY > 0 &&
+                                                  value >= maxY * 0.92) {
+                                                return const SizedBox();
+                                              }
+                                              return SideTitleWidget(
+                                                meta: meta,
+                                                child: Text(
+                                                  // House compact ticks — compactSimpleCurrency
+                                                  // shows a bare "$" for MXN and stray decimals
+                                                  // on some magnitudes (see compactMoney).
+                                                  compactMoney(
+                                                    value * conversionFactor,
+                                                    currencyFormat
+                                                            .currencyName ??
+                                                        'USD',
+                                                  ),
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: context.textSubtle,
+                                                  ),
+                                                  maxLines: 1,
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                        topTitles: const AxisTitles(
+                                          sideTitles: SideTitles(
+                                            showTitles: false,
+                                          ),
+                                        ),
+                                        rightTitles: const AxisTitles(
+                                          sideTitles: SideTitles(
+                                            showTitles: false,
+                                          ),
+                                        ),
+                                      ),
+                                      gridData: const FlGridData(show: false),
+                                      borderData: FlBorderData(show: false),
+                                      barGroups: trends.asMap().entries.map((
+                                        e,
+                                      ) {
+                                        return BarChartGroupData(
+                                          x: e.key,
+                                          barRods: [
+                                            BarChartRodData(
+                                              // Coerce via num: a whole-number amount arrives from
+                                              // JSON as an int, and fl_chart's toY wants a double —
+                                              // passing the raw dynamic throws "int is not a subtype
+                                              // of double".
+                                              toY:
+                                                  (e.value['income'] as num? ??
+                                                          0)
+                                                      .toDouble(),
+                                              // Teal gradient → darker variant at the top so the
+                                              // bar gives the eye somewhere to land. Reads
+                                              // correctly on white in light mode because
+                                              // tealAccent already shifts to its darker shade.
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  context.tealAccent,
+                                                  context.tealAccent.withValues(
+                                                    alpha: 0.6,
+                                                  ),
+                                                ],
+                                                begin: Alignment.bottomCenter,
+                                                end: Alignment.topCenter,
+                                              ),
+                                              width: barWidth,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              backDrawRodData:
+                                                  BackgroundBarChartRodData(
+                                                    show: true,
+                                                    toY: maxY,
+                                                    color: context.tint(0.05),
+                                                  ),
+                                            ),
+                                            BarChartRodData(
+                                              toY:
+                                                  (e.value['spending']
+                                                              as num? ??
+                                                          0)
+                                                      .toDouble(),
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  context.pinkAccent,
+                                                  context.negative.withValues(
+                                                    alpha: 0.85,
+                                                  ),
+                                                ],
+                                                begin: Alignment.bottomCenter,
+                                                end: Alignment.topCenter,
+                                              ),
+                                              width: barWidth,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              backDrawRodData:
+                                                  BackgroundBarChartRodData(
+                                                    show: true,
+                                                    toY: maxY,
+                                                    color: context.tint(0.05),
+                                                  ),
+                                            ),
+                                          ],
+                                        );
+                                      }).toList(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
-                        ),
+                          // Offstage but in the semantic tree: per-month values.
+                          Positioned.fill(child: _buildSemanticBars(context)),
+                        ],
                       ),
-                      // Offstage but in the semantic tree: per-month values.
-                      Positioned.fill(child: _buildSemanticBars(context)),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

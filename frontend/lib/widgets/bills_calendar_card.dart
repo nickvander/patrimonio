@@ -358,73 +358,82 @@ class _BillsCalendarCardState extends State<BillsCalendarCard> {
     if (data == null || _occurrences.isEmpty) return const SizedBox.shrink();
 
     final l = AppLocalizations.of(context);
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Width-responsive off the card's OWN constraint (inner
-        // LayoutBuilder, per the skill rule), not MediaQuery.
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final isPhone = c.maxWidth < 420;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Width-responsive off the card's OWN constraint (inner
+            // LayoutBuilder, per the skill rule), not MediaQuery.
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final isPhone = c.maxWidth < 420;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isPhone) ...[
-                      Icon(
-                        Icons.event_available_rounded,
-                        color: context.info,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        isPhone ? l.bcTitle.toUpperCase() : l.bcTitle,
-                        style: isPhone
-                            ? TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: context.textSubtle,
-                              )
-                            : TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: context.textPrimary,
-                              ),
-                        maxLines: isPhone ? 1 : null,
-                        overflow: isPhone ? TextOverflow.ellipsis : null,
-                      ),
+                    Row(
+                      children: [
+                        if (!isPhone) ...[
+                          Icon(
+                            Icons.event_available_rounded,
+                            color: context.info,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            isPhone ? l.bcTitle.toUpperCase() : l.bcTitle,
+                            style: isPhone
+                                ? TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: context.textSubtle,
+                                  )
+                                : TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: context.textPrimary,
+                                  ),
+                            maxLines: isPhone ? 1 : null,
+                            overflow: isPhone ? TextOverflow.ellipsis : null,
+                          ),
+                        ),
+                      ],
                     ),
+                    if (_hasDetected) ...[
+                      SizedBox(height: isPhone ? 8 : 12),
+                      _detectedToggle(context, l),
+                    ],
+                    SizedBox(height: isPhone ? 12 : 16),
+                    _monthHeader(context, l),
+                    const SizedBox(height: 8),
+                    _weekdayHeader(context, l),
+                    const SizedBox(height: 4),
+                    _monthGrid(context, l),
+                    const SizedBox(height: 8),
+                    _legend(context, l),
+                    const SizedBox(height: 12),
+                    _agenda(context, l),
+                    SizedBox(height: isPhone ? 16 : 20),
+                    _projectionSection(context, l, c.maxWidth),
                   ],
-                ),
-                if (_hasDetected) ...[
-                  SizedBox(height: isPhone ? 8 : 12),
-                  _detectedToggle(context, l),
-                ],
-                SizedBox(height: isPhone ? 12 : 16),
-                _monthHeader(context, l),
-                const SizedBox(height: 8),
-                _weekdayHeader(context, l),
-                const SizedBox(height: 4),
-                _monthGrid(context, l),
-                const SizedBox(height: 8),
-                _legend(context, l),
-                const SizedBox(height: 12),
-                _agenda(context, l),
-                SizedBox(height: isPhone ? 16 : 20),
-                _projectionSection(context, l, c.maxWidth),
-              ],
-            );
-          },
-        ),
-      ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

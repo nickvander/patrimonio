@@ -11,6 +11,16 @@ import '../utils/mask_aware_name.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
+/// Card width below which this card takes its touch layout: 16px of padding
+/// instead of 24, the two strategy tiles stacked instead of side by side, a
+/// 2-up summary strip instead of 3-up, and the what-if simulator behind a
+/// tap-to-expand header instead of inline.
+///
+/// The house ~720 breakpoint, measured on the card's OWN `LayoutBuilder`
+/// constraint rather than `MediaQuery` (skill §4/§5) — same signal as
+/// `performance_card.dart`.
+const double _kCompactCardBelow = 720;
+
 /// Rolls a monthly due-date [anchor] forward to its next occurrence on or after
 /// [today]. The comparison is date-only, so a due date that lands on today
 /// counts as due *today* rather than rolling to next month. The day-of-month is
@@ -305,215 +315,235 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
     final avalancheWins = avalanche.totalInterest <= snowball.totalInterest;
     final savings = (snowball.totalInterest - avalanche.totalInterest).abs();
 
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
-    final pad = isPhone ? 16.0 : 24.0;
+    // Every layout branch below keys off the width this card was GIVEN, never
+    // `MediaQuery` (skill §4/§5): the card sits in a tab column that the tab's
+    // padding and the 1600px content clamp narrow well below the window, so a
+    // wide window is no promise that the two strategy tiles fit side by side.
+    return LayoutBuilder(
+      builder: (context, outer) {
+        final isPhone = outer.maxWidth < _kCompactCardBelow;
+        final pad = isPhone ? 16.0 : 24.0;
 
-    // The strategy comparison: side-by-side on wide screens, stacked
-    // vertically on phones (the two tiles crush at ~360px side by side).
-    final avalancheTile = _strategyTile(
-      l.dpAvalanche,
-      l.dpAvalancheSub,
-      avalanche,
-      recommended: avalancheWins,
-    );
-    final snowballTile = _strategyTile(
-      l.dpSnowball,
-      l.dpSnowballSub,
-      snowball,
-      recommended: !avalancheWins,
-    );
-    final Widget strategyComparison = isPhone
-        ? Column(
-            children: [avalancheTile, const SizedBox(height: 12), snowballTile],
-          )
-        : Row(
+        // The strategy comparison: side-by-side on wide cards, stacked
+        // vertically on narrow ones (the two tiles crush at ~360px side by
+        // side).
+        final avalancheTile = _strategyTile(
+          l.dpAvalanche,
+          l.dpAvalancheSub,
+          avalanche,
+          recommended: avalancheWins,
+        );
+        final snowballTile = _strategyTile(
+          l.dpSnowball,
+          l.dpSnowballSub,
+          snowball,
+          recommended: !avalancheWins,
+        );
+        final Widget strategyComparison = isPhone
+            ? Column(
+                children: [
+                  avalancheTile,
+                  const SizedBox(height: 12),
+                  snowballTile,
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(child: avalancheTile),
+                  const SizedBox(width: 12),
+                  Expanded(child: snowballTile),
+                ],
+              );
+
+        // The what-if simulator: monthly-payment slider + strategy comparison.
+        // Collapsible on phones, always inline on wide screens.
+        final simulator = <Widget>[
+          // Monthly payment slider.
+          Row(
             children: [
-              Expanded(child: avalancheTile),
-              const SizedBox(width: 12),
-              Expanded(child: snowballTile),
-            ],
-          );
-
-    // The what-if simulator: monthly-payment slider + strategy comparison.
-    // Collapsible on phones, always inline on wide screens.
-    final simulator = <Widget>[
-      // Monthly payment slider.
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              l.dpMonthlyPayment,
-              style: TextStyle(color: context.textMuted, fontSize: 14),
-            ),
-          ),
-          Text(
-            _money(clampedBudget),
-            style: TextStyle(
-              color: context.pinkAccent,
-              fontWeight: FontWeight.bold,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-      Slider(
-        value: clampedBudget,
-        min: minTotal,
-        max: sliderMax,
-        activeColor: context.pinkAccent,
-        inactiveColor: context.hairline,
-        onChanged: (v) => setState(() => _monthlyPayment = v),
-      ),
-      const SizedBox(height: 8),
-      if (!feasible) _infeasibleNote(l) else strategyComparison,
-      if (feasible && savings > 1) ...[
-        const SizedBox(height: 10),
-        Center(
-          child: Text(
-            avalancheWins ? l.dpSaves(_money(savings)) : l.dpSaves(_money(0)),
-            style: TextStyle(color: context.textFaint, fontSize: 11),
-          ),
-        ),
-      ],
-    ];
-
-    // Collapsed-summary line: the recommended strategy + projected interest
-    // saved (when meaningful), reusing the already-computed values.
-    final recommendedName = avalancheWins ? l.dpAvalanche : l.dpSnowball;
-    final summaryLine = (feasible && savings > 1 && avalancheWins)
-        ? '$recommendedName · ${l.dpSaves(_money(savings))}'
-        : recommendedName;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Width-responsive off the card's OWN constraint (inner
-        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
-        // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(
-          builder: (context, c) {
-            // House ~420 phone breakpoint off the card interior: compact
-            // chrome — no leading icon, title compressed to a small uppercase
-            // overline (the portfolio_card idiom). Deliberately NOT the <720
-            // MediaQuery `isPhone` above (that gates tiles/padding); the
-            // overline keys off the card's own width.
-            final isPhoneCard = c.maxWidth < 420;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (!isPhoneCard) ...[
-                      Icon(
-                        Icons.trending_down_rounded,
-                        color: context.pinkAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        isPhoneCard ? l.dpTitle.toUpperCase() : l.dpTitle,
-                        style: isPhoneCard
-                            ? TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: context.textSubtle,
-                              )
-                            : TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: context.textPrimary,
-                              ),
-                        // maxLines only on the phone overline; wider layouts
-                        // keep the original wrap behaviour pixel-identical.
-                        maxLines: isPhoneCard ? 1 : null,
-                        overflow: isPhoneCard ? TextOverflow.ellipsis : null,
-                      ),
-                    ),
-                  ],
+              Expanded(
+                child: Text(
+                  l.dpMonthlyPayment,
+                  style: TextStyle(color: context.textMuted, fontSize: 14),
                 ),
-                // Header→content gap tightens with the phone overline header.
-                SizedBox(height: isPhoneCard ? 12 : 16),
-                _dueSoonStrip(debts, l),
-                // Phones (the same <720 flag that stacks the strategy tiles):
-                // the 3-up metric row crushes at phone widths, so it wraps to a
-                // 2-column grid (cash-10).
-                _summaryStrip(debts, l, twoUp: isPhone),
-                const SizedBox(height: 16),
-                Divider(height: 1, color: context.hairline),
-                const SizedBox(height: 12),
-                ...debts.map(_debtRow),
-                const SizedBox(height: 8),
-                Divider(height: 24, color: context.hairline),
-                if (!isPhone)
-                  ...simulator
-                else ...[
-                  // Tap-to-expand simulator header (phones only).
-                  InkWell(
-                    onTap: () => setState(() => _simExpanded = !_simExpanded),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
+              ),
+              Text(
+                _money(clampedBudget),
+                style: TextStyle(
+                  color: context.pinkAccent,
+                  fontWeight: FontWeight.bold,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: clampedBudget,
+            min: minTotal,
+            max: sliderMax,
+            activeColor: context.pinkAccent,
+            inactiveColor: context.hairline,
+            onChanged: (v) => setState(() => _monthlyPayment = v),
+          ),
+          const SizedBox(height: 8),
+          if (!feasible) _infeasibleNote(l) else strategyComparison,
+          if (feasible && savings > 1) ...[
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                avalancheWins
+                    ? l.dpSaves(_money(savings))
+                    : l.dpSaves(_money(0)),
+                style: TextStyle(color: context.textFaint, fontSize: 11),
+              ),
+            ),
+          ],
+        ];
+
+        // Collapsed-summary line: the recommended strategy + projected interest
+        // saved (when meaningful), reusing the already-computed values.
+        final recommendedName = avalancheWins ? l.dpAvalanche : l.dpSnowball;
+        final summaryLine = (feasible && savings > 1 && avalancheWins)
+            ? '$recommendedName · ${l.dpSaves(_money(savings))}'
+            : recommendedName;
+
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Width-responsive off the card's OWN constraint (inner
+            // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+            // be narrower than the screen (outer tab padding, width clamps).
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // House ~420 phone breakpoint off the card interior: compact
+                // chrome — no leading icon, title compressed to a small uppercase
+                // overline (the portfolio_card idiom). Deliberately NOT the <720
+                // MediaQuery `isPhone` above (that gates tiles/padding); the
+                // overline keys off the card's own width.
+                final isPhoneCard = c.maxWidth < 420;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (!isPhoneCard) ...[
                           Icon(
-                            Icons.tune_rounded,
-                            color: context.tealAccent,
+                            Icons.trending_down_rounded,
+                            color: context.pinkAccent,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  l.dpSimulator,
-                                  style: TextStyle(
-                                    fontSize: 14,
+                        ],
+                        Expanded(
+                          child: Text(
+                            isPhoneCard ? l.dpTitle.toUpperCase() : l.dpTitle,
+                            style: isPhoneCard
+                                ? TextStyle(
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: context.textSubtle,
+                                  )
+                                : TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
                                     color: context.textPrimary,
                                   ),
-                                ),
-                                if (!_simExpanded) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    summaryLine,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: context.textSubtle,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ],
-                            ),
+                            // maxLines only on the phone overline; wider layouts
+                            // keep the original wrap behaviour pixel-identical.
+                            maxLines: isPhoneCard ? 1 : null,
+                            overflow: isPhoneCard
+                                ? TextOverflow.ellipsis
+                                : null,
                           ),
-                          Icon(
-                            _simExpanded
-                                ? Icons.expand_less_rounded
-                                : Icons.expand_more_rounded,
-                            color: context.textMuted,
-                            size: 22,
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ),
-                  if (_simExpanded) ...[
+                    // Header→content gap tightens with the phone overline header.
+                    SizedBox(height: isPhoneCard ? 12 : 16),
+                    _dueSoonStrip(debts, l),
+                    // Phones (the same <720 flag that stacks the strategy tiles):
+                    // the 3-up metric row crushes at phone widths, so it wraps to a
+                    // 2-column grid (cash-10).
+                    _summaryStrip(debts, l, twoUp: isPhone),
+                    const SizedBox(height: 16),
+                    Divider(height: 1, color: context.hairline),
+                    const SizedBox(height: 12),
+                    ...debts.map(_debtRow),
                     const SizedBox(height: 8),
-                    ...simulator,
+                    Divider(height: 24, color: context.hairline),
+                    if (!isPhone)
+                      ...simulator
+                    else ...[
+                      // Tap-to-expand simulator header (phones only).
+                      InkWell(
+                        onTap: () =>
+                            setState(() => _simExpanded = !_simExpanded),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.tune_rounded,
+                                color: context.tealAccent,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      l.dpSimulator,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: context.textPrimary,
+                                      ),
+                                    ),
+                                    if (!_simExpanded) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        summaryLine,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: context.textSubtle,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                _simExpanded
+                                    ? Icons.expand_less_rounded
+                                    : Icons.expand_more_rounded,
+                                color: context.textMuted,
+                                size: 22,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_simExpanded) ...[
+                        const SizedBox(height: 8),
+                        ...simulator,
+                      ],
+                    ],
                   ],
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

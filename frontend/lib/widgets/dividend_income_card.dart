@@ -119,161 +119,170 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
             (c['per_year'] as num?)?.toInt() ?? 0,
     };
 
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // MergeSemantics + header so screen readers announce one
-            // "Dividend income" heading for the card (round-1 leftover a).
-            MergeSemantics(
-              child: Semantics(
-                header: true,
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.payments_outlined,
-                      color: context.tealAccent,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      l.divCardTitle,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: context.textPrimary,
-                      ),
-                    ),
-                    if (fxStale) ...[
-                      const SizedBox(width: 8),
-                      Tooltip(
-                        message: l.divFxStaleHint,
-                        child: Icon(
-                          Icons.error_outline,
-                          size: 15,
-                          color: context.warning,
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // MergeSemantics + header so screen readers announce one
+                // "Dividend income" heading for the card (round-1 leftover a).
+                MergeSemantics(
+                  child: Semantics(
+                    header: true,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.payments_outlined,
+                          color: context.tealAccent,
+                          size: 18,
                         ),
+                        const SizedBox(width: 8),
+                        Text(
+                          l.divCardTitle,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        if (fxStale) ...[
+                          const SizedBox(width: 8),
+                          Tooltip(
+                            message: l.divFxStaleHint,
+                            child: Icon(
+                              Icons.error_outline,
+                              size: 15,
+                              color: context.warning,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _summaryTile(
+                        l.divProjectedAnnual,
+                        _money(income),
+                        context.positive,
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _summaryTile(
+                        l.divBlendedYield,
+                        blendedYield == null
+                            ? '—'
+                            : formatPercent(context, blendedYield, digits: 2),
+                        context.textPrimary,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _summaryTile(
-                    l.divProjectedAnnual,
-                    _money(income),
-                    context.positive,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _summaryTile(
-                    l.divBlendedYield,
-                    blendedYield == null
-                        ? '—'
-                        : formatPercent(context, blendedYield, digits: 2),
-                    context.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            if (payers.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Divider(height: 24, color: context.hairline),
-              Semantics(
-                header: true,
-                child: Text(
-                  l.divTopPayers,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: context.textSubtle,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...(_showAllPayers ? payers : payers.take(_maxPayers)).map(
-                (c) => _payerRow(c as Map<String, dynamic>),
-              ),
-              if (payers.length > _maxPayers)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () =>
-                        setState(() => _showAllPayers = !_showAllPayers),
+                if (payers.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Divider(height: 24, color: context.hairline),
+                  Semantics(
+                    header: true,
                     child: Text(
-                      _showAllPayers
-                          ? l.pfDivShowFewerPayers
-                          : l.pfDivShowAllPayers(payers.length),
+                      l.divTopPayers,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                        color: context.textSubtle,
+                      ),
                     ),
                   ),
-                ),
-            ],
-            if (upcoming.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Divider(height: 24, color: context.hairline),
-              Semantics(
-                header: true,
-                child: Text(
-                  l.divUpcomingExDates,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: context.textSubtle,
+                  const SizedBox(height: 8),
+                  ...(_showAllPayers ? payers : payers.take(_maxPayers)).map(
+                    (c) => _payerRow(c as Map<String, dynamic>),
                   ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // All the entries the API returns, each with the expected
-              // payment amount (per-symbol annual income ÷ payments/yr).
-              ...upcoming.map(
-                (e) => _exDateRow(e as Map<String, dynamic>, perYearBySymbol),
-              ),
-            ],
-            if (calendar.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Divider(height: 24, color: context.hairline),
-              // Same expander pattern as the payers "Show all" toggle
-              // above — a plain TextButton and a plain conditional, no
-              // bespoke animation.
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () =>
-                      setState(() => _showCalendar = !_showCalendar),
-                  icon: Icon(
-                    _showCalendar ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
+                  if (payers.length > _maxPayers)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () =>
+                            setState(() => _showAllPayers = !_showAllPayers),
+                        child: Text(
+                          _showAllPayers
+                              ? l.pfDivShowFewerPayers
+                              : l.pfDivShowAllPayers(payers.length),
+                        ),
+                      ),
+                    ),
+                ],
+                if (upcoming.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Divider(height: 24, color: context.hairline),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      l.divUpcomingExDates,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                        color: context.textSubtle,
+                      ),
+                    ),
                   ),
-                  label: Text(
-                    _showCalendar ? l.calHideCalendar : l.calShowCalendar,
+                  const SizedBox(height: 8),
+                  // All the entries the API returns, each with the expected
+                  // payment amount (per-symbol annual income ÷ payments/yr).
+                  ...upcoming.map(
+                    (e) =>
+                        _exDateRow(e as Map<String, dynamic>, perYearBySymbol),
                   ),
-                ),
-              ),
-              if (_showCalendar) ...[
-                const SizedBox(height: 8),
-                DividendCalendar(
-                  calendar: calendar,
-                  conversionFactor: widget.conversionFactor,
-                  currencyFormat: widget.currencyFormat,
-                ),
+                ],
+                if (calendar.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Divider(height: 24, color: context.hairline),
+                  // Same expander pattern as the payers "Show all" toggle
+                  // above — a plain TextButton and a plain conditional, no
+                  // bespoke animation.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _showCalendar = !_showCalendar),
+                      icon: Icon(
+                        _showCalendar ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                      ),
+                      label: Text(
+                        _showCalendar ? l.calHideCalendar : l.calShowCalendar,
+                      ),
+                    ),
+                  ),
+                  if (_showCalendar) ...[
+                    const SizedBox(height: 8),
+                    DividendCalendar(
+                      calendar: calendar,
+                      conversionFactor: widget.conversionFactor,
+                      currencyFormat: widget.currencyFormat,
+                    ),
+                  ],
+                ],
               ],
-            ],
-          ],
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -484,46 +493,55 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
   /// + show-all button, and the upcoming ex-dates section) so data landing
   /// doesn't shove the page.
   Widget _buildLoadingSkeleton(BuildContext context) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SkeletonBox(width: 160, height: 18),
-            const SizedBox(height: 16),
-            const Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: SkeletonBox(height: 72)),
-                SizedBox(width: 12),
-                Expanded(child: SkeletonBox(height: 72)),
+                const SkeletonBox(width: 160, height: 18),
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    Expanded(child: SkeletonBox(height: 72)),
+                    SizedBox(width: 12),
+                    Expanded(child: SkeletonBox(height: 72)),
+                  ],
+                ),
+                // "Top payers" section: header + the 5 collapsed two-line payer
+                // rows (~52px each with their padding) + the show-all button.
+                const SizedBox(height: 24),
+                const SkeletonBox(width: 100, height: 12),
+                const SizedBox(height: 12),
+                for (var i = 0; i < 5; i++) ...[
+                  const SkeletonBox(height: 52),
+                  if (i < 4) const SizedBox(height: 8),
+                ],
+                const SizedBox(height: 12),
+                const SkeletonBox(width: 90, height: 16),
+                // "Upcoming ex-dates" section: header + single-line rows.
+                const SizedBox(height: 24),
+                const SkeletonBox(width: 100, height: 12),
+                const SizedBox(height: 12),
+                for (var i = 0; i < 4; i++) ...[
+                  const SkeletonBox(height: 24),
+                  if (i < 3) const SizedBox(height: 8),
+                ],
               ],
             ),
-            // "Top payers" section: header + the 5 collapsed two-line payer
-            // rows (~52px each with their padding) + the show-all button.
-            const SizedBox(height: 24),
-            const SkeletonBox(width: 100, height: 12),
-            const SizedBox(height: 12),
-            for (var i = 0; i < 5; i++) ...[
-              const SkeletonBox(height: 52),
-              if (i < 4) const SizedBox(height: 8),
-            ],
-            const SizedBox(height: 12),
-            const SkeletonBox(width: 90, height: 16),
-            // "Upcoming ex-dates" section: header + single-line rows.
-            const SizedBox(height: 24),
-            const SkeletonBox(width: 100, height: 12),
-            const SizedBox(height: 12),
-            for (var i = 0; i < 4; i++) ...[
-              const SkeletonBox(height: 24),
-              if (i < 3) const SizedBox(height: 8),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

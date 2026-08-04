@@ -34,7 +34,6 @@ class NetWorthGoalTile extends StatelessWidget {
     final l = AppLocalizations.of(context);
     // Tighter card interior on phones — 24px each side eats ~16% of a 360px
     // screen's width.
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     final goalUsd = Preferences.getGoalAmountUsd();
     final goalYear = Preferences.getGoalYear();
     if (goalUsd == null || goalYear == null || goalUsd <= 0) {
@@ -54,97 +53,107 @@ class NetWorthGoalTile extends StatelessWidget {
         ? context.tealAccent
         : context.yellowAccent;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.flag_outlined, color: color, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l.pfNetWorthGoal,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                Row(
+                  children: [
+                    Icon(Icons.flag_outlined, color: color, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l.pfNetWorthGoal,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
+                    Text(
+                      pctLabel,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  // gen-l10n orders these alphabetically → (amount, remaining, year).
+                  l.pfGoalHitBy(
+                    currencyFormat.displayMoney(goalUsd * conversionFactor),
+                    yearsRemaining <= 0
+                        ? l.pfGoalDueNow
+                        : l.pfGoalYearsLeft(yearsRemaining),
+                    goalYear,
+                  ),
+                  style: TextStyle(color: context.textMuted, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: pct,
+                    backgroundColor: context.tileSurface,
+                    color: color,
+                    minHeight: 10,
                   ),
                 ),
+                const SizedBox(height: 8),
                 Text(
-                  pctLabel,
+                  l.pfGoalCurrent(
+                    currencyFormat.displayMoney(netWorthUsd * conversionFactor),
+                  ),
                   style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: color,
+                    fontSize: 12,
+                    color: context.textSubtle,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              // gen-l10n orders these alphabetically → (amount, remaining, year).
-              l.pfGoalHitBy(
-                currencyFormat.displayMoney(goalUsd * conversionFactor),
-                yearsRemaining <= 0
-                    ? l.pfGoalDueNow
-                    : l.pfGoalYearsLeft(yearsRemaining),
-                goalYear,
-              ),
-              style: TextStyle(color: context.textMuted, fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: pct,
-                backgroundColor: context.tileSurface,
-                color: color,
-                minHeight: 10,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              l.pfGoalCurrent(
-                currencyFormat.displayMoney(netWorthUsd * conversionFactor),
-              ),
-              style: TextStyle(
-                fontSize: 12,
-                color: context.textSubtle,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            if (pace != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(pace.icon, size: 14, color: pace.color(context)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      pace.label(l, currencyFormat, conversionFactor),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: pace.color(context),
+                if (pace != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(pace.icon, size: 14, color: pace.color(context)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          pace.label(l, currencyFormat, conversionFactor),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: pace.color(context),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                   ),
                 ],
-              ),
-            ],
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

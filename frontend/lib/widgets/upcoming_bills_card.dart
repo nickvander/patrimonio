@@ -44,124 +44,132 @@ class UpcomingBillsCard extends StatelessWidget {
         .map((m) => m.totalUsd)
         .fold(0.0, (a, b) => a > b ? a : b);
 
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Width-responsive off the card's OWN constraint (inner
-        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
-        // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(
-          builder: (context, c) {
-            // House ~420 phone breakpoint: compact chrome — no leading icon,
-            // title compressed to a small uppercase overline (the
-            // portfolio_card idiom). Wider layouts are unchanged.
-            final isPhone = c.maxWidth < 420;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Width-responsive off the card's OWN constraint (inner
+            // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+            // be narrower than the screen (outer tab padding, width clamps).
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // House ~420 phone breakpoint: compact chrome — no leading icon,
+                // title compressed to a small uppercase overline (the
+                // portfolio_card idiom). Wider layouts are unchanged.
+                final isPhone = c.maxWidth < 420;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isPhone) ...[
-                      Icon(
-                        Icons.event_repeat_rounded,
-                        color: context.purpleAccent,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        isPhone ? l.billsTitle.toUpperCase() : l.billsTitle,
-                        style: isPhone
-                            ? TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: context.textSubtle,
-                              )
-                            : TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: context.textPrimary,
-                              ),
-                        // maxLines only on the phone overline; wider layouts
-                        // keep the original wrap behaviour pixel-identical.
-                        maxLines: isPhone ? 1 : null,
-                        overflow: isPhone ? TextOverflow.ellipsis : null,
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    Row(
                       children: [
-                        Text(
-                          currencyFormat.displayMoney(
-                            totalUsd * conversionFactor,
-                          ),
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        if (!isPhone) ...[
+                          Icon(
+                            Icons.event_repeat_rounded,
                             color: context.purpleAccent,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            isPhone ? l.billsTitle.toUpperCase() : l.billsTitle,
+                            style: isPhone
+                                ? TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: context.textSubtle,
+                                  )
+                                : TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: context.textPrimary,
+                                  ),
+                            // maxLines only on the phone overline; wider layouts
+                            // keep the original wrap behaviour pixel-identical.
+                            maxLines: isPhone ? 1 : null,
+                            overflow: isPhone ? TextOverflow.ellipsis : null,
                           ),
                         ),
-                        Text(
-                          l.billsNext12,
-                          style: TextStyle(
-                            color: context.textFaint,
-                            fontSize: 11,
-                          ),
-                        ),
-                        // The 12-month total reads alarmingly large on its own;
-                        // the monthly average reframes it as "a year of bills"
-                        // rather than a single scary number.
-                        Text(
-                          l.cfPerMonthApprox(
-                            currencyFormat.displayMoney(
-                              totalUsd / 12 * conversionFactor,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              currencyFormat.displayMoney(
+                                totalUsd * conversionFactor,
+                              ),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: context.purpleAccent,
+                              ),
                             ),
-                          ),
-                          style: TextStyle(
-                            color: context.textFaint,
-                            fontSize: 11,
-                          ),
+                            Text(
+                              l.billsNext12,
+                              style: TextStyle(
+                                color: context.textFaint,
+                                fontSize: 11,
+                              ),
+                            ),
+                            // The 12-month total reads alarmingly large on its own;
+                            // the monthly average reframes it as "a year of bills"
+                            // rather than a single scary number.
+                            Text(
+                              l.cfPerMonthApprox(
+                                currencyFormat.displayMoney(
+                                  totalUsd / 12 * conversionFactor,
+                                ),
+                              ),
+                              style: TextStyle(
+                                color: context.textFaint,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
+                    // Header→chart gap tightens with the phone overline header.
+                    SizedBox(height: isPhone ? 12 : 20),
+                    LayoutBuilder(
+                      builder: (context, outer) {
+                        // Month-label density off the inner width (~1 per 46px, keep
+                        // the last) — a full 12-month forecast rendered a two-line
+                        // month+year label under every bar and collided on phones.
+                        // 200 tall (was 160): the two-line labels plus y-ticks were
+                        // crowding the plot itself.
+                        final count = forecast.isEmpty ? 1 : forecast.length;
+                        final minLabels = count < 2 ? count : 2;
+                        final maxLabels = (outer.maxWidth / 46.0).floor().clamp(
+                          minLabels,
+                          count,
+                        );
+                        final labelStep = (count / maxLabels).ceil().clamp(
+                          1,
+                          count,
+                        );
+                        return SizedBox(
+                          height: 200,
+                          child: _chart(context, forecast, maxMonth, labelStep),
+                        );
+                      },
+                    ),
                   ],
-                ),
-                // Header→chart gap tightens with the phone overline header.
-                SizedBox(height: isPhone ? 12 : 20),
-                LayoutBuilder(
-                  builder: (context, outer) {
-                    // Month-label density off the inner width (~1 per 46px, keep
-                    // the last) — a full 12-month forecast rendered a two-line
-                    // month+year label under every bar and collided on phones.
-                    // 200 tall (was 160): the two-line labels plus y-ticks were
-                    // crowding the plot itself.
-                    final count = forecast.isEmpty ? 1 : forecast.length;
-                    final minLabels = count < 2 ? count : 2;
-                    final maxLabels = (outer.maxWidth / 46.0).floor().clamp(
-                      minLabels,
-                      count,
-                    );
-                    final labelStep = (count / maxLabels).ceil().clamp(
-                      1,
-                      count,
-                    );
-                    return SizedBox(
-                      height: 200,
-                      child: _chart(context, forecast, maxMonth, labelStep),
-                    );
-                  },
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

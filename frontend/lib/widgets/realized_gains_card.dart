@@ -416,11 +416,20 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   /// Shared Card chrome so the skeleton/error/empty states keep the exact
   /// footprint and styling of the loaded card.
   Widget _cardShell(Widget child) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(padding: EdgeInsets.all(pad), child: child),
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(padding: EdgeInsets.all(pad), child: child),
+        );
+      },
     );
   }
 

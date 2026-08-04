@@ -103,68 +103,84 @@ class _LoanDetailSheetState extends State<LoanDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    final gap = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.95,
-      builder: (ctx, scroll) {
-        return PopScope(
-          canPop: true,
-          onPopInvokedWithResult: (didPop, _) {},
-          child: ListView(
-            controller: scroll,
-            padding: EdgeInsets.fromLTRB(pad, 16, pad, 32),
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: context.hairline,
-                    borderRadius: BorderRadius.circular(2),
+    // Density off the sheet's OWN constraint, never `MediaQuery` (skill
+    // §4/§5) — and DELIBERATELY retuned to [kScheduleNarrowWidth] rather than
+    // the house ~720 card breakpoint. Material 3 caps a modal bottom sheet at
+    // 640dp, so this surface is NEVER 720 wide: reading its own width against
+    // 720 would hand every desktop window the 16px touch padding it has never
+    // had. 520 is the breakpoint this file already owns (the schedule table's
+    // fold), so the sheet now has exactly two layouts instead of three.
+    //
+    // What moves: windows in the 520–720px band (where the sheet is 520–640
+    // wide — a tablet, a small desktop window) go from 16px to 24px. Below
+    // 520 and at/above 720 the rendering is unchanged.
+    return LayoutBuilder(
+      builder: (_, sheet) {
+        final dense = sheet.maxWidth < kScheduleNarrowWidth;
+        final pad = dense ? 16.0 : 24.0;
+        final gap = dense ? 16.0 : 24.0;
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7,
+          maxChildSize: 0.95,
+          builder: (ctx, scroll) {
+            return PopScope(
+              canPop: true,
+              onPopInvokedWithResult: (didPop, _) {},
+              child: ListView(
+                controller: scroll,
+                padding: EdgeInsets.fromLTRB(pad, 16, pad, 32),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: context.hairline,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                (widget.loan['borrower_name'] ?? '').toString(),
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: context.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                AppLocalizations.of(context).lendLentOutstandingMeta(
-                  _moneyDisplay((widget.loan['principal'] as num?) ?? 0),
-                  _moneyDisplay(_totalOwedRemaining()),
-                ),
-                style: TextStyle(fontSize: 13, color: context.textSubtle),
-              ),
-              const SizedBox(height: 20),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else ...[
-                _buildDisbursementSection(),
-                SizedBox(height: gap),
-                if (_buildInterestSection() case final w?) ...[
-                  w,
-                  SizedBox(height: gap),
+                  const SizedBox(height: 16),
+                  Text(
+                    (widget.loan['borrower_name'] ?? '').toString(),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    AppLocalizations.of(context).lendLentOutstandingMeta(
+                      _moneyDisplay((widget.loan['principal'] as num?) ?? 0),
+                      _moneyDisplay(_totalOwedRemaining()),
+                    ),
+                    style: TextStyle(fontSize: 13, color: context.textSubtle),
+                  ),
+                  const SizedBox(height: 20),
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else ...[
+                    _buildDisbursementSection(),
+                    SizedBox(height: gap),
+                    if (_buildInterestSection() case final w?) ...[
+                      w,
+                      SizedBox(height: gap),
+                    ],
+                    _buildScheduleSection(),
+                    SizedBox(height: gap),
+                    _buildRepaymentsSection(),
+                    SizedBox(height: gap),
+                    _buildStatusActions(),
+                  ],
                 ],
-                _buildScheduleSection(),
-                SizedBox(height: gap),
-                _buildRepaymentsSection(),
-                SizedBox(height: gap),
-                _buildStatusActions(),
-              ],
-            ],
-          ),
+              ),
+            );
+          },
         );
       },
     );

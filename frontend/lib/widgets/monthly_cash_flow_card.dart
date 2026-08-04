@@ -152,271 +152,298 @@ class MonthlyCashFlowCard extends StatelessWidget {
     // source of truth for the period name.
     final headlinesCurrentMonth = !aggregate && currentIdx == trends.length - 1;
 
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: LayoutBuilder(
-          builder: (ctx, c) {
-            final isNarrow = c.maxWidth < kCompactLayoutBelow;
-            // House ~420 phone breakpoint off the card's OWN interior width
-            // (see portfolio_card.dart): compact chrome — no leading icon,
-            // the title compressed to a small uppercase overline. The period
-            // selector chip above the card already names the period, so the
-            // overline folds title + month into ONE line instead of tripling
-            // the period signal (title, month subtitle, selector chip).
-            final isPhone = c.maxWidth < 420;
-            final header = Row(
-              children: [
-                if (!isPhone) ...[
-                  Icon(
-                    Icons.account_balance_wallet_outlined,
-                    size: 18,
-                    color: context.tealAccent,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                if (isPhone)
-                  Expanded(
-                    child: Text(
-                      '${l.cfCashFlowShort} — $monthLabel'.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.6,
-                        color: context.textSubtle,
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: LayoutBuilder(
+              builder: (ctx, c) {
+                final isNarrow = c.maxWidth < kCompactLayoutBelow;
+                // House ~420 phone breakpoint off the card's OWN interior width
+                // (see portfolio_card.dart): compact chrome — no leading icon,
+                // the title compressed to a small uppercase overline. The period
+                // selector chip above the card already names the period, so the
+                // overline folds title + month into ONE line instead of tripling
+                // the period signal (title, month subtitle, selector chip).
+                final isPhone = c.maxWidth < 420;
+                final header = Row(
+                  children: [
+                    if (!isPhone) ...[
+                      Icon(
+                        Icons.account_balance_wallet_outlined,
+                        size: 18,
+                        color: context.tealAccent,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  )
-                else ...[
-                  Text(
-                    headlinesCurrentMonth
-                        ? l.cfMonthlyTitle
-                        : l.cfCashFlowShort,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: context.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      monthLabel,
-                      style: TextStyle(fontSize: 12, color: context.textSubtle),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-                // Hint so the user understands why the numbers don't equal
-                // "sum of every transaction this month." Without this, a
-                // bulk-import month looks suspicious. Tap-triggered (hover
-                // never fires on touch devices) with a 48dp target around
-                // the small glyph; the child is deliberately NOT a button —
-                // Tooltip's own tap recognizer must win the gesture arena,
-                // and an inner IconButton would swallow the tap.
-                Tooltip(
-                  message: l.cfMonthlyExcludesTooltip,
-                  triggerMode: TooltipTriggerMode.tap,
-                  child: SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Center(
-                      child: Icon(
-                        Icons.info_outline,
-                        size: 16,
-                        color: context.textFaint,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-
-            final netLine = _NetLine(
-              net: net,
-              priorNet: priorNet,
-              income: income,
-              priorIncome: priorIncome,
-              currencyFormat: currencyFormat,
-            );
-
-            final stats = Row(
-              children: [
-                Expanded(
-                  child: _StatBlock(
-                    label: l.cfIncome,
-                    value: currencyFormat.displayMoney(income),
-                    accent: context.tealAccent,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _StatBlock(
-                    label: l.cfExpense,
-                    value: currencyFormat.displayMoney(spending),
-                    accent: context.pinkAccent,
-                  ),
-                ),
-              ],
-            );
-
-            // Context line: the investment/transfer money peeled out of
-            // income/spending on the backend, shown (not hidden) so the user
-            // can see where e.g. a paycheck-as-transfer or a stock buy went.
-            final contextParts = <String>[];
-            if (invested.abs() >= 0.005) {
-              contextParts.add(
-                invested >= 0
-                    ? l.cfInvestedContext(
-                        currencyFormat.displayMoney(invested.abs()),
+                      const SizedBox(width: 8),
+                    ],
+                    if (isPhone)
+                      Expanded(
+                        child: Text(
+                          '${l.cfCashFlowShort} — $monthLabel'.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: context.textSubtle,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       )
-                    : l.cfWithdrawnContext(
-                        currencyFormat.displayMoney(invested.abs()),
+                    else ...[
+                      Text(
+                        headlinesCurrentMonth
+                            ? l.cfMonthlyTitle
+                            : l.cfCashFlowShort,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
                       ),
-              );
-            }
-            if (transferred.abs() >= 0.005) {
-              contextParts.add(
-                transferred >= 0
-                    ? l.cfTransferredInContext(
-                        currencyFormat.displayMoney(transferred.abs()),
-                      )
-                    : l.cfTransferredOutContext(
-                        currencyFormat.displayMoney(transferred.abs()),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          monthLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.textSubtle,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-              );
-            }
-            final Widget? contextLine = contextParts.isEmpty
-                ? null
-                : Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      '${l.cfAlsoThisPeriod}  ${contextParts.join('  ·  ')}',
-                      style: TextStyle(fontSize: 12, color: context.textSubtle),
-                    ),
-                  );
-
-            // FX-equivalence row (the portfolio_card "Total value in pesos
-            // ≈ MX$…" idiom): the net figure restated in the OTHER currency
-            // so a bi-currency user sees both readings without a second
-            // stat tile. Only on the narrow layout, and only when a real
-            // spot rate arrived (usdMxnRate 0.0 = legacy call sites → off).
-            final other = targetCurrency.toUpperCase() == 'USD' ? 'MXN' : 'USD';
-            final Widget? fxEquivalence = usdMxnRate > 0
-                ? ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        l.cfNetEquivalence(
-                          moneyFormat(other).displayMoney(
-                            convertCurrency(
-                              net,
-                              from: targetCurrency,
-                              to: other,
-                              usdMxnRate: usdMxnRate,
-                            ),
+                    ],
+                    // Hint so the user understands why the numbers don't equal
+                    // "sum of every transaction this month." Without this, a
+                    // bulk-import month looks suspicious. Tap-triggered (hover
+                    // never fires on touch devices) with a 48dp target around
+                    // the small glyph; the child is deliberately NOT a button —
+                    // Tooltip's own tap recognizer must win the gesture arena,
+                    // and an inner IconButton would swallow the tap.
+                    Tooltip(
+                      message: l.cfMonthlyExcludesTooltip,
+                      triggerMode: TooltipTriggerMode.tap,
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: context.textFaint,
                           ),
                         ),
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: context.textSubtle,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  )
-                : null;
-
-            final spark = _NetSparkline(
-              points: sparkSource
-                  .map(
-                    (m) =>
-                        (((m['income'] as num?)?.toDouble() ?? 0.0) -
-                            ((m['spending'] as num?)?.toDouble() ?? 0.0)) *
-                        conversionFactor,
-                  )
-                  .toList(growable: false),
-              labels: sparkSource
-                  .map((m) => (m['month'] as String?) ?? '')
-                  .toList(growable: false),
-              currencyFormat: currencyFormat,
-              positive: net >= 0,
-            );
-
-            if (isNarrow) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  header,
-                  const SizedBox(height: 12),
-                  netLine,
-                  const SizedBox(height: 12),
-                  stats,
-                  ?fxEquivalence,
-                  ?contextLine,
-                  const SizedBox(height: 12),
-                  SizedBox(height: 48, child: spark),
-                ],
-              );
-            }
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                header,
-                const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          netLine,
-                          const SizedBox(height: 12),
-                          stats,
-                          ?contextLine,
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    Expanded(
-                      flex: 2,
-                      child: SizedBox(height: 80, child: spark),
                     ),
                   ],
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+                );
+
+                final netLine = _NetLine(
+                  net: net,
+                  priorNet: priorNet,
+                  income: income,
+                  priorIncome: priorIncome,
+                  currencyFormat: currencyFormat,
+                );
+
+                final stats = Row(
+                  children: [
+                    Expanded(
+                      child: _StatBlock(
+                        label: l.cfIncome,
+                        value: currencyFormat.displayMoney(income),
+                        accent: context.tealAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatBlock(
+                        label: l.cfExpense,
+                        value: currencyFormat.displayMoney(spending),
+                        accent: context.pinkAccent,
+                      ),
+                    ),
+                  ],
+                );
+
+                // Context line: the investment/transfer money peeled out of
+                // income/spending on the backend, shown (not hidden) so the user
+                // can see where e.g. a paycheck-as-transfer or a stock buy went.
+                final contextParts = <String>[];
+                if (invested.abs() >= 0.005) {
+                  contextParts.add(
+                    invested >= 0
+                        ? l.cfInvestedContext(
+                            currencyFormat.displayMoney(invested.abs()),
+                          )
+                        : l.cfWithdrawnContext(
+                            currencyFormat.displayMoney(invested.abs()),
+                          ),
+                  );
+                }
+                if (transferred.abs() >= 0.005) {
+                  contextParts.add(
+                    transferred >= 0
+                        ? l.cfTransferredInContext(
+                            currencyFormat.displayMoney(transferred.abs()),
+                          )
+                        : l.cfTransferredOutContext(
+                            currencyFormat.displayMoney(transferred.abs()),
+                          ),
+                  );
+                }
+                final Widget? contextLine = contextParts.isEmpty
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '${l.cfAlsoThisPeriod}  ${contextParts.join('  ·  ')}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.textSubtle,
+                          ),
+                        ),
+                      );
+
+                // FX-equivalence row (the portfolio_card "Total value in pesos
+                // ≈ MXN …" idiom): the net figure restated in the OTHER currency
+                // so a bi-currency user sees both readings without a second
+                // stat tile. Only on the narrow layout, and only when a real
+                // spot rate arrived (usdMxnRate 0.0 = legacy call sites → off).
+                final other = targetCurrency.toUpperCase() == 'USD'
+                    ? 'MXN'
+                    : 'USD';
+                final Widget? fxEquivalence = usdMxnRate > 0
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            l.cfNetEquivalence(
+                              moneyFormat(other).displayMoney(
+                                convertCurrency(
+                                  net,
+                                  from: targetCurrency,
+                                  to: other,
+                                  usdMxnRate: usdMxnRate,
+                                ),
+                              ),
+                            ),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: context.textSubtle,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                    : null;
+
+                final spark = _NetSparkline(
+                  points: sparkSource
+                      .map(
+                        (m) =>
+                            (((m['income'] as num?)?.toDouble() ?? 0.0) -
+                                ((m['spending'] as num?)?.toDouble() ?? 0.0)) *
+                            conversionFactor,
+                      )
+                      .toList(growable: false),
+                  labels: sparkSource
+                      .map((m) => (m['month'] as String?) ?? '')
+                      .toList(growable: false),
+                  currencyFormat: currencyFormat,
+                  positive: net >= 0,
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      header,
+                      const SizedBox(height: 12),
+                      netLine,
+                      const SizedBox(height: 12),
+                      stats,
+                      ?fxEquivalence,
+                      ?contextLine,
+                      const SizedBox(height: 12),
+                      SizedBox(height: 48, child: spark),
+                    ],
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    header,
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              netLine,
+                              const SizedBox(height: 12),
+                              stats,
+                              ?contextLine,
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(height: 80, child: spark),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildEmpty(BuildContext context) {
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Text(
-          AppLocalizations.of(context).cfMonthlyEmpty,
-          style: TextStyle(color: context.textSubtle, fontSize: 13),
-        ),
-      ),
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Text(
+              AppLocalizations.of(context).cfMonthlyEmpty,
+              style: TextStyle(color: context.textSubtle, fontSize: 13),
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -35,91 +35,100 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
 
     // House card idiom (elevation 4 / radius 20 / responsive 16-24 padding),
     // matching monthly_cash_flow_card.dart so the tab's cards read as one set.
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Width-responsive off the card's OWN constraint (inner
-        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
-        // be narrower than the screen (outer tab padding, width clamps).
-        child: LayoutBuilder(
-          builder: (context, c) {
-            // House ~420 phone breakpoint: compact chrome — no leading icon,
-            // title compressed to a small uppercase overline (the
-            // portfolio_card idiom). Wider layouts are unchanged.
-            final isPhone = c.maxWidth < 420;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Width-responsive off the card's OWN constraint (inner
+            // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+            // be narrower than the screen (outer tab padding, width clamps).
+            child: LayoutBuilder(
+              builder: (context, c) {
+                // House ~420 phone breakpoint: compact chrome — no leading icon,
+                // title compressed to a small uppercase overline (the
+                // portfolio_card idiom). Wider layouts are unchanged.
+                final isPhone = c.maxWidth < 420;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (!isPhone) ...[
-                      Icon(
-                        Icons.swap_horiz,
-                        size: 18,
-                        color: context.tealAccent,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Flexible(
-                      child: Text(
-                        isPhone
-                            ? l.cfTransfersTitle.toUpperCase()
-                            : l.cfTransfersTitle,
-                        style: isPhone
-                            ? TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                                color: context.textSubtle,
-                              )
-                            : TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: context.textPrimary,
-                              ),
-                        // maxLines only on the phone overline; wider layouts
-                        // keep the original wrap behaviour pixel-identical.
-                        maxLines: isPhone ? 1 : null,
-                        overflow: isPhone ? TextOverflow.ellipsis : null,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: context.accentSoft(context.tealAccent),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${transfers.length}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: context.tealAccent,
+                    Row(
+                      children: [
+                        if (!isPhone) ...[
+                          Icon(
+                            Icons.swap_horiz,
+                            size: 18,
+                            color: context.tealAccent,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Flexible(
+                          child: Text(
+                            isPhone
+                                ? l.cfTransfersTitle.toUpperCase()
+                                : l.cfTransfersTitle,
+                            style: isPhone
+                                ? TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: context.textSubtle,
+                                  )
+                                : TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: context.textPrimary,
+                                  ),
+                            // maxLines only on the phone overline; wider layouts
+                            // keep the original wrap behaviour pixel-identical.
+                            maxLines: isPhone ? 1 : null,
+                            overflow: isPhone ? TextOverflow.ellipsis : null,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: context.accentSoft(context.tealAccent),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${transfers.length}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: context.tealAccent,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      l.cfTransfersSubtitle,
+                      style: TextStyle(fontSize: 12, color: context.textSubtle),
+                    ),
+                    const SizedBox(height: 12),
+                    ...transfers.map((t) => _buildRow(context, t as Map)),
                   ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  l.cfTransfersSubtitle,
-                  style: TextStyle(fontSize: 12, color: context.textSubtle),
-                ),
-                const SizedBox(height: 12),
-                ...transfers.map((t) => _buildRow(context, t as Map)),
-              ],
-            );
-          },
-        ),
-      ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

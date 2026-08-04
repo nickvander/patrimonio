@@ -38,149 +38,160 @@ class _FxWidgetState extends State<FxWidget> {
         (latestRate['target'] ?? latestRate['target_currency'] ?? 'MXN')
             .toString();
 
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  l.lwFxExchangeRate,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
                 Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    IconButton(
-                      onPressed: (_savingManual || _refreshing)
-                          ? null
-                          : () => _enterRateManually(base, target, rate),
-                      icon: _savingManual
-                          ? SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(
-                                  context.positive,
-                                ),
-                              ),
-                            )
-                          : const Icon(Icons.edit_outlined, size: 20),
-                      tooltip: l.lwFxEnterManually,
-                      color: context.textMuted,
-                    ),
-                    if (widget.onRefresh != null)
-                      IconButton(
-                        onPressed: (_refreshing || _savingManual)
-                            ? null
-                            : () async {
-                                setState(() => _refreshing = true);
-                                try {
-                                  await widget.onRefresh!();
-                                } finally {
-                                  if (mounted) {
-                                    setState(() => _refreshing = false);
-                                  }
-                                }
-                              },
-                        icon: _refreshing
-                            ? SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    context.positive,
-                                  ),
-                                ),
-                              )
-                            : const Icon(Icons.refresh, size: 20),
-                        tooltip: l.lwFxRefreshNow,
-                        color: context.textMuted,
+                    Text(
+                      l.lwFxExchangeRate,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                       ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: (_savingManual || _refreshing)
+                              ? null
+                              : () => _enterRateManually(base, target, rate),
+                          icon: _savingManual
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(
+                                      context.positive,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(Icons.edit_outlined, size: 20),
+                          tooltip: l.lwFxEnterManually,
+                          color: context.textMuted,
+                        ),
+                        if (widget.onRefresh != null)
+                          IconButton(
+                            onPressed: (_refreshing || _savingManual)
+                                ? null
+                                : () async {
+                                    setState(() => _refreshing = true);
+                                    try {
+                                      await widget.onRefresh!();
+                                    } finally {
+                                      if (mounted) {
+                                        setState(() => _refreshing = false);
+                                      }
+                                    }
+                                  },
+                            icon: _refreshing
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                        context.positive,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(Icons.refresh, size: 20),
+                            tooltip: l.lwFxRefreshNow,
+                            color: context.textMuted,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$base / $target',
+                            style: TextStyle(
+                              color: context.textMuted,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              rate.toStringAsFixed(4),
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: context.tealAccent,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                              maxLines: 1,
+                            ),
+                          ),
+                          if (latestRate['recorded_at'] != null) ...[
+                            const SizedBox(height: 12),
+                            _buildTimestampBlock(
+                              context,
+                              latestRate['recorded_at'],
+                            ),
+                          ],
+                          if (source.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              l.lwFxSource(source),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.textFaint,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    LayoutBuilder(
+                      builder: (ctx, c) {
+                        // Hide the decorative icon below ~340px so the rate column
+                        // doesn't fight a fixed 48px sibling on tiny phones.
+                        if (MediaQuery.sizeOf(ctx).width < 360) {
+                          return const SizedBox.shrink();
+                        }
+                        return Icon(
+                          Icons.currency_exchange,
+                          size: 48,
+                          color: context.tealAccent,
+                        );
+                      },
+                    ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$base / $target',
-                        style: TextStyle(
-                          color: context.textMuted,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          rate.toStringAsFixed(4),
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: context.tealAccent,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                          maxLines: 1,
-                        ),
-                      ),
-                      if (latestRate['recorded_at'] != null) ...[
-                        const SizedBox(height: 12),
-                        _buildTimestampBlock(
-                          context,
-                          latestRate['recorded_at'],
-                        ),
-                      ],
-                      if (source.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          l.lwFxSource(source),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: context.textFaint,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                LayoutBuilder(
-                  builder: (ctx, c) {
-                    // Hide the decorative icon below ~340px so the rate column
-                    // doesn't fight a fixed 48px sibling on tiny phones.
-                    if (MediaQuery.sizeOf(ctx).width < 360) {
-                      return const SizedBox.shrink();
-                    }
-                    return Icon(
-                      Icons.currency_exchange,
-                      size: 48,
-                      color: context.tealAccent,
-                    );
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

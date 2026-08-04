@@ -95,129 +95,139 @@ class SettingsPreferencesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.tune, size: 18, color: context.tealAccent),
-                const SizedBox(width: 8),
-                Text(
-                  l.dashPreferencesTitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                Row(
+                  children: [
+                    Icon(Icons.tune, size: 18, color: context.tealAccent),
+                    const SizedBox(width: 8),
+                    Text(
+                      l.dashPreferencesTitle,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.translate),
+                  title: Text(l.dashLanguageLabel),
+                  subtitle: Text(
+                    // Autonym of the ACTIVE locale (deliberately not localized).
+                    Localizations.localeOf(context).languageCode == 'es'
+                        ? 'Español (México)'
+                        : 'English',
+                  ),
+                  onTap: () => _pickLanguage(context),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  // Width decisions off the card's INNER constraint (house
+                  // convention), not the screen.
+                  child: LayoutBuilder(
+                    builder: (ctx, c) {
+                      final label = Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.brightness_6_outlined),
+                          const SizedBox(width: 16),
+                          Text(
+                            l.dashThemeMenu,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                        ],
+                      );
+                      // ValueListenableBuilder keeps the selection in step with
+                      // theme changes made elsewhere (the wide AppBar's
+                      // theme-cycle button writes the same notifier). Rendered as
+                      // an M3 Expressive connected button group (2px gaps, no
+                      // shared outline, selected segment morphs to a filled
+                      // fully-rounded pill) — the classic SegmentedButton's
+                      // outline+checkmark read as dated chrome, and equal-flex
+                      // segments always fit the card, no scroll guard needed.
+                      final picker = ValueListenableBuilder<ThemeMode>(
+                        valueListenable: themeModeNotifier,
+                        builder: (pickerCtx, mode, _) {
+                          // The group's look lives in the shared
+                          // ConnectedSegments widget (extracted from the
+                          // inline builder that used to be here); only the
+                          // persist logic stays local.
+                          return ConnectedSegments<ThemeMode>(
+                            segments: [
+                              ConnectedSegment(
+                                value: ThemeMode.system,
+                                icon: Icons.brightness_auto,
+                                label: l.dashThemeSystemShort,
+                              ),
+                              ConnectedSegment(
+                                value: ThemeMode.light,
+                                icon: Icons.light_mode_outlined,
+                                label: l.dashThemeLightShort,
+                              ),
+                              ConnectedSegment(
+                                value: ThemeMode.dark,
+                                icon: Icons.dark_mode_outlined,
+                                label: l.dashThemeDarkShort,
+                              ),
+                            ],
+                            selected: mode,
+                            onSelected: (value) {
+                              themeModeNotifier.value = value;
+                              // Same persist mapping as the AppBar theme
+                              // controls.
+                              Preferences.setThemeMode(switch (value) {
+                                ThemeMode.system => 'system',
+                                ThemeMode.light => 'light',
+                                ThemeMode.dark => 'dark',
+                              });
+                            },
+                          );
+                        },
+                      );
+                      if (c.maxWidth < 520) {
+                        // Narrow: the group gets its own full-width line under
+                        // the label.
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: label,
+                            ),
+                            const SizedBox(height: 12),
+                            picker,
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(child: label),
+                          const SizedBox(width: 16),
+                          SizedBox(width: 360, child: picker),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.translate),
-              title: Text(l.dashLanguageLabel),
-              subtitle: Text(
-                // Autonym of the ACTIVE locale (deliberately not localized).
-                Localizations.localeOf(context).languageCode == 'es'
-                    ? 'Español (México)'
-                    : 'English',
-              ),
-              onTap: () => _pickLanguage(context),
-            ),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              // Width decisions off the card's INNER constraint (house
-              // convention), not the screen.
-              child: LayoutBuilder(
-                builder: (ctx, c) {
-                  final label = Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.brightness_6_outlined),
-                      const SizedBox(width: 16),
-                      Text(
-                        l.dashThemeMenu,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ],
-                  );
-                  // ValueListenableBuilder keeps the selection in step with
-                  // theme changes made elsewhere (the wide AppBar's
-                  // theme-cycle button writes the same notifier). Rendered as
-                  // an M3 Expressive connected button group (2px gaps, no
-                  // shared outline, selected segment morphs to a filled
-                  // fully-rounded pill) — the classic SegmentedButton's
-                  // outline+checkmark read as dated chrome, and equal-flex
-                  // segments always fit the card, no scroll guard needed.
-                  final picker = ValueListenableBuilder<ThemeMode>(
-                    valueListenable: themeModeNotifier,
-                    builder: (pickerCtx, mode, _) {
-                      // The group's look lives in the shared
-                      // ConnectedSegments widget (extracted from the
-                      // inline builder that used to be here); only the
-                      // persist logic stays local.
-                      return ConnectedSegments<ThemeMode>(
-                        segments: [
-                          ConnectedSegment(
-                            value: ThemeMode.system,
-                            icon: Icons.brightness_auto,
-                            label: l.dashThemeSystemShort,
-                          ),
-                          ConnectedSegment(
-                            value: ThemeMode.light,
-                            icon: Icons.light_mode_outlined,
-                            label: l.dashThemeLightShort,
-                          ),
-                          ConnectedSegment(
-                            value: ThemeMode.dark,
-                            icon: Icons.dark_mode_outlined,
-                            label: l.dashThemeDarkShort,
-                          ),
-                        ],
-                        selected: mode,
-                        onSelected: (value) {
-                          themeModeNotifier.value = value;
-                          // Same persist mapping as the AppBar theme
-                          // controls.
-                          Preferences.setThemeMode(switch (value) {
-                            ThemeMode.system => 'system',
-                            ThemeMode.light => 'light',
-                            ThemeMode.dark => 'dark',
-                          });
-                        },
-                      );
-                    },
-                  );
-                  if (c.maxWidth < 520) {
-                    // Narrow: the group gets its own full-width line under
-                    // the label.
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Align(alignment: Alignment.centerLeft, child: label),
-                        const SizedBox(height: 12),
-                        picker,
-                      ],
-                    );
-                  }
-                  return Row(
-                    children: [
-                      Expanded(child: label),
-                      const SizedBox(width: 16),
-                      SizedBox(width: 360, child: picker),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -274,91 +284,103 @@ class SettingsAccountSecurityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.shield_outlined,
-                  size: 18,
-                  color: context.tealAccent,
+                Row(
+                  children: [
+                    Icon(
+                      Icons.shield_outlined,
+                      size: 18,
+                      color: context.tealAccent,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      l.dashAccountSecurityTitle,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  l.dashAccountSecurityTitle,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                const SizedBox(height: 8),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.shield_outlined),
+                  title: Text(l.dashSecurity),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SecurityScreen()),
                   ),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.visibility_off_outlined),
+                  title: Text(l.dashHiddenItems),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const HiddenItemsScreen(),
+                      ),
+                    );
+                    onHiddenItemsClosed();
+                  },
+                ),
+                // Rules. No reload callback on the way back on purpose: rule
+                // CRUD changes zero transactions, and the one path that does
+                // (the previewed retroactive apply) publishes a realtime
+                // TransactionsChanged the dashboard already listens for.
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.rule_folder_outlined),
+                  title: Text(l.ruleTitle),
+                  subtitle: Text(l.ruleSettingsSubtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const RulesScreen()),
+                  ),
+                ),
+                // Native builds configure the backend URL at first run; this row
+                // keeps that setting reachable afterwards. Web derives the URL
+                // from its own origin, so there's nothing to change there.
+                if (!kIsWeb)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.dns_outlined),
+                    title: Text(l.dashServerLabel),
+                    subtitle: Text(BackendConfig.baseUrl ?? ''),
+                    onTap: () => _confirmChangeServer(context),
+                  ),
+                const Divider(),
+                // Sign out — deliberately the final, low-prominence row, always
+                // behind a confirmation.
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.logout, color: scheme.error),
+                  title: Text(
+                    l.dashSignOut,
+                    style: TextStyle(color: scheme.error),
+                  ),
+                  onTap: () async {
+                    if (await confirmSignOutDialog(context)) onSignOut();
+                  },
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.shield_outlined),
-              title: Text(l.dashSecurity),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SecurityScreen())),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.visibility_off_outlined),
-              title: Text(l.dashHiddenItems),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const HiddenItemsScreen()),
-                );
-                onHiddenItemsClosed();
-              },
-            ),
-            // Rules. No reload callback on the way back on purpose: rule
-            // CRUD changes zero transactions, and the one path that does
-            // (the previewed retroactive apply) publishes a realtime
-            // TransactionsChanged the dashboard already listens for.
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.rule_folder_outlined),
-              title: Text(l.ruleTitle),
-              subtitle: Text(l.ruleSettingsSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const RulesScreen())),
-            ),
-            // Native builds configure the backend URL at first run; this row
-            // keeps that setting reachable afterwards. Web derives the URL
-            // from its own origin, so there's nothing to change there.
-            if (!kIsWeb)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.dns_outlined),
-                title: Text(l.dashServerLabel),
-                subtitle: Text(BackendConfig.baseUrl ?? ''),
-                onTap: () => _confirmChangeServer(context),
-              ),
-            const Divider(),
-            // Sign out — deliberately the final, low-prominence row, always
-            // behind a confirmation.
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.logout, color: scheme.error),
-              title: Text(l.dashSignOut, style: TextStyle(color: scheme.error)),
-              onTap: () async {
-                if (await confirmSignOutDialog(context)) onSignOut();
-              },
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

@@ -137,118 +137,132 @@ class _CashFlowSankeyCardState extends State<CashFlowSankeyCard> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        // Responsive off the card's OWN constraint (house rule), never
-        // MediaQuery: the card is narrower than the screen on every layout
-        // that pads or column-clamps the tab.
-        child: LayoutBuilder(
-          builder: (context, c) {
-            final isPhone = c.maxWidth < 420;
-            final data = buildCashFlowSankey(
-              trends: widget.trends,
-              selectedMonthIso: widget.selectedMonthIso,
-              aggregate: widget.periodLabel != null,
-              categoryData: _categoryData,
-              transactions: widget.transactions,
-              fxTransfers: widget.fxTransfers,
-              conversionFactor: widget.conversionFactor,
-              targetCurrency: widget.targetCurrency,
-              usdMxnRate: widget.usdMxnRate,
-              labels: _labels(l),
-              // Phone widths get fewer nodes, not smaller type: a 30-node
-              // column at 360px is an unreadable comb.
-              maxIncomeSources: isPhone ? 3 : 5,
-              maxCategories: isPhone ? 5 : 8,
-            );
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            // Responsive off the card's OWN constraint (house rule), never
+            // MediaQuery: the card is narrower than the screen on every layout
+            // that pads or column-clamps the tab.
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final isPhone = c.maxWidth < 420;
+                final data = buildCashFlowSankey(
+                  trends: widget.trends,
+                  selectedMonthIso: widget.selectedMonthIso,
+                  aggregate: widget.periodLabel != null,
+                  categoryData: _categoryData,
+                  transactions: widget.transactions,
+                  fxTransfers: widget.fxTransfers,
+                  conversionFactor: widget.conversionFactor,
+                  targetCurrency: widget.targetCurrency,
+                  usdMxnRate: widget.usdMxnRate,
+                  labels: _labels(l),
+                  // Phone widths get fewer nodes, not smaller type: a 30-node
+                  // column at 360px is an unreadable comb.
+                  maxIncomeSources: isPhone ? 3 : 5,
+                  maxCategories: isPhone ? 5 : 8,
+                );
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _header(context, l, isPhone),
-                const SizedBox(height: 10),
-                // The readout lives HERE — above the canvas, permanently
-                // clear of the finger.
-                _readoutBar(context, l, isPhone),
-                const SizedBox(height: 8),
-                if (_loading && _categoryData == null)
-                  // Never draw the river with the breakdown still in flight:
-                  // every outflow would land in "Uncategorized" for a frame
-                  // and then jump. A permanently failed fetch does fall
-                  // through to that honest single bucket.
-                  const SkeletonBox(height: 180)
-                else if (data.main.isEmpty && data.fx.isEmpty)
-                  _empty(context, l)
-                else ...[
-                  if (!data.main.isEmpty)
-                    _diagram(
-                      context: context,
-                      l: l,
-                      diagram: data.main,
-                      diagramId: 'main',
-                      width: c.maxWidth,
-                      isPhone: isPhone,
-                      semanticsLabel: (flows) => l.cfsSemantics(
-                        // gen-l10n orders these alphabetically → (flows, total)
-                        flows,
-                        widget.currencyFormat.format(data.main.total),
-                      ),
-                    ),
-                  if (!data.fx.isEmpty) ...[
-                    SizedBox(height: isPhone ? 14 : 18),
-                    Divider(height: 1, color: context.hairline),
-                    SizedBox(height: isPhone ? 12 : 16),
-                    Text(
-                      l.cfsFxTitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: context.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l.cfsFxCaption(data.fxTransferCount),
-                      style: TextStyle(fontSize: 11, color: context.textSubtle),
-                    ),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _header(context, l, isPhone),
+                    const SizedBox(height: 10),
+                    // The readout lives HERE — above the canvas, permanently
+                    // clear of the finger.
+                    _readoutBar(context, l, isPhone),
                     const SizedBox(height: 8),
-                    _diagram(
-                      context: context,
-                      l: l,
-                      diagram: data.fx,
-                      diagramId: 'fx',
-                      width: c.maxWidth,
-                      isPhone: isPhone,
-                      semanticsLabel: l.cfsFxSemantics,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      // The two legs are quoted with their OWN ISO codes and
-                      // never added together.
-                      l.cfsFxLegs(
-                        // gen-l10n orders these alphabetically → (from, to)
-                        _nativeLegs(data.fxSent),
-                        _nativeLegs(data.fxReceived),
-                      ),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: context.textMuted,
-                        fontFeatures: const [ui.FontFeature.tabularFigures()],
-                      ),
-                    ),
+                    if (_loading && _categoryData == null)
+                      // Never draw the river with the breakdown still in flight:
+                      // every outflow would land in "Uncategorized" for a frame
+                      // and then jump. A permanently failed fetch does fall
+                      // through to that honest single bucket.
+                      const SkeletonBox(height: 180)
+                    else if (data.main.isEmpty && data.fx.isEmpty)
+                      _empty(context, l)
+                    else ...[
+                      if (!data.main.isEmpty)
+                        _diagram(
+                          context: context,
+                          l: l,
+                          diagram: data.main,
+                          diagramId: 'main',
+                          width: c.maxWidth,
+                          isPhone: isPhone,
+                          semanticsLabel: (flows) => l.cfsSemantics(
+                            // gen-l10n orders these alphabetically → (flows, total)
+                            flows,
+                            widget.currencyFormat.format(data.main.total),
+                          ),
+                        ),
+                      if (!data.fx.isEmpty) ...[
+                        SizedBox(height: isPhone ? 14 : 18),
+                        Divider(height: 1, color: context.hairline),
+                        SizedBox(height: isPhone ? 12 : 16),
+                        Text(
+                          l.cfsFxTitle,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          l.cfsFxCaption(data.fxTransferCount),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textSubtle,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _diagram(
+                          context: context,
+                          l: l,
+                          diagram: data.fx,
+                          diagramId: 'fx',
+                          width: c.maxWidth,
+                          isPhone: isPhone,
+                          semanticsLabel: l.cfsFxSemantics,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          // The two legs are quoted with their OWN ISO codes and
+                          // never added together.
+                          l.cfsFxLegs(
+                            // gen-l10n orders these alphabetically → (from, to)
+                            _nativeLegs(data.fxSent),
+                            _nativeLegs(data.fxReceived),
+                          ),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: context.textMuted,
+                            fontFeatures: const [
+                              ui.FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ],
-                ],
-              ],
-            );
-          },
-        ),
-      ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -264,8 +278,8 @@ class _CashFlowSankeyCardState extends State<CashFlowSankeyCard> {
     fxConversion: l.cfsFxNode,
   );
 
-  /// "US$3,000.00 + MX$1,200.00" — one entry per currency, each formatted with
-  /// its own ISO code. Deliberately not a sum.
+  /// "USD 3,000.00 + MXN 1,200.00" — one entry per currency, each formatted
+  /// with its own ISO code. Deliberately not a sum.
   String _nativeLegs(Map<String, double> byCurrency) {
     final entries = byCurrency.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));

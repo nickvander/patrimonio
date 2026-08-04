@@ -58,7 +58,6 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
     // Stay invisible until loaded; the dashboard skeleton covers boot.
     if (_loading || _data == null) return const SizedBox.shrink();
     final l = AppLocalizations.of(context);
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     final cash = (_data!['liquid_cash_usd'] as num?)?.toDouble() ?? 0.0;
     final spend = (_data!['monthly_spend_usd'] as num?)?.toDouble() ?? 0.0;
     final runway = (_data!['months_covered'] as num?)?.toDouble() ?? 0.0;
@@ -72,78 +71,91 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
         ? (context.info, l.efStatusOnTrack)
         : (context.warning, l.efStatusBuilding);
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.shield_outlined, color: accent, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l.efTitle,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: context.textPrimary,
+                Row(
+                  children: [
+                    Icon(Icons.shield_outlined, color: accent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l.efTitle,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                      ),
                     ),
-                  ),
+                    if (hasSpend) _statusPill(statusLabel, accent),
+                  ],
                 ),
-                if (hasSpend) _statusPill(statusLabel, accent),
+                const SizedBox(height: 16),
+                if (!hasSpend)
+                  _noSpendBody(l, cash)
+                else ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        runway.toStringAsFixed(1),
+                        style: brandDisplayStyle(fontSize: 34, color: accent),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        l.efMonthsUnit,
+                        style: TextStyle(
+                          color: context.textMuted,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _gauge(runway, accent),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        l.efCashLabel(_money(cash)),
+                        style: TextStyle(
+                          color: context.textSubtle,
+                          fontSize: 12,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        l.efSpendLabel(_money(spend)),
+                        style: TextStyle(
+                          color: context.textFaint,
+                          fontSize: 12,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
-            const SizedBox(height: 16),
-            if (!hasSpend)
-              _noSpendBody(l, cash)
-            else ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    runway.toStringAsFixed(1),
-                    style: brandDisplayStyle(fontSize: 34, color: accent),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    l.efMonthsUnit,
-                    style: TextStyle(color: context.textMuted, fontSize: 13),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              _gauge(runway, accent),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    l.efCashLabel(_money(cash)),
-                    style: TextStyle(
-                      color: context.textSubtle,
-                      fontSize: 12,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  Text(
-                    l.efSpendLabel(_money(spend)),
-                    style: TextStyle(
-                      color: context.textFaint,
-                      fontSize: 12,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

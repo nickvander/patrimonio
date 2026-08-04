@@ -275,111 +275,120 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         accounts.length >= _longListThreshold ||
         _hideZero ||
         _search.isNotEmpty;
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l.pfAccountsHeader,
-              style: TextStyle(
-                fontSize: 11,
-                color: context.textSubtle,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (showControls) ...[
-              _buildFilterControls(context, l),
-              const SizedBox(height: 16),
-            ],
-            if (visibleAccounts.isEmpty)
-              _buildNoMatches(context, l)
-            else
-              ListView(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  if (cashAccounts.isNotEmpty)
-                    _buildAccountGroup(
-                      context,
-                      l.pfGroupCash,
-                      cashAccounts,
-                      Icons.wallet_rounded,
-                      false,
-                      context.info,
-                    ),
-                  if (investmentAccounts.isNotEmpty)
-                    _buildAccountGroup(
-                      context,
-                      l.pfGroupInvestments,
-                      investmentAccounts,
-                      Icons.show_chart_rounded,
-                      false,
-                      context.tealAccent,
-                    ),
-                  if (cryptoAccounts.isNotEmpty)
-                    _buildAccountGroup(
-                      context,
-                      l.pfGroupCrypto,
-                      cryptoAccounts,
-                      Icons.currency_bitcoin_rounded,
-                      false,
-                      context.purpleAccent,
-                    ),
-                  if (creditAccounts.isNotEmpty)
-                    _buildAccountGroup(
-                      context,
-                      l.pfGroupCreditCards,
-                      creditAccounts,
-                      Icons.credit_card_rounded,
-                      true,
-                      context.negative,
-                    ),
-                  if (loanAccounts.isNotEmpty)
-                    _buildAccountGroup(
-                      context,
-                      l.pfGroupLoans,
-                      loanAccounts,
-                      Icons.home_rounded,
-                      true,
-                      context.yellowAccent,
-                    ),
-                  if (realAssetAccounts.isNotEmpty)
-                    _buildAccountGroup(
-                      context,
-                      l.pfGroupRealAssets,
-                      realAssetAccounts,
-                      Icons.maps_home_work_rounded,
-                      false,
-                      context.yellowAccent,
-                    ),
-                  if (otherAccounts.isNotEmpty)
-                    _buildAccountGroup(
-                      context,
-                      l.pfGroupOther,
-                      otherAccounts,
-                      Icons.category_outlined,
-                      false,
-                      context.neutralAccent,
-                      // Honest, generic note that something fell through the
-                      // classifier — never the raw type token (that's debug
-                      // data; it goes to debugPrint above, not the UI).
-                      subtitle: unknownTypes.isEmpty
-                          ? null
-                          : l.pfUnrecognizedTypes(unknownTypes.length),
-                    ),
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.pfAccountsHeader,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.textSubtle,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (showControls) ...[
+                  _buildFilterControls(context, l),
+                  const SizedBox(height: 16),
                 ],
-              ),
-          ],
-        ),
-      ),
+                if (visibleAccounts.isEmpty)
+                  _buildNoMatches(context, l)
+                else
+                  ListView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      if (cashAccounts.isNotEmpty)
+                        _buildAccountGroup(
+                          context,
+                          l.pfGroupCash,
+                          cashAccounts,
+                          Icons.wallet_rounded,
+                          false,
+                          context.info,
+                        ),
+                      if (investmentAccounts.isNotEmpty)
+                        _buildAccountGroup(
+                          context,
+                          l.pfGroupInvestments,
+                          investmentAccounts,
+                          Icons.show_chart_rounded,
+                          false,
+                          context.tealAccent,
+                        ),
+                      if (cryptoAccounts.isNotEmpty)
+                        _buildAccountGroup(
+                          context,
+                          l.pfGroupCrypto,
+                          cryptoAccounts,
+                          Icons.currency_bitcoin_rounded,
+                          false,
+                          context.purpleAccent,
+                        ),
+                      if (creditAccounts.isNotEmpty)
+                        _buildAccountGroup(
+                          context,
+                          l.pfGroupCreditCards,
+                          creditAccounts,
+                          Icons.credit_card_rounded,
+                          true,
+                          context.negative,
+                        ),
+                      if (loanAccounts.isNotEmpty)
+                        _buildAccountGroup(
+                          context,
+                          l.pfGroupLoans,
+                          loanAccounts,
+                          Icons.home_rounded,
+                          true,
+                          context.yellowAccent,
+                        ),
+                      if (realAssetAccounts.isNotEmpty)
+                        _buildAccountGroup(
+                          context,
+                          l.pfGroupRealAssets,
+                          realAssetAccounts,
+                          Icons.maps_home_work_rounded,
+                          false,
+                          context.yellowAccent,
+                        ),
+                      if (otherAccounts.isNotEmpty)
+                        _buildAccountGroup(
+                          context,
+                          l.pfGroupOther,
+                          otherAccounts,
+                          Icons.category_outlined,
+                          false,
+                          context.neutralAccent,
+                          // Honest, generic note that something fell through the
+                          // classifier — never the raw type token (that's debug
+                          // data; it goes to debugPrint above, not the UI).
+                          subtitle: unknownTypes.isEmpty
+                              ? null
+                              : l.pfUnrecognizedTypes(unknownTypes.length),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

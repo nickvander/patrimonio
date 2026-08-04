@@ -375,22 +375,25 @@ class _RebalancingCardState extends State<RebalancingCard> {
 
   // ---------------------------------------------------------------------
   // Chrome shared by every state — identical to the sibling cards
-  // (Card elevation 4, radius 20, 16/24 padding at the 720px breakpoint,
+  // (Card elevation 4, radius 20, 16/24 padding at the 720px INNER-width
+  // breakpoint,
   // MergeSemantics+header title row like the dividend card).
   // ---------------------------------------------------------------------
 
-  double _pad(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
-
   Widget _card(BuildContext context, List<Widget> children) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: EdgeInsets.all(_pad(context)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: children,
+    // Padding off the card's OWN LayoutBuilder constraint, never the window
+    // (skill §4/§5): the card is narrower than the screen on every layout
+    // that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) => Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: EdgeInsets.all(outer.maxWidth < 720 ? 16.0 : 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          ),
         ),
       ),
     );

@@ -109,7 +109,6 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final failed = _failedCount;
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     final successCount = _statusCount({'success', 'synced'});
     final syncingCount = _statusCount({'syncing'});
@@ -122,128 +121,141 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
         ? _syncData.where((raw) => raw is Map && _isProblem(raw)).toList()
         : _syncData;
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    // Card padding off the card's OWN LayoutBuilder constraint, never
+    // the window (skill §4/§5): the card is narrower than the screen on
+    // every layout that pads or column-clamps its tab.
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    l.lwSyncInstitutionsHeader,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: context.textSubtle,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-                if (failed > 0 &&
-                    (widget.onRetryBatch != null ||
-                        widget.onRetrySingle != null ||
-                        widget.onRetrySync != null))
-                  TextButton.icon(
-                    onPressed: () async {
-                      final ids = _failedIds();
-                      if (ids.isEmpty) return; // nothing retryable
-                      // Preference: batched > per-institution loop >
-                      // global fallback. The batched path is one HTTP
-                      // round-trip server-side via ANY($1).
-                      if (widget.onRetryBatch != null) {
-                        try {
-                          await widget.onRetryBatch!(ids);
-                        } catch (_) {
-                          /* swallowed; UI re-renders */
-                        }
-                      } else if (widget.onRetrySingle != null) {
-                        for (final id in ids) {
-                          try {
-                            await widget.onRetrySingle!(id);
-                          } catch (_) {
-                            /* continue on individual errors */
-                          }
-                        }
-                      } else {
-                        widget.onRetrySync?.call();
-                      }
-                    },
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: Text(l.lwSyncRetryFailed(failed)),
-                    style: TextButton.styleFrom(
-                      foregroundColor: context.warning,
-                    ),
-                  ),
-              ],
-            ),
-            if (_syncData.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildSummaryRow(
-                context,
-                successCount: successCount,
-                syncingCount: syncingCount,
-                errorCount: errorCount,
-                reconnectCount: reconnectCount,
-                staleCount: staleCount,
-                problemTotal: problemTotal,
-              ),
-            ],
-            const SizedBox(height: 24),
-            if (_syncData.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
+                Row(
                   children: [
-                    Icon(
-                      Icons.account_balance_outlined,
-                      size: 32,
-                      color: context.textFaint,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      l.lwSyncNoInstitutions,
-                      style: TextStyle(
-                        color: context.textMuted,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Text(
+                        l.lwSyncInstitutionsHeader,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textSubtle,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l.lwSyncNoInstitutionsHint,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: context.textMuted, fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    Icon(
-                      Icons.arrow_downward,
-                      size: 18,
-                      color: context.textFaint,
-                    ),
+                    if (failed > 0 &&
+                        (widget.onRetryBatch != null ||
+                            widget.onRetrySingle != null ||
+                            widget.onRetrySync != null))
+                      TextButton.icon(
+                        onPressed: () async {
+                          final ids = _failedIds();
+                          if (ids.isEmpty) return; // nothing retryable
+                          // Preference: batched > per-institution loop >
+                          // global fallback. The batched path is one HTTP
+                          // round-trip server-side via ANY($1).
+                          if (widget.onRetryBatch != null) {
+                            try {
+                              await widget.onRetryBatch!(ids);
+                            } catch (_) {
+                              /* swallowed; UI re-renders */
+                            }
+                          } else if (widget.onRetrySingle != null) {
+                            for (final id in ids) {
+                              try {
+                                await widget.onRetrySingle!(id);
+                              } catch (_) {
+                                /* continue on individual errors */
+                              }
+                            }
+                          } else {
+                            widget.onRetrySync?.call();
+                          }
+                        },
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: Text(l.lwSyncRetryFailed(failed)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: context.warning,
+                        ),
+                      ),
                   ],
                 ),
-              )
-            else if (visible.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Center(
-                  child: Text(
-                    l.lwSyncNoProblems,
-                    style: TextStyle(
-                      color: context.textMuted,
-                      fontWeight: FontWeight.w600,
-                    ),
+                if (_syncData.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _buildSummaryRow(
+                    context,
+                    successCount: successCount,
+                    syncingCount: syncingCount,
+                    errorCount: errorCount,
+                    reconnectCount: reconnectCount,
+                    staleCount: staleCount,
+                    problemTotal: problemTotal,
                   ),
-                ),
-              )
-            else
-              ...visible.map((inst) => _buildSyncRow(context, inst)),
-          ],
-        ),
-      ),
+                ],
+                const SizedBox(height: 24),
+                if (_syncData.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.account_balance_outlined,
+                          size: 32,
+                          color: context.textFaint,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          l.lwSyncNoInstitutions,
+                          style: TextStyle(
+                            color: context.textMuted,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          l.lwSyncNoInstitutionsHint,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: context.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Icon(
+                          Icons.arrow_downward,
+                          size: 18,
+                          color: context.textFaint,
+                        ),
+                      ],
+                    ),
+                  )
+                else if (visible.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Text(
+                        l.lwSyncNoProblems,
+                        style: TextStyle(
+                          color: context.textMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  ...visible.map((inst) => _buildSyncRow(context, inst)),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
