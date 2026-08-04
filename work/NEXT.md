@@ -53,6 +53,45 @@ quarterly rather than ad hoc.
 
 ## Open items needing only a sitting
 
+### ⚠ OWNER-REPORTED 2026-08-04 — cash-flow / Sankey on real prod data (START HERE)
+
+From a phone screenshot of the Cash flow tab (period showing "Net this period
+≈ MXN 32,303", "Every flow shown in USD"). Three distinct issues; **investigate
+before fixing — two of them may not be Sankey bugs at all.**
+
+1. **Income shows ONE source at 100% ($2,599.35, "4206 Payroll Google LLC ACH
+   Credit") but the owner receives part of their paycheck in other accounts.**
+   This is the important one, because if it's real it understates the whole
+   cash-flow tab, not just the diagram. The attribution's "Other income"
+   residual is *absent*, which means attributed == the authoritative income
+   from `/dashboard/trends` — i.e. **the period's income total itself is
+   $2,599.35**, and the other deposits aren't in it. Check, in order:
+   whether those deposits are classified `TRANSFER*` and therefore removed by
+   `CASHFLOW_ROW_ANTI_JOINS_SQL` / `NON_CASHFLOW_CATEGORIES_SQL`; whether the
+   receiving accounts are excluded from cash flow (type/archived); whether MXN
+   deposits are being dropped rather than converted. Compare
+   `/api/dashboard/trends` income against a raw sum of deposit rows for the
+   same window before touching any frontend code.
+2. **The source name carries a bank code: "4206 Payroll Google LLC ACH
+   Credit".** NOT a Sankey defect — `cash_flow_sankey.dart:359` uses the house
+   `displayLabel` ladder, same as everywhere else. The ladder fell through to
+   the raw description because Plaid enrichment supplied no counterparty for
+   that row. So the fix belongs upstream (enrichment / a normalization step
+   for income-source grouping), and the same ugly label is presumably showing
+   in the transactions list too — check there first. Related risk: if the
+   other paycheck deposits carry *different* raw descriptors, they'd group as
+   separate sources even once issue 1 is fixed, so grouping may need to
+   normalize (strip a leading numeric code) rather than key on the raw label.
+3. **"Rent & utilities $79.76" — the owner notes rent is also a detected
+   recurring payment.** AMBIGUOUS, ask before building: it could mean (a) the
+   figure is wrong/incomplete — $79.76 is implausible for rent, so the actual
+   rent payment may be missing from the period entirely, which would make this
+   the same root cause as issue 1; or (b) a design request — that committed /
+   recurring spending should be visually distinct from discretionary in the
+   diagram, since the app already detects it. Do not guess which; (a) is a bug
+   and (b) is a feature.
+
+
 > Pruned 2026-08-04 after the closeout batch. Everything the previous list
 > held as actionable is now done — see CURRENT.md's 2026-08-03/04 entries.
 > What remains here is genuinely small or genuinely blocked.
