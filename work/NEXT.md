@@ -53,48 +53,50 @@ quarterly rather than ad hoc.
 
 ## Open items needing only a sitting
 
-### ⚠ OWNER-REPORTED 2026-08-04 — cash-flow / Sankey on real prod data (START HERE)
+### Owner-reported 2026-08-04 — cash-flow / Sankey, INVESTIGATED against prod
 
-From a phone screenshot of the Cash flow tab (period showing "Net this period
-≈ MXN 32,303", "Every flow shown in USD"). Three distinct issues; **investigate
-before fixing — two of them may not be Sankey bugs at all.**
+A phone screenshot raised three concerns. Checked read-only against the prod
+DB the same day; **two of the three are the app behaving correctly**, and the
+real finding is a different one. Recorded so nobody "fixes" the right
+behaviour.
 
-1. **Income shows ONE source at 100% ($2,599.35, "4206 Payroll Google LLC ACH
-   Credit") but the owner receives part of their paycheck in other accounts.**
-   This is the important one, because if it's real it understates the whole
-   cash-flow tab, not just the diagram. The attribution's "Other income"
-   residual is *absent*, which means attributed == the authoritative income
-   from `/dashboard/trends` — i.e. **the period's income total itself is
-   $2,599.35**, and the other deposits aren't in it. Check, in order:
-   whether those deposits are classified `TRANSFER*` and therefore removed by
-   `CASHFLOW_ROW_ANTI_JOINS_SQL` / `NON_CASHFLOW_CATEGORIES_SQL`; whether the
-   receiving accounts are excluded from cash flow (type/archived); whether MXN
-   deposits are being dropped rather than converted. Compare
-   `/api/dashboard/trends` income against a raw sum of deposit rows for the
-   same window before touching any frontend code.
-2. **The source name carries a bank code: "4206 Payroll Google LLC ACH
-   Credit".** NOT a Sankey defect — `cash_flow_sankey.dart:359` uses the house
-   `displayLabel` ladder, same as everywhere else. The ladder fell through to
-   the raw description because Plaid enrichment supplied no counterparty for
-   that row. So the fix belongs upstream (enrichment / a normalization step
-   for income-source grouping), and the same ugly label is presumably showing
-   in the transactions list too — check there first. Related risk: if the
-   other paycheck deposits carry *different* raw descriptors, they'd group as
-   separate sources even once issue 1 is fixed, so grouping may need to
-   normalize (strip a leading numeric code) rather than key on the raw label.
-3. **"Rent & utilities $79.76" — the owner notes rent is also a detected
-   recurring payment.** AMBIGUOUS, ask before building: it could mean (a) the
-   figure is wrong/incomplete — $79.76 is implausible for rent, so the actual
-   rent payment may be missing from the period entirely, which would make this
-   the same root cause as issue 1; or (b) a design request — that committed /
-   recurring spending should be visually distinct from discretionary in the
-   diagram, since the app already detects it. Do not guess which; (a) is a bug
-   and (b) is a feature.
-
-
-> Pruned 2026-08-04 after the closeout batch. Everything the previous list
-> held as actionable is now done — see CURRENT.md's 2026-08-03/04 entries.
-> What remains here is genuinely small or genuinely blocked.
+1. **"Income shows only one source, but I get part of my paycheck in other
+   accounts" — NOT a defect.** The current month has exactly two INCOME rows,
+   both the same payroll descriptor into the same account, which the diagram
+   correctly groups into one source. Every other inflow that month is
+   `TRANSFER_IN`: vault moves ("From checking balance" into Cards / Emergency
+   / Rent sub-accounts), a brokerage transfer, and one small Zelle receipt.
+   Those are the SAME money moving between the owner's own accounts —
+   counting them as income would double-count the paycheck. The exclusion via
+   `NON_CASHFLOW_CATEGORIES_SQL` is right.
+   *Two small judgement calls a future agent may revisit with the owner:* an
+   inbound Zelle from another person is arguably income, not a transfer; and
+   a brokerage-to-checking move is a transfer only if it's the owner's own
+   account (it is here).
+2. **The "4206 …" bank code in the source name — real but NOT the Sankey's
+   doing.** `cash_flow_sankey.dart:359` uses the house `displayLabel` ladder;
+   Plaid supplied no counterparty for that payroll row, so the ladder fell
+   through to the raw description. The same label shows anywhere that row is
+   listed. Fix belongs upstream (enrichment, or a normalization that strips a
+   leading `*NNNN` code before grouping) — not in the diagram.
+3. **THE REAL FINDING — "Left over" is misleading for a vault user.** The
+   diagram splits income into spending and "Left over", but internal
+   transfers are excluded from cash flow, so money the owner moved into
+   savings vaults and card payments lands in "Left over" as if it were
+   undirected surplus. In the observed month, transfers out were roughly
+   three times the diagram's leftover figure. The FX node already proves the
+   pattern works; **a "Moved to savings / cards" node fed from the excluded
+   `TRANSFER_OUT` rows would make the picture honest** without touching the
+   income maths. Design note: it must stay visually distinct from spending —
+   moving money to yourself is not spending.
+4. **"Rent is listed even though it's a detected recurring payment" — needs
+   the owner's read.** The `RENT_AND_UTILITIES` figure that month is a single
+   small charge, i.e. a utility, not rent; the actual (MXN) rent is absent
+   because **that month has no MXN transactions at all** — the Mexican
+   statements hadn't been imported yet. So the diagram isn't wrong, it's
+   incomplete-by-input. The separate reading — that committed/recurring
+   spending should be visually distinct from discretionary — is a real design
+   idea and is worth asking about, but it is a feature, not a fix.
 
 - **Four bare `720` literals in `tax_planning_screen.dart`** (≈:485, :1243,
   :2183, :2989) mean the card-density rule but were never named consts, so
