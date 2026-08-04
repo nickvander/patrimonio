@@ -265,7 +265,7 @@ fakes.
   date replaces the caption) and `net_worth_card.dart` (hero number + label, or the
   compact overline on phones). A host that sets `suppressTooltipOnTouch` **must**
   render `onScrub` somewhere clear of the hand, must clear its reading whenever the
-  plotted series changes (range/benchmark/lens switch), and must expose it to screen
+  plotted series changes (range/benchmark/ignore-FX switch), and must expose it to screen
   readers (`lwChartScrubReading` + `liveRegion`) — it replaces a tooltip they never
   saw. Keep the host's scrub state in a `ValueNotifier` + `ValueListenableBuilder`
   around the header only: a scrub fires per pointer move, and a `setState` would

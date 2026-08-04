@@ -15,7 +15,6 @@ import '../utils/currency.dart';
 import '../utils/net_worth_delta.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
-import 'connected_segments.dart';
 
 class NetWorthCard extends StatefulWidget {
   final double netWorth;
@@ -68,8 +67,8 @@ class NetWorthCard extends StatefulWidget {
 
 /// One frame of a touch scrub on this card's chart, already formatted: the
 /// scrubbed [date] and the plotted value at that point (in whatever currency
-/// the active lens plots — the chart formats it, the header only displays
-/// it). A record, so equality is structural.
+/// the plotted series is denominated in — the chart formats it, the header
+/// only displays it). A record, so equality is structural.
 typedef _ScrubReading = ({DateTime date, String value});
 
 class _NetWorthCardState extends State<NetWorthCard> {
@@ -88,16 +87,20 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// the app (the dashboard call site passes nothing).
   late final ApiService _api = widget.apiService ?? ApiService();
 
-  /// Currency lens for the chart: 'USD' / 'MXN' / 'CONST' (FX held constant
-  /// at the window-start rate). Defaults to the reporting currency, where the
-  /// existing chart path (institution bands and all) renders unchanged; a
-  /// non-default lens swaps in the attribution endpoint's lens series. The
-  /// lens deliberately affects only the CHART — the hero/delta/movers stay in
-  /// the reporting currency the rest of the dashboard uses.
-  late String _lens = _defaultLens;
+  /// "Ignore FX moves": when true the chart plots the attribution endpoint's
+  /// constant-FX series (every balance revalued at the window-start rate)
+  /// instead of the live-FX history. OFF by default, where the existing chart
+  /// path (institution bands and all) renders unchanged.
+  ///
+  /// This is deliberately a BOOLEAN, not a currency picker. Which currency the
+  /// card reports in is the global reporting-currency switcher's job (app
+  /// bar); a second USD/MXN control here duplicated it and could be set to
+  /// contradict the hero number above the chart. Only the constant-FX read is
+  /// something the global switcher can't express, so only it survives.
+  bool _ignoreFx = false;
 
   /// `/dashboard/net-worth-attribution` response for the current window
-  /// (`flows/market/fx/residual` totals + the lens series), or null while
+  /// (`flows/market/fx/residual` totals + the window series), or null while
   /// loading / when there's no history to attribute.
   Map<String, dynamic>? _attribution;
   bool _attributionError = false;
@@ -107,8 +110,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// response can't clobber a newer window's data.
   String? _attributionKey;
 
-  String get _defaultLens =>
-      widget.reportingCurrency.toUpperCase() == 'MXN' ? 'MXN' : 'USD';
+  /// The loaded window series, or null when there's nothing plottable. The
+  /// toggle only exists when this does — a control that can't change the
+  /// chart is worse than no control.
+  List<dynamic>? get _constantFxSeries {
+    final series = _attribution?['series'] as List<dynamic>?;
+    if (series == null || series.isEmpty) return null;
+    return series;
+  }
 
   /// The live touch-scrub reading, or null when no finger is on the chart.
   ///
@@ -195,6 +204,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
       setState(() {
         _attribution = null;
         _attributionError = true;
+        // No series left to plot, so the toggle disappears — don't leave it
+        // latched ON with the chart silently back on live FX.
+        _ignoreFx = false;
       });
     }
   }
@@ -312,12 +324,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 final institutions = _detailed
                     ? _topInstitutions(context, filtered, max: 4)
                     : const <MapEntry<String, Color>>[];
-                // Non-default lens: swap the plot for the attribution endpoint's
-                // lens series (single line, day-offset x). Falls back to the
-                // default chart while the series hasn't loaded (or errored).
-                final lensSeries = _lens == _defaultLens
-                    ? null
-                    : _attribution?['series'] as List<dynamic>?;
+                // "Ignore FX moves" ON: swap the plot for the attribution
+                // endpoint's constant-FX series (single line, day-offset x).
+                // OFF — and while the series hasn't loaded (or errored) — the
+                // default chart path renders exactly as it always has.
+                final fxSeries = _constantFxSeries;
+                final constantFxPlot = _ignoreFx ? fxSeries : null;
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,8 +343,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
                       // card/scroll layer — noticeably less raster work on
                       // Android while scrubbing.
                       child: RepaintBoundary(
-                        child: lensSeries != null && lensSeries.isNotEmpty
-                            ? _renderLensChart(lensSeries, constraints.maxWidth)
+                        child: constantFxPlot != null
+                            ? _renderConstantFxChart(
+                                constantFxPlot,
+                                constraints.maxWidth,
+                              )
                             : _buildChart(
                                 filtered,
                                 institutions,
@@ -340,9 +355,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
                               ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _buildLensToggle(),
-                    if (_lens == 'CONST') _buildConstantFxCaption(),
+                    if (fxSeries != null) ...[
+                      const SizedBox(height: 12),
+                      _buildIgnoreFxToggle(),
+                      if (_ignoreFx) _buildConstantFxCaption(),
+                    ],
                     _buildAttributionSection(),
                     // Phone layout: the range selector lives inside the card,
                     // right under the plot it controls (thumb-reachable).
@@ -360,41 +377,36 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
   }
 
-  /// Currency-lens toggle: USD / MXN / FX-held-constant. House connected
-  /// button group (ConnectedSegments) — never a forked segmented control.
-  /// "USD"/"MXN" are ISO codes rendered verbatim (same as the hero chips),
-  /// so only the constant-FX segment is localized.
-  Widget _buildLensToggle() {
+  /// The card's one chart control: "Ignore FX moves" — plot the same history
+  /// with every balance held at the window-start rate.
+  ///
+  /// A single FilterChip, not a segmented control: this is a boolean, and a
+  /// two-state control drawn as a segmented group invites a third segment.
+  /// The label states the EFFECT, not the mechanism ("constant FX" named an
+  /// implementation nobody outside this file uses).
+  Widget _buildIgnoreFxToggle() {
     final l = AppLocalizations.of(context);
     return Align(
       alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        // Equal-flex segments go full-bleed by default; cap them so the
-        // toggle doesn't stretch into a banner on a 1440px card.
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: ConnectedSegments<String>(
-          segments: [
-            const ConnectedSegment(value: 'USD', label: 'USD'),
-            const ConnectedSegment(value: 'MXN', label: 'MXN'),
-            ConnectedSegment(value: 'CONST', label: l.nwLensConstantFx),
-          ],
-          selected: _lens,
-          // Fires on re-taps too — short-circuit no-ops.
-          onSelected: (v) {
-            if (v == _lens) return;
-            // A different lens replots in a different currency — drop any
-            // scrub reading with it.
-            _scrub.value = null;
-            setState(() => _lens = v);
-          },
-        ),
+      child: FilterChip(
+        label: Text(l.nwIgnoreFxMoves),
+        selected: _ignoreFx,
+        onSelected: (v) {
+          // The two states plot different series (and, when reporting in MXN,
+          // different currencies) — drop any scrub reading with the series it
+          // was read off.
+          _scrub.value = null;
+          setState(() => _ignoreFx = v);
+        },
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
 
   /// "MXN revalued at the window-start rate (N MXN/USD)" — the honesty
-  /// caption for the constant-FX lens, so the flat peso never reads as a
-  /// live conversion. Hidden until the attribution response supplies r0.
+  /// caption shown while the FX-moves toggle is ON, so the flat peso never
+  /// reads as a live conversion. Hidden until the attribution response
+  /// supplies r0.
   Widget _buildConstantFxCaption() {
     final rate = (_attribution?['fx_rate_open'] as num?)?.toDouble();
     if (rate == null) return const SizedBox.shrink();
@@ -519,22 +531,25 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
   }
 
-  /// Single-line chart for a non-default currency lens, fed by the
-  /// attribution endpoint's window series. Day-offset x (a data gap occupies
+  /// Single-line chart for "ignore FX moves", fed by the attribution
+  /// endpoint's `constant_fx_usd` series. Day-offset x (a data gap occupies
   /// its real width — never index-as-x) and the shared `standardLineTouch`
   /// hover; deliberately NOT another inline LineTouchData fork.
-  Widget _renderLensChart(List<dynamic> series, double chartWidth) {
-    final valueKey = _lens == 'MXN'
-        ? 'mxn'
-        : (_lens == 'CONST' ? 'constant_fx_usd' : 'usd');
-    final lensCurrency = _lens == 'MXN' ? 'MXN' : 'USD';
-    final lensFormat = moneyFormat(lensCurrency);
+  ///
+  /// **Every figure here is USD, whatever the reporting currency is.** The
+  /// endpoint has no constant-FX series in MXN, so rather than hide the one
+  /// genuinely unique read from the users most exposed to peso swings, the
+  /// plot labels itself: axis ticks, tooltip, scrub readout and the semantics
+  /// summary all carry the ISO code ("USD 1.9K" / "USD 1,970.00") instead of
+  /// the reporting-currency format used everywhere else on the card. A bare
+  /// "$" is the peso glyph too, so an unlabelled axis would read as pesos.
+  Widget _renderConstantFxChart(List<dynamic> series, double chartWidth) {
     final points = dedupeDailyCloses([
       for (final p in series)
         if (p is Map && DateTime.tryParse(p['date']?.toString() ?? '') != null)
           (
             date: DateTime.parse(p['date'].toString()),
-            close: ((p[valueKey] ?? 0) as num).toDouble(),
+            close: ((p['constant_fx_usd'] ?? 0) as num).toDouble(),
           ),
     ]);
     if (points.isEmpty) return const SizedBox.shrink();
@@ -558,6 +573,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
       for (final x in _bottomTickOffsets(spanDays, tickInterval, chartWidth))
         points.first.date.add(Duration(days: x.round())),
     ];
+
     final labelFormat = nonRepeatingDateFormat(tickDates, spanDays: spanDays);
     DateTime dateFor(double x) =>
         points.first.date.add(Duration(days: x.toInt()));
@@ -569,9 +585,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
       onScrub: _scrubHandler(
         (spot) => (
           date: dateFor(spot.x),
-          // The lens plots its own currency (MXN / constant-FX USD), so the
-          // header shows the lens-formatted figure, matching the axis.
-          value: lensFormat.displayMoney(spot.y),
+          // Code-prefixed, like the axis: this series is USD even when the
+          // card reports in MXN.
+          value: displayCurrencyWithCode(spot.y, 'USD'),
         ),
       ),
       data: LineChartData(
@@ -621,11 +637,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   return const SizedBox.shrink();
                 }
                 return Text(
-                  compactMoney(value, lensCurrency),
+                  _constantFxTick(value),
                   style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },
-              reservedSize: compactMoneyAxisWidth(minY, maxY, lensCurrency),
+              reservedSize: _constantFxAxisWidth(minY, maxY),
             ),
           ),
         ),
@@ -651,7 +667,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             return touchedSpots.map((spot) {
               return LineTooltipItem(
                 '${DateFormat('MMM d, y').format(dateFor(spot.x))}\n'
-                '${lensFormat.displayMoney(spot.y)}',
+                '${displayCurrencyWithCode(spot.y, 'USD')}',
                 TextStyle(
                   color: context.tooltipOnSurface,
                   fontWeight: FontWeight.bold,
@@ -663,15 +679,34 @@ class _NetWorthCardState extends State<NetWorthCard> {
       ),
     );
 
-    // Pointer-only canvas: mirror the lens read into the semantics tree.
+    // Pointer-only canvas: mirror the latest constant-FX read into the
+    // semantics tree, code-prefixed like everything else on this plot.
     return Semantics(
       container: true,
       label:
-          '${_lens == 'CONST' ? AppLocalizations.of(context).nwLensConstantFx : lensCurrency}: '
-          '${lensFormat.displayMoney(points.last.close)}',
+          '${AppLocalizations.of(context).nwIgnoreFxMoves}: '
+          '${displayCurrencyWithCode(points.last.close, 'USD')}',
       child: ExcludeSemantics(child: chart),
     );
   }
+
+  /// One compact y tick for the constant-FX plot: the house [compactMoney]
+  /// magnitude with the "$" glyph swapped for the ISO code, so the axis reads
+  /// "USD 1.9K". `compactMoney` is still the single source of the locale,
+  /// grouping and no-break-space rules — only the glyph changes, because this
+  /// axis is USD while the rest of the card may be in pesos.
+  /// (The separator is a no-break space, `\u00A0`, matching `compactMoney`'s
+  /// own rule: a tick must never wrap inside fl_chart's fixed `reservedSize`.)
+  static String _constantFxTick(num value) =>
+      compactMoney(value, 'USD').replaceFirst(r'$', 'USD\u00A0');
+
+  /// fl_chart `reservedSize` for that axis. [compactMoneyAxisWidth] measures
+  /// the "$" glyph form, so add what swapping it for "USD " costs — otherwise
+  /// the widest tick clips ("USD 2." for "USD 2.61K" is a 10x misread).
+  static double _constantFxAxisWidth(double minY, double maxY) =>
+      compactMoneyAxisWidth(minY, maxY, 'USD') +
+      axisTickTextWidth('USD\u00A0') -
+      axisTickTextWidth(r'$');
 
   Widget _buildModeToggle() {
     // Segmented "Simple / Detailed" pill. We keep it small so it sits next

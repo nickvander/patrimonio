@@ -2880,7 +2880,7 @@
   "nwAttrFlows": "Flujos",
   "nwAttrOther": "Otro",
   "nwAttrError": "No se pudo cargar la atribución del cambio",
-  "nwLensConstantFx": "TC constante",
+  "nwIgnoreFxMoves": "Ignorar movimientos cambiarios",
   "nwLensConstantCaption": "MXN valuado al tipo de cambio inicial del período ({rate} MXN/USD)",
   "fxcPillTapHint": "Toca para ver historial y herramientas",
   "fxcChipHoldHint": "Mantén presionado para ver historial y herramientas",

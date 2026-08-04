@@ -3991,13 +3991,13 @@
   "@nwAttrError": {
     "description": "Net-worth attribution: muted inline error when the attribution endpoint fails."
   },
-  "nwLensConstantFx": "Constant FX",
-  "@nwLensConstantFx": {
-    "description": "Net-worth card currency-lens toggle: third segment that revalues MXN balances at the window-start rate (alongside USD and MXN)."
+  "nwIgnoreFxMoves": "Ignore FX moves",
+  "@nwIgnoreFxMoves": {
+    "description": "Net-worth card chart toggle (a chip, off by default): replots the same history with every balance held at the window-start exchange rate, so currency movement is excluded. Names the effect, not the mechanism — the card's only currency-related control now that the global reporting-currency switcher owns which currency the card reports in."
   },
   "nwLensConstantCaption": "MXN revalued at the window-start rate ({rate} MXN/USD)",
   "@nwLensConstantCaption": {
-    "description": "Caption under the chart while the constant-FX lens is active; {rate} is the window-start USD→MXN rate already formatted for the locale.",
+    "description": "Caption under the chart while the \"Ignore FX moves\" toggle is on; {rate} is the window-start USD→MXN rate already formatted for the locale.",
     "placeholders": {
       "rate": {
         "type": "String"

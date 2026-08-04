@@ -7234,7 +7234,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nwAttrError => 'Couldn\'t load change attribution';
 
   @override
-  String get nwLensConstantFx => 'Constant FX';
+  String get nwIgnoreFxMoves => 'Ignore FX moves';
 
   @override
   String nwLensConstantCaption(String rate) {

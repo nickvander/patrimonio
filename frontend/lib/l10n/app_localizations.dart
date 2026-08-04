@@ -11567,13 +11567,13 @@ abstract class AppLocalizations {
   /// **'Couldn\'t load change attribution'**
   String get nwAttrError;
 
-  /// Net-worth card currency-lens toggle: third segment that revalues MXN balances at the window-start rate (alongside USD and MXN).
+  /// Net-worth card chart toggle (a chip, off by default): replots the same history with every balance held at the window-start exchange rate, so currency movement is excluded. Names the effect, not the mechanism — the card's only currency-related control now that the global reporting-currency switcher owns which currency the card reports in.
   ///
   /// In en, this message translates to:
-  /// **'Constant FX'**
-  String get nwLensConstantFx;
+  /// **'Ignore FX moves'**
+  String get nwIgnoreFxMoves;
 
-  /// Caption under the chart while the constant-FX lens is active; {rate} is the window-start USD→MXN rate already formatted for the locale.
+  /// Caption under the chart while the "Ignore FX moves" toggle is on; {rate} is the window-start USD→MXN rate already formatted for the locale.
   ///
   /// In en, this message translates to:
   /// **'MXN revalued at the window-start rate ({rate} MXN/USD)'**

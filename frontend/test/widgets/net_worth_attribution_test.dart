@@ -8,10 +8,16 @@ import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/utils/currency.dart';
 import 'package:patrimonio/widgets/net_worth_card.dart';
 
-/// Net-worth card: the FX / Market / Flows attribution section and the
-/// USD / MXN / constant-FX currency-lens toggle, driven by a faked
+/// Net-worth card: the FX / Market / Flows attribution section and the single
+/// "Ignore FX moves" chart toggle, driven by a faked
 /// `getNetWorthAttribution` (mixin members are virtual — `extends ApiService`
 /// + `@override` is the house fake pattern).
+///
+/// The toggle replaced a three-segment USD / MXN / Constant-FX currency lens:
+/// USD and MXN duplicated the global reporting-currency switcher in the app
+/// bar (and could be set to contradict the hero number above the chart), so
+/// only the constant-FX read — which the global switcher cannot express —
+/// survives, as a boolean that is OFF by default.
 
 class _FakeAttributionApi extends ApiService {
   _FakeAttributionApi({this.result, this.throwError = false});
@@ -94,16 +100,25 @@ Widget _host(Widget child, {Locale? locale}) => MaterialApp(
   home: Scaffold(body: SingleChildScrollView(child: child)),
 );
 
-NetWorthCard _card(ApiService api, {List<dynamic>? history}) => NetWorthCard(
+NetWorthCard _card(
+  ApiService api, {
+  List<dynamic>? history,
+  String reportingCurrency = 'USD',
+  double conversionFactor = 1.0,
+}) => NetWorthCard(
   netWorth: 1780.0,
   history: history ?? _history(),
-  conversionFactor: 1.0,
-  currencyFormat: moneyFormat('USD'),
-  reportingCurrency: 'USD',
+  conversionFactor: conversionFactor,
+  currencyFormat: moneyFormat(reportingCurrency),
+  reportingCurrency: reportingCurrency,
   sourceBreakdown: const [],
   usdMxnRate: 20.0,
   apiService: api,
 );
+
+/// The label on the one chart toggle, in the two locales.
+const String _ignoreFxEn = 'Ignore FX moves';
+const String _ignoreFxEs = 'Ignorar movimientos cambiarios';
 
 void _useWideSurface(WidgetTester tester) {
   tester.view.physicalSize = const Size(1000, 1400);
@@ -168,33 +183,57 @@ List<double> _plottedXs(WidgetTester tester) => tester
     .map((s) => s.x)
     .toList();
 
+/// y values of the plotted headline series — what the chart actually claims,
+/// in whatever currency it plots.
+List<double> _plottedYs(WidgetTester tester) => tester
+    .widget<LineChart>(find.byType(LineChart))
+    .data
+    .lineBarsData
+    .last
+    .spots
+    .map((s) => s.y)
+    .toList();
+
+/// Every `Semantics` label in the tree — the chart canvas is pointer-only, so
+/// its reading is mirrored into a `Semantics(label:)` node.
+List<String> _semanticsLabels(WidgetTester tester) => tester
+    .widgetList<Semantics>(find.byType(Semantics))
+    .map((w) => w.properties.label)
+    .whereType<String>()
+    .toList();
+
 void main() {
-  group('lens x-axis mapping is the same for every lens', () {
-    // The USD (default) lens plotted its history index-spaced while the MXN
-    // and constant-FX lenses plotted the attribution series day-offset
-    // spaced. Same history, three horizontal mappings: switching lenses
-    // appeared to reshape the past, and a sparse March point sat one step
-    // from a tightly packed cluster. Every lens is time-spaced now.
-    testWidgets('all three lenses plot the same day offsets', (tester) async {
+  group('x-axis mapping is the same in both toggle states', () {
+    // The default chart plotted its history index-spaced while the lens
+    // charts plotted the attribution series day-offset spaced. Same history,
+    // two horizontal mappings: flipping the control appeared to reshape the
+    // past, and a sparse March point sat one step from a tightly packed
+    // cluster. Both states are time-spaced now.
+    testWidgets('live-FX and ignore-FX plot the same day offsets', (
+      tester,
+    ) async {
       _useWideSurface(tester);
       final api = _FakeAttributionApi(result: _sparseAttribution());
       await tester.pumpWidget(_host(_card(api, history: _sparseHistory())));
       await tester.pumpAndSettle();
 
-      // Default (USD) lens — the history path, formerly index-as-x.
+      // Toggle OFF — the history path, formerly index-as-x.
       expect(_plottedXs(tester), _sparseDayOffsets);
       // …and it is emphatically NOT index spacing.
       expect(_plottedXs(tester), isNot([0.0, 1.0, 2.0, 3.0]));
 
-      for (final lens in const ['MXN', 'Constant FX', 'USD']) {
-        await tester.tap(find.text(lens));
-        await tester.pumpAndSettle();
-        expect(
-          _plottedXs(tester),
-          _sparseDayOffsets,
-          reason: 'the $lens lens must use the same horizontal mapping',
-        );
-      }
+      await tester.tap(find.text(_ignoreFxEn));
+      await tester.pumpAndSettle();
+      expect(
+        _plottedXs(tester),
+        _sparseDayOffsets,
+        reason: 'the constant-FX plot must use the same horizontal mapping',
+      );
+
+      // …and back off again.
+      await tester.tap(find.text(_ignoreFxEn));
+      await tester.pumpAndSettle();
+      expect(_plottedXs(tester), _sparseDayOffsets);
       expect(tester.takeException(), isNull);
     });
 
@@ -295,43 +334,37 @@ void main() {
       expect(find.text('WHY IT CHANGED'), findsNothing);
       // The chart itself must survive an attribution failure.
       expect(find.byType(LineChart), findsOneWidget);
+      // …and the toggle is gone with the series it would have plotted — a
+      // control that cannot change the chart is worse than no control.
+      expect(find.text(_ignoreFxEn), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });
 
-  group('currency-lens toggle', () {
-    testWidgets(
-      'defaults to the reporting currency and offers USD / MXN / constant',
-      (tester) async {
-        _useWideSurface(tester);
-        final api = _FakeAttributionApi(result: _attribution());
-        await tester.pumpWidget(_host(_card(api)));
-        await tester.pumpAndSettle();
+  group('"Ignore FX moves" toggle', () {
+    /// The live-FX history and the constant-FX series, in the units the
+    /// fixtures define them — deliberately different, so a test can tell
+    /// which one is on screen.
+    final liveFxUsd = [for (var i = 0; i < 4; i++) 1500.0 + i * 100];
+    final constantFxUsd = [for (var i = 0; i < 4; i++) 1500.0 + i * 90];
 
-        expect(find.text('USD'), findsOneWidget);
-        expect(find.text('MXN'), findsOneWidget);
-        expect(find.text('Constant FX'), findsOneWidget);
-        // Default lens (reporting currency) → no constant-FX caption.
-        expect(
-          find.textContaining('window-start rate', findRichText: true),
-          findsNothing,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
-
-    testWidgets('MXN lens swaps the plotted series without a caption', (
+    testWidgets('is OFF by default and the chart is the normal one', (
       tester,
     ) async {
       _useWideSurface(tester);
-      final api = _FakeAttributionApi(result: _attribution());
-      await tester.pumpWidget(_host(_card(api)));
+      final api = _FakeAttributionApi(result: _sparseAttribution());
+      await tester.pumpWidget(_host(_card(api, history: _sparseHistory())));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('MXN'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(LineChart), findsOneWidget);
+      // Exactly ONE chart control, and it is off.
+      expect(find.text(_ignoreFxEn), findsOneWidget);
+      expect(
+        tester.widget<FilterChip>(find.byType(FilterChip)).selected,
+        isFalse,
+      );
+      // The default path: the reporting-currency history, not the lens
+      // series, and no explanatory caption.
+      expect(_plottedYs(tester), liveFxUsd);
       expect(
         find.textContaining('window-start rate', findRichText: true),
         findsNothing,
@@ -339,35 +372,117 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-      'constant-FX lens shows the window-start-rate caption and toggling '
-      'back to USD removes it',
-      (tester) async {
-        _useWideSurface(tester);
+    testWidgets('the old USD / MXN currency lens is gone', (tester) async {
+      _useWideSurface(tester);
+      final api = _FakeAttributionApi(result: _attribution());
+      await tester.pumpWidget(_host(_card(api)));
+      await tester.pumpAndSettle();
+
+      // Which currency the card reports in belongs to the global switcher in
+      // the app bar; this card must not offer a second, contradictable one.
+      expect(find.text('USD'), findsNothing);
+      expect(find.text('MXN'), findsNothing);
+      expect(find.text('Constant FX'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('ON plots the constant-FX series and its caption; OFF undoes '
+        'both', (tester) async {
+      _useWideSurface(tester);
+      final api = _FakeAttributionApi(result: _sparseAttribution());
+      await tester.pumpWidget(_host(_card(api, history: _sparseHistory())));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(_ignoreFxEn));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<FilterChip>(find.byType(FilterChip)).selected,
+        isTrue,
+      );
+      expect(_plottedYs(tester), constantFxUsd);
+      // The honesty caption, so a flat peso can't read as a live conversion.
+      expect(
+        find.text('MXN revalued at the window-start rate (20.00 MXN/USD)'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text(_ignoreFxEn));
+      await tester.pumpAndSettle();
+      expect(_plottedYs(tester), liveFxUsd);
+      expect(
+        find.textContaining('window-start rate', findRichText: true),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    // The attribution endpoint has no constant-FX series in MXN, only
+    // `constant_fx_usd`. Rather than hide the one read the global switcher
+    // can't express from the users most exposed to peso swings, the plot
+    // stays available and LABELS ITSELF: every figure on it carries the ISO
+    // code. A bare "$" is the peso glyph too, so an unlabelled axis under MXN
+    // reporting would read as pesos.
+    testWidgets('under MXN reporting the constant-FX plot is labelled USD', (
+      tester,
+    ) async {
+      _useWideSurface(tester);
+      final api = _FakeAttributionApi(result: _sparseAttribution());
+      await tester.pumpWidget(
+        _host(
+          _card(
+            api,
+            history: _sparseHistory(),
+            reportingCurrency: 'MXN',
+            conversionFactor: 20.0,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // OFF: the normal chart, in the reporting currency (pesos).
+      expect(_plottedYs(tester), [for (final v in liveFxUsd) v * 20.0]);
+
+      await tester.tap(find.text(_ignoreFxEn));
+      await tester.pumpAndSettle();
+
+      // ON: the raw USD constant-FX series — NOT silently scaled into pesos.
+      expect(_plottedYs(tester), constantFxUsd);
+      // Y-axis ticks carry the code ("USD 1.5K"), never a bare "$".
+      expect(
+        find.textContaining('USD\u00A0'),
+        findsWidgets,
+        reason: 'the constant-FX axis must name its currency',
+      );
+      expect(find.textContaining('\$1'), findsNothing);
+      // …as does the screen-reader summary of the pointer-only canvas.
+      expect(
+        _semanticsLabels(tester).any(
+          (l) =>
+              l.contains(_ignoreFxEn) &&
+              l.contains(displayCurrencyWithCode(constantFxUsd.last, 'USD')),
+        ),
+        isTrue,
+        reason: 'semantics label should read "$_ignoreFxEn: USD 1,770.00"',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('renders its label in both locales', (tester) async {
+      _useWideSurface(tester);
+      for (final (locale, label) in const [
+        (Locale('en'), _ignoreFxEn),
+        (Locale('es'), _ignoreFxEs),
+      ]) {
         final api = _FakeAttributionApi(result: _attribution());
-        await tester.pumpWidget(_host(_card(api)));
+        await tester.pumpWidget(_host(_card(api), locale: locale));
         await tester.pumpAndSettle();
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
 
-        await tester.tap(find.text('Constant FX'));
-        await tester.pumpAndSettle();
-
-        expect(
-          find.text('MXN revalued at the window-start rate (20.00 MXN/USD)'),
-          findsOneWidget,
-        );
-        expect(find.byType(LineChart), findsOneWidget);
-
-        await tester.tap(find.text('USD'));
-        await tester.pumpAndSettle();
-        expect(
-          find.textContaining('window-start rate', findRichText: true),
-          findsNothing,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
-
-    testWidgets('lens switching reuses the loaded window (no refetch)', (
+    testWidgets('toggling reuses the loaded window (no refetch)', (
       tester,
     ) async {
       _useWideSurface(tester);
@@ -376,9 +491,9 @@ void main() {
       await tester.pumpAndSettle();
       final callsAfterLoad = api.calls;
 
-      await tester.tap(find.text('MXN'));
+      await tester.tap(find.text(_ignoreFxEn));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Constant FX'));
+      await tester.tap(find.text(_ignoreFxEn));
       await tester.pumpAndSettle();
 
       expect(api.calls, callsAfterLoad);

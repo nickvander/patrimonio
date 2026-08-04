@@ -7296,7 +7296,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nwAttrError => 'No se pudo cargar la atribución del cambio';
 
   @override
-  String get nwLensConstantFx => 'TC constante';
+  String get nwIgnoreFxMoves => 'Ignorar movimientos cambiarios';
 
   @override
   String nwLensConstantCaption(String rate) {
