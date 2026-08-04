@@ -59,26 +59,17 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
     }
   }
 
-  /// Native-currency money, mirroring LendingTab._money: no sub-cent
-  /// residue, MX$ vs $ symbol by currency.
-  String _money(num v, String currency) {
-    final fmt = NumberFormat.currency(
-      symbol: currency == 'MXN' ? r'MX$' : r'$',
-      decimalDigits: 2,
-    );
-    return fmt.format(v.abs() < 0.005 ? 0 : v);
-  }
+  /// Native-currency money, mirroring LendingTab._money: the house glyph per
+  /// currency (`$1,234.00` / `MXN 30,000.00`) and no sub-cent residue, so a
+  /// loan card and this sheet never disagree about how a peso is written.
+  String _money(num v, String currency) =>
+      moneyFormat(currency).format(v.abs() < 0.005 ? 0 : v);
 
   /// Display variant of [_money] for headline stats and per-loan rows:
   /// cents drop at the whole-money threshold. The monthly breakdown table
   /// keeps the exact [_money] — its rows sum to reconcilable totals.
-  String _moneyDisplay(num v, String currency) {
-    final fmt = NumberFormat.currency(
-      symbol: currency == 'MXN' ? r'MX$' : r'$',
-      decimalDigits: 2,
-    );
-    return fmt.displayMoney(v.abs() < 0.005 ? 0 : v);
-  }
+  String _moneyDisplay(num v, String currency) =>
+      moneyFormat(currency).displayMoney(v.abs() < 0.005 ? 0 : v);
 
   @override
   Widget build(BuildContext context) {

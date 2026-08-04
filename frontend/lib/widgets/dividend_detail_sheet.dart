@@ -96,10 +96,15 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
 
   /// Per-share amounts (annual rate, history events) stay in the payer's
   /// native currency and can be sub-cent (e.g. $0.0825/share), so they
-  /// keep up to four decimals instead of the display-currency format.
+  /// keep up to four decimals instead of the display-currency format. Only
+  /// the precision is local: the glyph is the house [currencySymbol] one
+  /// (`$`, `MXN `), and `name` keeps intl's per-code grouping/decimal
+  /// conventions, exactly as [moneyFormat] does.
   String _perShare(double v, String currency) {
+    final code = currency.toUpperCase();
     final fmt = NumberFormat.currency(
-      symbol: currency == 'MXN' ? r'MX$' : r'$',
+      name: code,
+      symbol: currencySymbol(code),
       decimalDigits: v.abs() < 1 ? 4 : 2,
     );
     return fmt.format(v);

@@ -263,10 +263,15 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   /// Per-unit amounts (price, lot cost) stay in the instrument's native
   /// currency and can be sub-dollar for some funds, so they keep up to
   /// four decimals — mirrors the dividend sheet's per-share helper.
+  /// The glyph is the house [currencySymbol] one (`$`, `MXN `) — only the
+  /// precision is local to this sheet, so a peso price never reads with a
+  /// symbol no other surface uses. `name` keeps intl's grouping/decimal
+  /// conventions for the code, exactly as [moneyFormat] does.
   String _nativeAmount(double v) {
-    final currency = (_data['currency'] ?? 'USD').toString();
+    final code = (_data['currency'] ?? 'USD').toString().toUpperCase();
     final fmt = NumberFormat.currency(
-      symbol: currency == 'MXN' ? r'MX$' : r'$',
+      name: code,
+      symbol: currencySymbol(code),
       decimalDigits: v.abs() < 1 ? 4 : 2,
     );
     return fmt.format(v);

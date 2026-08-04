@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../theme/menus.dart';
-import '../utils/currency.dart' show currencySymbol;
+import '../utils/currency.dart' show moneyFieldPrefix;
 import '../utils/theme_colors.dart';
 
 /// Mirrors the add-loan dialog's look (same _section / _twoUp / filled
@@ -38,11 +38,10 @@ class _EditLoanDialogState extends State<EditLoanDialog> {
 
   String get _currency => (widget.loan['currency'] ?? 'USD').toString();
 
-  /// Amount-field prefix for the loan's own currency, taken from the house
-  /// [currencySymbol] map (`$ `, `MXN `) rather than hardcoded, so the field
-  /// agrees with every other money surface. `trimRight` normalizes the map's
-  /// already-spaced entries so the prefix never doubles its space.
-  String get _amountPrefix => '${currencySymbol(_currency).trimRight()} ';
+  /// Amount-field prefix for the loan's own currency, from the house
+  /// [moneyFieldPrefix] helper (`$ `, `MXN `) rather than hardcoded, so the
+  /// field agrees with every other money surface.
+  String get _amountPrefix => moneyFieldPrefix(_currency);
 
   String get _ratePeriod => (widget.loan['rate_period'] ?? 'annual').toString();
 

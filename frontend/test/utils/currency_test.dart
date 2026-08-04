@@ -42,6 +42,38 @@ void main() {
     });
   });
 
+  group('moneyFieldPrefix — the prefixText of a money INPUT', () {
+    // The whole reason the helper exists: `$` carries no space of its own but
+    // the ISO-prefix entries do, so naive concatenation double-spaces MXN.
+    test('USD is the glyph plus exactly one space', () {
+      expect(moneyFieldPrefix('USD'), '\$ ');
+    });
+
+    test('MXN keeps ONE space, not the map space plus a second', () {
+      expect(moneyFieldPrefix('MXN'), 'MXN ');
+      expect(moneyFieldPrefix('MXN'), isNot('MXN  '));
+      expect(moneyFieldPrefix('MXN'), isNot(endsWith('  ')));
+    });
+
+    test('every code ends in exactly one trailing space', () {
+      for (final code in ['USD', 'MXN', 'EUR']) {
+        final prefix = moneyFieldPrefix(code);
+        expect(prefix, endsWith(' '));
+        expect(prefix.trimRight().length, prefix.length - 1, reason: code);
+      }
+    });
+
+    test('lower-case code is normalised, like currencySymbol', () {
+      expect(moneyFieldPrefix('mxn'), moneyFieldPrefix('MXN'));
+      expect(moneyFieldPrefix('usd'), '\$ ');
+    });
+
+    test('tracks the house symbol map rather than a hardcoded glyph', () {
+      expect(moneyFieldPrefix('MXN'), '${currencySymbol('MXN').trimRight()} ');
+      expect(moneyFieldPrefix('MXN'), isNot(contains('MX\$')));
+    });
+  });
+
   group('formatCurrencyWithCode — self-labelling for mixed lists', () {
     test('USD gets an explicit code, not a bare \$', () {
       // In a per-currency breakdown "$9,591" is ambiguous; "USD 9,591.00" isn't.

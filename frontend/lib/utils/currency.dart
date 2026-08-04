@@ -22,10 +22,11 @@ double convertCurrency(
   return amount;
 }
 
-/// Idiomatic currency symbols, keyed by ISO code. Money should read as
-/// `$1,234.00` / `MX$47,651.01` — the ISO prefix ("USD 1,234.00") was
-/// spreadsheet voice. The map is the single place to add a symbol; codes
-/// without an entry fall back to the ISO code so nothing renders blank.
+/// Idiomatic currency symbols, keyed by ISO code. Dollars should read as
+/// `$1,234.00` rather than the spreadsheet-voice "USD 1,234.00"; pesos
+/// deliberately keep the ISO prefix (`MXN 47,651.01`, see the entry below).
+/// The map is the single place to add a symbol; codes without an entry fall
+/// back to the ISO code so nothing renders blank.
 const Map<String, String> _currencySymbols = {
   'USD': '\$',
   // Peso amounts read as "MXN 47,651.01". The "MX$" glyph was being misread as
@@ -34,17 +35,32 @@ const Map<String, String> _currencySymbols = {
   'MXN': 'MXN ',
 };
 
-/// The display glyph for a currency code: `$` / `MX$`, or "CODE " (ISO
-/// prefix with a trailing space) for anything without an idiomatic symbol.
+/// The display glyph for a currency code: `$` for USD, `MXN ` for pesos, or
+/// "CODE " (ISO prefix with a trailing space) for anything without an
+/// idiomatic symbol. Note that every ISO-prefix form carries its OWN
+/// trailing space while `$` does not — never concatenate a separator onto
+/// this yourself; use [moneyFieldPrefix].
 String currencySymbol(String currency) {
   final code = currency.toUpperCase();
   return _currencySymbols[code] ?? '$code ';
 }
 
+/// The `prefixText` for a money INPUT field in [currency]: the display glyph
+/// plus exactly one separating space (`$ `, `MXN `).
+///
+/// A text field needs breathing room between the glyph and the digits the
+/// user types, which [currencySymbol] alone doesn't give for `$` — but the
+/// ISO-prefix entries already end in a space, so a bare `'$sym '` would
+/// double it for MXN. Normalizing that lives here rather than at each amount
+/// field, so the app has one answer to "how is a money prefix built".
+String moneyFieldPrefix(String currency) =>
+    '${currencySymbol(currency).trimRight()} ';
+
 /// A `NumberFormat` for [currency] that renders the idiomatic symbol. Use
 /// this anywhere a reusable formatter is needed (e.g. the dashboard's
 /// `currencyFormat` passed down to cards) so every money string in the app
-/// reads `$1,234.00` / `MX$47,651.01` rather than the old "USD 1,234.00".
+/// reads `$1,234.00` / `MXN 47,651.01` — and so a currency's glyph is never
+/// re-decided at a call site.
 NumberFormat moneyFormat(String currency) {
   final code = currency.toUpperCase();
   // `name` stays the ISO code so NumberFormat keeps the right

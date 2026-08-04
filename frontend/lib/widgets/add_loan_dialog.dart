@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../theme/menus.dart';
-import '../utils/currency.dart' show currencySymbol, moneyFormat;
+import '../utils/currency.dart' show moneyFieldPrefix, moneyFormat;
 import '../utils/flat_schedule.dart';
 import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
@@ -148,12 +148,11 @@ class _AddLoanDialogState extends State<AddLoanDialog> {
 
   /// Amount-field prefix in the loan's NATIVE currency (never the converted
   /// display currency — the preview always speaks the loan's own money).
-  /// The glyph comes from the house [currencySymbol] map so these inputs read
-  /// like money everywhere else in the app (`$ `, `MXN `); hardcoding it here
-  /// is how the fields kept rendering a stale `MX$` after the map moved MXN to
-  /// its ISO prefix. `trimRight` normalizes the map's already-spaced entries
-  /// so the prefix never doubles its space.
-  String get _amountPrefix => '${currencySymbol(_currency).trimRight()} ';
+  /// The glyph comes from the house [moneyFieldPrefix] helper so these inputs
+  /// read like money everywhere else in the app (`$ `, `MXN `); hardcoding it
+  /// here is how the fields kept rendering a stale `MX$` after the map moved
+  /// MXN to its ISO prefix.
+  String get _amountPrefix => moneyFieldPrefix(_currency);
 
   /// Whether "set the payment, solve for the term" applies to the current
   /// selection. Only standard (amortized) and no-interest loans amortize
