@@ -68,10 +68,24 @@ vault's secret policy live in Vaultwarden, config in
 1. `finance_tracker` dumps to **669 bytes** — effectively an empty database.
    Fine if it's a legacy leftover; alarming if it's supposed to hold data.
    Size checks can't catch this class: it is a *valid* dump of nothing.
-2. Restic logs `permission denied` on
-   `local_export/infrastructure/stacks/{adguard/workdir/data,ntfy/cache/attachments}`
-   when run as `nickvander`, so those paths are silently absent from
-   snapshots (`Warning: at least one source file could not be read`).
+   **Still open — needs the owner to say whether that DB should hold data.**
+2. ~~Restic `permission denied` on two stack paths~~ — ✅ resolved 2026-08-04.
+   `adguard/workdir/data` and `ntfy/cache/attachments` are `drwx------ root`,
+   and there is **no passwordless sudo on thelab**, so they cannot be chmod'd
+   from an agent session. They are excluded instead — from BOTH the rsync and
+   the restic call (stale root-owned copies of them linger in `local_export`
+   from before the rsync exclusion and cannot be deleted without root, so
+   restic had to skip them too). **Nothing of restore value is lost:**
+   `adguard/confdir/AdGuardHome.yaml`, both compose files, `ntfy/etc` and
+   `ntfy/cache/cache.db` are all captured; only container runtime data is
+   skipped, consistent with the script's existing querylog/stats/.cache
+   exclusions. Verified: a full run now logs **0** permission-denied lines and
+   ends without the read warning. Originals at `master_backup.sh.bak-20260804`
+   / `.bak-20260804b`.
+   *If the owner ever wants that runtime data captured, it needs a real TTY:*
+   `sudo chmod o+rX /mnt/data/docker/stacks/adguard/workdir/data /mnt/data/docker/stacks/ntfy/cache/attachments`
+   *plus* `sudo rm -rf /mnt/data/backups/local_export/infrastructure/stacks/{adguard/workdir/data,ntfy/cache/attachments}`
+   *and reverting the two exclusion lines.*
 
 **Dev on this VM is native (no docker):** Postgres `:5442` + Redis `:6380`
 with data dirs inside the repo, cargo + `~/flutter` toolchains. All run/test/
