@@ -50,6 +50,7 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
             original_description: None,
             balance_after: None,
             account_label: None,
+            declared_closing_balance: None,
             from_ocr: false,
         });
     }

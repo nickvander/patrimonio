@@ -45,6 +45,26 @@ pub struct ParsedTransaction {
     /// section to its own account so its balance isn't lost.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_label: Option<String>,
+    /// The statement's own **declared** closing total for the account section
+    /// this row belongs to — the `SALDO FINAL DEL PERIODO` / `Saldo final`
+    /// figure the bank prints in its own summary, NOT a number derived from
+    /// the parsed rows. Stamped identically on every row of the section it
+    /// belongs to, so the reconciliation check has a closing balance that is
+    /// INDEPENDENT of the rows: a parser that silently drops trailing rows
+    /// still "matches to the centavo" when the closing balance is read off
+    /// the last row it kept (see `services/reconcile.rs`).
+    ///
+    /// Set ONLY by parsers whose declared line we have an actual sample of
+    /// (currently Santander's `SALDO FINAL DEL PERIODO` row and Nu México's
+    /// older running-balance layout) — `None` everywhere else, which leaves
+    /// reconciliation on its running-column fallback. A guessed match that
+    /// produces a plausible wrong number would be worse than no match.
+    ///
+    /// Transient (a check input, never persisted); `#[serde(default,
+    /// skip_serializing_if)]` keeps the preview→confirm wire shape unchanged
+    /// for every parser that doesn't set it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_closing_balance: Option<Decimal>,
     /// True when this row's text came from OCR (a scanned / photographed /
     /// browser-printed statement) rather than an extractable text layer. OCR
     /// can misread an amount or date, so the preview flags these rows for the
@@ -106,6 +126,34 @@ mod tests {
         let legacy = r#"{"date":"2026-06-01","description":"X","amount":"1.00","currency":"MXN","category":null}"#;
         let back: ParsedTransaction = serde_json::from_str(legacy).unwrap();
         assert!(back.category_detailed.is_none());
+    }
+
+    #[test]
+    fn declared_closing_balance_survives_the_preview_confirm_roundtrip() {
+        // The reconciliation check runs on rows the CLIENT sends back from the
+        // preview, so a declared total that doesn't survive serialization is a
+        // declared total the check never sees.
+        let tx = ParsedTransaction {
+            declared_closing_balance: Some(Decimal::from_str("22401.60").unwrap()),
+            ..sample(None)
+        };
+        let json = serde_json::to_string(&tx).unwrap();
+        let back: ParsedTransaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            back.declared_closing_balance,
+            Some(Decimal::from_str("22401.60").unwrap())
+        );
+    }
+
+    #[test]
+    fn a_row_without_a_declared_closing_balance_keeps_the_old_wire_shape() {
+        // Most parsers declare nothing; their payload must be byte-identical
+        // to what older clients already parse.
+        let json = serde_json::to_string(&sample(None)).unwrap();
+        assert!(!json.contains("declared_closing_balance"), "json: {json}");
+        let legacy = r#"{"date":"2026-06-01","description":"X","amount":"1.00","currency":"MXN","category":null}"#;
+        let back: ParsedTransaction = serde_json::from_str(legacy).unwrap();
+        assert!(back.declared_closing_balance.is_none());
     }
 
     #[test]

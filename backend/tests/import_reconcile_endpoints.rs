@@ -8,6 +8,11 @@
 //! the user-scoping invariant: user B's account id must 404 for user A rather
 //! than reconcile against — or leak the existence of — someone else's ledger.
 //!
+//! Also covers the INDEPENDENT check: a statement's own declared closing total
+//! (`declared_closing_balance`, captured by the parser and round-tripped
+//! through the preview) is preferred over the running SALDO column, and a
+//! disagreement between them surfaces as a difference rather than an error.
+//!
 //! Needs a real Postgres via `PATRIMONIO_TEST_DATABASE_URL`; unset prints a
 //! skip note and returns (set-but-unreachable PANICS — see
 //! tests/common/mod.rs).
@@ -496,6 +501,71 @@ async fn an_unexplained_gap_is_reported_without_a_candidate() {
     assert_eq!(stmt["status"], "unexplained", "{json}");
     assert!(approx(&stmt["difference"], -40.0), "{json}");
     assert_eq!(stmt["candidates"], json!([]), "{json}");
+    assert_eq!(stmt["unavailable_reason"], Value::Null, "{json}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn a_declared_closing_balance_makes_the_check_independent_of_the_rows() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (cookie, uid) = bootstrap(&app, &pool).await;
+    let account = seed_account(&pool, uid, "Santander").await;
+
+    // Byte-for-byte the same rows twice. Without a declared total the check
+    // can only prove the rows agree with themselves (green). With the
+    // statement's own SALDO FINAL — which the parser now captures and the
+    // preview round-trips per row — the same rows are 200 short of what the
+    // bank printed, which is what a dropped trailing row looks like.
+    let (status, json) = reconcile(
+        &app,
+        &cookie,
+        &json!({ "accounts": [{
+            "account_id": account.to_string(),
+            "transactions": january("ene.pdf"),
+        }]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let stmt = &json["accounts"][0]["statements"][0];
+    assert_eq!(stmt["status"], "reconciled", "{json}");
+    assert_eq!(stmt["closing_balance_source"], "running_balance", "{json}");
+    assert_eq!(stmt["declared_closing_balance"], Value::Null, "{json}");
+
+    let declared: Vec<Value> = january("ene.pdf")
+        .into_iter()
+        .map(|mut row| {
+            row["declared_closing_balance"] = json!("1350.00");
+            row
+        })
+        .collect();
+    let (status, json) = reconcile(
+        &app,
+        &cookie,
+        &json!({ "accounts": [{
+            "account_id": account.to_string(),
+            "transactions": declared,
+        }]}),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a disagreement is a finding, not an error: {json}"
+    );
+
+    let stmt = &json["accounts"][0]["statements"][0];
+    assert_eq!(stmt["closing_balance_source"], "declared", "{json}");
+    assert!(approx(&stmt["declared_closing_balance"], 1350.0), "{json}");
+    assert!(
+        approx(&stmt["running_closing_balance"], 1150.0),
+        "both figures are reported so the UI can show the disagreement: {json}"
+    );
+    assert!(approx(&stmt["statement_closing_balance"], 1350.0), "{json}");
+    assert!(approx(&stmt["computed_closing_balance"], 1150.0), "{json}");
+    assert!(approx(&stmt["difference"], 200.0), "{json}");
+    assert_eq!(stmt["status"], "unexplained", "{json}");
     assert_eq!(stmt["unavailable_reason"], Value::Null, "{json}");
 }
 

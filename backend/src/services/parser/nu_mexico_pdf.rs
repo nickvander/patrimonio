@@ -299,8 +299,46 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                 original_description: None,
                 balance_after: balance,
                 account_label,
+                declared_closing_balance: None,
                 from_ocr: false,
             });
+        }
+    }
+
+    // The OLD layout prints its own "Resumen del periodo" box with a declared
+    // `Saldo final` — the bank's period total, independent of the movement
+    // rows. Capturing it lets reconciliation catch a parse that silently drops
+    // trailing rows (the running column can't: its last surviving row IS the
+    // closing balance it would check against).
+    //
+    // Deliberately limited to the old layout — the only Nu layout we have a
+    // sample of this line in. The CURRENT layout has no running Saldo column
+    // and prints a different figure ("Saldo al generar este estado de cuenta"
+    // = available + cajitas + crédito, which is NOT this account's closing
+    // balance), so requiring a running column keeps the current layout on the
+    // fallback rather than reconciling it against a grand total.
+    let has_running_column = txs.iter().any(|t| t.balance_after.is_some());
+    let declared_closing: Option<Decimal> = has_running_column
+        .then(|| {
+            text.lines().find_map(|line| {
+                if !line.to_uppercase().contains("SALDO FINAL") {
+                    return None;
+                }
+                // Last money token on THAT line (never across lines — a
+                // label on one line and an unrelated amount on the next must
+                // not be paired up).
+                money_re
+                    .captures_iter(line)
+                    .last()
+                    .and_then(|c| Decimal::from_str(&c[2].replace(',', "")).ok())
+            })
+        })
+        .flatten();
+    if let Some(total) = declared_closing {
+        // Main-account rows only: each cajita is its own account with its own
+        // balance, and this total is the main account's.
+        for t in txs.iter_mut().filter(|t| t.account_label.is_none()) {
+            t.declared_closing_balance = Some(total);
         }
     }
 
@@ -440,6 +478,44 @@ Fecha    Descripción                                         Monto         Sald
     }
 
     #[test]
+    fn old_layout_captures_the_declared_saldo_final() {
+        // The "Resumen del periodo" box declares the period's closing balance.
+        // Capturing it gives reconciliation a figure that does NOT come from
+        // the rows, so a dropped trailing row shows up as a gap instead of
+        // silently redefining the closing balance.
+        let txs = parse_text(SAMPLE).unwrap();
+        for t in &txs {
+            assert_eq!(
+                t.declared_closing_balance,
+                Some(Decimal::from_str("32285.60").unwrap()),
+                "{t:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_dropped_trailing_row_does_not_move_the_declared_saldo_final() {
+        // Same statement, minus its last movement: the running column now ends
+        // at 38,029.17 — internally consistent, and invisible to a check that
+        // reads the closing balance off the last parsed row. The declared
+        // 32,285.60 is unchanged, so the loss is detectable.
+        let truncated = SAMPLE.replace(
+            "30 OCT   Pago de tarjeta de credito Nu                    -5,743.57    $32,285.60\n",
+            "",
+        );
+        let txs = parse_text(&truncated).unwrap();
+        assert_eq!(txs.len(), 4, "got {txs:#?}");
+        assert_eq!(
+            txs[3].balance_after,
+            Some(Decimal::from_str("38029.17").unwrap())
+        );
+        assert_eq!(
+            txs[3].declared_closing_balance,
+            Some(Decimal::from_str("32285.60").unwrap())
+        );
+    }
+
+    #[test]
     fn keyword_sign_without_balance_column() {
         let text = "\
 Periodo del 01 de marzo de 2024 al 31 de marzo de 2024
@@ -509,6 +585,21 @@ Cómo está organizado tu dinero
         assert!(!txs
             .iter()
             .any(|t| t.description.to_uppercase().contains("CONGEL")));
+    }
+
+    #[test]
+    fn the_current_layout_declares_nothing() {
+        // The current layout has no running Saldo column and no `Saldo final`
+        // line — only the grand total ("Saldo al generar…", 63,525.30) which
+        // includes the cajitas and the crédito and is therefore NOT this
+        // account's closing balance. Nothing is declared: reconciliation stays
+        // on its fallback rather than checking against a number that means
+        // something else.
+        let txs = parse_text(CURRENT).unwrap();
+        assert!(
+            txs.iter().all(|t| t.declared_closing_balance.is_none()),
+            "{txs:#?}"
+        );
     }
 
     #[test]

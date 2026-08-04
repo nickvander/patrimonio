@@ -243,6 +243,7 @@ fn savings_block(
         original_description: None,
         balance_after: Some(balance),
         account_label: None,
+        declared_closing_balance: None,
         from_ocr: false,
     })
 }
@@ -366,6 +367,7 @@ fn parse_personal(text: &str) -> Result<Vec<ParsedTransaction>> {
             original_description: None,
             balance_after: Some(balance),
             account_label: label.clone(),
+            declared_closing_balance: None,
             from_ocr: false,
         });
     }

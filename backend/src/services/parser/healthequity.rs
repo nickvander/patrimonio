@@ -131,6 +131,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             // continuity check skips single-balance statements.
             balance_after: None,
             account_label: None,
+            declared_closing_balance: None,
             from_ocr: false,
         });
     }

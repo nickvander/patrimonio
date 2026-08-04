@@ -344,6 +344,7 @@ fn test_polish_all_captures_original_when_changed() {
         original_description: None,
         balance_after: None,
         account_label: None,
+        declared_closing_balance: None,
         from_ocr: false,
     }];
     let polished = polish_all(Ok(parsed)).unwrap();
@@ -369,6 +370,7 @@ fn test_polish_all_skips_original_when_unchanged() {
         original_description: None,
         balance_after: None,
         account_label: None,
+        declared_closing_balance: None,
         from_ocr: false,
     }];
     let polished = polish_all(Ok(parsed)).unwrap();
@@ -541,4 +543,91 @@ Summary of balances and movements during the period
 fn revolut_looks_like() {
     assert!(revolut::looks_like("© 2026 REVOLUT BANK, S.A."));
     assert!(!revolut::looks_like("BANCO NACIONAL DE MEXICO"));
+}
+
+/// End-to-end (no DB): a real parser's declared total, fed into the
+/// reconciliation check, catches a dropped trailing row that the running
+/// balance column cannot.
+#[test]
+fn santander_declared_total_catches_a_dropped_trailing_row_at_reconcile() {
+    use crate::services::reconcile::{
+        reconcile_statement, ClosingBalanceSource, IncomingRow, ReconcileStatus,
+    };
+
+    // A Santander statement whose closing SALDO FINAL DEL PERIODO says
+    // 22,401.60, but whose last movement (a −190.00 commission) never made it
+    // into the parsed rows.
+    const TRUNCATED: &str = "\
+                                                DETALLE DE MOVIMIENTOS CUENTA DE CHEQUES
+F E C H A      FOLIO     DESCRIPCION                                          DEPOSITOS         RETIROS              SALDO
+30-ABR-2026             SALDO FINAL DEL PERIODO ANTERIOR                                                          8,540.10
+04-MAY-2026   0000000   ABONO NOMINA QUINCENA 1 MAY 2026                      12,500.00                          21,040.10
+05-MAY-2026   1184302   COMPRA OXXO TIENDA 4521 GUADALAJARA                                     248.50           20,791.60
+09-MAY-2026   2233190   SPEI ENVIADO BBVA JUAN PEREZ                                          3,200.00           17,591.60
+12-MAY-2026   2345671   SPEI RECIBIDO BANORTE RENTA DEPTO MAYO                 5,000.00                          22,591.60
+31-MAY-2026   3990771   SALDO FINAL DEL PERIODO                                                                 22,401.60
+";
+
+    let parsed = santander_layout::parse_text(TRUNCATED).unwrap();
+    assert_eq!(parsed.len(), 4, "the −190.00 row is missing: {parsed:#?}");
+
+    let rows: Vec<IncomingRow> = parsed
+        .iter()
+        .map(|t| IncomingRow {
+            file: "mayo.pdf".to_string(),
+            date: t.date,
+            amount: t.amount,
+            currency: t.currency.clone(),
+            balance_after: t.balance_after,
+            declared_closing_balance: t.declared_closing_balance,
+            duplicate: false,
+        })
+        .collect();
+
+    let r = reconcile_statement("mayo.pdf", &rows, &[]);
+    assert_eq!(
+        r.closing_balance_source,
+        Some(ClosingBalanceSource::Declared),
+        "{r:?}"
+    );
+    assert_eq!(
+        r.running_closing_balance,
+        Some(Decimal::from_str("22591.60").unwrap()),
+        "the parsed rows are internally consistent — the old check went green here"
+    );
+    assert_eq!(
+        r.statement_closing_balance,
+        Some(Decimal::from_str("22401.60").unwrap())
+    );
+    assert_eq!(
+        r.difference,
+        Some(Decimal::from_str("-190.00").unwrap()),
+        "the app would end the month 190 ABOVE the bank's own total"
+    );
+    assert_eq!(r.status, ReconcileStatus::Unexplained, "{r:?}");
+
+    // Same statement WITH its last row: green, and still an independent check.
+    let full = santander_layout::parse_text(&TRUNCATED.replace(
+        "31-MAY-2026   3990771   SALDO FINAL DEL PERIODO",
+        "27-MAY-2026   3456112   COMISION MANEJO DE CUENTA                                              190.00           22,401.60\n31-MAY-2026   3990771   SALDO FINAL DEL PERIODO",
+    ))
+    .unwrap();
+    let full_rows: Vec<IncomingRow> = full
+        .iter()
+        .map(|t| IncomingRow {
+            file: "mayo.pdf".to_string(),
+            date: t.date,
+            amount: t.amount,
+            currency: t.currency.clone(),
+            balance_after: t.balance_after,
+            declared_closing_balance: t.declared_closing_balance,
+            duplicate: false,
+        })
+        .collect();
+    let ok = reconcile_statement("mayo.pdf", &full_rows, &[]);
+    assert_eq!(ok.status, ReconcileStatus::Reconciled, "{ok:?}");
+    assert_eq!(
+        ok.closing_balance_source,
+        Some(ClosingBalanceSource::Declared)
+    );
 }

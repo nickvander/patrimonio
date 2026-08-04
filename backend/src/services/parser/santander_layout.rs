@@ -18,7 +18,11 @@
 //!    running balance, present on every row.
 //!  * The opening row is `SALDO FINAL DEL PERIODO ANTERIOR` (balance only,
 //!    no movement) and the closing row `SALDO FINAL DEL PERIODO` — both have
-//!    no DEPOSITOS/RETIROS so they're naturally skipped.
+//!    no DEPOSITOS/RETIROS so neither becomes a transaction. The CLOSING
+//!    one's SALDO is kept as `declared_closing_balance` (stamped on every
+//!    parsed row): it is the bank's own period total, so reconciliation can
+//!    check the ledger against a figure that does NOT come from the rows we
+//!    happened to parse. The opener is excluded by its `ANTERIOR` suffix.
 //!  * Lines with no date are description continuations; the abbreviation
 //!    legend (`ABO= ABONO  CGO= CARGO …`) and `* GAT …` notes at the end are
 //!    furniture and must not be appended as description.
@@ -104,20 +108,42 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     let mut cols: Option<Columns> = None;
     let mut cur: Option<Record> = None;
 
-    let flush = |rec: Option<Record>, txs: &mut Vec<ParsedTransaction>| {
+    // The statement's own DECLARED closing total, captured from the closing
+    // `SALDO FINAL DEL PERIODO` row instead of only using it as a terminator.
+    // It is what makes the reconciliation check independent of the parsed
+    // rows: read off the last row we kept, a dropped trailing row is
+    // invisible; read off the bank's printed total, it is a gap.
+    let mut declared_closing: Option<Decimal> = None;
+
+    let flush = |rec: Option<Record>,
+                 txs: &mut Vec<ParsedTransaction>,
+                 declared_closing: &mut Option<Decimal>| {
         let Some(rec) = rec else { return };
-        let amount = match (rec.deposit, rec.retiro) {
-            (Some(d), _) => d,
-            (_, Some(r)) => -r,
-            // Opening/closing "SALDO FINAL…" rows have no movement.
-            (None, None) => return,
-        };
         let description = rec
             .desc
             .join(" ")
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
+        let amount = match (rec.deposit, rec.retiro) {
+            (Some(d), _) => d,
+            (_, Some(r)) => -r,
+            // Opening/closing "SALDO FINAL…" rows have no movement. The
+            // CLOSING one — `SALDO FINAL DEL PERIODO`, as opposed to the
+            // opener `SALDO FINAL DEL PERIODO ANTERIOR` — carries the
+            // period's declared total in the SALDO column; keep it (the row
+            // itself is still not a transaction). A later occurrence wins, so
+            // on a multi-page extraction the last printed total stands.
+            (None, None) => {
+                let upper = description.to_uppercase();
+                if upper.contains("SALDO FINAL DEL PERIODO") && !upper.contains("ANTERIOR") {
+                    if let Some(saldo) = rec.saldo {
+                        *declared_closing = Some(saldo);
+                    }
+                }
+                return;
+            }
+        };
         if description.is_empty() {
             return;
         }
@@ -131,6 +157,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             original_description: None,
             balance_after: rec.saldo,
             account_label: None,
+            declared_closing_balance: None,
             from_ocr: false,
         });
     };
@@ -153,7 +180,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         }
 
         if let Some(c) = row_re.captures(line) {
-            flush(cur.take(), &mut txs);
+            flush(cur.take(), &mut txs, &mut declared_closing);
             let day: u32 = c[1].parse().unwrap_or(1);
             let month = month_abbr(&c[2]).unwrap_or(1);
             let year: i32 = c[3].parse().unwrap_or(2025);
@@ -189,11 +216,21 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             }
         }
     }
-    flush(cur.take(), &mut txs);
+    flush(cur.take(), &mut txs, &mut declared_closing);
+
+    // Stamp the declared total on every row of the statement (not just the
+    // last): the import preview lets the user exclude rows, and the check must
+    // still know what the bank declared for the period whichever rows survive.
+    if let Some(total) = declared_closing {
+        for t in &mut txs {
+            t.declared_closing_balance = Some(total);
+        }
+    }
 
     info!(
-        "Santander layout parser extracted {} transactions",
-        txs.len()
+        "Santander layout parser extracted {} transactions (declared closing: {:?})",
+        txs.len(),
+        declared_closing
     );
     Ok(txs)
 }
@@ -282,6 +319,73 @@ BANCO SANTANDER (MEXICO) S.A., INSTITUCION DE BANCA MULTIPLE, R.F.C. BSM970519DU
             txs[4].balance_after,
             Some(Decimal::from_str("22401.60").unwrap())
         );
+    }
+
+    #[test]
+    fn captures_the_declared_saldo_final_del_periodo() {
+        // The closing row is still not a transaction, but its SALDO is now
+        // kept: every parsed row carries the bank's declared period total.
+        let txs = parse_text(SAMPLE).unwrap();
+        assert_eq!(txs.len(), 5, "the closing row is still not a transaction");
+        for t in &txs {
+            assert_eq!(
+                t.declared_closing_balance,
+                Some(Decimal::from_str("22401.60").unwrap()),
+                "declared total stamped on every row: {t:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_opening_saldo_final_anterior_row_is_not_read_as_the_declared_closing() {
+        // `SALDO FINAL DEL PERIODO ANTERIOR` is the OPENER (8,540.10). Reading
+        // it as the declared closing would compare the ledger against last
+        // month's balance and manufacture a gap on every Santander import.
+        let txs = parse_text(SAMPLE).unwrap();
+        assert!(
+            txs.iter()
+                .all(|t| t.declared_closing_balance != Some(Decimal::from_str("8540.10").unwrap())),
+            "the ANTERIOR opener must never be the declared closing"
+        );
+    }
+
+    #[test]
+    fn a_dropped_trailing_row_leaves_the_declared_total_above_the_running_column() {
+        // THE case this capture exists for: the last movement (COMISION
+        // −190.00) never makes it into the parsed rows — a layout quirk, a
+        // page-break, a regex miss. The running column then ends at 22,591.60
+        // and the rows are perfectly self-consistent, so the old
+        // last-row-is-the-closing-balance check reconciled to the centavo.
+        // The bank's own declared total still says 22,401.60 — a real gap.
+        let truncated = SAMPLE.replace(
+            "27-MAY-2026   3456112   COMISION MANEJO DE CUENTA                                              190.00           22,401.60\n",
+            "",
+        );
+        let txs = parse_text(&truncated).unwrap();
+        assert_eq!(txs.len(), 4, "one movement dropped: {txs:#?}");
+        assert_eq!(
+            txs.last().unwrap().balance_after,
+            Some(Decimal::from_str("22591.60").unwrap()),
+            "the running column ends one row early"
+        );
+        assert_eq!(
+            txs.last().unwrap().declared_closing_balance,
+            Some(Decimal::from_str("22401.60").unwrap()),
+            "the declared total is unaffected by the dropped row"
+        );
+    }
+
+    #[test]
+    fn a_statement_without_a_closing_row_declares_nothing() {
+        // No `SALDO FINAL DEL PERIODO` row → no declared balance and no
+        // guess: reconciliation stays on its running-column fallback.
+        let no_closing = SAMPLE.replace(
+            "31-MAY-2026   3990771   SALDO FINAL DEL PERIODO                                                                 22,401.60\n",
+            "",
+        );
+        let txs = parse_text(&no_closing).unwrap();
+        assert_eq!(txs.len(), 5);
+        assert!(txs.iter().all(|t| t.declared_closing_balance.is_none()));
     }
 
     #[test]

@@ -221,11 +221,13 @@ const RECONCILE_MAX_EXISTING_ROWS: i64 = 2000;
 /// run BEFORE confirm so the user can act on it.
 ///
 /// For each account, for each statement file, it compares the bank's own
-/// closing SALDO for the period against the balance the app will hold once
-/// this import lands (existing rows + the incoming rows that aren't
-/// duplicates), and classifies the gap — naming the specific stored
-/// transactions that explain it when it can. See `services/reconcile.rs` for
-/// the classification and its recorded limitation.
+/// closing balance for the period — the statement's DECLARED total when the
+/// parser captured one, else the running SALDO column — against the balance
+/// the app will hold once this import lands (existing rows + the incoming rows
+/// that aren't duplicates), and classifies the gap, naming the specific stored
+/// transactions that explain it when it can. The response says which closing
+/// balance was used (`closing_balance_source`), because only the declared one
+/// is independent of the rows we parsed. See `services/reconcile.rs`.
 ///
 /// **This never blocks an import.** It is a read-only preview: nothing is
 /// written, `confirm` is unchanged, and a statement that does not reconcile
@@ -301,6 +303,11 @@ async fn reconcile_handler(
                 amount: rt.tx.amount,
                 currency: rt.tx.currency.clone(),
                 balance_after: rt.tx.balance_after,
+                // The statement's own declared closing total, when the parser
+                // captured one. It rides the row through preview→reconcile
+                // like `balance_after` does, so no extra request shape and no
+                // migration: it is a check input, never stored.
+                declared_closing_balance: rt.tx.declared_closing_balance,
                 duplicate: already_present.contains(sig),
             })
             .collect();

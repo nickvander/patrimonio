@@ -168,6 +168,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         original_description: None,
         balance_after: Some(value),
         account_label: None,
+        declared_closing_balance: None,
         from_ocr: false,
     };
     info!("Fidelity Stock Plan parser: value {} as of {}", value, end);

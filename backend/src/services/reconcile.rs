@@ -10,11 +10,23 @@
 //!
 //! ## Where the two balances come from
 //!
-//! * **The statement's closing balance** is the bank's own running SALDO
-//!   column (`ParsedTransaction::balance_after`) — a figure the bank printed,
-//!   not one we computed from the rows. The statement's opening balance is
-//!   recovered the same way (`first balance_after − the amounts up to and
-//!   including that row`).
+//! * **The statement's closing balance** is, in order of preference:
+//!   1. the statement's own **declared** total — `SALDO FINAL DEL PERIODO`
+//!      and friends, captured by the parser from the line the bank prints as
+//!      its summary (`ParsedTransaction::declared_closing_balance`). This is
+//!      the INDEPENDENT figure: it is not derived from the rows at all.
+//!   2. otherwise, the last value in the bank's running SALDO column
+//!      (`ParsedTransaction::balance_after`) — still a figure the bank
+//!      printed, but attached to a row we parsed.
+//!
+//!   Which one was used is reported as `closing_balance_source`, and both
+//!   numbers are reported separately (`declared_closing_balance` /
+//!   `running_closing_balance`) so the caller can distinguish a genuinely
+//!   independent check from a self-consistent one — and can show the user the
+//!   two disagreeing figures when they disagree.
+//!
+//!   The statement's opening balance always comes from the running column
+//!   (`first balance_after − the amounts up to and including that row`).
 //! * **The computed closing balance** is `opening + every amount the account
 //!   will hold for that period after the import` — the rows the app ALREADY
 //!   has in the period, plus the incoming rows that will actually be inserted
@@ -36,17 +48,45 @@
 //! is guidance, not a gate — the caller surfaces the state and lets the user
 //! proceed.
 //!
-//! ## ⚠ Known limitation (recorded, not fixed here)
+//! ## Why the declared balance matters (and what is still uncovered)
 //!
-//! Because the closing balance is read off the LAST PARSED row, a parser that
-//! silently drops trailing rows still "matches to the centavo" — the check is
-//! self-referential in exactly that one case. The fix is to capture the
-//! statement's independently-declared SALDO FINAL / SALDO AL CORTE, which the
-//! layout parsers currently treat as a block-terminator token and discard
-//! (`banorte_layout.rs`, `hsbc_layout.rs`, `banamex_pdf.rs`, `cetes_pdf.rs`,
-//! `santander_layout.rs`). Capturing it is a follow-up that touches every
-//! layout parser; until then this module is honest about the fact that its
-//! authority is the running balance column.
+//! With the closing balance read off the LAST PARSED row, a parser that
+//! silently drops trailing rows "matches to the centavo": the rows it kept
+//! define the balance it is checked against, so the check is self-referential
+//! in exactly that case. A declared total breaks that circle — the bank's
+//! printed figure does not move when our parse loses a row, so the loss
+//! shows up as a `difference`.
+//!
+//! **Which parsers declare one** (`closing_balance_source == Declared` only
+//! for these — everything else is the running-column fallback, which is
+//! honest but not independent):
+//!
+//! * `santander_layout.rs` — the closing `SALDO FINAL DEL PERIODO` row
+//!   (its opener, `… DEL PERIODO ANTERIOR`, is deliberately excluded).
+//! * `nu_mexico_pdf.rs` — the older running-balance layout's
+//!   "Resumen del periodo → Saldo final". Nu's CURRENT layout prints only a
+//!   grand total across account + cajitas + crédito, which is not this
+//!   account's closing balance, so it declares nothing.
+//!
+//! Still uncovered, deliberately:
+//!
+//! * `banorte_layout.rs`, `hsbc_layout.rs`, `banamex_pdf.rs`,
+//!   `banamex_layout.rs` recognise `SALDO FINAL` / `SALDO AL CORTE` only as a
+//!   furniture/blacklist keyword, and no fixture we have contains the line
+//!   with its amount — so where on the line the total sits is unverified.
+//!   Guessing would risk a plausible-looking WRONG number, which is worse
+//!   than the fallback; they stay on the running column until a real
+//!   statement is available.
+//! * `cetes_pdf.rs` declares a portfolio "Total final", not a closing balance
+//!   for the cash movements it emits as rows — a different quantity. It is
+//!   already stamped as a lone balance marker, which this module reports as
+//!   `Unavailable` / `BalanceMarkerOnly` rather than pretending to reconcile.
+//! * The **opening** balance is still taken from the running column, so a
+//!   parser that drops LEADING rows is not caught by this (the opening is
+//!   back-computed from the first row it kept).
+//! * A declared total only helps when the statement also has a running
+//!   column: without one there is no opening balance to add movements to, so
+//!   the outcome stays `Unavailable` / `NoRunningBalance`.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -86,6 +126,11 @@ pub struct IncomingRow {
     /// The bank's running SALDO after this row. `None` for parsers that don't
     /// expose one (CSV exports, cetesdirecto movement lists).
     pub balance_after: Option<Decimal>,
+    /// The statement's own DECLARED closing total, stamped identically on
+    /// every row of the statement by the parsers that can read it (see the
+    /// module doc for which). `None` leaves this statement on the
+    /// running-column fallback.
+    pub declared_closing_balance: Option<Decimal>,
     /// True when this row's dedup signature already exists in the account, so
     /// confirm's `ON CONFLICT` will skip the insert. Such a row must be
     /// counted ONCE (via its stored twin), never twice.
@@ -170,6 +215,24 @@ pub enum UnavailableReason {
     MixedCurrency,
 }
 
+/// Where the closing balance we checked against came from — the difference
+/// between a genuinely INDEPENDENT check and a self-consistent one.
+///
+/// Not a status: the outcome vocabulary is unchanged, this is the provenance
+/// of the number behind it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClosingBalanceSource {
+    /// The statement's own printed total (`SALDO FINAL DEL PERIODO`, …). It
+    /// does not come from the parsed rows, so it catches a parse that dropped
+    /// trailing rows.
+    Declared,
+    /// The last value of the bank's running SALDO column. Proves the rows are
+    /// internally consistent; CANNOT prove no trailing row was dropped, since
+    /// the last row we kept defines the balance being checked.
+    RunningBalance,
+}
+
 /// How a candidate transaction would explain the gap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -211,9 +274,21 @@ pub struct StatementReconciliation {
     pub status: ReconcileStatus,
     /// Set iff `status == Unavailable`.
     pub unavailable_reason: Option<UnavailableReason>,
-    /// The bank's own opening / closing SALDO for the period.
+    /// The bank's own opening SALDO for the period (always recovered from the
+    /// running column) and the closing balance we actually checked against —
+    /// the declared total when there is one, else the running column's last
+    /// value. `closing_balance_source` says which.
     pub statement_opening_balance: Option<Decimal>,
     pub statement_closing_balance: Option<Decimal>,
+    /// Provenance of `statement_closing_balance`. `None` iff we couldn't
+    /// check the statement at all.
+    pub closing_balance_source: Option<ClosingBalanceSource>,
+    /// The two candidates, reported separately and always (explicit `null`
+    /// when absent) so the caller never has to infer one from the other.
+    /// **`declared != running` is the fingerprint of a parse that lost rows**:
+    /// the bank's own total disagrees with where our rows end.
+    pub declared_closing_balance: Option<Decimal>,
+    pub running_closing_balance: Option<Decimal>,
     /// Opening + every amount the account will hold for this period after the
     /// import lands.
     pub computed_closing_balance: Option<Decimal>,
@@ -312,6 +387,9 @@ pub fn reconcile_statement(
                 unavailable_reason: reason,
                 statement_opening_balance: None,
                 statement_closing_balance: None,
+                closing_balance_source: None,
+                declared_closing_balance: None,
+                running_closing_balance: None,
                 computed_closing_balance: None,
                 difference: None,
                 incoming_rows: rows.len(),
@@ -378,8 +456,9 @@ pub fn reconcile_statement(
         );
     }
 
-    // The bank's running-balance column is the only closing-balance authority
-    // this pipeline currently has (see the module doc's ⚠ note).
+    // The running-balance column anchors the OPENING balance, so a statement
+    // without one still can't be reconciled — a declared closing total alone
+    // gives us nothing to add the period's movements to.
     let balance_idx: Vec<usize> = rows
         .iter()
         .enumerate()
@@ -413,11 +492,43 @@ pub fn reconcile_statement(
     let first = balance_idx[0];
     let opening = rows[first].balance_after.unwrap_or_default()
         - rows[..=first].iter().map(|r| r.amount).sum::<Decimal>();
-    // Closing = the last printed balance, plus any trailing amounts printed
-    // without one.
+    // Running closing = the last printed balance, plus any trailing amounts
+    // printed without one. Self-consistent by construction: it is defined by
+    // the rows we parsed, so it cannot notice rows we didn't.
     let last = *balance_idx.last().unwrap_or(&first);
-    let statement_closing = rows[last].balance_after.unwrap_or_default()
-        + rows[last + 1..].iter().map(|r| r.amount).sum::<Decimal>();
+    let running_closing = (rows[last].balance_after.unwrap_or_default()
+        + rows[last + 1..].iter().map(|r| r.amount).sum::<Decimal>())
+    .round_dp(2);
+
+    // The statement's own declared total, when a parser captured one. Every
+    // row of a statement carries the same value; if this group somehow holds
+    // two different ones (two statements or two account sections merged under
+    // one file name) we refuse to pick a winner and fall back to the running
+    // column rather than check against an arbitrary half of the file.
+    let declared: Vec<Decimal> = {
+        let mut seen: Vec<Decimal> = Vec::new();
+        for d in rows.iter().filter_map(|r| r.declared_closing_balance) {
+            let d = d.round_dp(2);
+            if !seen.contains(&d) {
+                seen.push(d);
+            }
+        }
+        seen
+    };
+    let declared_closing: Option<Decimal> = match declared.as_slice() {
+        [only] => Some(*only),
+        _ => None,
+    };
+
+    // Prefer the declared total: it is the only closing balance that is
+    // independent of the rows, so it is the only one that can catch a parse
+    // that silently dropped trailing rows. A disagreement between it and the
+    // running column is a REAL finding, and it must land in `difference` (a
+    // gap the user can act on), never as an error that hides the import.
+    let (statement_closing, closing_source) = match declared_closing {
+        Some(d) => (d, ClosingBalanceSource::Declared),
+        None => (running_closing, ClosingBalanceSource::RunningBalance),
+    };
 
     // What the account will actually hold for this period once the import
     // lands: the rows already stored, plus the incoming rows that are NOT
@@ -437,6 +548,9 @@ pub fn reconcile_statement(
     );
     result.statement_opening_balance = Some(opening.round_dp(2));
     result.statement_closing_balance = Some(statement_closing.round_dp(2));
+    result.closing_balance_source = Some(closing_source);
+    result.declared_closing_balance = declared_closing;
+    result.running_closing_balance = Some(running_closing);
     result.computed_closing_balance = Some(computed_closing.round_dp(2));
     result.difference = Some(difference);
 
@@ -568,8 +682,20 @@ mod tests {
             amount: dec(amount),
             currency: "MXN".into(),
             balance_after: balance.map(dec),
+            declared_closing_balance: None,
             duplicate: false,
         }
+    }
+
+    /// Stamp a parser-captured declared closing total on every row, the way
+    /// the layout parsers do.
+    fn declaring(rows: Vec<IncomingRow>, declared: &str) -> Vec<IncomingRow> {
+        rows.into_iter()
+            .map(|r| IncomingRow {
+                declared_closing_balance: Some(dec(declared)),
+                ..r
+            })
+            .collect()
     }
 
     fn stored(date: NaiveDate, amount: &str, desc: &str) -> ExistingRow {
@@ -601,6 +727,141 @@ mod tests {
         assert_eq!(r.computed_closing_balance, Some(dec("1150.00")));
         assert_eq!(r.difference, Some(Decimal::ZERO));
         assert!(r.candidates.is_empty());
+    }
+
+    #[test]
+    fn without_a_declared_total_the_check_says_it_used_the_running_column() {
+        // The fallback must never be reported as an independent check.
+        let r = reconcile_statement("mar.pdf", &january(), &[]);
+        assert_eq!(
+            r.closing_balance_source,
+            Some(ClosingBalanceSource::RunningBalance)
+        );
+        assert_eq!(r.declared_closing_balance, None);
+        assert_eq!(r.running_closing_balance, Some(dec("1150.00")));
+        assert_eq!(r.statement_closing_balance, Some(dec("1150.00")));
+    }
+
+    #[test]
+    fn a_declared_total_is_preferred_over_the_running_column() {
+        // Same statement, but the parser captured the bank's own SALDO FINAL.
+        // It agrees with the running column here, so the outcome is unchanged
+        // — except that the check is now independent, and says so.
+        let rows = declaring(january(), "1150.00");
+        let r = reconcile_statement("mar.pdf", &rows, &[]);
+        assert_eq!(r.status, ReconcileStatus::Reconciled);
+        assert_eq!(
+            r.closing_balance_source,
+            Some(ClosingBalanceSource::Declared),
+            "{r:?}"
+        );
+        assert_eq!(r.declared_closing_balance, Some(dec("1150.00")));
+        assert_eq!(r.running_closing_balance, Some(dec("1150.00")));
+        assert_eq!(r.statement_closing_balance, Some(dec("1150.00")));
+        assert_eq!(r.difference, Some(Decimal::ZERO));
+    }
+
+    #[test]
+    fn a_declared_total_that_disagrees_with_the_rows_surfaces_as_a_difference() {
+        // THE case this whole mechanism exists for. The parser dropped the
+        // statement's last row (a +200 deposit): the rows it kept are
+        // perfectly self-consistent and end at 1150, so the running-column
+        // check reconciles to the centavo and the loss is invisible. The bank
+        // declared 1350 — that 200 must surface as a difference, on an
+        // importable statement, not as an error or a silent green.
+        let rows = declaring(january(), "1350.00");
+        let r = reconcile_statement("mar.pdf", &rows, &[]);
+        assert_eq!(
+            r.statement_closing_balance,
+            Some(dec("1350.00")),
+            "the declared total is the authority"
+        );
+        assert_eq!(
+            r.running_closing_balance,
+            Some(dec("1150.00")),
+            "the running column is still reported, so the UI can show both"
+        );
+        assert_eq!(r.computed_closing_balance, Some(dec("1150.00")));
+        assert_eq!(
+            r.difference,
+            Some(dec("200.00")),
+            "the app is 200 SHORT of what the bank declared"
+        );
+        assert_eq!(
+            r.status,
+            ReconcileStatus::Unexplained,
+            "a real, actionable gap — not Unavailable, not Reconciled: {r:?}"
+        );
+        assert_eq!(
+            r.closing_balance_source,
+            Some(ClosingBalanceSource::Declared)
+        );
+        assert!(r.candidates.is_empty());
+    }
+
+    #[test]
+    fn the_same_statement_reads_green_on_the_running_column_and_red_on_the_declared_one() {
+        // Side-by-side proof that the declared total is not decorative: the
+        // identical rows reconcile when checked against themselves.
+        let self_referential = reconcile_statement("mar.pdf", &january(), &[]);
+        let independent = reconcile_statement("mar.pdf", &declaring(january(), "1350.00"), &[]);
+        assert_eq!(self_referential.status, ReconcileStatus::Reconciled);
+        assert_eq!(independent.status, ReconcileStatus::Unexplained);
+    }
+
+    #[test]
+    fn conflicting_declared_totals_in_one_file_fall_back_to_the_running_column() {
+        // Two statements (or two account sections) merged under one file name
+        // carry two different declared totals. Picking one arbitrarily would
+        // check the ledger against half the file; fall back instead, and don't
+        // claim independence.
+        let mut rows = declaring(january(), "1150.00");
+        rows[2].declared_closing_balance = Some(dec("9999.00"));
+        let r = reconcile_statement("mar.pdf", &rows, &[]);
+        assert_eq!(
+            r.closing_balance_source,
+            Some(ClosingBalanceSource::RunningBalance),
+            "{r:?}"
+        );
+        assert_eq!(r.declared_closing_balance, None);
+        assert_eq!(r.statement_closing_balance, Some(dec("1150.00")));
+        assert_eq!(r.status, ReconcileStatus::Reconciled);
+    }
+
+    #[test]
+    fn a_declared_total_does_not_rescue_a_statement_with_no_running_balance() {
+        // No running column → no opening balance to add the period's
+        // movements to. Reporting a difference against the declared total
+        // alone would be arithmetic on a number we don't have.
+        let rows: Vec<IncomingRow> = declaring(
+            vec![
+                incoming(d(2026, 1, 5), "-200.00", None),
+                incoming(d(2026, 1, 20), "-150.00", None),
+            ],
+            "1150.00",
+        );
+        let r = reconcile_statement("mar.pdf", &rows, &[]);
+        assert_eq!(r.status, ReconcileStatus::Unavailable);
+        assert_eq!(
+            r.unavailable_reason,
+            Some(UnavailableReason::NoRunningBalance)
+        );
+        assert_eq!(r.closing_balance_source, None);
+        assert_eq!(r.difference, None);
+    }
+
+    #[test]
+    fn a_declared_gap_explained_by_a_stored_row_still_names_that_row() {
+        // The declared total feeds the SAME explanation search: the bank says
+        // the period ends 300 higher than the app will, and a hand-typed row
+        // inside the period is exactly that 300.
+        let stray = stored(d(2026, 1, 14), "-300.00", "OXXO (typed by hand)");
+        let stray_id = stray.id;
+        let r = reconcile_statement("mar.pdf", &declaring(january(), "1150.00"), &[stray]);
+        assert_eq!(r.status, ReconcileStatus::ExplainedByExistingTransactions);
+        assert_eq!(r.difference, Some(dec("300.00")));
+        assert_eq!(r.candidates.len(), 1);
+        assert_eq!(r.candidates[0].transaction_id, stray_id);
     }
 
     #[test]
