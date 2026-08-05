@@ -74,14 +74,17 @@ account (equal amount, same currency, ±5 days — the house pair-matching
 window). Five of the seven tests pass before AND after by design — they are
 the "never eat real spending" guardrails.
 
-**Rule created on prod 2026-08-05 (owner-requested), HALF DONE:** rule
+**Rule created on prod 2026-08-05 (owner-requested):** rule
 `49b95d04-d85d-4db7-ab5c-f268d941c1f5` — `contains "BILT CARD"` →
 `TRANSFER_OUT`, active. Blast radius measured before writing: 10 rows, all
 on checking accounts, none card-side, none hand-edited. It applies to NEW
 rows automatically, but **the retroactive apply was blocked by the safety
-classifier** (bulk UPDATE on prod transactions), so historical rows —
-including the June $3,038.13 leg — are unchanged. The owner finishes it in
-the app: Settings → Rules → Preview retroactive → confirm. That path is
+classifier** (bulk UPDATE on prod transactions), so the owner finished it in
+the app instead (Settings → Rules → Save & apply). **Their preview matched
+the measurement exactly — 10 matches, 10 category changes, 0 renames, all on
+checking accounts** — which is precisely what the shipped dry-run exists for.
+If June's `RENT_AND_UTILITIES` still looks high, the apply didn't land;
+re-check in the app rather than by SQL. That path is
 better anyway: previewed diff, single-use token, manual-protection
 re-asserted at write time. **If the preview shows anything other than ~10
 checking-side rows, the matcher measurement was wrong — stop.**

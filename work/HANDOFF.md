@@ -7,7 +7,7 @@
 
 ## TL;DR — current state
 
-**As of 2026-08-04:** `main` is pushed and the tree is clean. **Prod is deployed through `b7a0bfc`**, and every commit on `main` after it is **documentation only** — verified with `git diff b7a0bfc..HEAD -- backend/ frontend/ scripts/` returning empty. So prod is NOT behind on code; don't redeploy on the strength of the commit count alone. **Prod runs on the homelab
+**As of 2026-08-05:** `main` is pushed and the tree is clean. **Prod is deployed through `5c403ec`**, and every commit on `main` after it is **documentation only** — verify with `git diff 5c403ec..HEAD -- backend/ frontend/ scripts/` returning empty before concluding prod is behind. Gates on that tree: backend **676/676**, frontend **1344/1344**. **Prod runs on the homelab
 host `thelab`** (`ssh nickvander@thelab`; docker compose stack at
 `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — **deployed through
 `b7a0bfc`** via the host's own `update.sh` (the same script its 3am cron
@@ -16,7 +16,7 @@ health 200, frontend 200, no errors in the api log, migration
 `2026080401 user rules` recorded `success=t`. Its provenance backfill was a
 **no-op on prod** — prod carries 0 hand-edited categories/descriptions
 across 2,520 transactions, so no existing row was rewritten. The latest APK
-is cut from `b7a0bfc` (`app-arm64-v8a-release.apk`, 28.6MB; the 65-file diff
+is cut from `5c403ec` (`app-arm64-v8a-release.apk`, 28.6MB; the 65-file diff
 touched no Android dep/Gradle/proguard file, so the emulator smoke gate
 wasn't triggered).
 
@@ -95,6 +95,15 @@ build commands live in the repo-root [AGENTS.md](../AGENTS.md) (and the
 
 ## Shipped recently (newest first — detail in CURRENT.md)
 
+- **2026-08-05 (`5c403ec`):** three owner-reported defects found by looking at
+  real data on a phone, none reachable from the suite — **credit-card payments
+  were being counted as spending** (July rent-and-utilities 8,951.77 → 3,360.79
+  on live prod; a payment leg is now matched structurally, not by category);
+  the chart's currency lens was redundant with the app-bar switcher and could
+  contradict it, now one "Ignore FX moves" chip; and the Sankey's "Left over"
+  counted vault transfers as undirected surplus, now a "Moved to savings" node
+  (card payments deliberately excluded so it can't re-double-count rent).
+  Backend 669→**676**, frontend 1325→**1344**.
 - **2026-08-04 closeout (`b7a0bfc`):** backlog burn-down — **FBAR
   per-account contribution was under-reporting** (exact-date snapshot lookup
   → a foreign account with no row on the peak date contributed 0; now

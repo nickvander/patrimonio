@@ -3,6 +3,55 @@
 > **Last updated:** 2026-08-03 (feature-research sweep, 4 features + tooltip fix committed; rules-engine MVP built)
 > **Branch:** `main`.
 
+## 2026-08-05 — Three owner-reported defects from real phone screenshots
+
+Deployed through `5c403ec`; backend **676/676**, frontend **1344/1344**. All
+three came from the owner looking at production data on their phone; none was
+reachable from the test suite.
+
+* **Credit-card payments counted as spending (`de4178f`) — the big one.**
+  Cash flow double- and triple-counted rent: the card charge, plus each
+  checking→card payment leg, all carried `RENT_AND_UTILITIES_RENT` because the
+  merchant is literally "BILT CARD", and the anti-join only excluded payments
+  tagged `LOAN_PAYMENTS_CREDIT_CARD_PAYMENT`. **Measured on live prod: July
+  `RENT_AND_UTILITIES` 8,951.77 → 3,360.79** (real rent 3,038.13 + ~322
+  utilities); ~5,591 of phantom spending removed from ONE month, and it had
+  been wrong for months across every surface fed by the shared fragment —
+  trends, spending-by-category, insights, the Sankey, the recurring detector,
+  emergency-fund runway, FIRE projection defaults.
+  A payment leg is now recognised **structurally** (outflow whose matching
+  inflow lands on one of the same user's liability accounts; equal amount,
+  same currency, ±5 days) rather than by category, because categorising out of
+  it breaks on the next card whose payment leg gets a spending label. 5 of the
+  7 tests pass before AND after by design — the "never eat real spending"
+  guardrails. Perf measured, not guessed: 11.3ms → 74.4ms, index-supported; a
+  candidate index would halve it and was declined (write amplification on the
+  hottest table).
+* **The chart currency lens was redundant AND could contradict (`2b3b03e`).**
+  It defaulted to the reporting currency but could then be set independently,
+  so the chart could read MXN while the hero above it read USD. Collapsed to a
+  single "Ignore FX moves" chip (OFF by default) — the one thing the app-bar
+  switcher cannot express. Honest edge: there is no constant-FX series in MXN,
+  so rather than hide the capability from the user most exposed to peso moves,
+  every figure on that plot is ISO-prefixed (`USD 1,770.00`) — a bare `$` is
+  also the peso glyph, and the axis `reservedSize` is corrected so `USD 2.61K`
+  can't clip to `USD 2.` (a 10× misread).
+* **"Left over" was lying to a vault user (`5c403ec`).** The owner's paycheck
+  lands in one account and gets pushed into Cards / Emergency / Rent vaults;
+  transfers are excluded from cash flow, so all that DIRECTED money showed as
+  undirected surplus (≈3× the leftover figure). A "Moved to savings" node now
+  carries it. **Card payments are deliberately excluded from that node** —
+  verified with a BEGIN/ROLLBACK probe — because rent charged to a card is
+  already counted once as spending and showing the payment leg would visually
+  re-double-count what `de4178f` just removed. Conservation sabotage-checked
+  two ways (7 and 5 failures).
+* **A rule was created on prod at the owner's request** — `contains "BILT
+  CARD"` → `TRANSFER_OUT`, blast radius measured first (10 rows, all checking,
+  none hand-edited). The retroactive apply was **blocked by the safety
+  classifier** (bulk UPDATE on prod transactions), so the owner finished it in
+  the app; their preview matched the measurement exactly (10 matches, 10
+  category changes, 0 renames), which is what the shipped dry-run is for.
+
 ## 2026-08-04 (closeout) — Backlog burn-down; FBAR under-reporting fixed
 
 Deployed through `b7a0bfc`; backend **669/669**, frontend **1325/1325**,
