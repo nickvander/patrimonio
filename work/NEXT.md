@@ -53,49 +53,37 @@ quarterly rather than ad hoc.
 
 ## Open items needing only a sitting
 
-### 🔴 CONFIRMED BUG 2026-08-04 — credit-card payments counted as spending
+### ~~Credit-card payments counted as spending~~ ✅ FIXED 2026-08-05 (`de4178f`)
 
-**Cash-flow spending is materially overstated when a card is paid from
-checking and the payment carries a spending category.** Verified against prod:
-July `RENT_AND_UTILITIES` totals **$8,951.77** under the real cash-flow filter,
-for a rent of **$3,038.13/mo** — roughly 3x, ~$5,900 overstated in one month.
+Owner-reported via a phone screenshot; the largest real-money defect found in
+this stretch. Cash-flow spending double- and triple-counted rent because the
+card charge, plus each checking→card payment leg, all carried
+`RENT_AND_UTILITIES_RENT` (the merchant is literally "BILT CARD"), and the
+anti-join only excluded payments tagged `LOAN_PAYMENTS_CREDIT_CARD_PAYMENT`.
 
-Mechanism (all rows real, same month):
-- `-3038.13` "Bilt Housing Payment" on the **Bilt Blue Card** (credit card),
-  `RENT_AND_UTILITIES_RENT` → the actual rent charge. **Correct spend.**
-- `-3038.13` "BILT CARD" from **Checking**, also `RENT_AND_UTILITIES_RENT` →
-  this is **paying the card**, counted a second time as rent.
-- `-2552.85` "BILT CARD" from another checking account, same story → a third.
-- `+3038.13` "Payment - Bilt Housing" on the card is correctly excluded by the
-  existing `NOT (amount > 0 AND is_liability_account_type(...))` anti-join.
+**Verified on live prod, before → after:** July `RENT_AND_UTILITIES`
+**$8,951.77 → $3,360.79** (the real $3,038.13 rent + ~$322 of utilities);
+~$5,591 of phantom spending removed from one month. It had been overstating
+spending for months, on every surface fed by the shared fragment — trends,
+spending-by-category, spending-insights, the Sankey, the recurring detector,
+emergency-fund runway and the FIRE projection defaults.
 
-Root cause: `CASHFLOW_ROW_ANTI_JOINS_SQL` excludes card payments **only by
-`category_detailed = 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'`**. These payment legs
-are categorized as RENT by the provider (the merchant is literally "BILT
-CARD"), so they slip through. Any card paid from checking whose payment leg
-gets a spending category has the same problem — Bilt is just the visible case
-because rent is large.
+A payment leg is now recognised **structurally**: an outflow from a
+non-liability account with a matching inflow on the same user's liability
+account (equal amount, same currency, ±5 days — the house pair-matching
+window). Five of the seven tests pass before AND after by design — they are
+the "never eat real spending" guardrails.
 
-**Fix options (owner's call):**
-1. **Systemic, preferred** — recognize a card-payment leg structurally rather
-   than by category: an outflow from a non-liability account that matches an
-   inflow on one of the SAME user's liability accounts (equal absolute amount,
-   within a few days) is a payment, not spending. `services/fx_transfer_link.rs`
-   is the existing precedent for pair-matching, and the inflow side is already
-   excluded, so only the outflow leg needs suppressing. Must not suppress a
-   genuine purchase that happens to equal a payment amount — require the
-   liability-account counterpart to exist.
-2. **Immediate, no code** — the rules engine shipped 2026-08-03 can do it
-   today: a rule matching "BILT CARD" scoped to the checking accounts, setting
-   the category to `TRANSFER_OUT`, which `NON_CASHFLOW_CATEGORIES_SQL` already
-   excludes. Retroactive apply is previewed, so the blast radius is visible
-   first.
-
-**Also visible in the recurring card:** the same rent is detected as TWO
-clusters ("Bilt" and "Bilt Housing Payment", both $3,038.13) because the
-card-side and checking-side descriptors differ — so the monthly recurring
-estimate is inflated by the same duplication. Fixing the classification should
-be checked against the detector output afterwards.
+**Two follow-ups this leaves open:**
+- **Unlinked cards still produce a phantom recurring cluster.** The collapse
+  depends on the card's inflow rows existing. If a card isn't linked, its
+  checking-side payment legs still cluster as a fake "subscription". Check the
+  live recurring card now that this has deployed — the owner's Bilt entry was
+  duplicated for exactly this descriptor reason and should now be single.
+- **An optional index** `transactions (account_id, amount, date)` takes the
+  worst-case query 74ms → 35ms. Deliberately not added: 74ms on a dashboard
+  endpoint doesn't justify write amplification on the hottest table. One-line
+  additive migration if it's ever wanted.
 
 ### Owner-reported 2026-08-04 — cash-flow / Sankey, INVESTIGATED against prod
 
@@ -123,7 +111,7 @@ behaviour.
    through to the raw description. The same label shows anywhere that row is
    listed. Fix belongs upstream (enrichment, or a normalization that strips a
    leading `*NNNN` code before grouping) — not in the diagram.
-3. **THE REAL FINDING — "Left over" is misleading for a vault user.** The
+3. **STILL OPEN — "Left over" is misleading for a vault user.** The
    diagram splits income into spending and "Left over", but internal
    transfers are excluded from cash flow, so money the owner moved into
    savings vaults and card payments lands in "Left over" as if it were
