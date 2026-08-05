@@ -21,6 +21,7 @@ pub fn router() -> Router<AppState> {
         .route("/", get(list_institutions).post(create_institution))
         .route("/sync", post(trigger_sync))
         .route("/{id}/sync", post(trigger_sync_one))
+        .route("/{id}/resync", post(trigger_full_resync))
         .route("/link-token", post(create_link_token))
         .route("/reconnect-token/{id}", post(create_reconnect_token))
         .route("/{id}", delete(delete_institution))
@@ -157,6 +158,94 @@ async fn trigger_sync_one(
 ) -> axum::response::Response {
     // Same detached-task treatment as the global sync, scoped to one id.
     spawn_sync(state, ctx.user_id, Some(vec![id])).await
+}
+
+/// Full-history re-pull for ONE Plaid institution: clear its
+/// `/transactions/sync` cursor, then run a normal sync. With a NULL cursor
+/// Plaid replays everything it currently holds for the item as `added`, so
+/// any row the incremental cursor never delivered gets (re-)imported.
+///
+/// **Why this exists.** The cursor only ever advances (`services::sync`
+/// stamps `plaid_transactions_cursor` after each pass) and a `removed`
+/// entry hard-DELETEs the local row, so before this endpoint *any*
+/// transaction missing from our DB was unrecoverable short of editing
+/// Postgres by hand. The owner's June "Bilt Housing Payment" charge and its
+/// offsetting credit went missing exactly that way, while every other
+/// transaction on the same card synced fine.
+///
+/// **Safe over existing data.** The re-import goes through
+/// [`crate::services::sync::upsert_plaid_transaction`], whose
+/// `ON CONFLICT (account_id, external_id) DO UPDATE SET` list deliberately
+/// contains NO `user_*` column. Hand edits, rule-applied categories and
+/// user renames — and their `*_source` / `*_rule_id` provenance — survive a
+/// full re-pull untouched. The same conflict key is why the reset cannot
+/// duplicate anything: Plaid re-sends the same `transaction_id`, so a
+/// replayed row updates in place.
+///
+/// **What it CANNOT do — do not promise otherwise.** A re-pull recovers only
+/// what Plaid still returns for the item. If the institution has genuinely
+/// dropped a transaction from the feed (or Plaid never received it), the
+/// full replay returns exactly the same set the incremental sync did and the
+/// row stays missing; nothing in this codebase can conjure data the upstream
+/// no longer serves. Likewise, a transaction Plaid previously withdrew via a
+/// `removed` entry is no longer part of the item's current set, so a re-pull
+/// does not resurrect it — there is no oscillation with Plaid. In both cases
+/// the remaining option is a manual entry / CSV import.
+///
+/// Fire-and-forget like every other sync trigger (DEC-021): a full-history
+/// pull is many Plaid pages of work, and axum drops the handler future when
+/// the client disconnects — blocking the request would let backgrounding the
+/// app cancel the re-pull mid-flight. Returns `202 Accepted`; the client
+/// watches `GET /dashboard/sync-status` for completion.
+async fn trigger_full_resync(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> Result<Response, ApiError> {
+    // Ownership predicate first: an unknown OR foreign institution is a flat
+    // 404, so this can't be used to probe for another user's institution ids
+    // (and can't reset their cursor).
+    let integration_type: String = sqlx::query_scalar(
+        "SELECT integration_type FROM institutions WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal)?
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "Institution not found"))?;
+
+    // Manual / CSV / PDF / crypto institutions have no Plaid cursor, so a
+    // "re-pull" would silently do nothing. Say so instead — a sync trigger
+    // that accepts and no-ops is exactly how a missing transaction goes
+    // unnoticed for another month.
+    if integration_type != "plaid" {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Full re-pull is only available for Plaid institutions",
+        ));
+    }
+
+    // Clear synchronously, BEFORE spawning: the detached sync reads the
+    // cursor off the institutions row when it starts, so clearing it after
+    // the spawn would race and the run could still go incremental.
+    let cleared = crate::services::sync::clear_plaid_cursor(&state.db, ctx.user_id, id)
+        .await
+        .map_err(internal)?;
+    if cleared == 0 {
+        // The row existed and was Plaid a moment ago; zero rows here means it
+        // was deleted or converted concurrently. Don't claim a re-pull.
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "Institution not found",
+        ));
+    }
+    info!(
+        "Full Plaid re-pull requested for institution {} (user {}): cursor cleared",
+        id, ctx.user_id
+    );
+
+    Ok(spawn_sync(state, ctx.user_id, Some(vec![id])).await)
 }
 
 /// List all linked institutions for the authenticated user.

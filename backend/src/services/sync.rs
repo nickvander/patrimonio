@@ -118,6 +118,39 @@ pub async fn mark_syncable_syncing(
     Ok(res.rows_affected())
 }
 
+/// Clear one institution's `/transactions/sync` cursor so the NEXT sync
+/// re-pulls that Plaid item's full transaction history from scratch.
+///
+/// The cursor is otherwise write-only-forward: [`sync_one_inst`] advances it
+/// after every pass and nothing ever rewinds it, so a transaction Plaid
+/// failed to deliver (or delivered and later withdrew via a `removed` entry,
+/// which we hard-DELETE) was unrecoverable short of hand-editing the DB. A
+/// NULL cursor makes Plaid replay everything it currently holds for the item
+/// as `added`, and the re-import is an upsert keyed on
+/// `(account_id, external_id)` — so it heals gaps without duplicating rows
+/// and without touching any `user_*` column (see
+/// [`upsert_plaid_transaction`]).
+///
+/// Scoped by `user_id` as well as `id`: a foreign institution matches zero
+/// rows rather than having its cursor reset. Returns the number of rows
+/// cleared (0 = unknown/foreign id), so the caller can 404 rather than
+/// reporting success on a no-op.
+pub async fn clear_plaid_cursor(
+    db: &PgPool,
+    user_id: uuid::Uuid,
+    inst_id: uuid::Uuid,
+) -> Result<u64> {
+    let res = sqlx::query(
+        "UPDATE institutions SET plaid_transactions_cursor = NULL \
+         WHERE id = $1 AND user_id = $2 AND integration_type = 'plaid'",
+    )
+    .bind(inst_id)
+    .bind(user_id)
+    .execute(db)
+    .await?;
+    Ok(res.rows_affected())
+}
+
 /// Internal sync loop.
 ///
 /// * `user_filter` — when `Some`, only institutions owned by this user
