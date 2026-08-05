@@ -4820,6 +4820,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lwSyncDeleteInstitution => 'Eliminar institución';
 
   @override
+  String get lwSyncMoreActions => 'Más acciones';
+
+  @override
+  String get lwSyncResyncAction => 'Buscar movimientos faltantes';
+
+  @override
+  String lwSyncResyncTitle(Object name) {
+    return '¿Volver a consultar $name con el proveedor?';
+  }
+
+  @override
+  String get lwSyncResyncWhat =>
+      'Le pediremos al proveedor todo el historial de movimientos de esta institución otra vez, no solo lo nuevo, e importaremos lo que nos falte. Esto puede tardar varios minutos.';
+
+  @override
+  String get lwSyncResyncLimit =>
+      'No puede recuperar lo que el proveedor ya no envía. Si los movimientos faltantes desaparecieron de su feed, una consulta completa devuelve exactamente los mismos registros que una sincronización normal, y capturarlos a mano es la opción restante.';
+
+  @override
+  String get lwSyncResyncSafe =>
+      'Tu trabajo está a salvo: los movimientos renombrados, las categorías manuales y las aplicadas por reglas nunca se sobrescriben, y los movimientos que ya tenemos se actualizan en su lugar en vez de duplicarse.';
+
+  @override
+  String get lwSyncResyncConfirm => 'Consultar ahora';
+
+  @override
   String lwSyncVia(Object source) {
     return 'Vía $source';
   }

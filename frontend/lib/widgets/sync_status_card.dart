@@ -4,6 +4,11 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 
+/// Entries of a per-institution overflow menu. A single-value enum today,
+/// but the kebab is the place any future rare per-row action goes rather
+/// than growing the always-visible icon strip.
+enum _RowAction { fullResync }
+
 class SyncStatusCard extends StatefulWidget {
   final List<dynamic> syncData;
   final VoidCallback? onRetrySync;
@@ -19,6 +24,12 @@ class SyncStatusCard extends StatefulWidget {
   final Function(String id)? onReconnect;
   final Function(String id)? onDelete;
 
+  /// Optional full-history re-pull hook (`POST /institutions/{id}/resync`).
+  /// Offered ONLY on Plaid rows, behind a confirmation — see
+  /// [_confirmFullResync]. The host is responsible for the call itself and
+  /// for reflecting the resulting sync through this same card's data.
+  final Future<void> Function(String id)? onFullResync;
+
   const SyncStatusCard({
     super.key,
     required this.syncData,
@@ -27,6 +38,7 @@ class SyncStatusCard extends StatefulWidget {
     this.onRetryBatch,
     this.onReconnect,
     this.onDelete,
+    this.onFullResync,
   });
 
   @override
@@ -93,6 +105,69 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
       }
       return _isStale(raw);
     }).length;
+  }
+
+  /// True when [inst] is a Plaid-backed institution. Only these have a
+  /// `/transactions/sync` cursor to clear, so only these can be re-pulled;
+  /// the backend answers 400 for anything else.
+  bool _isPlaid(Map inst) => inst['integration_type']?.toString() == 'plaid';
+
+  /// Confirmation for the full-history re-pull, then hand off to the host.
+  ///
+  /// The copy has to stay honest in both directions. A re-pull replays what
+  /// the provider still holds, so it CAN recover a row the incremental
+  /// cursor skipped — but it cannot conjure one the provider has dropped
+  /// from its feed, and promising recovery here would turn "your rent is
+  /// gone" into "the app lied to me". What IS guaranteed is that nothing of
+  /// the user's is lost: the backend's upsert touches no `user_*` column, so
+  /// edits, renames and rule-applied categories survive.
+  Future<void> _confirmFullResync(
+    BuildContext context,
+    Map<String, dynamic> inst,
+  ) async {
+    final l = AppLocalizations.of(context);
+    final name = inst['name']?.toString() ?? l.lwSyncUnknownInstitution;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        // gen-l10n orders placeholders alphabetically; single placeholder
+        // (name), so there is nothing to transpose here.
+        title: Text(l.lwSyncResyncTitle(name)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l.lwSyncResyncWhat),
+              const SizedBox(height: 12),
+              // The limitation is the point of this dialog, so it is styled
+              // as a warning rather than buried as fine print.
+              Text(
+                l.lwSyncResyncLimit,
+                style: TextStyle(color: context.warning),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                l.lwSyncResyncSafe,
+                style: TextStyle(fontSize: 12, color: context.textMuted),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l.actionCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l.lwSyncResyncConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await widget.onFullResync?.call(inst['id'].toString());
   }
 
   /// True when an institution should be shown while the problem filter is on:
@@ -528,6 +603,43 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
                 padding: const EdgeInsets.all(6),
                 constraints: const BoxConstraints(),
               ),
+              // Rare recovery action, so it lives behind a kebab rather than
+              // adding a fifth always-visible icon to every row. Rendered
+              // ONLY for Plaid rows: a manual/CSV institution has no
+              // provider feed to re-check at all (the backend 400s), so
+              // there is nothing to offer, not merely something to disable.
+              if (widget.onFullResync != null && _isPlaid(inst))
+                PopupMenuButton<_RowAction>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    color: context.textMuted,
+                    size: 20,
+                  ),
+                  tooltip: l.lwSyncMoreActions,
+                  padding: const EdgeInsets.all(6),
+                  onSelected: (action) {
+                    if (action == _RowAction.fullResync) {
+                      _confirmFullResync(context, inst);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<_RowAction>(
+                      value: _RowAction.fullResync,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.history,
+                            size: 18,
+                            color: context.textMuted,
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(child: Text(l.lwSyncResyncAction)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ],

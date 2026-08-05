@@ -5026,7 +5026,18 @@ class _DashboardScreenState extends State<DashboardScreen>
       );
     }
 
-    Future<void> runSync() async {
+    /// Fire a sync and watch `/sync-status` until nothing is `syncing`.
+    ///
+    /// [trigger] defaults to the global sync-everything POST; a caller with
+    /// its own 202-returning trigger (the per-institution full-history
+    /// re-pull) passes it here with the matching [total] so it rides THIS
+    /// progress machinery instead of growing a second one. Everything after
+    /// the trigger — the spinner, the live SyncStatusCard, the honest
+    /// "still running" vs "complete" toast — is shared.
+    Future<void> runSync({
+      Future<void> Function()? trigger,
+      int? syncTotal,
+    }) async {
       // Progress shows INLINE on the Sync button (spinner + "Syncing…",
       // disabled), not as a long bottom SnackBar — a 30s snackbar sat on top
       // of the Link Coinbase / Connect Bitso buttons right below it and blocked
@@ -5035,7 +5046,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (_isSyncing) return;
       // Only Plaid/crypto institutions actually sync (manual/CSV/PDF are
       // skipped server-side), so the total reflects what will really update.
-      final total = syncableInstitutionCount(_syncData);
+      final total = syncTotal ?? syncableInstitutionCount(_syncData);
       setState(() {
         _isSyncing = true;
         _syncTotal = total;
@@ -5051,9 +5062,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       // what turns backgrounding from a "connection abort" error into a
       // non-event.
       try {
-        await _apiService.syncInstitutions();
+        await (trigger ?? _apiService.syncInstitutions)();
       } catch (e) {
         // Couldn't even start the sync (network/auth) — surface and bail.
+        // For the full re-pull this is also where the backend's 400 ("Full
+        // re-pull is only available for Plaid institutions") and 404 land:
+        // ApiService surfaces the server's own `error` string, so the
+        // snackbar below shows THAT rather than a generic failure.
         debugPrint("Sync trigger failed: $e");
         if (!mounted) return;
         // ApiService throws `Exception(<localized message>)`, and
@@ -6771,6 +6786,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                           }
                         },
                         onReconnect: handleReconnect,
+                        // Full-history re-pull. The card owns the
+                        // confirmation; we only fire the 202 and then let
+                        // the SHARED runSync poller drive the existing
+                        // sync-status surface (spinner, live rows, honest
+                        // completion toast). Exactly one institution is
+                        // stamped `syncing` by the backend, hence total 1.
+                        onFullResync: (id) => runSync(
+                          trigger: () =>
+                              _apiService.resyncInstitutionFullHistory(id),
+                          syncTotal: 1,
+                        ),
                         onDelete: (id) async {
                           final confirm = await showDialog<bool>(
                             context: context,

@@ -499,6 +499,37 @@ mixin _HoldingsApi on _ApiServiceBase {
     }
   }
 
+  /// Full-history re-pull for ONE Plaid institution. The backend clears the
+  /// item's `/transactions/sync` cursor and then runs the same detached sync
+  /// [syncInstitution] triggers, so Plaid replays everything it currently
+  /// holds for the item as `added` — recovering any row the incremental
+  /// cursor never delivered.
+  ///
+  /// Returns as soon as the backend accepts (202); the re-pull runs detached
+  /// like every other sync trigger, and progress/completion are watched
+  /// through [getSyncStatus] — there is no second progress channel.
+  ///
+  /// Errors carry a server `{"error": ...}` message worth showing verbatim:
+  /// 400 for a manual/CSV institution (which has no Plaid cursor to clear)
+  /// and 404 for an unknown or foreign id. Hence [_errorFromBody] rather
+  /// than a flat status-code `Exception` — "Full re-pull is only available
+  /// for Plaid institutions" tells the user what to do; "failed: 400" does not.
+  Future<void> resyncInstitutionFullHistory(String institutionId) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/institutions/$institutionId/resync'),
+    );
+    // 202 = accepted (cursor cleared, detached re-pull started).
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw _errorFromBody(
+        response,
+        fallback: _t(
+          'Full re-check failed: ${response.statusCode}',
+          'La consulta completa falló: ${response.statusCode}',
+        ),
+      );
+    }
+  }
+
   /// Push the currently-configured PLAID_WEBHOOK_URL onto every Plaid
   /// item the caller owns via Plaid's /item/webhook/update. Used after
   /// the operator first sets the env var on a deployment that already

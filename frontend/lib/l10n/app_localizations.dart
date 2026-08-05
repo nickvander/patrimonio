@@ -7737,6 +7737,48 @@ abstract class AppLocalizations {
   /// **'Delete institution'**
   String get lwSyncDeleteInstitution;
 
+  /// No description provided for @lwSyncMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get lwSyncMoreActions;
+
+  /// No description provided for @lwSyncResyncAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-check for missing transactions'**
+  String get lwSyncResyncAction;
+
+  /// No description provided for @lwSyncResyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-check {name} with the provider?'**
+  String lwSyncResyncTitle(Object name);
+
+  /// No description provided for @lwSyncResyncWhat.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ll ask the provider for this institution\'s full transaction history again — not just what\'s new — and import anything we\'re missing. This can take several minutes.'**
+  String get lwSyncResyncWhat;
+
+  /// No description provided for @lwSyncResyncLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'It can\'t recover what the provider no longer sends. If the missing transactions have dropped out of their feed, a full re-check returns exactly the same rows as a normal sync, and adding them by hand is the remaining option.'**
+  String get lwSyncResyncLimit;
+
+  /// No description provided for @lwSyncResyncSafe.
+  ///
+  /// In en, this message translates to:
+  /// **'Your work is safe: renamed transactions, manual categories and rule-applied categories are never overwritten, and transactions we already have are updated in place rather than duplicated.'**
+  String get lwSyncResyncSafe;
+
+  /// No description provided for @lwSyncResyncConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-check now'**
+  String get lwSyncResyncConfirm;
+
   /// No description provided for @lwSyncVia.
   ///
   /// In en, this message translates to:

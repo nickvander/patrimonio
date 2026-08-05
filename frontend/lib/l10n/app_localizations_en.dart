@@ -4780,6 +4780,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lwSyncDeleteInstitution => 'Delete institution';
 
   @override
+  String get lwSyncMoreActions => 'More actions';
+
+  @override
+  String get lwSyncResyncAction => 'Re-check for missing transactions';
+
+  @override
+  String lwSyncResyncTitle(Object name) {
+    return 'Re-check $name with the provider?';
+  }
+
+  @override
+  String get lwSyncResyncWhat =>
+      'We\'ll ask the provider for this institution\'s full transaction history again — not just what\'s new — and import anything we\'re missing. This can take several minutes.';
+
+  @override
+  String get lwSyncResyncLimit =>
+      'It can\'t recover what the provider no longer sends. If the missing transactions have dropped out of their feed, a full re-check returns exactly the same rows as a normal sync, and adding them by hand is the remaining option.';
+
+  @override
+  String get lwSyncResyncSafe =>
+      'Your work is safe: renamed transactions, manual categories and rule-applied categories are never overwritten, and transactions we already have are updated in place rather than duplicated.';
+
+  @override
+  String get lwSyncResyncConfirm => 'Re-check now';
+
+  @override
   String lwSyncVia(Object source) {
     return 'Via $source';
   }
