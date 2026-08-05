@@ -74,6 +74,18 @@ account (equal amount, same currency, ±5 days — the house pair-matching
 window). Five of the seven tests pass before AND after by design — they are
 the "never eat real spending" guardrails.
 
+**Rule created on prod 2026-08-05 (owner-requested), HALF DONE:** rule
+`49b95d04-d85d-4db7-ab5c-f268d941c1f5` — `contains "BILT CARD"` →
+`TRANSFER_OUT`, active. Blast radius measured before writing: 10 rows, all
+on checking accounts, none card-side, none hand-edited. It applies to NEW
+rows automatically, but **the retroactive apply was blocked by the safety
+classifier** (bulk UPDATE on prod transactions), so historical rows —
+including the June $3,038.13 leg — are unchanged. The owner finishes it in
+the app: Settings → Rules → Preview retroactive → confirm. That path is
+better anyway: previewed diff, single-use token, manual-protection
+re-asserted at write time. **If the preview shows anything other than ~10
+checking-side rows, the matcher measurement was wrong — stop.**
+
 **Two follow-ups this leaves open:**
 - **Unlinked cards still produce a phantom recurring cluster.** The collapse
   depends on the card's inflow rows existing. If a card isn't linked, its
@@ -111,7 +123,12 @@ behaviour.
    through to the raw description. The same label shows anywhere that row is
    listed. Fix belongs upstream (enrichment, or a normalization that strips a
    leading `*NNNN` code before grouping) — not in the diagram.
-3. **STILL OPEN — "Left over" is misleading for a vault user.** The
+3. ~~**"Left over" is misleading for a vault user**~~ ✅ FIXED `5c403ec` — a
+   "Moved to savings" node now carries directed transfers and `net` drops by
+   the same amount. Card payments are deliberately EXCLUDED from that node
+   (verified by a BEGIN/ROLLBACK probe): rent charged to a card is already
+   counted once as spending, so showing the payment leg would visually
+   re-double-count what `de4178f` removed from the numbers. Original note: The
    diagram splits income into spending and "Left over", but internal
    transfers are excluded from cash flow, so money the owner moved into
    savings vaults and card payments lands in "Left over" as if it were
