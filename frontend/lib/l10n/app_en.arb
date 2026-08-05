@@ -4367,22 +4367,11 @@
   "ruleSetDescriptionHint": "Leave empty to keep the current name",
   "ruleNeedsAction": "Set a category, a new name, or both.",
   "ruleScopeLabel": "Only when (optional)",
-  "ruleScopeThisAccount": "Only {account}",
-  "@ruleScopeThisAccount": {
-    "placeholders": {
-      "account": {
-        "type": "String"
-      }
-    }
-  },
-  "ruleScopeThisCurrency": "Only {currency}",
-  "@ruleScopeThisCurrency": {
-    "placeholders": {
-      "currency": {
-        "type": "String"
-      }
-    }
-  },
+  "ruleScopeAccountField": "Account",
+  "ruleScopeAnyAccount": "Any account",
+  "ruleScopeCurrencyField": "Currency",
+  "ruleScopeAnyCurrency": "Any currency",
+  "ruleScopeOneAccountOnly": "A rule can be scoped to one account only. Matches in your other accounts stop counting — check the match count below before you apply.",
   "ruleDirectionAny": "Any direction",
   "ruleDirectionInflow": "Inflows",
   "ruleDirectionOutflow": "Outflows",

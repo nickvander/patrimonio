@@ -26,9 +26,38 @@ class _FakeRulesApi extends ApiService {
     bool forceRefresh = false,
   }) async => {
     'accounts': [
-      {'id': 'a1', 'name': 'Perfiles', 'institution_name': 'Banamex'},
+      {
+        'id': 'a1',
+        'name': 'Perfiles',
+        'institution_name': 'Banamex',
+        'currency': 'MXN',
+      },
+      {
+        'id': 'a2',
+        'name': 'Checking',
+        'institution_name': 'Chase',
+        'currency': 'USD',
+      },
     ],
   };
+
+  @override
+  Future<RulePreview> previewRule(RuleDraft draft) async {
+    lastPreviewDraft = draft;
+    return RulePreview.fromJson(const {
+      'matched': 4,
+      'category_changes': 4,
+      'description_changes': 0,
+      'skipped_manual': 0,
+      'fx_transfer_legs': 0,
+      'derived_merchant_key': '',
+      'samples': [],
+      'preview_token': 'tok-1',
+      'expires_in_seconds': 900,
+    });
+  }
+
+  RuleDraft? lastPreviewDraft;
 
   @override
   Future<List<UserRule>> reorderRules(List<String> orderedIds) async {
@@ -216,6 +245,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.deletedId, 'r1');
     expect(_allText(tester), contains('Rule deleted.'));
+  });
+
+  // The scope a rule actually has is legible from the list without opening
+  // it: the tile prints the generated summary and, under it, one chip per
+  // scope. An unscoped rule prints no scope chip at all — so "global" and
+  // "account-scoped" can't be confused at a glance.
+  testWidgets('the tile distinguishes a scoped rule from a global one', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_FakeRulesApi([..._rules])));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Account: Banamex · Perfiles'), findsOneWidget);
+    expect(find.text('Currency: MXN'), findsOneWidget);
+    // r2 (merchant_key STARBUCKS) is unscoped — exactly one account chip on
+    // the screen, belonging to r1.
+    expect(find.textContaining('Account: '), findsOneWidget);
+  });
+
+  // The editor's scope pickers are fed from the accounts the screen already
+  // read off the cached dashboard overview — on EVERY path into the sheet,
+  // including a brand-new rule. Before this, a scope could only be removed:
+  // the account option was passed only for a rule that already had one.
+  testWidgets('the new-rule sheet offers every account, defaulting to Any', (
+    tester,
+  ) async {
+    final api = _FakeRulesApi([..._rules]);
+    await tester.pumpWidget(_host(api));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    // Unscoped by default — a new rule behaves exactly as it always has.
+    expect(find.text('Any account'), findsOneWidget);
+    expect(find.text('Any currency'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Any account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Any account'));
+    await tester.pumpAndSettle();
+
+    // Both overview accounts are offered, labelled institution · account.
+    expect(find.text('Banamex · Perfiles').last, findsOneWidget);
+    expect(find.text('Chase · Checking').last, findsOneWidget);
+  });
+
+  testWidgets('editing an already-scoped rule opens on its own scope', (
+    tester,
+  ) async {
+    final api = _FakeRulesApi([..._rules]);
+    await tester.pumpWidget(_host(api));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.more_vert).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Any account'), findsNothing);
+    expect(find.text('Banamex · Perfiles'), findsOneWidget);
+    expect(api.lastPreviewDraft?.accountId, 'a1');
+    expect(api.lastPreviewDraft?.currency, 'MXN');
   });
 
   testWidgets('es: delete confirm keeps the same promise in es-MX', (

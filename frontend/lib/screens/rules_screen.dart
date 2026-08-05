@@ -41,6 +41,13 @@ class _RulesScreenState extends State<RulesScreen> {
   /// second bespoke endpoint.
   Map<String, String> _accountNames = const {};
 
+  /// The same overview accounts as an ordered picker list + the distinct
+  /// currencies they're held in — what the editor's scope pickers offer.
+  /// Sourced here, not in the sheet: the sheet is dumb/injected and never
+  /// fetches.
+  List<RuleScopeAccount> _accountOptions = const [];
+  List<String> _currencyOptions = const [];
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +62,8 @@ class _RulesScreenState extends State<RulesScreen> {
     try {
       final rules = await _api.getRules();
       Map<String, String> names = _accountNames;
+      List<RuleScopeAccount> options = _accountOptions;
+      List<String> currencies = _currencyOptions;
       if (names.isEmpty) {
         try {
           final overview = await _api.getDashboardOverview();
@@ -63,15 +72,33 @@ class _RulesScreenState extends State<RulesScreen> {
             for (final a in accounts)
               (a['id'] ?? '').toString(): _accountLabel(a),
           };
+          options =
+              [
+                for (final a in accounts)
+                  if ((a['id'] ?? '').toString().isNotEmpty)
+                    RuleScopeAccount((a['id']).toString(), _accountLabel(a)),
+              ]..sort(
+                (x, y) =>
+                    x.label.toLowerCase().compareTo(y.label.toLowerCase()),
+              );
+          currencies = {
+            for (final a in accounts)
+              if ((a['currency'] ?? '').toString().trim().isNotEmpty)
+                (a['currency']).toString().trim(),
+          }.toList()..sort();
         } catch (_) {
           // Account names are decoration on a scope chip — a rules list
-          // that renders without them beats an error page.
+          // that renders without them beats an error page. The editor's
+          // pickers degrade with them (an existing scope still renders;
+          // see RuleEditorSheet's choice union).
         }
       }
       if (!mounted) return;
       setState(() {
         _rules = rules;
         _accountNames = names;
+        _accountOptions = options;
+        _currencyOptions = currencies;
       });
     } catch (e) {
       if (!mounted) return;
@@ -102,6 +129,12 @@ class _RulesScreenState extends State<RulesScreen> {
               _accountNames[rule.accountId!] ?? rule.accountId!,
             ),
       currencyOption: rule?.currency,
+      // Every path into the sheet gets the full pick list — new rule as
+      // well as edit. Scoping used to be reachable only for a rule that
+      // was already scoped, which meant a scope could be removed but
+      // never added.
+      accounts: _accountOptions,
+      currencies: _currencyOptions,
     );
     if (saved == true && mounted) await _load();
   }

@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/widgets/rule_editor_sheet.dart';
@@ -86,13 +89,16 @@ class _FakeRulesApi extends ApiService {
 }
 
 Widget _host(
-  _FakeRulesApi api, {
+  ApiService api, {
   Locale locale = const Locale('en'),
   RuleDraft initial = const RuleDraft(
     matchType: 'contains',
     matchValue: 'OXXO GAS',
     setCategory: 'Transportation',
   ),
+  String? ruleId,
+  List<RuleScopeAccount> accounts = const <RuleScopeAccount>[],
+  List<String> currencies = const <String>[],
 }) => MaterialApp(
   locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -105,6 +111,9 @@ Widget _host(
             context,
             api: api,
             initial: initial,
+            ruleId: ruleId,
+            accounts: accounts,
+            currencies: currencies,
             previewDebounce: Duration.zero,
           ),
           child: const Text('open'),
@@ -113,6 +122,28 @@ Widget _host(
     ),
   ),
 );
+
+const List<RuleScopeAccount> _accounts = [
+  RuleScopeAccount('a1', 'Banamex · Perfiles'),
+  RuleScopeAccount('a2', 'Chase · Checking'),
+];
+
+/// Open a dropdown's menu and pick [option]. The sheet's scope section sits
+/// below the fold in an 800×600 test window, so the field is scrolled into
+/// view first — a tap on an off-screen dropdown would miss.
+Future<void> _pickFromDropdown(
+  WidgetTester tester,
+  String current,
+  String option,
+) async {
+  await tester.ensureVisible(find.text(current).first);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(current).first);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(option).last);
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
+}
 
 /// Open the sheet and let the modal route animate in. Deliberately NOT
 /// pumpAndSettle: while a preview is in flight the diff shows a
@@ -556,5 +587,280 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.previewCalls, 2);
     expect(api.lastPreviewDraft?.matchType, 'exact');
+  });
+
+  // The backend's user_rules model has always carried account_id and
+  // currency, but the sheet only ever offered them as a chip built from a
+  // single caller-supplied option — which the rules screen passed ONLY for a
+  // rule that was already scoped. Scope could therefore be removed but never
+  // added: a `contains "BILT CARD"` rule was unavoidably global, and would
+  // have caught a real charge on the Bilt card itself.
+  group('account/currency scope on every path into the sheet', () {
+    testWidgets('the picker renders unscoped by default on a plain edit', (
+      tester,
+    ) async {
+      final api = _FakeRulesApi(preview: RulePreview.fromJson(_previewPayload));
+      await tester.pumpWidget(
+        _host(
+          api,
+          ruleId: 'r1',
+          accounts: _accounts,
+          currencies: const ['MXN', 'USD'],
+        ),
+      );
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      // Both pickers are present and both read "Any …" — an existing rule
+      // stays exactly as unscoped as it was.
+      expect(find.text('Any account'), findsOneWidget);
+      expect(find.text('Any currency'), findsOneWidget);
+      expect(api.lastPreviewDraft?.accountId, isNull);
+      expect(api.lastPreviewDraft?.currency, isNull);
+      // The single-account caveat is only shown once a scope is chosen.
+      expect(find.textContaining('one account only'), findsNothing);
+    });
+
+    testWidgets('picking an account re-previews with account_id and says '
+        'plainly that a rule can only cover one account', (tester) async {
+      final api = _FakeRulesApi(preview: RulePreview.fromJson(_previewPayload));
+      await tester.pumpWidget(_host(api, accounts: _accounts));
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+      expect(api.previewCalls, 1);
+
+      await _pickFromDropdown(tester, 'Any account', 'Chase · Checking');
+
+      expect(api.previewCalls, 2);
+      expect(api.lastPreviewDraft?.accountId, 'a2');
+      // The owner's card payments come from TWO checking accounts and the
+      // schema holds one account_id — so the consequence is stated, not
+      // hidden, right where the scope is chosen. The preview's match count
+      // below it is the hard number.
+      expect(
+        _allText(tester),
+        contains(
+          'A rule can be scoped to one account only. Matches in your other '
+          'accounts stop counting — check the match count below before you '
+          'apply.',
+        ),
+      );
+    });
+
+    testWidgets('a scope change re-gates the apply exactly like a matcher '
+        'edit — no applying against a stale token', (tester) async {
+      final api = _FakeRulesApi(preview: RulePreview.fromJson(_previewPayload));
+      await tester.pumpWidget(_host(api, accounts: _accounts));
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(
+                FilledButton,
+                'Save & apply · changes 22 categories, 31 names',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      // Block the NEXT preview, then change the scope: the diff and the
+      // token it minted belong to the unscoped rule, so both actions must
+      // go dead until the re-scoped preview lands.
+      api.gate = Completer<RulePreview>();
+      await _pickFromDropdown(tester, 'Any account', 'Banamex · Perfiles');
+
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Save & apply'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Save rule'),
+            )
+            .onPressed,
+        isNull,
+      );
+
+      // A narrower scope matching fewer rows IS the signal that scoping to
+      // one account drops the other's transactions.
+      api.gate!.complete(
+        RulePreview.fromJson({
+          ..._previewPayload,
+          'matched': 6,
+          'category_changes': 6,
+          'description_changes': 0,
+          'preview_token': 'tok-scoped',
+        }),
+      );
+      api.gate = null;
+      await tester.pumpAndSettle();
+
+      expect(_allText(tester), contains('Matches 6'));
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(
+                FilledButton,
+                'Save & apply · changes 6 transactions',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets('es-MX: the pickers and the caveat are localized', (
+      tester,
+    ) async {
+      final api = _FakeRulesApi(preview: RulePreview.fromJson(_previewPayload));
+      await tester.pumpWidget(
+        _host(
+          api,
+          locale: const Locale('es'),
+          accounts: _accounts,
+          currencies: const ['MXN'],
+        ),
+      );
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cualquier cuenta'), findsOneWidget);
+      expect(find.text('Cualquier moneda'), findsOneWidget);
+
+      await _pickFromDropdown(tester, 'Cualquier cuenta', 'Chase · Checking');
+      expect(
+        _allText(tester),
+        contains(
+          'Una regla solo puede limitarse a una cuenta. Las coincidencias en '
+          'tus otras cuentas dejan de contar: revisa el número de '
+          'coincidencias abajo antes de aplicar.',
+        ),
+      );
+    });
+
+    testWidgets('a rule scoped to an account the caller never listed still '
+        'shows its own scope', (tester) async {
+      final api = _FakeRulesApi(preview: RulePreview.fromJson(_previewPayload));
+      await tester.pumpWidget(
+        _host(
+          api,
+          ruleId: 'r9',
+          initial: const RuleDraft(
+            matchType: 'contains',
+            matchValue: 'BILT CARD',
+            setCategory: 'Transfer',
+            accountId: 'gone-from-overview',
+          ),
+          accounts: _accounts,
+        ),
+      );
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      // Reading "Any account" here would misdescribe the rule.
+      expect(find.text('Any account'), findsNothing);
+      expect(find.text('gone-from-overview'), findsOneWidget);
+      expect(api.lastPreviewDraft?.accountId, 'gone-from-overview');
+    });
+  });
+
+  // Wire-level: what the sheet's scope selection actually puts on the socket,
+  // through the real ApiService (MockClient via debugHttpClientOverride) —
+  // the widget-level fakes above stop at the RuleDraft.
+  group('scope on the wire', () {
+    tearDown(() {
+      ApiService.debugHttpClientOverride = null;
+      ApiService.clearDashboardCache();
+    });
+
+    testWidgets('a scoped rule POSTs account_id and currency', (tester) async {
+      final requests = <http.Request>[];
+      ApiService.debugHttpClientOverride = MockClient((request) async {
+        requests.add(request);
+        if (request.url.path.endsWith('/rules/preview')) {
+          return http.Response(jsonEncode(_previewPayload), 200);
+        }
+        return http.Response(jsonEncode({'id': 'rule-9'}), 201);
+      });
+
+      await tester.pumpWidget(
+        _host(
+          ApiService(),
+          accounts: _accounts,
+          currencies: const ['MXN', 'USD'],
+        ),
+      );
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      await _pickFromDropdown(tester, 'Any account', 'Banamex · Perfiles');
+      await _pickFromDropdown(tester, 'Any currency', 'MXN');
+      await tester.pumpAndSettle();
+
+      final previewBody =
+          jsonDecode(
+                requests.lastWhere((r) => r.url.path.endsWith('/preview')).body,
+              )
+              as Map<String, dynamic>;
+      expect(previewBody['account_id'], 'a1');
+      expect(previewBody['currency'], 'MXN');
+
+      await tester.ensureVisible(find.text('Save rule'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save rule'));
+      await tester.pumpAndSettle();
+
+      final create = requests.lastWhere(
+        (r) => r.method == 'POST' && r.url.path.endsWith('/rules'),
+      );
+      final body = jsonDecode(create.body) as Map<String, dynamic>;
+      expect(body['match_type'], 'contains');
+      expect(body['match_value'], 'OXXO GAS');
+      expect(body['set_category'], 'Transportation');
+      expect(body['account_id'], 'a1');
+      expect(body['currency'], 'MXN');
+    });
+
+    testWidgets('the unscoped default omits both keys entirely', (
+      tester,
+    ) async {
+      final requests = <http.Request>[];
+      ApiService.debugHttpClientOverride = MockClient((request) async {
+        requests.add(request);
+        if (request.url.path.endsWith('/rules/preview')) {
+          return http.Response(jsonEncode(_previewPayload), 200);
+        }
+        return http.Response(jsonEncode({'id': 'rule-9'}), 201);
+      });
+
+      await tester.pumpWidget(
+        _host(
+          ApiService(),
+          accounts: _accounts,
+          currencies: const ['MXN', 'USD'],
+        ),
+      );
+      await _openSheet(tester);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Save rule'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save rule'));
+      await tester.pumpAndSettle();
+
+      final create = requests.lastWhere(
+        (r) => r.method == 'POST' && r.url.path.endsWith('/rules'),
+      );
+      final body = jsonDecode(create.body) as Map<String, dynamic>;
+      expect(body.containsKey('account_id'), isFalse);
+      expect(body.containsKey('currency'), isFalse);
+    });
   });
 }

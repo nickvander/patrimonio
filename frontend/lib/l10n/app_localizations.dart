@@ -12383,17 +12383,35 @@ abstract class AppLocalizations {
   /// **'Only when (optional)'**
   String get ruleScopeLabel;
 
-  /// No description provided for @ruleScopeThisAccount.
+  /// No description provided for @ruleScopeAccountField.
   ///
   /// In en, this message translates to:
-  /// **'Only {account}'**
-  String ruleScopeThisAccount(String account);
+  /// **'Account'**
+  String get ruleScopeAccountField;
 
-  /// No description provided for @ruleScopeThisCurrency.
+  /// No description provided for @ruleScopeAnyAccount.
   ///
   /// In en, this message translates to:
-  /// **'Only {currency}'**
-  String ruleScopeThisCurrency(String currency);
+  /// **'Any account'**
+  String get ruleScopeAnyAccount;
+
+  /// No description provided for @ruleScopeCurrencyField.
+  ///
+  /// In en, this message translates to:
+  /// **'Currency'**
+  String get ruleScopeCurrencyField;
+
+  /// No description provided for @ruleScopeAnyCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'Any currency'**
+  String get ruleScopeAnyCurrency;
+
+  /// No description provided for @ruleScopeOneAccountOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'A rule can be scoped to one account only. Matches in your other accounts stop counting — check the match count below before you apply.'**
+  String get ruleScopeOneAccountOnly;
 
   /// No description provided for @ruleDirectionAny.
   ///

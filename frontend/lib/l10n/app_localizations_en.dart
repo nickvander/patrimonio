@@ -7746,14 +7746,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ruleScopeLabel => 'Only when (optional)';
 
   @override
-  String ruleScopeThisAccount(String account) {
-    return 'Only $account';
-  }
+  String get ruleScopeAccountField => 'Account';
 
   @override
-  String ruleScopeThisCurrency(String currency) {
-    return 'Only $currency';
-  }
+  String get ruleScopeAnyAccount => 'Any account';
+
+  @override
+  String get ruleScopeCurrencyField => 'Currency';
+
+  @override
+  String get ruleScopeAnyCurrency => 'Any currency';
+
+  @override
+  String get ruleScopeOneAccountOnly =>
+      'A rule can be scoped to one account only. Matches in your other accounts stop counting — check the match count below before you apply.';
 
   @override
   String get ruleDirectionAny => 'Any direction';

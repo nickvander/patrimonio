@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../theme/buttons.dart';
+import '../theme/menus.dart';
 import '../utils/theme_colors.dart';
 import 'connected_segments.dart';
 import 'rule_preview_diff.dart';
 
-/// An account the sheet can offer as a scope chip ("only this account").
+/// An account the sheet can offer in the "only this account" picker.
 /// The label is resolved by the caller — the sheet never looks accounts up.
 class RuleScopeAccount {
   const RuleScopeAccount(this.id, this.label);
@@ -40,6 +41,8 @@ class RuleEditorSheet extends StatefulWidget {
     this.ruleId,
     this.accountOption,
     this.currencyOption,
+    this.accounts = const <RuleScopeAccount>[],
+    this.currencies = const <String>[],
     this.categorySuggestions = const <String>[],
     this.previewDebounce = const Duration(milliseconds: 450),
   });
@@ -53,11 +56,21 @@ class RuleEditorSheet extends StatefulWidget {
   /// Non-null = edit mode (PATCH instead of POST).
   final String? ruleId;
 
-  /// Offered as the "only this account" chip; null hides that chip.
+  /// One account worth offering even when [accounts] doesn't list it — the
+  /// row's own account on the "Save as rule…" path. Folded into the picker's
+  /// options, deduped by id.
   final RuleScopeAccount? accountOption;
 
-  /// Offered as the "only this currency" chip; null hides that chip.
+  /// Same, for the currency picker.
   final String? currencyOption;
+
+  /// Every account the scope picker can offer, in display order. The sheet
+  /// never fetches: the caller hands it whatever list it already has (the
+  /// rules screen reads the cached dashboard overview).
+  final List<RuleScopeAccount> accounts;
+
+  /// Currency codes the scope picker can offer.
+  final List<String> currencies;
 
   /// The shared prettified category list — same source the bulk-
   /// categorize / split / detail-panel editors feed from, so a rule can't
@@ -82,8 +95,18 @@ class _RuleEditorSheetState extends State<RuleEditorSheet> {
 
   late String _matchType;
   String? _direction;
-  late bool _scopeAccount;
-  late bool _scopeCurrency;
+
+  /// Scope selections — null means "any", i.e. the unscoped default every
+  /// existing rule keeps.
+  String? _accountId;
+  String? _currency;
+
+  /// Picker options, resolved once: what the caller offers, plus whatever
+  /// the rule is ALREADY scoped to. A rule pinned to an account the
+  /// overview no longer returns must still render (and be able to keep)
+  /// its own scope rather than silently reading as "Any account".
+  late final List<RuleScopeAccount> _accountChoices = _buildAccountChoices();
+  late final List<String> _currencyChoices = _buildCurrencyChoices();
 
   RulePreview? _preview;
   bool _previewing = false;
@@ -106,8 +129,12 @@ class _RuleEditorSheetState extends State<RuleEditorSheet> {
         ? d.matchType
         : 'contains';
     _direction = d.direction;
-    _scopeAccount = d.accountId != null && widget.accountOption != null;
-    _scopeCurrency = d.currency != null && widget.currencyOption != null;
+    _accountId = _accountChoices.any((a) => a.id == d.accountId)
+        ? d.accountId
+        : null;
+    _currency = _currencyChoices.contains(d.currency?.trim())
+        ? d.currency?.trim()
+        : null;
     _valueCtrl = TextEditingController(text: d.matchValue);
     _categoryCtrl = TextEditingController(text: d.setCategory ?? '');
     _nameCtrl = TextEditingController(text: d.setDescription ?? '');
@@ -148,6 +175,48 @@ class _RuleEditorSheetState extends State<RuleEditorSheet> {
     super.dispose();
   }
 
+  /// [RuleEditorSheet.accounts] + [RuleEditorSheet.accountOption] + the
+  /// initial draft's account, deduped by id, first occurrence wins.
+  List<RuleScopeAccount> _buildAccountChoices() {
+    final seen = <String>{};
+    final out = <RuleScopeAccount>[];
+    void add(RuleScopeAccount a) {
+      if (a.id.isEmpty || !seen.add(a.id)) return;
+      out.add(a);
+    }
+
+    for (final a in widget.accounts) {
+      add(a);
+    }
+    final option = widget.accountOption;
+    if (option != null) add(option);
+    final initialId = widget.initial.accountId;
+    if (initialId != null &&
+        initialId.isNotEmpty &&
+        !seen.contains(initialId)) {
+      // No label to be had — the id is at least honest about the scope
+      // being there, which reading "Any account" would not be.
+      add(RuleScopeAccount(initialId, initialId));
+    }
+    return out;
+  }
+
+  /// Same union for currencies, sorted so the order doesn't wobble with
+  /// whatever order the caller's accounts came back in. Codes are compared
+  /// verbatim (never upper-cased): the value goes back on the wire.
+  List<String> _buildCurrencyChoices() {
+    final out = <String>{};
+    for (final c in [
+      ...widget.currencies,
+      ?widget.currencyOption,
+      ?widget.initial.currency,
+    ]) {
+      final s = c.trim();
+      if (s.isNotEmpty) out.add(s);
+    }
+    return out.toList()..sort();
+  }
+
   static String _numText(double? v) {
     if (v == null) return '';
     return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
@@ -167,8 +236,8 @@ class _RuleEditorSheetState extends State<RuleEditorSheet> {
   RuleDraft get _draft => RuleDraft(
     matchType: _matchType,
     matchValue: _valueCtrl.text,
-    accountId: _scopeAccount ? widget.accountOption?.id : null,
-    currency: _scopeCurrency ? widget.currencyOption : null,
+    accountId: _accountId,
+    currency: _currency,
     direction: _direction,
     amountMin: _parseBound(_minCtrl.text),
     amountMax: _parseBound(_maxCtrl.text),
@@ -486,39 +555,7 @@ class _RuleEditorSheetState extends State<RuleEditorSheet> {
                             const SizedBox(height: 18),
                             _sectionLabel(context, l.ruleScopeLabel),
                             const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                if (widget.accountOption != null)
-                                  FilterChip(
-                                    label: Text(
-                                      l.ruleScopeThisAccount(
-                                        widget.accountOption!.label,
-                                      ),
-                                    ),
-                                    selected: _scopeAccount,
-                                    onSelected: (v) {
-                                      setState(() => _scopeAccount = v);
-                                      _schedulePreview();
-                                    },
-                                  ),
-                                if (widget.currencyOption != null)
-                                  FilterChip(
-                                    label: Text(
-                                      l.ruleScopeThisCurrency(
-                                        widget.currencyOption!,
-                                      ),
-                                    ),
-                                    selected: _scopeCurrency,
-                                    onSelected: (v) {
-                                      setState(() => _scopeCurrency = v);
-                                      _schedulePreview();
-                                    },
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
+                            ..._scopePickers(context, l, stacked: stacked),
                             ConnectedSegments<String?>(
                               selected: _direction,
                               onSelected: (v) {
@@ -611,6 +648,122 @@ class _RuleEditorSheetState extends State<RuleEditorSheet> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The account / currency scope pickers, plus the trailing gap. Empty
+  /// when the caller offered no options at all (nothing to pick from beats
+  /// a dropdown whose only entry is "Any account").
+  ///
+  /// Both default to "Any …", so a rule the user never scopes keeps the
+  /// unscoped behaviour it has always had. Changing either goes through
+  /// [_schedulePreview] exactly like a matcher edit — which drops the
+  /// preview on screen AND the apply token behind it, so an apply can
+  /// never fire against the counts of a differently-scoped rule.
+  List<Widget> _scopePickers(
+    BuildContext context,
+    AppLocalizations l, {
+    required bool stacked,
+  }) {
+    final account = _accountChoices.isEmpty
+        ? null
+        : _scopeDropdown<String>(
+            context,
+            label: l.ruleScopeAccountField,
+            anyLabel: l.ruleScopeAnyAccount,
+            value: _accountId,
+            options: [for (final a in _accountChoices) (a.id, a.label)],
+            onChanged: (v) {
+              if (v == _accountId) return;
+              setState(() => _accountId = v);
+              _schedulePreview();
+            },
+          );
+    final currency = _currencyChoices.isEmpty
+        ? null
+        : _scopeDropdown<String>(
+            context,
+            label: l.ruleScopeCurrencyField,
+            anyLabel: l.ruleScopeAnyCurrency,
+            value: _currency,
+            options: [for (final c in _currencyChoices) (c, c)],
+            onChanged: (v) {
+              if (v == _currency) return;
+              setState(() => _currency = v);
+              _schedulePreview();
+            },
+          );
+    if (account == null && currency == null) return const [];
+
+    final Widget row;
+    if (account == null || currency == null) {
+      row = account ?? currency!;
+    } else if (stacked) {
+      row = Column(children: [account, const SizedBox(height: 10), currency]);
+    } else {
+      row = Row(
+        children: [
+          Expanded(flex: 3, child: account),
+          const SizedBox(width: 10),
+          Expanded(flex: 2, child: currency),
+        ],
+      );
+    }
+    return [
+      row,
+      // The schema holds ONE account_id, so a rule cannot span two
+      // accounts. Said out loud the moment a scope is picked, because the
+      // failure mode is silent: payments made from a second account simply
+      // stop matching. The preview's match count below is the hard number.
+      if (_accountId != null) ...[
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, size: 14, color: context.warning),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                l.ruleScopeOneAccountOnly,
+                style: TextStyle(fontSize: 11.5, color: context.warning),
+              ),
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: 10),
+    ];
+  }
+
+  /// One "Any …"-defaulted scope dropdown. House dropdown chrome comes
+  /// from `theme/menus.dart` (the legacy dropdown route has no theme hook).
+  Widget _scopeDropdown<T extends Object>(
+    BuildContext context, {
+    required String label,
+    required String anyLabel,
+    required T? value,
+    required List<(T, String)> options,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return DropdownButtonFormField<T?>(
+      initialValue: value,
+      isExpanded: true,
+      dropdownColor: houseDropdownColor(context),
+      borderRadius: kMenuRadius,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+      items: [
+        DropdownMenuItem<T?>(value: null, child: Text(anyLabel)),
+        for (final (v, text) in options)
+          DropdownMenuItem<T?>(
+            value: v,
+            child: Text(text, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: onChanged,
     );
   }
 
@@ -785,6 +938,8 @@ Future<bool?> showRuleEditorSheet(
   String? ruleId,
   RuleScopeAccount? accountOption,
   String? currencyOption,
+  List<RuleScopeAccount> accounts = const <RuleScopeAccount>[],
+  List<String> currencies = const <String>[],
   List<String> categorySuggestions = const <String>[],
   Duration previewDebounce = const Duration(milliseconds: 450),
 }) {
@@ -801,6 +956,8 @@ Future<bool?> showRuleEditorSheet(
       ruleId: ruleId,
       accountOption: accountOption,
       currencyOption: currencyOption,
+      accounts: accounts,
+      currencies: currencies,
       categorySuggestions: categorySuggestions,
       previewDebounce: previewDebounce,
     ),

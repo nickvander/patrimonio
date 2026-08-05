@@ -7813,14 +7813,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ruleScopeLabel => 'Solo cuando (opcional)';
 
   @override
-  String ruleScopeThisAccount(String account) {
-    return 'Solo $account';
-  }
+  String get ruleScopeAccountField => 'Cuenta';
 
   @override
-  String ruleScopeThisCurrency(String currency) {
-    return 'Solo $currency';
-  }
+  String get ruleScopeAnyAccount => 'Cualquier cuenta';
+
+  @override
+  String get ruleScopeCurrencyField => 'Moneda';
+
+  @override
+  String get ruleScopeAnyCurrency => 'Cualquier moneda';
+
+  @override
+  String get ruleScopeOneAccountOnly =>
+      'Una regla solo puede limitarse a una cuenta. Las coincidencias en tus otras cuentas dejan de contar: revisa el número de coincidencias abajo antes de aplicar.';
 
   @override
   String get ruleDirectionAny => 'Cualquiera';
