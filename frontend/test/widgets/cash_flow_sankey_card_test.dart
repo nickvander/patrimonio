@@ -427,6 +427,125 @@ void main() {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // "Moved to savings"
+  //
+  // The owner's vault workflow: the paycheck lands in one account and is
+  // pushed into savings sub-accounts. Internal transfers are excluded from
+  // income and spending, so every one of those pesos used to land in
+  // "Left over" — on the real data, transfers out ran ~3x the leftover figure.
+  // -------------------------------------------------------------------------
+
+  group('the directed-savings node', () {
+    testWidgets('renders with its amount, and Left over shrinks to match', (
+      tester,
+    ) async {
+      await pump(tester, _vaultCard());
+      final painter = _painterFor(tester, 'main');
+
+      // The un-elided label, straight off the diagram the painter drew.
+      expect(painter.diagram.nodeById('out:moved')!.label, 'Moved to savings');
+      expect(
+        painter.diagram.nodeById('out:moved')!.value,
+        closeTo(1500.0, 1e-9),
+      );
+
+      final values = {
+        for (final p in _placements(tester, 'main')) p.nodeId: p.value,
+      };
+      // Exact money, like every other node on this card.
+      expect(values['out:moved'], r'$1,500.00');
+      // 6,000 in − 4,000 spent − 1,500 directed. The same month with no
+      // transfers leaves $2,000, and that whole gap used to read as surplus.
+      expect(values['out:saved'], r'$500.00');
+    });
+
+    testWidgets('it goes through the shared label placer like any other node', (
+      tester,
+    ) async {
+      await pump(tester, _vaultCard());
+      final placements = _placements(tester, 'main');
+      expect(placements.map((p) => p.nodeId), contains('out:moved'));
+      _expectNoOverlap(placements);
+      _expectInsideCanvas(tester, 'main', placements);
+    });
+
+    testWidgets('the same holds at phone width', (tester) async {
+      await pump(tester, _vaultCard(), width: 360, view: const Size(390, 1800));
+      final placements = _placements(tester, 'main');
+      _expectNoOverlap(placements);
+      _expectInsideCanvas(tester, 'main', placements);
+    });
+
+    testWidgets('the flow is narrated to screen readers, in en', (
+      tester,
+    ) async {
+      await pump(tester, _vaultCard());
+      final main = _semanticsStartingWith(tester, 'Money flow diagram');
+      expect(main, isNotEmpty);
+      expect(main, contains('Money in to Moved to savings'));
+      expect(main, contains(r'$1,500.00'));
+    });
+
+    testWidgets('…and in es-MX', (tester) async {
+      await pump(tester, _vaultCard(), locale: const Locale('es'));
+      final main = _semanticsStartingWith(
+        tester,
+        'Diagrama de flujo de dinero',
+      );
+      expect(main, isNotEmpty);
+      // "de {source} a {target}" — the es node label, in the es sentence.
+      expect(main, contains('de Dinero disponible a Movido a ahorros'));
+    });
+
+    testWidgets('a period with no transfers renders no such node', (
+      tester,
+    ) async {
+      // The same month with nothing directed anywhere.
+      await pump(tester, _vaultCard(transferred: 0.0));
+      final painter = _painterFor(tester, 'main');
+      expect(painter.diagram.nodeById('out:moved'), isNull);
+      expect(
+        _placements(tester, 'main').map((p) => p.nodeId),
+        isNot(contains('out:moved')),
+      );
+      final main = _semanticsStartingWith(tester, 'Money flow diagram');
+      expect(main, isNot(contains('Moved to savings')));
+      // …and the untouched surplus is still the full $2,000.
+      final values = {
+        for (final p in _placements(tester, 'main')) p.nodeId: p.value,
+      };
+      expect(values['out:saved'], r'$2,000.00');
+    });
+
+    testWidgets('tapping the band reads it out in the header', (tester) async {
+      await pump(tester, _vaultCard());
+      final painter = _painterFor(tester, 'main');
+      final band = painter.layout.bands.firstWhere(
+        (b) => b.link.target == 'out:moved',
+      );
+      final canvasRect = tester.getRect(
+        find.byKey(const Key('cfsCanvas-main')),
+      );
+      final point =
+          canvasRect.topLeft +
+          Offset(
+            (band.sourceRect.right + band.targetRect.left) / 2,
+            band.targetTop + band.thickness / 2,
+          );
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Money in  →  Moved to savings'), findsOneWidget);
+      // 1,500 of a 6,000 pool.
+      expect(find.textContaining(r'$1,500.00'), findsWidgets);
+      expect(find.textContaining('25.0%'), findsWidgets);
+      // …and the readout is still clear of the finger.
+      final readout = tester.getRect(find.byKey(const Key('cfsReadout')));
+      expect(readout.contains(point), isFalse);
+    });
+  });
+
   group('the FX band stays inside its canvas', () {
     testWidgets('the painter clips to its bounds', (tester) async {
       await pump(
@@ -491,6 +610,13 @@ SankeyPainter _painterFor(WidgetTester tester, String id) =>
 /// The painter's real placements for one diagram, at its real painted size.
 List<SankeyLabelPlacement> _placements(WidgetTester tester, String id) =>
     _painterFor(tester, id).labelPlacements(tester.getSize(_painterFinder(id)));
+
+/// The first `Semantics` label on screen that starts with [prefix] — the
+/// mirrored diagram summary, since a painted canvas is invisible otherwise.
+String _semanticsStartingWith(WidgetTester tester, String prefix) => tester
+    .widgetList<Semantics>(find.byType(Semantics))
+    .map((s) => s.properties.label ?? '')
+    .firstWhere((s) => s.startsWith(prefix), orElse: () => '');
 
 void _expectNoOverlap(List<SankeyLabelPlacement> placements) {
   for (var i = 0; i < placements.length; i++) {
@@ -641,6 +767,31 @@ CashFlowSankeyCard _threeMonthCard() => CashFlowSankeyCard(
   targetCurrency: 'USD',
   usdMxnRate: 18.0,
 );
+
+/// The vault month: same income and spending as `_trends`, but $1,500 of it
+/// pushed into savings sub-accounts by internal transfer. `/dashboard/trends`
+/// reports that as a NET `transferred` of −1,500, already stripped of both
+/// legs of any credit-card payment by the backend's shared cash-flow
+/// anti-joins — a card payment settles spending the category bands already
+/// draw, so it must never appear here.
+CashFlowSankeyCard _vaultCard({double transferred = -1500.0}) =>
+    CashFlowSankeyCard(
+      apiService: _FakeApi(),
+      trends: <Map<String, dynamic>>[
+        {
+          'month': '2026-07',
+          'income': 6000.0,
+          'spending': 4000.0,
+          'invested': 0.0,
+          'transferred': transferred,
+        },
+      ],
+      months: 1,
+      conversionFactor: 1.0,
+      currencyFormat: moneyFormat('USD'),
+      targetCurrency: 'USD',
+      usdMxnRate: 18.0,
+    );
 
 /// One dominant category and a long comb of dust — the worst case for a
 /// value-sized column, where several nodes collapse to the 1px floor and their

@@ -3069,6 +3069,7 @@
   "cfsNodeMoneyIn": "Dinero disponible",
   "cfsNodeSaved": "Sobrante",
   "cfsNodeInvested": "Invertido",
+  "cfsNodeMovedToSavings": "Movido a ahorros",
   "cfsNodeFromSavings": "De ahorros",
   "cfsNodeFromInvestments": "De inversiones",
   "cfsNodeUncategorized": "Sin categoría",

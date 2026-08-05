@@ -15,6 +15,7 @@ const _labels = CashFlowSankeyLabels(
   moneyIn: 'Money in',
   saved: 'Left over',
   invested: 'Invested',
+  movedToSavings: 'Moved to savings',
   fromSavings: 'From savings',
   fromInvestments: 'From investments',
   uncategorized: 'Uncategorized',
@@ -327,6 +328,261 @@ void main() {
       // 1000 income + 800 out of investments − 1500 spent = 300 left.
       expect(d.net, closeTo(300.0, 1e-9));
       expect(_sumIn(d.main, 'hub'), closeTo(_sumOut(d.main, 'hub'), 1e-9));
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Directed transfers out of the cash pool.
+  //
+  // The owner runs a vault workflow: the paycheck lands in one account and is
+  // pushed into savings sub-accounts (Cards / Emergency / Rent). Internal
+  // transfers are excluded from income and spending, so before this node
+  // existed every one of those pesos landed in "Left over" — on the real data,
+  // transfers out ran about 3x the leftover figure, which made the single most
+  // prominent label on the card the single most misleading one.
+  //
+  // The figure is the trend rows' NET `transferred`, which the backend
+  // computes under `CASHFLOW_ROW_ANTI_JOINS_SQL` — so credit-card payments are
+  // already gone from it on BOTH legs. That matters: a card payment settles
+  // spending this diagram already draws as a category band.
+  // ---------------------------------------------------------------------
+  group('money moved out on purpose', () {
+    /// One month whose net internal-transfer flow is [transferred] (in +,
+    /// out −), spending fully explained by one category.
+    List<Map<String, dynamic>> vaultMonth(double transferred) => [
+      {
+        'month': '2026-07',
+        'income': 6000.0,
+        'spending': 4000.0,
+        'invested': 0.0,
+        'transferred': transferred,
+      },
+    ];
+
+    Map<String, dynamic> oneCategory(double amount) => {
+      'months': ['2026-07'],
+      'categories': [
+        {
+          'category': 'FOOD_AND_DRINK',
+          'total': amount,
+          'monthly': [
+            {'month': '2026-07', 'amount': amount},
+          ],
+        },
+      ],
+    };
+
+    test('transfers out become their own node and shrink Left over', () {
+      final d = _build(
+        trends: vaultMonth(-1500.0),
+        categories: oneCategory(4000.0),
+      );
+
+      // The node carries exactly what MonthlyCashFlowCard prints as
+      // "Transferred out" for the same period.
+      expect(d.transferredOut, closeTo(1500.0, 1e-9));
+      final moved = d.main.links.firstWhere((l) => l.target == 'out:moved');
+      expect(moved.value, closeTo(1500.0, 1e-9));
+      expect(d.main.nodeById('out:moved')!.label, 'Moved to savings');
+
+      // Left over now means what it says: 6000 − 4000 spent − 1500 directed.
+      // (With `transferred: 0` the same month leaves 2000 — that whole
+      // difference used to be labelled surplus.)
+      expect(d.net, closeTo(500.0, 1e-9));
+      expect(
+        d.main.links.firstWhere((l) => l.target == 'out:saved').value,
+        closeTo(500.0, 1e-9),
+      );
+
+      // Conservation, with the new node included: sources == hub ==
+      // destinations. 4000 spent + 1500 moved + 500 left = 6000 in.
+      expect(_sumIn(d.main, 'hub'), closeTo(6000.0, 1e-9));
+      expect(_sumOut(d.main, 'hub'), closeTo(6000.0, 1e-9));
+      expect(_sumIn(d.main, 'hub'), closeTo(_sumOut(d.main, 'hub'), 1e-9));
+      expect(d.main.total, closeTo(6000.0, 1e-9));
+    });
+
+    test('the node is directed money, not a spending band', () {
+      final d = _build(
+        trends: vaultMonth(-1500.0),
+        categories: oneCategory(4000.0),
+      );
+      final node = d.main.nodeById('out:moved')!;
+      // Its own kind, so the widget can colour it semantically instead of
+      // handing it a `chartSeries` slot like a consumption category.
+      expect(node.kind, SankeyNodeKind.transferredOut);
+      expect(node.id.startsWith('cat:'), isFalse);
+      // …and it is NOT counted as spending: the spending total still equals
+      // the trend row's, so the card above still reconciles.
+      expect(d.spending, closeTo(4000.0, 1e-9));
+      final spendBands = d.main.links
+          .where((l) => l.source == 'hub' && l.target.startsWith('cat:'))
+          .fold<double>(0, (s, l) => s + l.value);
+      expect(spendBands, closeTo(4000.0, 1e-9));
+    });
+
+    test('no transfers in the period → no node at all, not an empty band', () {
+      final d = _build(
+        trends: vaultMonth(0.0),
+        categories: oneCategory(4000.0),
+      );
+      expect(d.transferredOut, 0.0);
+      expect(d.main.nodeById('out:moved'), isNull);
+      expect(d.main.links.any((l) => l.target == 'out:moved'), isFalse);
+      // The surplus is untouched when nothing was directed anywhere.
+      expect(d.net, closeTo(2000.0, 1e-9));
+    });
+
+    test('an absent transferred field is treated as zero, not as null', () {
+      final d = _build(
+        trends: [
+          {
+            'month': '2026-07',
+            'income': 6000.0,
+            'spending': 4000.0,
+            'invested': 0.0,
+          },
+        ],
+        categories: oneCategory(4000.0),
+      );
+      expect(d.transferredOut, 0.0);
+      expect(d.main.nodeById('out:moved'), isNull);
+      expect(d.net, closeTo(2000.0, 1e-9));
+    });
+
+    test('dust below the epsilon never becomes a node', () {
+      final d = _build(
+        trends: vaultMonth(-0.004),
+        categories: oneCategory(4000.0),
+      );
+      expect(d.main.nodeById('out:moved'), isNull);
+      // Sub-cent dust is absorbed into the balance rather than drawn as a
+      // one-pixel band — the same trade `invested` already makes — so the two
+      // sides agree to within the epsilon, not to the last float bit.
+      expect(
+        _sumIn(d.main, 'hub'),
+        closeTo(_sumOut(d.main, 'hub'), kSankeyEpsilon),
+      );
+    });
+
+    test('a net transfer IN adds no node and no phantom income', () {
+      // Money coming back out of the user's own reserves is already
+      // represented by the "From savings" drawdown whenever it funds a gap.
+      // A second inflow node would count it twice.
+      final d = _build(
+        trends: vaultMonth(2000.0),
+        categories: oneCategory(4000.0),
+      );
+      expect(d.transferredOut, 0.0);
+      expect(d.main.nodeById('out:moved'), isNull);
+      expect(d.income, closeTo(6000.0, 1e-9));
+      expect(d.net, closeTo(2000.0, 1e-9));
+      expect(_sumIn(d.main, 'hub'), closeTo(6000.0, 1e-9));
+    });
+
+    test('directing more than the surplus draws on savings, and conserves', () {
+      // The owner's observed shape: transfers out ~3x the leftover figure.
+      // 6000 in, 4000 spent → 2000 surplus, but 6000 pushed into vaults, so
+      // 4000 of it came out of cash the period did not earn.
+      final d = _build(
+        trends: vaultMonth(-6000.0),
+        categories: oneCategory(4000.0),
+      );
+      expect(d.transferredOut, closeTo(6000.0, 1e-9));
+      expect(d.net, closeTo(-4000.0, 1e-9));
+      // Nothing is "left over" when everything and more was directed.
+      expect(d.main.nodeById('out:saved'), isNull);
+      expect(
+        d.main.links.firstWhere((l) => l.source == 'src:drawdown').value,
+        closeTo(4000.0, 1e-9),
+      );
+      // 6000 income + 4000 drawn = 4000 spent + 6000 moved.
+      expect(_sumIn(d.main, 'hub'), closeTo(10000.0, 1e-9));
+      expect(_sumOut(d.main, 'hub'), closeTo(10000.0, 1e-9));
+    });
+
+    test('investing and directing coexist without either being absorbed', () {
+      final d = _build(
+        trends: [
+          {
+            'month': '2026-07',
+            'income': 6000.0,
+            'spending': 4000.0,
+            'invested': 800.0,
+            'transferred': -700.0,
+          },
+        ],
+        categories: oneCategory(4000.0),
+      );
+      expect(
+        d.main.links.firstWhere((l) => l.target == 'out:invested').value,
+        closeTo(800.0, 1e-9),
+      );
+      expect(
+        d.main.links.firstWhere((l) => l.target == 'out:moved').value,
+        closeTo(700.0, 1e-9),
+      );
+      expect(d.net, closeTo(500.0, 1e-9));
+      expect(_sumIn(d.main, 'hub'), closeTo(_sumOut(d.main, 'hub'), 1e-9));
+    });
+
+    test('an aggregated window nets every month before deciding', () {
+      // −2000 out in June, +500 back in July → 1500 net out over the window.
+      final d = _build(
+        trends: [
+          {
+            'month': '2026-06',
+            'income': 5000.0,
+            'spending': 3000.0,
+            'invested': 0.0,
+            'transferred': -2000.0,
+          },
+          {
+            'month': '2026-07',
+            'income': 6000.0,
+            'spending': 4000.0,
+            'invested': 0.0,
+            'transferred': 500.0,
+          },
+        ],
+        categories: {
+          'months': ['2026-06', '2026-07'],
+          'categories': [
+            {
+              'category': 'FOOD_AND_DRINK',
+              'total': 7000.0,
+              'monthly': [
+                {'month': '2026-06', 'amount': 3000.0},
+                {'month': '2026-07', 'amount': 4000.0},
+              ],
+            },
+          ],
+        },
+        aggregate: true,
+      );
+      expect(d.transferredOut, closeTo(1500.0, 1e-9));
+      expect(d.net, closeTo(2500.0, 1e-9));
+      expect(_sumIn(d.main, 'hub'), closeTo(11000.0, 1e-9));
+      expect(_sumOut(d.main, 'hub'), closeTo(11000.0, 1e-9));
+    });
+
+    test('the reporting factor scales the directed band exactly once', () {
+      final usd = _build(
+        trends: vaultMonth(-1500.0),
+        categories: oneCategory(4000.0),
+      );
+      final mxn = _build(
+        trends: vaultMonth(-1500.0),
+        categories: oneCategory(4000.0),
+        conversionFactor: 18.0,
+        targetCurrency: 'MXN',
+      );
+      expect(mxn.transferredOut, closeTo(usd.transferredOut * 18, 1e-6));
+      expect(
+        mxn.main.links.firstWhere((l) => l.target == 'out:moved').value,
+        closeTo(1500.0 * 18, 1e-6),
+      );
+      expect(_sumIn(mxn.main, 'hub'), closeTo(_sumOut(mxn.main, 'hub'), 1e-6));
     });
   });
 

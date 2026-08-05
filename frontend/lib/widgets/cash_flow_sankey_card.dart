@@ -272,6 +272,7 @@ class _CashFlowSankeyCardState extends State<CashFlowSankeyCard> {
     moneyIn: l.cfsNodeMoneyIn,
     saved: l.cfsNodeSaved,
     invested: l.cfsNodeInvested,
+    movedToSavings: l.cfsNodeMovedToSavings,
     fromSavings: l.cfsNodeFromSavings,
     fromInvestments: l.cfsNodeFromInvestments,
     uncategorized: l.cfsNodeUncategorized,
@@ -560,6 +561,11 @@ class _CashFlowSankeyCardState extends State<CashFlowSankeyCard> {
         return context.positive;
       case SankeyNodeKind.invested:
         return context.info;
+      // Teal — the house's "secondary positive". Directed savings reads as a
+      // cousin of the green "Left over", and deliberately NOT as one of the
+      // `chartSeries` category bands: money moved into a vault is not consumed.
+      case SankeyNodeKind.transferredOut:
+        return context.tealAccent;
       case SankeyNodeKind.drawdown:
         return context.warning;
       case SankeyNodeKind.fxEndpoint:

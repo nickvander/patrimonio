@@ -43,8 +43,14 @@ enum SankeyNodeKind {
   /// Net cash moved into investments over the window.
   invested,
 
-  /// What the period did not spend — the surplus.
+  /// What the period did not spend and did not direct anywhere — the surplus.
   saved,
+
+  /// Money the user deliberately MOVED out of the tracked cash pool by
+  /// internal transfer (savings vaults, sinking funds, a sub-account per
+  /// goal). Directed, not consumed: it is still the user's money, it just
+  /// stopped being spendable cash — so it is neither spending nor "left over".
+  transferredOut,
 
   /// An inflow that is NOT income: savings drawn down to cover a deficit, or
   /// net cash coming back out of investments.
@@ -146,6 +152,7 @@ class CashFlowSankeyLabels {
     required this.moneyIn,
     required this.saved,
     required this.invested,
+    required this.movedToSavings,
     required this.fromSavings,
     required this.fromInvestments,
     required this.uncategorized,
@@ -157,6 +164,7 @@ class CashFlowSankeyLabels {
   final String moneyIn;
   final String saved;
   final String invested;
+  final String movedToSavings;
   final String fromSavings;
   final String fromInvestments;
   final String uncategorized;
@@ -172,6 +180,7 @@ class CashFlowSankeyData {
     required this.income,
     required this.spending,
     required this.invested,
+    required this.transferredOut,
     required this.net,
     required this.incomeAttributed,
     required this.monthKeys,
@@ -186,6 +195,7 @@ class CashFlowSankeyData {
     income: 0,
     spending: 0,
     invested: 0,
+    transferredOut: 0,
     net: 0,
     incomeAttributed: false,
     monthKeys: <String>[],
@@ -207,8 +217,26 @@ class CashFlowSankeyData {
   final double spending;
   final double invested;
 
-  /// `income + money out of investments − spending − money into investments`.
-  /// Positive → a "Saved" outflow; negative → a "From savings" inflow.
+  /// Money the period pushed OUT of the cash pool by internal transfer — the
+  /// magnitude of the trend rows' NET `transferred` when that net is negative,
+  /// 0 otherwise. This is the vault workflow: a paycheck lands in one account
+  /// and is deliberately pushed into savings sub-accounts.
+  ///
+  /// Only the net-OUT direction becomes a node. A net transfer IN is money
+  /// arriving from the user's own reserves, which the diagram already
+  /// represents — as the "From savings" drawdown that funds any gap between
+  /// income and outflows. Giving it a second inflow node would count it twice.
+  final double transferredOut;
+
+  /// `income + money out of investments − spending − money into investments −
+  /// money moved out by internal transfer`. Positive → a "Left over" outflow;
+  /// negative → a "From savings" inflow.
+  ///
+  /// [transferredOut] belongs in this balance for the same reason
+  /// `investedOut` does: it is money that left the spendable pool on purpose.
+  /// Before it was subtracted, every peso pushed into a savings vault landed
+  /// in "Left over" and the diagram called directed money undirected surplus —
+  /// on the owner's real data, transfers out ran ~3x the leftover figure.
   final double net;
 
   /// False when income could not be split into named sources and the diagram
@@ -418,6 +446,7 @@ CashFlowSankeyData buildCashFlowSankey({
       income: 0,
       spending: 0,
       invested: 0,
+      transferredOut: 0,
       net: 0,
       incomeAttributed: false,
       monthKeys: const <String>[],
@@ -431,16 +460,28 @@ CashFlowSankeyData buildCashFlowSankey({
   var income = 0.0;
   var spendingTrend = 0.0;
   var invested = 0.0;
+  // NET internal-transfer flow (in +, out −), exactly the figure
+  // `MonthlyCashFlowCard` prints as "Transferred out". `/dashboard/trends`
+  // computes it under the shared `CASHFLOW_ROW_ANTI_JOINS_SQL` WHERE fragment,
+  // so BOTH legs of a credit-card payment are already gone from it: the
+  // card-side inflow by the liability-inflow clause, the paying leg out of
+  // checking by the structural counterpart clause added in `de4178f`. That is
+  // load-bearing here — a card payment settles spending this diagram already
+  // draws as a category band, so surfacing it again as directed money would
+  // re-double-count the very rent `de4178f` stopped double-counting.
+  var transferred = 0.0;
   for (final row in trends) {
     if (!keySet.contains(row['month'])) continue;
     income += (row['income'] as num?)?.toDouble() ?? 0.0;
     spendingTrend += (row['spending'] as num?)?.toDouble() ?? 0.0;
     invested += (row['invested'] as num?)?.toDouble() ?? 0.0;
+    transferred += (row['transferred'] as num?)?.toDouble() ?? 0.0;
   }
   // Single scale from the endpoints' USD into the reporting currency.
   income *= conversionFactor;
   spendingTrend *= conversionFactor;
   invested *= conversionFactor;
+  transferred *= conversionFactor;
 
   // --- Outflow breakdown -------------------------------------------------
   // `/dashboard/spending-by-category` applies the SAME hygiene as
@@ -508,13 +549,17 @@ CashFlowSankeyData buildCashFlowSankey({
   // avoid. In practice the two endpoints agree and this equals `spending`.
   final spending = outflows.fold<double>(0, (s, e) => s + e.value);
 
-  // --- Investing + the surplus/deficit balance --------------------------
+  // --- Investing, directed transfers, and the surplus/deficit balance ----
   // `invested` is net cash into investments (buys +, sells −) and is peeled
   // out of BOTH income and spending upstream, so it is its own outflow when
-  // positive and its own inflow when negative.
+  // positive and its own inflow when negative. `transferred` is peeled out the
+  // same way and gets the same treatment on the outbound side.
   final investedOut = invested > 0 ? invested : 0.0;
   final investedIn = invested < 0 ? -invested : 0.0;
-  final net = income + investedIn - spending - investedOut;
+  // Money pushed out of the cash pool on purpose. Net-in is deliberately NOT
+  // mirrored as an inflow node — see [CashFlowSankeyData.transferredOut].
+  final transferredOut = transferred < 0 ? -transferred : 0.0;
+  final net = income + investedIn - spending - investedOut - transferredOut;
 
   // --- Income sources ----------------------------------------------------
   final attributed = attributeIncomeSources(
@@ -581,6 +626,18 @@ CashFlowSankeyData buildCashFlowSankey({
       ),
     );
   }
+  // Between "Invested" and "Left over" on purpose: the two directed
+  // destinations sit together, and whatever is genuinely undirected stays last.
+  if (transferredOut > kSankeyEpsilon) {
+    outflows.add(
+      _Slice(
+        id: 'out:moved',
+        label: labels.movedToSavings,
+        value: transferredOut,
+        kind: SankeyNodeKind.transferredOut,
+      ),
+    );
+  }
   if (net > kSankeyEpsilon) {
     outflows.add(
       _Slice(
@@ -606,6 +663,7 @@ CashFlowSankeyData buildCashFlowSankey({
     income: income,
     spending: spending,
     invested: invested,
+    transferredOut: transferredOut,
     net: net,
     incomeAttributed: attributed != null,
     monthKeys: monthKeys,

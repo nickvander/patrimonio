@@ -8006,6 +8006,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cfsNodeInvested => 'Invertido';
 
   @override
+  String get cfsNodeMovedToSavings => 'Movido a ahorros';
+
+  @override
   String get cfsNodeFromSavings => 'De ahorros';
 
   @override

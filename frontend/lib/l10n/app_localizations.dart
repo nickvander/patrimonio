@@ -12641,6 +12641,12 @@ abstract class AppLocalizations {
   /// **'Invested'**
   String get cfsNodeInvested;
 
+  /// No description provided for @cfsNodeMovedToSavings.
+  ///
+  /// In en, this message translates to:
+  /// **'Moved to savings'**
+  String get cfsNodeMovedToSavings;
+
   /// No description provided for @cfsNodeFromSavings.
   ///
   /// In en, this message translates to:

@@ -4534,6 +4534,7 @@
   "cfsNodeMoneyIn": "Money in",
   "cfsNodeSaved": "Left over",
   "cfsNodeInvested": "Invested",
+  "cfsNodeMovedToSavings": "Moved to savings",
   "cfsNodeFromSavings": "From savings",
   "cfsNodeFromInvestments": "From investments",
   "cfsNodeUncategorized": "Uncategorized",

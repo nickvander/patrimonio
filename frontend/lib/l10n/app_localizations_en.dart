@@ -7939,6 +7939,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cfsNodeInvested => 'Invested';
 
   @override
+  String get cfsNodeMovedToSavings => 'Moved to savings';
+
+  @override
   String get cfsNodeFromSavings => 'From savings';
 
   @override
