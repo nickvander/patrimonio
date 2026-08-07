@@ -7260,12 +7260,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nwAttrError => 'Couldn\'t load change attribution';
 
   @override
-  String get nwIgnoreFxMoves => 'Ignore FX moves';
+  String get nwFxTapHint => 'Tap FX to replot the chart without currency moves';
 
   @override
-  String nwLensConstantCaption(String rate) {
-    return 'MXN revalued at the window-start rate ($rate MXN/USD)';
+  String get nwFxExcludeTooltip => 'Replot the chart without currency moves';
+
+  @override
+  String get nwFxIncludeTooltip => 'Put currency moves back on the chart';
+
+  @override
+  String get nwFxExcludedLabel => 'Excluding FX moves';
+
+  @override
+  String nwFxExcludedCaption(String rate) {
+    return 'Excluding FX: every balance held at $rate MXN/USD';
   }
+
+  @override
+  String get nwFxBandsUnavailable =>
+      'Institution bands aren\'t available while FX is excluded';
 
   @override
   String get fxcPillTapHint => 'Tap for rate history & tools';

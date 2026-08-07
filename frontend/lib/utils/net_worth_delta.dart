@@ -165,3 +165,43 @@ NetWorthDelta? computeNetWorthDelta(List<dynamic> history) {
     yoy: deltaTo(DateTime(d.year - 1, d.month, d.day), 'YoY'),
   );
 }
+
+/// Fraction of the plotted value span that FX movement must reach before the
+/// FX-free replot is worth offering. Below this the shifted line traces the
+/// live one within a stroke width or two.
+const double kFxVisibleShareOfSpan = 0.10;
+
+/// Whether replotting a window with FX held constant would visibly differ from
+/// the live-FX line.
+///
+/// The constant-FX view answers "what would my net worth have done if the peso
+/// hadn't moved?" — a question worth a control only when the answer *looks*
+/// different. Currency movement displaces the plot by roughly [fxUsd], and the
+/// chart's y-axis is fitted to the span of [constantFxUsd], so a displacement
+/// under [kFxVisibleShareOfSpan] of that span produces two lines that trace
+/// each other. Offering the control regardless is what made pressing it read
+/// as doing nothing: on a $1.6M net worth whose window moved $46k, a $639 FX
+/// component is 1.4% of the change and invisible on the plot.
+///
+/// The ratio — rather than an absolute dollar floor — is what keeps offsetting
+/// windows honest: FX +$50k against market −$50k nets to a flat delta while
+/// having entirely shaped the curve, and it stays offered.
+///
+/// A flat series (zero span) with any FX movement is the visible extreme: the
+/// live line is level and the constant-FX one is not.
+bool fxViewIsInformative({
+  required double fxUsd,
+  required List<double> constantFxUsd,
+}) {
+  // One point is not a line; nothing to compare a replot against.
+  if (constantFxUsd.length < 2 || fxUsd == 0) return false;
+  var min = constantFxUsd.first;
+  var max = constantFxUsd.first;
+  for (final v in constantFxUsd) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  final span = max - min;
+  if (span <= 0) return true;
+  return fxUsd.abs() >= span * kFxVisibleShareOfSpan;
+}

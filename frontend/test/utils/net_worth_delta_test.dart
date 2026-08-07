@@ -134,4 +134,106 @@ void main() {
       expect(deltas.yoy!.percentage, closeTo(50, 1e-9));
     });
   });
+
+  // Whether the net-worth card offers its FX-free replot. The control used to
+  // be offered whenever the series loaded, so in a quiet FX month pressing it
+  // redrew a line that traced the old one — which is what made it read as
+  // doing nothing. The gate is "would this look different", measured against
+  // the span the chart's y-axis is fitted to.
+  group('fxViewIsInformative', () {
+    // The real shape of the complaint: $1.6M net worth, a $46k month, $639 of
+    // it FX. Half a percent of the plotted span — invisible.
+    test('a quiet FX month does not earn the control', () {
+      expect(
+        fxViewIsInformative(
+          fxUsd: 639.32,
+          constantFxUsd: const [1500000, 1550000, 1610000],
+        ),
+        isFalse,
+      );
+    });
+
+    test('a peso swing that reshapes a flat month does', () {
+      expect(
+        fxViewIsInformative(
+          fxUsd: -6000,
+          constantFxUsd: const [1600000, 1602000, 1605000],
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'the threshold is a share of the plotted span, not a dollar floor',
+      () {
+        // Same $1k of FX: decisive against a $5k span, invisible against $100k.
+        expect(
+          fxViewIsInformative(fxUsd: 1000, constantFxUsd: const [0, 5000]),
+          isTrue,
+        );
+        expect(
+          fxViewIsInformative(fxUsd: 1000, constantFxUsd: const [0, 100000]),
+          isFalse,
+        );
+      },
+    );
+
+    test('exactly at the threshold is offered', () {
+      expect(
+        fxViewIsInformative(
+          fxUsd: 1000 * kFxVisibleShareOfSpan,
+          constantFxUsd: const [0, 1000],
+        ),
+        isTrue,
+      );
+    });
+
+    test('sign does not matter — a peso rally hides as much as a crash', () {
+      for (final fx in const [7500.0, -7500.0]) {
+        expect(
+          fxViewIsInformative(fxUsd: fx, constantFxUsd: const [0, 50000]),
+          isTrue,
+          reason: 'fx=$fx',
+        );
+      }
+    });
+
+    test('zero FX never earns a control', () {
+      expect(
+        fxViewIsInformative(fxUsd: 0, constantFxUsd: const [0, 1000]),
+        isFalse,
+      );
+    });
+
+    test('a flat series with any FX movement is the visible extreme', () {
+      // The live line is level and the constant-FX one cannot be.
+      expect(
+        fxViewIsInformative(fxUsd: 50, constantFxUsd: const [1000, 1000]),
+        isTrue,
+      );
+    });
+
+    test('fewer than two points is not a line to compare against', () {
+      expect(
+        fxViewIsInformative(fxUsd: 5000, constantFxUsd: const [1000]),
+        isFalse,
+      );
+      expect(
+        fxViewIsInformative(fxUsd: 5000, constantFxUsd: const []),
+        isFalse,
+      );
+    });
+
+    test('the span is min-to-max, not first-to-last', () {
+      // A round trip: ends where it started, but the chart is fitted to the
+      // dip it took. FX under a tenth of THAT is still invisible.
+      expect(
+        fxViewIsInformative(
+          fxUsd: 500,
+          constantFxUsd: const [100000, 90000, 100000],
+        ),
+        isFalse,
+      );
+    });
+  });
 }

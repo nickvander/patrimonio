@@ -3998,18 +3998,34 @@
   "@nwAttrError": {
     "description": "Net-worth attribution: muted inline error when the attribution endpoint fails."
   },
-  "nwIgnoreFxMoves": "Ignore FX moves",
-  "@nwIgnoreFxMoves": {
-    "description": "Net-worth card chart toggle (a chip, off by default): replots the same history with every balance held at the window-start exchange rate, so currency movement is excluded. Names the effect, not the mechanism — the card's only currency-related control now that the global reporting-currency switcher owns which currency the card reports in."
+  "nwFxTapHint": "Tap FX to replot the chart without currency moves",
+  "@nwFxTapHint": {
+    "description": "Net-worth card: one-line hint under the \"Why it changed\" chips telling the user the FX chip is tappable. Shown only while the FX-free replot is offered (FX moved enough to visibly reshape the line) and not yet applied — the affordance replaced a floating \"Ignore FX moves\" chip that named an action without saying what it produced."
   },
-  "nwLensConstantCaption": "MXN revalued at the window-start rate ({rate} MXN/USD)",
-  "@nwLensConstantCaption": {
-    "description": "Caption under the chart while the \"Ignore FX moves\" toggle is on; {rate} is the window-start USD→MXN rate already formatted for the locale.",
+  "nwFxExcludeTooltip": "Replot the chart without currency moves",
+  "@nwFxExcludeTooltip": {
+    "description": "Net-worth card: tooltip and screen-reader label on the tappable FX attribution chip while the chart still includes FX."
+  },
+  "nwFxIncludeTooltip": "Put currency moves back on the chart",
+  "@nwFxIncludeTooltip": {
+    "description": "Net-worth card: tooltip and screen-reader label on the tappable FX attribution chip while the FX-free replot is showing."
+  },
+  "nwFxExcludedLabel": "Excluding FX moves",
+  "@nwFxExcludedLabel": {
+    "description": "Net-worth card: names the FX-free chart state — used as the prefix of the pointer-only chart canvas's screen-reader summary."
+  },
+  "nwFxExcludedCaption": "Excluding FX: every balance held at {rate} MXN/USD",
+  "@nwFxExcludedCaption": {
+    "description": "Caption under the chart while the FX-free replot is showing, so a flat peso never reads as a live conversion; {rate} is the window-start USD→MXN rate already formatted for the locale.",
     "placeholders": {
       "rate": {
         "type": "String"
       }
     }
+  },
+  "nwFxBandsUnavailable": "Institution bands aren't available while FX is excluded",
+  "@nwFxBandsUnavailable": {
+    "description": "Net-worth card: tooltip on the disabled Simple/Detailed toggle while the FX-free replot is showing — that series is a single total line, so the detailed view has nothing to stack."
   },
   "fxcPillTapHint": "Tap for rate history & tools",
   "@fxcPillTapHint": {

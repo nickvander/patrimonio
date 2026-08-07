@@ -87,7 +87,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// the app (the dashboard call site passes nothing).
   late final ApiService _api = widget.apiService ?? ApiService();
 
-  /// "Ignore FX moves": when true the chart plots the attribution endpoint's
+  /// The FX-free replot: when true the chart plots the attribution endpoint's
   /// constant-FX series (every balance revalued at the window-start rate)
   /// instead of the live-FX history. OFF by default, where the existing chart
   /// path (institution bands and all) renders unchanged.
@@ -97,6 +97,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// bar); a second USD/MXN control here duplicated it and could be set to
   /// contradict the hero number above the chart. Only the constant-FX read is
   /// something the global switcher can't express, so only it survives.
+  ///
+  /// Its affordance is the **FX chip in "Why it changed"** — not a control of
+  /// its own. A standalone "Ignore FX moves" chip floated unlabelled between
+  /// the chart and that section, naming an action without saying what it
+  /// produced, while the very number it removes ("FX +$639.32") sat 20px below
+  /// it in a different block. Hanging the toggle on that number makes the
+  /// cause and the effect one object. See [_attrChip].
   bool _ignoreFx = false;
 
   /// `/dashboard/net-worth-attribution` response for the current window
@@ -117,6 +124,25 @@ class _NetWorthCardState extends State<NetWorthCard> {
     final series = _attribution?['series'] as List<dynamic>?;
     if (series == null || series.isEmpty) return null;
     return series;
+  }
+
+  /// Whether the card offers the FX-free replot for the loaded window.
+  ///
+  /// Not merely "did the series load": a control that redraws the same-looking
+  /// line is the thing that reads as broken. [fxViewIsInformative] gates on
+  /// whether the replot would visibly differ, so in a quiet FX month the FX
+  /// chip stays an ordinary read-only chip and nothing invites a press that
+  /// does nothing.
+  bool get _fxViewOffered {
+    final series = _constantFxSeries;
+    if (series == null) return false;
+    return fxViewIsInformative(
+      fxUsd: ((_attribution?['fx_usd'] ?? 0) as num).toDouble(),
+      constantFxUsd: [
+        for (final p in series)
+          if (p is Map) ((p['constant_fx_usd'] ?? 0) as num).toDouble(),
+      ],
+    );
   }
 
   /// The live touch-scrub reading, or null when no finger is on the chart.
@@ -198,6 +224,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
       setState(() {
         _attribution = data;
         _attributionError = false;
+        // A new window may not move FX enough to be worth replotting; don't
+        // leave the toggle latched ON with its affordance gone.
+        if (!_fxViewOffered) _ignoreFx = false;
       });
     } catch (_) {
       if (!mounted || _attributionKey != key) return;
@@ -318,23 +347,28 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   280.0,
                 );
                 final filtered = _filterByRange(history);
+                // FX-free replot ON: swap the plot for the attribution
+                // endpoint's constant-FX series (single line, day-offset x).
+                // OFF — and while the series hasn't loaded, errored, or moved
+                // too little to be worth offering — the default chart path
+                // renders exactly as it always has.
+                final fxOffered = _fxViewOffered;
+                final fxViewActive = _ignoreFx && fxOffered;
+                final constantFxPlot = fxViewActive ? _constantFxSeries : null;
                 // Only compute the per-institution slices when the detailed
                 // view is actually being shown — saves a meaningful chunk of
-                // work on the simple path.
-                final institutions = _detailed
+                // work on the simple path. The constant-FX series is a single
+                // total with nothing to stack, so the bands (and their legend)
+                // stand down with it rather than describing a chart that isn't
+                // on screen.
+                final institutions = _detailed && !fxViewActive
                     ? _topInstitutions(context, filtered, max: 4)
                     : const <MapEntry<String, Color>>[];
-                // "Ignore FX moves" ON: swap the plot for the attribution
-                // endpoint's constant-FX series (single line, day-offset x).
-                // OFF — and while the series hasn't loaded (or errored) — the
-                // default chart path renders exactly as it always has.
-                final fxSeries = _constantFxSeries;
-                final constantFxPlot = _ignoreFx ? fxSeries : null;
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(isCompact, institutions),
+                    _buildHeader(isCompact, institutions, fxViewActive),
                     const SizedBox(height: 24),
                     SizedBox(
                       height: chartHeight,
@@ -355,12 +389,10 @@ class _NetWorthCardState extends State<NetWorthCard> {
                               ),
                       ),
                     ),
-                    if (fxSeries != null) ...[
-                      const SizedBox(height: 12),
-                      _buildIgnoreFxToggle(),
-                      if (_ignoreFx) _buildConstantFxCaption(),
-                    ],
-                    _buildAttributionSection(),
+                    // The caption stays with the CHART, not with the chip that
+                    // toggled it: it names what the line on screen is.
+                    if (fxViewActive) _buildFxExcludedCaption(),
+                    _buildAttributionSection(fxOffered),
                     // Phone layout: the range selector lives inside the card,
                     // right under the plot it controls (thumb-reachable).
                     if (widget.rangeSelector != null) ...[
@@ -377,37 +409,18 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
   }
 
-  /// The card's one chart control: "Ignore FX moves" — plot the same history
-  /// with every balance held at the window-start rate.
-  ///
-  /// A single FilterChip, not a segmented control: this is a boolean, and a
-  /// two-state control drawn as a segmented group invites a third segment.
-  /// The label states the EFFECT, not the mechanism ("constant FX" named an
-  /// implementation nobody outside this file uses).
-  Widget _buildIgnoreFxToggle() {
-    final l = AppLocalizations.of(context);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: FilterChip(
-        label: Text(l.nwIgnoreFxMoves),
-        selected: _ignoreFx,
-        onSelected: (v) {
-          // The two states plot different series (and, when reporting in MXN,
-          // different currencies) — drop any scrub reading with the series it
-          // was read off.
-          _scrub.value = null;
-          setState(() => _ignoreFx = v);
-        },
-        visualDensity: VisualDensity.compact,
-      ),
-    );
+  /// Flip the FX-free replot. Both states plot different series (and, when
+  /// reporting in MXN, different currencies), so any scrub reading goes with
+  /// the series it was read off.
+  void _toggleFxView() {
+    _scrub.value = null;
+    setState(() => _ignoreFx = !_ignoreFx);
   }
 
-  /// "MXN revalued at the window-start rate (N MXN/USD)" — the honesty
-  /// caption shown while the FX-moves toggle is ON, so the flat peso never
-  /// reads as a live conversion. Hidden until the attribution response
-  /// supplies r0.
-  Widget _buildConstantFxCaption() {
+  /// "Excluding FX: every balance held at N MXN/USD" — the honesty caption
+  /// shown while the FX-free replot is on, so the flat peso never reads as a
+  /// live conversion. Hidden until the attribution response supplies r0.
+  Widget _buildFxExcludedCaption() {
     final rate = (_attribution?['fx_rate_open'] as num?)?.toDouble();
     if (rate == null) return const SizedBox.shrink();
     final l = AppLocalizations.of(context);
@@ -416,7 +429,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
       child: Text(
         // A rate is a plain number, not money — localize the decimal
         // separator only.
-        l.nwLensConstantCaption(
+        l.nwFxExcludedCaption(
           localizeNumberString(context, rate.toStringAsFixed(2)),
         ),
         style: TextStyle(fontSize: 11, color: context.textFaint),
@@ -431,7 +444,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// residual is the common case and hiding it keeps the row honest without
   /// clutter. Values arrive in USD and are scaled to the reporting currency
   /// with the same conversionFactor as everything else on the card.
-  Widget _buildAttributionSection() {
+  ///
+  /// When [fxOffered] the FX chip is also the card's chart control — tapping
+  /// it replots the window with that component removed (see [_attrChip]) — and
+  /// a one-line hint says so, because an icon alone doesn't teach a gesture.
+  Widget _buildAttributionSection(bool fxOffered) {
     final l = AppLocalizations.of(context);
     if (_attributionError) {
       return Padding(
@@ -453,12 +470,6 @@ class _NetWorthCardState extends State<NetWorthCard> {
     if (fx == 0 && market == 0 && flows == 0 && residual == 0) {
       return const SizedBox.shrink();
     }
-    final items = <({String label, double value})>[
-      (label: l.nwAttrFx, value: fx),
-      (label: l.nwAttrMarket, value: market),
-      (label: l.nwAttrFlows, value: flows),
-      if (residual != 0) (label: l.nwAttrOther, value: residual),
-    ];
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Semantics(
@@ -479,8 +490,27 @@ class _NetWorthCardState extends State<NetWorthCard> {
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: [for (final item in items) _attrChip(item)],
+              // The FX chip carries a taller tap target than its read-only
+              // neighbours; centre the run so the row doesn't step.
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _attrChip((label: l.nwAttrFx, value: fx), fxToggle: fxOffered),
+                _attrChip((label: l.nwAttrMarket, value: market)),
+                _attrChip((label: l.nwAttrFlows, value: flows)),
+                if (residual != 0)
+                  _attrChip((label: l.nwAttrOther, value: residual)),
+              ],
             ),
+            // Teach the gesture once, and only while there's something to
+            // gain: it disappears the moment the replot is on screen.
+            if (fxOffered && !_ignoreFx)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  l.nwFxTapHint,
+                  style: TextStyle(fontSize: 11, color: context.textFaint),
+                ),
+              ),
           ],
         ),
       ),
@@ -490,18 +520,33 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// One attribution component chip: `label +$X` / `label −$X`, hue by sign
   /// (muted for an exactly-zero component, e.g. Market in a pure-flows
   /// month). Mirrors the mover-chip styling one section up.
-  Widget _attrChip(({String label, double value}) item) {
+  ///
+  /// With [fxToggle] the chip is also the card's chart control: tapping it
+  /// replots the window with this component removed. It reads as pressable —
+  /// an outline, an eye icon, and a selected fill once the replot is on — and
+  /// gets a ~40dp tap target from vertical padding INSIDE the ink area, the
+  /// `_buildModeToggle` idiom, so the hit box grows without the pill growing.
+  Widget _attrChip(
+    ({String label, double value}) item, {
+    bool fxToggle = false,
+  }) {
     final zero = item.value == 0;
     final up = item.value >= 0;
     final color = zero
         ? context.textMuted
         : (up ? context.positive : context.negative);
     final amount = item.value.abs() * conversionFactor;
-    return Container(
+    final on = fxToggle && _ignoreFx;
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: zero ? context.tint(0.05) : color.withValues(alpha: 0.10),
+        color: on
+            ? color.withValues(alpha: 0.18)
+            : (zero ? context.tint(0.05) : color.withValues(alpha: 0.10)),
         borderRadius: BorderRadius.circular(6),
+        border: fxToggle
+            ? Border.all(color: on ? color : context.hairline)
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -526,7 +571,36 @@ class _NetWorthCardState extends State<NetWorthCard> {
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
+          if (fxToggle) ...[
+            const SizedBox(width: 5),
+            // Eye-off = "take this off the chart"; eye = "put it back". The
+            // hint line under the row carries the words.
+            Icon(
+              on ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+              size: 13,
+              color: on ? color : context.textMuted,
+            ),
+          ],
         ],
+      ),
+    );
+    if (!fxToggle) return chip;
+    final l = AppLocalizations.of(context);
+    final action = on ? l.nwFxIncludeTooltip : l.nwFxExcludeTooltip;
+    return Tooltip(
+      message: action,
+      child: Semantics(
+        button: true,
+        selected: on,
+        label: action,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: _toggleFxView,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: chip,
+          ),
+        ),
       ),
     );
   }
@@ -684,7 +758,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
     return Semantics(
       container: true,
       label:
-          '${AppLocalizations.of(context).nwIgnoreFxMoves}: '
+          '${AppLocalizations.of(context).nwFxExcludedLabel}: '
           '${displayCurrencyWithCode(points.last.close, 'USD')}',
       child: ExcludeSemantics(child: chart),
     );
@@ -708,19 +782,26 @@ class _NetWorthCardState extends State<NetWorthCard> {
       axisTickTextWidth('USD\u00A0') -
       axisTickTextWidth(r'$');
 
-  Widget _buildModeToggle() {
-    // Segmented "Simple / Detailed" pill. We keep it small so it sits next
-    // to the legend without dominating the header.
+  /// Segmented "Simple / Detailed" pill.
+  ///
+  /// [enabled] is false while the FX-free replot is showing: that series is a
+  /// single total with no per-institution breakdown, so "Detailed" would be a
+  /// segment that visibly selects and changes nothing. It goes muted and
+  /// inert, and the tooltip says why.
+  Widget _buildModeToggle({bool enabled = true}) {
+    // We keep it small so it sits next to the legend without dominating the
+    // header.
     Widget seg(String label, bool active, VoidCallback onTap) {
       // InkWell makes the segment focusable + Enter/Space-activatable;
       // Semantics(button + selected) lets a screen reader announce both
       // the role and which segment is currently active.
       return Semantics(
         button: true,
+        enabled: enabled,
         selected: active,
         label: label,
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(20),
           // Vertical padding extends the TAP target toward the 48dp floor
           // without growing the visual pill.
@@ -729,7 +810,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: active
+                color: active && enabled
                     ? context.accentSoft(context.positive)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(20),
@@ -739,7 +820,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: active ? context.positive : context.textMuted,
+                  color: !enabled
+                      ? context.textFaint
+                      : (active ? context.positive : context.textMuted),
                   letterSpacing: 0.4,
                 ),
               ),
@@ -751,7 +834,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
     final l = AppLocalizations.of(context);
     return Tooltip(
-      message: _detailed ? l.pfShowingBands : l.pfShowingLine,
+      message: !enabled
+          ? l.nwFxBandsUnavailable
+          : (_detailed ? l.pfShowingBands : l.pfShowingLine),
       child: Container(
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
@@ -829,10 +914,15 @@ class _NetWorthCardState extends State<NetWorthCard> {
     };
   }
 
+  /// [fxViewActive] — the FX-free replot is on screen. It plots one total
+  /// line, so the mode toggle goes inert and the band legend stands down; the
+  /// header must not advertise chrome the chart below it isn't using.
   Widget _buildHeader(
     bool isCompact,
     List<MapEntry<String, Color>> institutions,
+    bool fxViewActive,
   ) {
+    final showBands = _detailed && !fxViewActive;
     // Phone chrome: the dashboard hero block directly above this card
     // already shows the net-worth figure, delta and currency pills, so the
     // in-card summary collapses to a small overline title (the fad9351
@@ -844,9 +934,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
       // instead of overflowing its share of the header row.
       final modeToggle = FittedBox(
         fit: BoxFit.scaleDown,
-        child: _buildModeToggle(),
+        child: _buildModeToggle(enabled: !fxViewActive),
       );
-      final rightSide = _detailed
+      final rightSide = showBands
           ? Wrap(
               spacing: 12,
               runSpacing: 8,
@@ -1084,12 +1174,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
 
     final legend = _buildLegend(institutions);
-    final modeToggle = _buildModeToggle();
+    final modeToggle = _buildModeToggle(enabled: !fxViewActive);
 
     // In simple mode the legend collapses to just the toggle. In detailed
     // mode they sit side by side (toggle first, so it's reachable without
     // tabbing past the legend chips).
-    final rightSide = _detailed
+    final rightSide = showBands
         ? Wrap(
             spacing: 12,
             runSpacing: 8,

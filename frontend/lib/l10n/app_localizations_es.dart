@@ -7322,12 +7322,27 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nwAttrError => 'No se pudo cargar la atribución del cambio';
 
   @override
-  String get nwIgnoreFxMoves => 'Ignorar movimientos cambiarios';
+  String get nwFxTapHint =>
+      'Toca Tipo de cambio para graficar sin los movimientos cambiarios';
 
   @override
-  String nwLensConstantCaption(String rate) {
-    return 'MXN valuado al tipo de cambio inicial del período ($rate MXN/USD)';
+  String get nwFxExcludeTooltip => 'Graficar sin los movimientos cambiarios';
+
+  @override
+  String get nwFxIncludeTooltip =>
+      'Volver a incluir los movimientos cambiarios';
+
+  @override
+  String get nwFxExcludedLabel => 'Sin movimientos cambiarios';
+
+  @override
+  String nwFxExcludedCaption(String rate) {
+    return 'Sin tipo de cambio: cada saldo valuado a $rate MXN/USD';
   }
+
+  @override
+  String get nwFxBandsUnavailable =>
+      'Las bandas por institución no están disponibles sin el tipo de cambio';
 
   @override
   String get fxcPillTapHint => 'Toca para ver historial y herramientas';

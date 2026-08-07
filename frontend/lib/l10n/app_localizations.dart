@@ -11609,17 +11609,41 @@ abstract class AppLocalizations {
   /// **'Couldn\'t load change attribution'**
   String get nwAttrError;
 
-  /// Net-worth card chart toggle (a chip, off by default): replots the same history with every balance held at the window-start exchange rate, so currency movement is excluded. Names the effect, not the mechanism — the card's only currency-related control now that the global reporting-currency switcher owns which currency the card reports in.
+  /// Net-worth card: one-line hint under the "Why it changed" chips telling the user the FX chip is tappable. Shown only while the FX-free replot is offered (FX moved enough to visibly reshape the line) and not yet applied — the affordance replaced a floating "Ignore FX moves" chip that named an action without saying what it produced.
   ///
   /// In en, this message translates to:
-  /// **'Ignore FX moves'**
-  String get nwIgnoreFxMoves;
+  /// **'Tap FX to replot the chart without currency moves'**
+  String get nwFxTapHint;
 
-  /// Caption under the chart while the "Ignore FX moves" toggle is on; {rate} is the window-start USD→MXN rate already formatted for the locale.
+  /// Net-worth card: tooltip and screen-reader label on the tappable FX attribution chip while the chart still includes FX.
   ///
   /// In en, this message translates to:
-  /// **'MXN revalued at the window-start rate ({rate} MXN/USD)'**
-  String nwLensConstantCaption(String rate);
+  /// **'Replot the chart without currency moves'**
+  String get nwFxExcludeTooltip;
+
+  /// Net-worth card: tooltip and screen-reader label on the tappable FX attribution chip while the FX-free replot is showing.
+  ///
+  /// In en, this message translates to:
+  /// **'Put currency moves back on the chart'**
+  String get nwFxIncludeTooltip;
+
+  /// Net-worth card: names the FX-free chart state — used as the prefix of the pointer-only chart canvas's screen-reader summary.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluding FX moves'**
+  String get nwFxExcludedLabel;
+
+  /// Caption under the chart while the FX-free replot is showing, so a flat peso never reads as a live conversion; {rate} is the window-start USD→MXN rate already formatted for the locale.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluding FX: every balance held at {rate} MXN/USD'**
+  String nwFxExcludedCaption(String rate);
+
+  /// Net-worth card: tooltip on the disabled Simple/Detailed toggle while the FX-free replot is showing — that series is a single total line, so the detailed view has nothing to stack.
+  ///
+  /// In en, this message translates to:
+  /// **'Institution bands aren\'t available while FX is excluded'**
+  String get nwFxBandsUnavailable;
 
   /// FX center: appended to the app-bar FX pill tooltip/semantics now that tapping it opens the FX center sheet.
   ///
