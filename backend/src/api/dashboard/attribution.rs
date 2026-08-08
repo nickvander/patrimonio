@@ -45,8 +45,10 @@
 //! exactly. Rate lookups use the dated nearest-prior ladder (on-or-before →
 //! latest-any → hard fallback), matching `services/fx.rs`.
 //!
-//! The response also carries the currency-lens `series` for the net-worth
-//! card's USD / MXN / FX-held-constant toggle: per snapshot date in the
+//! The response also carries the currency-lens `series` behind the net-worth
+//! card's FX-free replot (the USD / MXN segments of the original three-way
+//! lens are gone — the global reporting-currency switcher owns those): per
+//! snapshot date in the
 //! window, the carried net worth in USD (`balance_usd`, matching the chart),
 //! in MXN at that date's rate, and in USD with MXN balances revalued at the
 //! window-START rate (`constant_fx_usd` — "what my net worth did ignoring
@@ -127,6 +129,22 @@ pub(super) struct NetWorthAttribution {
     market_usd: Decimal,
     fx_usd: Decimal,
     residual_usd: Decimal,
+    /// False when the window OPENS before the stored USD/MXN history starts.
+    ///
+    /// `fx` is `B0/r1 - B0/r0` — it needs a real opening rate. When `from`
+    /// predates every stored row, `rate_on`'s "else the latest row of any
+    /// date" rung hands back the SAME rate for both endpoints, the two terms
+    /// cancel, and `fx_usd` lands on exactly `0.00` — indistinguishable on
+    /// the wire from a genuinely FX-free window, and wrong for a holder of
+    /// MXN 970k. The currency effect isn't lost (the observed `delta_usd`
+    /// still contains it, so `residual_usd` absorbs it), but it cannot be
+    /// ATTRIBUTED, and a client must say so rather than print a confident
+    /// `$0.00`. See `fx_rates_start` for the date to name in that message.
+    fx_attributable: bool,
+    /// Date of the oldest stored USD→MXN row, or null when the table is
+    /// empty — the "history starts here" the client cites when
+    /// `fx_attributable` is false.
+    fx_rates_start: Option<String>,
     per_currency: Vec<CurrencyAttribution>,
     series: Vec<LensSeriesPoint>,
 }
@@ -195,6 +213,11 @@ pub(super) async fn net_worth_attribution(
     }
     let r0 = rate_on(&rates, from);
     let r1 = rate_on(&rates, to);
+    // Did `from` land on a REAL nearest-prior row, or on the "latest of any
+    // date" rung? On that rung r0 == r1 and the fx term cancels to exactly
+    // zero; the client must render that as unattributable, not as $0.00.
+    let fx_rates_start = rates.first().map(|(d, _)| *d);
+    let fx_attributable = fx_rates_start.is_some_and(|start| from >= start);
 
     // Per-account snapshot rows up to the window close, carried forward in
     // Rust — NOT a per-date GROUP BY (accounts snapshot on different days;
@@ -389,6 +412,16 @@ pub(super) async fn net_worth_attribution(
             .unwrap_or(Decimal::ZERO);
     }
 
+    // A missing opening rate only COSTS anything when there were pesos to
+    // revalue: with no MXN at the window open, `fx` is genuinely zero however
+    // the rates resolve, and reporting it as unattributable would put a dash
+    // where an honest $0.00 belongs (every USD-only window, forever).
+    let mxn_open_native = buckets
+        .get("MXN")
+        .map(|b| b.open_native)
+        .unwrap_or(Decimal::ZERO);
+    let fx_attributable = fx_attributable || mxn_open_native == Decimal::ZERO;
+
     let mut per_currency: Vec<CurrencyAttribution> = Vec::with_capacity(buckets.len());
     let (mut t_delta, mut t_flows, mut t_market, mut t_fx, mut t_residual) = (
         Decimal::ZERO,
@@ -462,6 +495,8 @@ pub(super) async fn net_worth_attribution(
         market_usd: t_market,
         fx_usd: t_fx,
         residual_usd: t_residual,
+        fx_attributable,
+        fx_rates_start: fx_rates_start.map(|d| d.to_string()),
         per_currency,
         series,
     }))

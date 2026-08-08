@@ -18,6 +18,9 @@ pub fn router() -> Router<AppState> {
         .route("/latest/{base}/{target}", get(get_latest_rate))
         .route("/history/{base}/{target}", get(get_rate_history))
         .route("/manual", post(post_manual_rate))
+        // Fill the pre-history gap in `exchange_rates`. A mutation, so the
+        // business router's require_owner layer gates it.
+        .route("/backfill", post(post_backfill))
         // Per-user alert threshold for the FX center ("notify me when the
         // rate crosses X"). GET is readable by every authenticated user;
         // PUT/DELETE are mutations and thus owner-gated by the business
@@ -252,6 +255,75 @@ struct ManualRateRequest {
 /// GET fallback) prefer over the automated 'api' rows. Used to correct a
 /// missing/bad upstream rate that would otherwise collapse to the
 /// FX_FALLBACK_USD_MXN=20.0 sentinel and corrupt every MXN→USD figure.
+/// `POST /api/fx/backfill` — fill USD/MXN history back to the oldest data
+/// this instance actually holds.
+///
+/// The gap is computed here rather than taken from the client: `from` is the
+/// earliest balance-snapshot or transaction date on the instance, `to` is the
+/// day before the oldest stored rate. Everything in that span currently
+/// resolves through `rate_on`'s "latest row of any date" rung — which is what
+/// collapsed the net-worth attribution's `fx` component to exactly $0.00 on
+/// every window opening before the rate table began.
+///
+/// Idempotent: dates that already hold a row are skipped, so re-running is a
+/// no-op and a pinned `manual` rate is never overwritten.
+async fn post_backfill(
+    State(state): State<AppState>,
+) -> Result<Json<crate::services::exchange_rate::BackfillOutcome>, ApiError> {
+    let row = sqlx::query(
+        r#"
+        SELECT LEAST(
+                 (SELECT MIN(as_of_date) FROM balance_snapshots),
+                 (SELECT MIN(date) FROM transactions)
+               ) AS earliest_data,
+               (SELECT MIN(recorded_at)::date FROM exchange_rates
+                 WHERE base_currency = 'USD' AND target_currency = 'MXN' AND rate > 0
+               ) AS oldest_rate
+        "#,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(internal)?;
+
+    let earliest: Option<chrono::NaiveDate> = row.try_get("earliest_data").unwrap_or(None);
+    let oldest_rate: Option<chrono::NaiveDate> = row.try_get("oldest_rate").unwrap_or(None);
+
+    let Some(from) = earliest else {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "no balances or transactions yet — nothing to backfill rates for",
+        ));
+    };
+    // Stop the day before history starts; with no rows at all, fill through
+    // today so the very first run isn't a no-op.
+    let to = match oldest_rate {
+        Some(start) => start - chrono::Duration::days(1),
+        None => chrono::Utc::now().date_naive(),
+    };
+    if from > to {
+        // Already covered — report it honestly instead of erroring.
+        return Ok(Json(crate::services::exchange_rate::BackfillOutcome {
+            requested_from: from.to_string(),
+            requested_to: to.to_string(),
+            inserted: 0,
+            skipped_existing: 0,
+        }));
+    }
+
+    crate::services::exchange_rate::backfill_usd_mxn_history(&state.db, from, to)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            // The upstream message can carry a URL and provider internals —
+            // log it, hand the client a stable sentence.
+            tracing::warn!("USD/MXN rate backfill failed ({from}..{to}): {e}");
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                "couldn't reach the historical rate provider; try again later",
+            )
+        })
+}
+
 async fn post_manual_rate(
     State(state): State<AppState>,
     Json(req): Json<ManualRateRequest>,

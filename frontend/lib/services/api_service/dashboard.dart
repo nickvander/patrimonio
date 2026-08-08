@@ -641,6 +641,29 @@ mixin _DashboardApi on _ApiServiceBase {
     );
   }
 
+  /// Fill the pre-history gap in stored USD/MXN rates from the ECB daily
+  /// series, so windows opening before this instance's first rate row can
+  /// attribute an FX component instead of cancelling it to a misleading
+  /// exact $0.00. The server computes the range from its own oldest data;
+  /// re-running is a no-op. Returns `{requested_from, requested_to, inserted,
+  /// skipped_existing}`.
+  Future<Map<String, dynamic>> backfillExchangeRateHistory() async {
+    final response = await _post(Uri.parse('$_baseUrl/fx/backfill'));
+    // Rate history feeds every MXN→USD figure on the dashboard, so the whole
+    // `dash:` family must go — `_post`'s `_invalidateAfterMutation` already
+    // does exactly that on a 2xx, so there's nothing extra to clear here.
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw _errorFromBody(
+      response,
+      fallback: _t(
+        'Failed to backfill rate history',
+        'No se pudo completar el historial de tasas',
+      ),
+    );
+  }
+
   /// Historical rate points for the FX center sparkline. [days] windows
   /// the series server-side (30/90 in the UI) so the payload stays small.
   Future<List<dynamic>> getExchangeRateHistory(

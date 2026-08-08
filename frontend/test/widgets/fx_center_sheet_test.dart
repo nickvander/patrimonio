@@ -56,6 +56,9 @@ void main() {
     Map<String, dynamic>? alert,
     Map<String, dynamic>? refreshed,
     ValueChanged<Map<String, dynamic>>? onRateChanged,
+    Map<String, dynamic>? backfillResult,
+    List<bool>? backfillCalls,
+    bool backfillThrows = false,
   }) {
     return FxCenterSheet(
       apiService: ApiService(),
@@ -69,6 +72,11 @@ void main() {
       fetchAlertOverride: () async => alert,
       saveAlertOverride: (t) async => savedThresholds?.add(t),
       deleteAlertOverride: () async => deletes?.add(true),
+      backfillOverride: () async {
+        backfillCalls?.add(true);
+        if (backfillThrows) throw Exception('provider unreachable');
+        return backfillResult ?? {'inserted': 412, 'skipped_existing': 0};
+      },
     );
   }
 
@@ -226,6 +234,74 @@ void main() {
       expect(deletes, [true]);
       expect(find.text('Rate alert removed'), findsOneWidget);
       expect(find.textContaining('crosses 17.25'), findsNothing);
+    });
+  });
+
+  // The live FX provider is latest-only, so `exchange_rates` starts whenever
+  // the instance first ran and every earlier date resolves to the newest rate
+  // — which cancelled the net-worth attribution's FX component to an exact,
+  // and badly misleading, $0.00 on long windows. This action closes the gap.
+  group('rate-history backfill', () {
+    testWidgets('runs the fill and reports how much history it added', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final calls = <bool>[];
+      await tester.pumpWidget(_host(sheet(backfillCalls: calls)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Fill in rate history'));
+      await tester.pumpAndSettle();
+
+      expect(calls, hasLength(1));
+      expect(find.text('Added 412 days of rate history'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('says so plainly when there was no gap to fill', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(
+        _host(sheet(backfillResult: const {'inserted': 0})),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Fill in rate history'));
+      await tester.pumpAndSettle();
+
+      // "Added 0 days" would read as a failure; a re-run is a legitimate no-op.
+      expect(find.text('Rate history is already complete'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('surfaces a provider failure instead of failing silently', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(_host(sheet(backfillThrows: true)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Fill in rate history'));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't fill in rate history"), findsOneWidget);
+      // …and the button is live again for a retry.
+      expect(
+        tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('renders the section in es-MX', (tester) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(_host(sheet(), locale: const Locale('es')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Historial de tasas'), findsOneWidget);
+      expect(find.text('Completar historial de tasas'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

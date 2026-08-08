@@ -66,6 +66,8 @@ class FxCenterSheet extends StatefulWidget {
   final Future<void> Function()? deleteAlertOverride;
   @visibleForTesting
   final Future<Map<String, dynamic>> Function()? fetchCostsOverride;
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function()? backfillOverride;
 
   const FxCenterSheet({
     super.key,
@@ -78,6 +80,7 @@ class FxCenterSheet extends StatefulWidget {
     this.saveAlertOverride,
     this.deleteAlertOverride,
     this.fetchCostsOverride,
+    this.backfillOverride,
   });
 
   @override
@@ -96,6 +99,10 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
 
   Map<String, dynamic>? _alert;
   bool _alertSaving = false;
+
+  /// A backfill is a network round trip over a decade of daily rates — keep
+  /// the button inert while it runs rather than queueing duplicate fills.
+  bool _backfilling = false;
 
   Map<String, dynamic>? _costs;
   bool _costsLoading = true;
@@ -363,6 +370,10 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
                         _sectionTitle(l.fxcCostsTitle),
                         const SizedBox(height: 8),
                         _costsSection(l),
+                        const SizedBox(height: 24),
+                        _sectionTitle(l.fxcBackfillTitle),
+                        const SizedBox(height: 8),
+                        _backfillSection(l),
                       ],
                     );
                   },
@@ -676,6 +687,60 @@ class _FxCenterSheetState extends State<FxCenterSheet> {
         ),
       ),
     );
+  }
+
+  /// "Fill in rate history" — pulls the ECB daily USD/MXN series back to this
+  /// instance's oldest data.
+  ///
+  /// The live provider serves only today's rate, so `exchange_rates` starts
+  /// whenever the instance first ran. Every date before that resolves through
+  /// the "latest row of any date" rung, which made the net-worth
+  /// attribution's FX component cancel to an exact — and badly misleading —
+  /// $0.00 on 1Y/5Y/ALL windows. One run closes the gap; re-running is a
+  /// no-op, and a pinned `manual` rate is never overwritten.
+  Widget _backfillSection(AppLocalizations l) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l.fxcBackfillBody,
+          style: TextStyle(fontSize: 12, color: context.textMuted),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton(
+          onPressed: _backfilling ? null : _runBackfill,
+          child: Text(
+            _backfilling ? l.fxcBackfillRunning : l.fxcBackfillAction,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _runBackfill() async {
+    final l = AppLocalizations.of(context);
+    setState(() => _backfilling = true);
+    try {
+      final result = widget.backfillOverride != null
+          ? await widget.backfillOverride!()
+          : await widget.apiService.backfillExchangeRateHistory();
+      if (!mounted) return;
+      final inserted = (result['inserted'] as num?)?.toInt() ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            inserted == 0 ? l.fxcBackfillUpToDate : l.fxcBackfillDone(inserted),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.fxcBackfillFailed)));
+    } finally {
+      if (mounted) setState(() => _backfilling = false);
+    }
   }
 
   Widget _sectionTitle(String text) => Text(

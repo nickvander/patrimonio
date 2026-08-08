@@ -641,4 +641,82 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  // A window opening before the stored rate history has no computable fx: the
+  // backend's endpoint rates both resolve to the same row and the terms
+  // cancel to exactly 0.00. Printing that as "FX $0.00" told a holder of
+  // MXN 970k the peso did nothing for a year. The chip must say nothing
+  // instead, and the caption must say where the value went.
+  group('FX that cannot be attributed', () {
+    Map<String, dynamic> unattributable() => {
+      ..._attribution(),
+      'fx_usd': 0.0,
+      'fx_attributable': false,
+      'fx_rates_start': '2026-03-22',
+    };
+
+    testWidgets('shows an em dash, never a confident zero', (tester) async {
+      _useWideSurface(tester);
+      final api = _FakeAttributionApi(result: unattributable());
+      await tester.pumpWidget(_host(_card(api)));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_fxChipEn), findsOneWidget);
+      expect(find.text('—'), findsOneWidget);
+      expect(
+        find.text(moneyFormat('USD').displayMoney(0)),
+        findsNothing,
+        reason: 'an artifact zero must never render as a figure',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('names where the history starts and where the value went', (
+      tester,
+    ) async {
+      _useWideSurface(tester);
+      final api = _FakeAttributionApi(result: unattributable());
+      await tester.pumpWidget(_host(_card(api)));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Mar 22, 2026'), findsOneWidget);
+      expect(find.textContaining('inside Other'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('never offers the replot — the constant line is the live one', (
+      tester,
+    ) async {
+      _useWideSurface(tester);
+      // fx_attributable false must win even if the numbers would otherwise
+      // clear the materiality bar: r0 is untrustworthy, so the constant-FX
+      // series is meaningless.
+      final api = _FakeAttributionApi(
+        result: {...unattributable(), 'fx_usd': -200.0},
+      );
+      await tester.pumpWidget(_host(_card(api, history: _sparseHistory())));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_fxHintEn), findsNothing);
+      expect(
+        _semanticsLabels(tester).any((l) => l.contains('currency moves')),
+        isFalse,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('an older backend without the field keeps the old behaviour', (
+      tester,
+    ) async {
+      _useWideSurface(tester);
+      // _attribution() carries no fx_attributable key at all.
+      final api = _FakeAttributionApi(result: _sparseAttribution());
+      await tester.pumpWidget(_host(_card(api, history: _sparseHistory())));
+      await tester.pumpAndSettle();
+
+      expect(find.text('—'), findsNothing);
+      expect(find.text(_fxHintEn), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

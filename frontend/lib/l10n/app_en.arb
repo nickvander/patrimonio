@@ -3998,6 +3998,15 @@
   "@nwAttrError": {
     "description": "Net-worth attribution: muted inline error when the attribution endpoint fails."
   },
+  "nwFxNoRateHistory": "FX can't be separated out before {date}, where the stored rate history starts — the currency effect is inside Other.",
+  "@nwFxNoRateHistory": {
+    "description": "Net-worth card: caption under the \"Why it changed\" chips when the window opens before stored USD/MXN rate history, so the FX chip shows an em dash instead of a figure. Both endpoint rates would resolve to the same stored row, cancelling the fx term to a misleading exact $0.00. {date} is the oldest stored rate date, already formatted for the locale.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "nwFxTapHint": "Tap FX to replot the chart without currency moves",
   "@nwFxTapHint": {
     "description": "Net-worth card: one-line hint under the \"Why it changed\" chips telling the user the FX chip is tappable. Shown only while the FX-free replot is offered (FX moved enough to visibly reshape the line) and not yet applied — the affordance replaced a floating \"Ignore FX moves\" chip that named an action without saying what it produced."
@@ -4026,6 +4035,39 @@
   "nwFxBandsUnavailable": "Institution bands aren't available while FX is excluded",
   "@nwFxBandsUnavailable": {
     "description": "Net-worth card: tooltip on the disabled Simple/Detailed toggle while the FX-free replot is showing — that series is a single total line, so the detailed view has nothing to stack."
+  },
+  "fxcBackfillTitle": "Rate history",
+  "@fxcBackfillTitle": {
+    "description": "FX center: section heading for the historical-rate backfill action."
+  },
+  "fxcBackfillBody": "The live provider only serves today's rate, so dates before this server's first sync fall back to the newest rate. That makes the net-worth FX breakdown unattributable on long windows. Fill in the daily ECB series to fix it.",
+  "@fxcBackfillBody": {
+    "description": "FX center: explains why the rate-history backfill exists \u2014 the free live provider is latest-only, so pre-history dates resolve to the newest rate and the net-worth attribution's FX component cancels to a misleading exact zero."
+  },
+  "fxcBackfillAction": "Fill in rate history",
+  "@fxcBackfillAction": {
+    "description": "FX center: button label that runs the historical USD/MXN rate backfill."
+  },
+  "fxcBackfillRunning": "Filling\u2026",
+  "@fxcBackfillRunning": {
+    "description": "FX center: backfill button label while the request is in flight."
+  },
+  "fxcBackfillDone": "{count, plural, =1{Added 1 day of rate history} other{Added {count} days of rate history}}",
+  "@fxcBackfillDone": {
+    "description": "FX center: snackbar after a backfill inserted rows; {count} is the number of daily rates written (business days only \u2014 the ECB publishes no weekend quote).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fxcBackfillUpToDate": "Rate history is already complete",
+  "@fxcBackfillUpToDate": {
+    "description": "FX center: snackbar when a backfill found no gap to fill (a re-run is a no-op)."
+  },
+  "fxcBackfillFailed": "Couldn't fill in rate history",
+  "@fxcBackfillFailed": {
+    "description": "FX center: snackbar when the historical rate provider could not be reached."
   },
   "fxcPillTapHint": "Tap for rate history & tools",
   "@fxcPillTapHint": {

@@ -7322,6 +7322,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nwAttrError => 'No se pudo cargar la atribución del cambio';
 
   @override
+  String nwFxNoRateHistory(String date) {
+    return 'El tipo de cambio no puede separarse antes del $date, cuando inicia el historial de tasas guardado — su efecto está incluido en Otro.';
+  }
+
+  @override
   String get nwFxTapHint =>
       'Toca Tipo de cambio para graficar sin los movimientos cambiarios';
 
@@ -7343,6 +7348,36 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get nwFxBandsUnavailable =>
       'Las bandas por institución no están disponibles sin el tipo de cambio';
+
+  @override
+  String get fxcBackfillTitle => 'Historial de tasas';
+
+  @override
+  String get fxcBackfillBody =>
+      'El proveedor en vivo solo entrega la tasa de hoy, así que las fechas anteriores a la primera sincronización de este servidor usan la tasa más reciente. Eso impide atribuir el efecto cambiario en periodos largos. Completa la serie diaria del BCE para corregirlo.';
+
+  @override
+  String get fxcBackfillAction => 'Completar historial de tasas';
+
+  @override
+  String get fxcBackfillRunning => 'Completando…';
+
+  @override
+  String fxcBackfillDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se agregaron $count días de historial de tasas',
+      one: 'Se agregó 1 día de historial de tasas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get fxcBackfillUpToDate => 'El historial de tasas ya está completo';
+
+  @override
+  String get fxcBackfillFailed => 'No se pudo completar el historial de tasas';
 
   @override
   String get fxcPillTapHint => 'Toca para ver historial y herramientas';

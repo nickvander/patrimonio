@@ -205,6 +205,130 @@ struct ErApiResponse {
     rates: std::collections::HashMap<String, f64>,
 }
 
+/// Frankfurter time-series payload: `{"rates": {"2025-08-04": {"MXN": 18.84}}}`.
+#[derive(Deserialize)]
+struct FrankfurterSeries {
+    rates: std::collections::BTreeMap<String, std::collections::HashMap<String, f64>>,
+}
+
+/// What a backfill run actually did — every field is reported to the caller
+/// rather than logged, because "it worked" and "it inserted nothing" look
+/// identical from the outside otherwise.
+#[derive(serde::Serialize)]
+pub struct BackfillOutcome {
+    pub requested_from: String,
+    pub requested_to: String,
+    /// Rows written. Business days only — the upstream publishes no weekend
+    /// or holiday quote, and the nearest-prior ladder covers those days.
+    pub inserted: usize,
+    /// Dates upstream returned that already had a row (a re-run is a no-op).
+    pub skipped_existing: usize,
+}
+
+/// Longest span one backfill call will request. A decade of business days is
+/// ~2,600 rows — a bounded fetch and a bounded insert, where an unbounded
+/// "since 1999" would be neither.
+const MAX_BACKFILL_DAYS: i64 = 3653;
+
+/// Backfill historical USD→MXN rates into `exchange_rates` for `[start, end]`.
+///
+/// **Why a second provider.** The live path uses open.er-api.com, whose free
+/// tier serves only *today's* rate — so `exchange_rates` begins whenever this
+/// instance first ran, and every date before that resolves through
+/// `rate_on`'s "latest row of any date" rung. That silently made the
+/// net-worth attribution's `fx` component exactly `$0.00` on 1Y/5Y/ALL
+/// windows (both endpoints resolving to the same rate, terms cancelling).
+/// Frankfurter publishes the ECB daily reference series, free and keyless,
+/// which is what a backfill needs.
+///
+/// **Idempotent by construction:** a date that already holds any USD/MXN row
+/// is left alone, so re-running never duplicates and never overwrites a
+/// `manual` correction the user pinned. Rows land at midnight UTC of the
+/// quoted date with `source = 'backfill'`, keeping them distinguishable from
+/// `api` and `manual` rows forever.
+pub async fn backfill_usd_mxn_history(
+    db: &PgPool,
+    start: chrono::NaiveDate,
+    end: chrono::NaiveDate,
+) -> Result<BackfillOutcome> {
+    if start > end {
+        anyhow::bail!("backfill start {start} is after end {end}");
+    }
+    if (end - start).num_days() > MAX_BACKFILL_DAYS {
+        anyhow::bail!(
+            "backfill span {start}..{end} exceeds the {MAX_BACKFILL_DAYS}-day cap; \
+             narrow the range and run again"
+        );
+    }
+
+    let client = Client::builder().timeout(FX_HTTP_TIMEOUT).build()?;
+    let url = format!("https://api.frankfurter.dev/v1/{start}..{end}?base=USD&symbols=MXN");
+    let series = client
+        .get(&url)
+        .send()
+        .await?
+        .json::<FrankfurterSeries>()
+        .await?;
+
+    let mut dates: Vec<chrono::NaiveDate> = Vec::new();
+    let mut values: Vec<Decimal> = Vec::new();
+    for (day, quotes) in &series.rates {
+        let (Ok(d), Some(rate)) = (
+            chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d"),
+            quotes.get("MXN").copied(),
+        ) else {
+            continue;
+        };
+        // Same poison guard as the live path: a non-positive rate becomes a
+        // divisor somewhere downstream.
+        let Ok(dec) = Decimal::from_str(&rate.to_string()) else {
+            continue;
+        };
+        if dec <= Decimal::ZERO {
+            continue;
+        }
+        dates.push(d);
+        values.push(dec);
+    }
+    let returned = dates.len();
+    if returned == 0 {
+        return Ok(BackfillOutcome {
+            requested_from: start.to_string(),
+            requested_to: end.to_string(),
+            inserted: 0,
+            skipped_existing: 0,
+        });
+    }
+
+    // One statement: unnest the pairs, drop any date that already has a
+    // USD/MXN row (whatever its source or time of day), insert the rest.
+    let inserted = sqlx::query(
+        r#"
+        INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at, source)
+        SELECT 'USD', 'MXN', v.rate, v.d::timestamptz, 'backfill'
+        FROM UNNEST($1::date[], $2::numeric[]) AS v(d, rate)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM exchange_rates e
+            WHERE e.base_currency = 'USD' AND e.target_currency = 'MXN'
+              AND e.recorded_at::date = v.d
+        )
+        ON CONFLICT (base_currency, target_currency, recorded_at) DO NOTHING
+        "#,
+    )
+    .bind(&dates)
+    .bind(&values)
+    .execute(db)
+    .await?
+    .rows_affected() as usize;
+
+    Ok(BackfillOutcome {
+        requested_from: start.to_string(),
+        requested_to: end.to_string(),
+        inserted,
+        skipped_existing: returned.saturating_sub(inserted),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::threshold_crossed;

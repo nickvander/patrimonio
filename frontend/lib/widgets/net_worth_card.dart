@@ -126,6 +126,17 @@ class _NetWorthCardState extends State<NetWorthCard> {
     return series;
   }
 
+  /// Whether the backend could attribute an FX component for this window at
+  /// all. False when the window opens before the stored USD/MXN history: both
+  /// endpoint rates then resolve to the same row, the fx terms cancel, and the
+  /// wire carries exactly `0.00` — which must NOT be printed as "FX $0.00" for
+  /// someone holding a million pesos. Defaults true so an older backend (no
+  /// such field) keeps its current behaviour.
+  bool get _fxAttributable => _attribution?['fx_attributable'] as bool? ?? true;
+
+  /// The date stored rate history begins, for the "can't attribute" caption.
+  String? get _fxRatesStart => _attribution?['fx_rates_start'] as String?;
+
   /// Whether the card offers the FX-free replot for the loaded window.
   ///
   /// Not merely "did the series load": a control that redraws the same-looking
@@ -136,6 +147,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
   bool get _fxViewOffered {
     final series = _constantFxSeries;
     if (series == null) return false;
+    // An unattributable window has no trustworthy opening rate, so the
+    // constant-FX line is the live line by construction — never offer it.
+    if (!_fxAttributable) return false;
     return fxViewIsInformative(
       fxUsd: ((_attribution?['fx_usd'] ?? 0) as num).toDouble(),
       constantFxUsd: [
@@ -494,7 +508,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
               // neighbours; centre the run so the row doesn't step.
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _attrChip((label: l.nwAttrFx, value: fx), fxToggle: fxOffered),
+                _attrChip(
+                  (label: l.nwAttrFx, value: fx),
+                  fxToggle: fxOffered,
+                  unattributable: !_fxAttributable,
+                ),
                 _attrChip((label: l.nwAttrMarket, value: market)),
                 _attrChip((label: l.nwAttrFlows, value: flows)),
                 if (residual != 0)
@@ -511,10 +529,29 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   style: TextStyle(fontSize: 11, color: context.textFaint),
                 ),
               ),
+            // Say WHY the FX slot is a dash, and where its value went — the
+            // currency effect is still inside the total, it just can't be
+            // separated out without a rate for the window's opening day.
+            if (!_fxAttributable && _fxRatesStart != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  l.nwFxNoRateHistory(_formatRatesStart(_fxRatesStart!)),
+                  style: TextStyle(fontSize: 11, color: context.textFaint),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  /// The backend's ISO `fx_rates_start`, rendered in the app locale. Falls
+  /// back to the raw string if it won't parse — a caption that names a date
+  /// badly still beats one that vanishes.
+  String _formatRatesStart(String iso) {
+    final d = DateTime.tryParse(iso);
+    return d == null ? iso : DateFormat.yMMMd().format(d);
   }
 
   /// One attribution component chip: `label +$X` / `label −$X`, hue by sign
@@ -526,9 +563,16 @@ class _NetWorthCardState extends State<NetWorthCard> {
   /// an outline, an eye icon, and a selected fill once the replot is on — and
   /// gets a ~40dp tap target from vertical padding INSIDE the ink area, the
   /// `_buildModeToggle` idiom, so the hit box grows without the pill growing.
+  ///
+  /// With [unattributable] the amount is replaced by an em dash. The wire says
+  /// `0.00`, but that zero is an artifact of both endpoint rates resolving to
+  /// the same row — printing it would claim the peso did nothing for a year.
+  /// A dash claims nothing, and the caption under the row says where the
+  /// value actually went.
   Widget _attrChip(
     ({String label, double value}) item, {
     bool fxToggle = false,
+    bool unattributable = false,
   }) {
     final zero = item.value == 0;
     final up = item.value >= 0;
@@ -561,9 +605,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
           ),
           const SizedBox(width: 4),
           Text(
-            zero
-                ? currencyFormat.displayMoney(0)
-                : '${up ? '+' : '−'}${currencyFormat.displayMoney(amount)}',
+            unattributable
+                ? '—'
+                : (zero
+                      ? currencyFormat.displayMoney(0)
+                      : '${up ? '+' : '−'}${currencyFormat.displayMoney(amount)}'),
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,

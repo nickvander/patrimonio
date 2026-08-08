@@ -595,3 +595,166 @@ async fn attribution_rejects_bad_windows() {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST, "{uri} should be 400");
     }
 }
+
+// =====================================================================
+// FX attributability — the window that opens before the rate history
+// =====================================================================
+
+/// A window opening BEFORE the oldest stored rate cannot have an FX
+/// component computed: `rate_on`'s "latest row of any date" rung hands the
+/// same rate back for both endpoints, so `B0/r1 - B0/r0` cancels to exactly
+/// `0.00`. That zero is indistinguishable on the wire from a genuinely
+/// FX-free window — and it shipped, reading "FX $0.00" to someone holding
+/// MXN 970k across a year in which the peso moved 8%.
+///
+/// The response must now SAY it couldn't attribute, and name where the
+/// history starts, so the client can render a dash instead of a figure.
+#[tokio::test]
+#[serial_test::serial]
+async fn attribution_flags_windows_opening_before_the_rate_history() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let mx = seed_account_typed_currency(&pool, user_id, "Banamex", "depository", "MXN").await;
+
+    // Rate history starts 2026-03-22 — exactly the prod shape that surfaced
+    // this: a live provider that only ever serves "today".
+    seed_fx_rate_at(&pool, "18.00", "2026-03-22T00:00:00Z").await;
+    seed_fx_rate_at(&pool, "17.00", "2026-06-01T00:00:00Z").await;
+
+    // Pesos held across the whole span, well before the rates begin.
+    seed_snapshot(
+        &pool,
+        user_id,
+        mx,
+        "2025-08-01",
+        "970000.00",
+        "MXN",
+        "52000.00",
+    )
+    .await;
+    seed_snapshot(
+        &pool,
+        user_id,
+        mx,
+        "2026-07-01",
+        "970000.00",
+        "MXN",
+        "57058.82",
+    )
+    .await;
+
+    // Window opens before any stored rate → unattributable.
+    let before = get_attribution(&app, &token, "2025-08-01", "2026-07-01").await;
+    assert_eq!(
+        before["fx_attributable"], false,
+        "a window opening before the rate history cannot attribute fx"
+    );
+    assert_eq!(
+        before["fx_rates_start"], "2026-03-22",
+        "the client needs the date to name in its caption"
+    );
+    // The zero is still on the wire (the invariant depends on it) — the flag
+    // is what stops a client printing it as a finding.
+    assert_eq!(dec(&before["fx_usd"]), Decimal::ZERO);
+
+    // Window opening ON the first rate date → attributable, and the two
+    // endpoint rates genuinely differ, so fx is a real nonzero number.
+    let after = get_attribution(&app, &token, "2026-03-22", "2026-07-01").await;
+    assert_eq!(
+        after["fx_attributable"], true,
+        "opening exactly on the first stored rate is covered"
+    );
+    assert_ne!(
+        dec(&after["fx_usd"]),
+        Decimal::ZERO,
+        "970k pesos across an 18.00 -> 17.00 move must show an fx component"
+    );
+}
+
+/// With no stored rates at all there is no history to open after, so nothing
+/// is attributable and there is no date to cite.
+#[tokio::test]
+#[serial_test::serial]
+async fn attribution_reports_no_rate_history_at_all() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let mx = seed_account_typed_currency(&pool, user_id, "Banamex", "depository", "MXN").await;
+    // Pesos held BEFORE the window opens — otherwise the opening MXN balance
+    // is zero and fx is honestly zero regardless of rates (see
+    // `attribution_usd_only_window_stays_attributable_without_rates`).
+    seed_snapshot(
+        &pool,
+        user_id,
+        mx,
+        "2026-03-01",
+        "500000.00",
+        "MXN",
+        "25000.00",
+    )
+    .await;
+    seed_snapshot(
+        &pool,
+        user_id,
+        mx,
+        "2026-06-01",
+        "500000.00",
+        "MXN",
+        "25000.00",
+    )
+    .await;
+
+    let body = get_attribution(&app, &token, "2026-04-01", "2026-06-01").await;
+    assert_eq!(body["fx_attributable"], false);
+    assert!(
+        body["fx_rates_start"].is_null(),
+        "no rows means no history date to name"
+    );
+}
+
+/// A missing opening rate only matters if there were pesos to revalue. A
+/// USD-only window has a genuinely zero fx component however the rates
+/// resolve, so it stays ATTRIBUTABLE — otherwise every USD-only user gets a
+/// permanent dash where an honest $0.00 belongs.
+#[tokio::test]
+#[serial_test::serial]
+async fn attribution_usd_only_window_stays_attributable_without_rates() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let usd = seed_account_typed_currency(&pool, user_id, "Checking", "depository", "USD").await;
+    seed_fx_rate_at(&pool, "18.00", "2026-03-22T00:00:00Z").await;
+    seed_snapshot(
+        &pool,
+        user_id,
+        usd,
+        "2025-08-01",
+        "1000.00",
+        "USD",
+        "1000.00",
+    )
+    .await;
+    seed_snapshot(
+        &pool,
+        user_id,
+        usd,
+        "2026-07-01",
+        "1500.00",
+        "USD",
+        "1500.00",
+    )
+    .await;
+
+    // Window opens long before the rate history, exactly as in the flagged
+    // case — but with no MXN at the open there is nothing a rate could change.
+    let body = get_attribution(&app, &token, "2025-08-01", "2026-07-01").await;
+    assert_eq!(
+        body["fx_attributable"], true,
+        "no pesos at the open means fx is honestly zero, not unattributable"
+    );
+    assert_eq!(dec(&body["fx_usd"]), Decimal::ZERO);
+}

@@ -11609,6 +11609,12 @@ abstract class AppLocalizations {
   /// **'Couldn\'t load change attribution'**
   String get nwAttrError;
 
+  /// Net-worth card: caption under the "Why it changed" chips when the window opens before stored USD/MXN rate history, so the FX chip shows an em dash instead of a figure. Both endpoint rates would resolve to the same stored row, cancelling the fx term to a misleading exact $0.00. {date} is the oldest stored rate date, already formatted for the locale.
+  ///
+  /// In en, this message translates to:
+  /// **'FX can\'t be separated out before {date}, where the stored rate history starts — the currency effect is inside Other.'**
+  String nwFxNoRateHistory(String date);
+
   /// Net-worth card: one-line hint under the "Why it changed" chips telling the user the FX chip is tappable. Shown only while the FX-free replot is offered (FX moved enough to visibly reshape the line) and not yet applied — the affordance replaced a floating "Ignore FX moves" chip that named an action without saying what it produced.
   ///
   /// In en, this message translates to:
@@ -11644,6 +11650,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Institution bands aren\'t available while FX is excluded'**
   String get nwFxBandsUnavailable;
+
+  /// FX center: section heading for the historical-rate backfill action.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate history'**
+  String get fxcBackfillTitle;
+
+  /// FX center: explains why the rate-history backfill exists — the free live provider is latest-only, so pre-history dates resolve to the newest rate and the net-worth attribution's FX component cancels to a misleading exact zero.
+  ///
+  /// In en, this message translates to:
+  /// **'The live provider only serves today\'s rate, so dates before this server\'s first sync fall back to the newest rate. That makes the net-worth FX breakdown unattributable on long windows. Fill in the daily ECB series to fix it.'**
+  String get fxcBackfillBody;
+
+  /// FX center: button label that runs the historical USD/MXN rate backfill.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in rate history'**
+  String get fxcBackfillAction;
+
+  /// FX center: backfill button label while the request is in flight.
+  ///
+  /// In en, this message translates to:
+  /// **'Filling…'**
+  String get fxcBackfillRunning;
+
+  /// FX center: snackbar after a backfill inserted rows; {count} is the number of daily rates written (business days only — the ECB publishes no weekend quote).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Added 1 day of rate history} other{Added {count} days of rate history}}'**
+  String fxcBackfillDone(int count);
+
+  /// FX center: snackbar when a backfill found no gap to fill (a re-run is a no-op).
+  ///
+  /// In en, this message translates to:
+  /// **'Rate history is already complete'**
+  String get fxcBackfillUpToDate;
+
+  /// FX center: snackbar when the historical rate provider could not be reached.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t fill in rate history'**
+  String get fxcBackfillFailed;
 
   /// FX center: appended to the app-bar FX pill tooltip/semantics now that tapping it opens the FX center sheet.
   ///

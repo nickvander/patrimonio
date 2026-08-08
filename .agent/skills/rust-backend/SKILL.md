@@ -158,6 +158,22 @@ that comment is in `main.rs`; keep it.
   `CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx`.
 - **Never sum raw amounts across currencies** without the per-row FX conversion — historical
   ~18x error. If you're about to write `SUM(amount)` over mixed-currency rows, stop.
+- **The "else latest rate" rung is a per-row convenience, NOT a safe input to rate ARITHMETIC.**
+  It exists so a statement imported from before FX history begins still converts to a
+  sane magnitude. But anything that *differences two rates* — `B0/r1 - B0/r0`, a
+  constant-FX revaluation, a period-over-period FX attribution — gets the SAME rate
+  back for both endpoints once either date predates the table, so the terms cancel to
+  **exactly `0.00`**: a confident, wrong, and completely plausible-looking answer.
+  (Shipped: `net-worth-attribution` reported `FX $0.00` on every 1Y/5Y/ALL window to a
+  user holding MXN 970k, because `exchange_rates` only went back to the instance's first
+  sync.) If your math differences rates, **check coverage first** — `rates.first()` vs the
+  window open — and report unavailability to the client instead of emitting the cancelled
+  zero. See `fx_attributable` / `fx_rates_start` in `api/dashboard/attribution.rs`.
+- **The live provider (open.er-api.com, free tier) serves TODAY only** — it can never
+  populate history. `services/exchange_rate.rs::backfill_usd_mxn_history` fills the gap
+  from the ECB daily series (Frankfurter, free/keyless), idempotently and without
+  overwriting a pinned `manual` row; `POST /api/fx/backfill` computes the range from the
+  instance's own oldest data. Reach for it before assuming a date has no rate.
 - **`services/fx.rs` is the single owner of the FX rules** — the shared SQL fragments
   (`USD_MXN_ROW_RATE_SQL`, `AMOUNT_USD_SQL`, `LATEST_USD_MXN_RATE_SQL`) and the hard-fallback
   constant (`FX_FALLBACK_USD_MXN`, with its `Decimal` twin). Add new FX rules there and import

@@ -7260,6 +7260,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nwAttrError => 'Couldn\'t load change attribution';
 
   @override
+  String nwFxNoRateHistory(String date) {
+    return 'FX can\'t be separated out before $date, where the stored rate history starts — the currency effect is inside Other.';
+  }
+
+  @override
   String get nwFxTapHint => 'Tap FX to replot the chart without currency moves';
 
   @override
@@ -7279,6 +7284,36 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get nwFxBandsUnavailable =>
       'Institution bands aren\'t available while FX is excluded';
+
+  @override
+  String get fxcBackfillTitle => 'Rate history';
+
+  @override
+  String get fxcBackfillBody =>
+      'The live provider only serves today\'s rate, so dates before this server\'s first sync fall back to the newest rate. That makes the net-worth FX breakdown unattributable on long windows. Fill in the daily ECB series to fix it.';
+
+  @override
+  String get fxcBackfillAction => 'Fill in rate history';
+
+  @override
+  String get fxcBackfillRunning => 'Filling…';
+
+  @override
+  String fxcBackfillDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Added $count days of rate history',
+      one: 'Added 1 day of rate history',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get fxcBackfillUpToDate => 'Rate history is already complete';
+
+  @override
+  String get fxcBackfillFailed => 'Couldn\'t fill in rate history';
 
   @override
   String get fxcPillTapHint => 'Tap for rate history & tools';
