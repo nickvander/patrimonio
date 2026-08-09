@@ -5,13 +5,13 @@ import 'package:home_widget/home_widget.dart';
 import '../../utils/home_widget_snapshot.dart';
 
 /// Every provider declared in AndroidManifest.xml. Android lists one picker
-/// entry per provider, so the three size variants are three receivers — and an
-/// update broadcast targets ONE of them, so a push that named only the default
-/// would leave a placed small/large widget frozen on stale values.
+/// entry per provider, so each offered size is a receiver — and an update
+/// broadcast targets ONE of them, so a push naming only the default would
+/// leave a placed small widget frozen on stale values. **Adding a size variant
+/// means adding it here too**, or it silently never updates.
 const List<String> _androidProviders = [
   'com.patrimonio.patrimonio.PatrimonioWidgetProvider',
   'com.patrimonio.patrimonio.PatrimonioWidgetProviderSmall',
-  'com.patrimonio.patrimonio.PatrimonioWidgetProviderLarge',
 ];
 
 /// Publish [snapshot] to the Android home-screen widgets and ask them to

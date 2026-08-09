@@ -13,6 +13,11 @@
   currency or the locale, and a second formatter would drift from the app.
 -->
 <!--
+  The roomy two-line layout. RESIZE-ONLY: no appwidget-provider names it as an
+  initialLayout any more (the 4x2 picker entry was dropped — see
+  PatrimonioWidgetSizes.kt). PatrimonioWidgetProvider.layoutFor swaps to it
+  once a widget is dragged past ~90dp tall.
+
   NOTE `layout_height="wrap_content"`, not match_parent. A widget root that
   matches its parent paints the card across the ENTIRE allocated cell area
   while the content sits at the top — which is exactly how this shipped: a

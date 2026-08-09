@@ -3,11 +3,9 @@
 <resources>
     <string name="widget_label">Patrimonio</string>
     <string name="widget_label_small">Patrimonio (peque\u00f1o)</string>
-    <string name="widget_label_large">Patrimonio (grande)</string>
 
     <string name="widget_description">Patrimonio neto y USD/MXN de un vistazo</string>
     <string name="widget_description_small">Patrimonio neto de un vistazo</string>
-    <string name="widget_description_large">Patrimonio neto, tipo de cambio y \u00faltima sincronizaci\u00f3n</string>
 
     <string name="widget_net_worth_label">Patrimonio neto</string>
     <string name="widget_sync_label">Sincronizar</string>

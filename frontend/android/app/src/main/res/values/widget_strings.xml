@@ -13,11 +13,9 @@
 <resources>
     <string name="widget_label">Patrimonio</string>
     <string name="widget_label_small">Patrimonio (small)</string>
-    <string name="widget_label_large">Patrimonio (large)</string>
 
     <string name="widget_description">Net worth and USD/MXN at a glance</string>
     <string name="widget_description_small">Net worth at a glance</string>
-    <string name="widget_description_large">Net worth, rate and last sync</string>
 
     <string name="widget_net_worth_label">Net worth</string>
     <string name="widget_sync_label">Sync now</string>

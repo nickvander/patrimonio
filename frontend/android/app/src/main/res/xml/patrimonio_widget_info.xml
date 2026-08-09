@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Default (3x1) variant — compact layout. This is the original provider;
-  the small/large siblings are subclasses of its Kotlin class.
+  Default (3x1) variant — compact layout. This is the original provider; the
+  small sibling is a subclass of its Kotlin class.
 
-  SIZE FLOOR (shared by all three variants): the launcher converts dp to cells
+  SIZE FLOOR (shared by both variants): the launcher converts dp to cells
   as ceil((dp + 30) / 70), so 110dp = 2 columns and 40dp = 1 row. targetCell*
   is the DEFAULT placement; min*/minResize* is how small the user may drag it.
-  Every variant can be resized to any other variant's size — they differ only
-  in where they start, which is what makes offering three of them cheap.
+  Either variant can be resized to the other's size — they differ only in
+  where they start. Dragging past ~90dp tall also swaps in the roomy two-line
+  layout (see PatrimonioWidgetProvider.layoutFor); that layout is reachable by
+  resizing but is deliberately NOT its own picker entry, because the picker
+  gives every row the height of the tallest widget an app offers and one
+  2-row entry padded every other entry with dead space.
 
   previewLayout points at a dedicated *_preview layout with sample text: the
   picker renders it with NO widget data, so aiming it at the live layout drew
