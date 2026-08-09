@@ -384,3 +384,133 @@ class SettingsAccountSecurityCard extends StatelessWidget {
     );
   }
 }
+
+/// Home-screen widget card on the Settings tab (**Android only** — `kIsWeb`
+/// and desktop have no home screen to place one on, and the card would be a
+/// dead control).
+///
+/// Three switches choosing which sections the widget renders. All default ON,
+/// so a freshly placed widget is immediately useful and the user subtracts
+/// rather than having to find three switches before it shows anything.
+///
+/// Toggling re-pushes immediately via [onChanged] rather than waiting for the
+/// next dashboard load: a switch whose effect appears minutes later on the
+/// home screen reads as broken.
+///
+/// Dumb/injected per house convention; public so widget tests can pump it in
+/// isolation.
+class SettingsHomeWidgetCard extends StatefulWidget {
+  /// Called after any toggle is persisted, so the host can re-push the widget.
+  final VoidCallback onChanged;
+
+  const SettingsHomeWidgetCard({super.key, required this.onChanged});
+
+  @override
+  State<SettingsHomeWidgetCard> createState() => _SettingsHomeWidgetCardState();
+}
+
+class _SettingsHomeWidgetCardState extends State<SettingsHomeWidgetCard> {
+  late bool _netWorth = Preferences.getWidgetShowNetWorth();
+  late bool _fx = Preferences.getWidgetShowFx();
+  late bool _sync = Preferences.getWidgetShowSync();
+
+  void _set(void Function(bool) persist, bool value, void Function() apply) {
+    persist(value);
+    setState(apply);
+    widget.onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return LayoutBuilder(
+      builder: (_, outer) {
+        final pad = outer.maxWidth < 720 ? 16.0 : 24.0;
+        return Card(
+          child: Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.widgets_outlined,
+                      size: 18,
+                      color: context.tealAccent,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      l.dashWidgetTitle,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l.dashWidgetSubtitle,
+                  style: TextStyle(fontSize: 12, color: context.textSubtle),
+                ),
+                const SizedBox(height: 4),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: _netWorth,
+                  onChanged: (v) => _set(
+                    Preferences.setWidgetShowNetWorth,
+                    v,
+                    () => _netWorth = v,
+                  ),
+                  title: Text(
+                    l.dashWidgetShowNetWorth,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: _fx,
+                  onChanged: (v) =>
+                      _set(Preferences.setWidgetShowFx, v, () => _fx = v),
+                  title: Text(
+                    l.dashWidgetShowFx,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: _sync,
+                  onChanged: (v) =>
+                      _set(Preferences.setWidgetShowSync, v, () => _sync = v),
+                  title: Text(
+                    l.dashWidgetShowSync,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    l.dashWidgetSyncNote,
+                    style: TextStyle(fontSize: 11, color: context.textFaint),
+                  ),
+                ),
+                // The all-off case is legal (some people want a bare tile that
+                // just opens the app) but it must not look like a bug, so the
+                // widget says so and this says the same thing here.
+                if (!_netWorth && !_fx && !_sync)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      l.dashWidgetAllOff,
+                      style: TextStyle(fontSize: 11, color: context.warning),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

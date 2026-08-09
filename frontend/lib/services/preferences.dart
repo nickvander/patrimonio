@@ -283,4 +283,27 @@ class Preferences {
 
   static void setCardTerms(Map<String, dynamic> terms) =>
       _write('card_terms', jsonEncode(terms));
+
+  // -- Android home-screen widget ----------------------------------------
+  //
+  // Which sections the home-screen widget renders. All default ON, so a
+  // freshly placed widget shows everything and the user subtracts rather than
+  // having to discover three switches to make it useful. Stored here (not
+  // server-side) because they describe THIS device's home screen — a widget on
+  // one phone shouldn't reshape one on another.
+
+  /// Show the net-worth figure on the home-screen widget.
+  static bool getWidgetShowNetWorth() => _read('widgetShowNetWorth') != 'false';
+  static void setWidgetShowNetWorth(bool v) =>
+      _write('widgetShowNetWorth', v.toString());
+
+  /// Show the USD/MXN rate on the home-screen widget.
+  static bool getWidgetShowFx() => _read('widgetShowFx') != 'false';
+  static void setWidgetShowFx(bool v) => _write('widgetShowFx', v.toString());
+
+  /// Show the sync button on the home-screen widget (opens the app, which
+  /// syncs — the widget itself does no networking).
+  static bool getWidgetShowSync() => _read('widgetShowSync') != 'false';
+  static void setWidgetShowSync(bool v) =>
+      _write('widgetShowSync', v.toString());
 }

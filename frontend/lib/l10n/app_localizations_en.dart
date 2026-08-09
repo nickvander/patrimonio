@@ -7260,6 +7260,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nwAttrError => 'Couldn\'t load change attribution';
 
   @override
+  String get dashWidgetTitle => 'Home screen widget';
+
+  @override
+  String get dashWidgetSubtitle =>
+      'Choose what the widget shows. It updates whenever you open the app.';
+
+  @override
+  String get dashWidgetShowNetWorth => 'Net worth';
+
+  @override
+  String get dashWidgetShowFx => 'USD/MXN rate';
+
+  @override
+  String get dashWidgetShowSync => 'Sync button';
+
+  @override
+  String get dashWidgetSyncNote =>
+      'Opens the app, which syncs and refreshes the widget';
+
+  @override
+  String get dashWidgetAllOff =>
+      'With everything off the widget just opens the app.';
+
+  @override
+  String get dashWidgetJustNow => 'just now';
+
+  @override
+  String dashWidgetMinutesAgo(int count) {
+    return '${count}m ago';
+  }
+
+  @override
+  String dashWidgetHoursAgo(int count) {
+    return '${count}h ago';
+  }
+
+  @override
+  String dashWidgetDaysAgo(int count) {
+    return '${count}d ago';
+  }
+
+  @override
   String nwFxNoRateHistory(String date) {
     return 'FX can\'t be separated out before $date, where the stored rate history starts — the currency effect is inside Other.';
   }

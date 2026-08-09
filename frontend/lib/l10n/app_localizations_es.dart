@@ -7322,6 +7322,48 @@ class AppLocalizationsEs extends AppLocalizations {
   String get nwAttrError => 'No se pudo cargar la atribución del cambio';
 
   @override
+  String get dashWidgetTitle => 'Widget de pantalla de inicio';
+
+  @override
+  String get dashWidgetSubtitle =>
+      'Elige qué muestra el widget. Se actualiza cuando abres la app.';
+
+  @override
+  String get dashWidgetShowNetWorth => 'Patrimonio neto';
+
+  @override
+  String get dashWidgetShowFx => 'Tipo de cambio USD/MXN';
+
+  @override
+  String get dashWidgetShowSync => 'Botón de sincronización';
+
+  @override
+  String get dashWidgetSyncNote =>
+      'Abre la app, que sincroniza y actualiza el widget';
+
+  @override
+  String get dashWidgetAllOff =>
+      'Con todo desactivado, el widget solo abre la app.';
+
+  @override
+  String get dashWidgetJustNow => 'ahora';
+
+  @override
+  String dashWidgetMinutesAgo(int count) {
+    return 'hace $count min';
+  }
+
+  @override
+  String dashWidgetHoursAgo(int count) {
+    return 'hace $count h';
+  }
+
+  @override
+  String dashWidgetDaysAgo(int count) {
+    return 'hace $count d';
+  }
+
+  @override
   String nwFxNoRateHistory(String date) {
     return 'El tipo de cambio no puede separarse antes del $date, cuando inicia el historial de tasas guardado — su efecto está incluido en Otro.';
   }

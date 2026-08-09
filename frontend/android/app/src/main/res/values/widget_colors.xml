@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Home-screen widget palette (light). A RemoteViews tree cannot read the
+  Flutter theme, so the widget's colours are declared here and swapped by
+  Android's own night qualifier in values-night/ — the same light/dark
+  contract the app honours, expressed in the only place the widget can see.
+  Values are lifted from the app's surfaces so the tile doesn't read as a
+  different product on the home screen.
+-->
+<resources>
+    <color name="widget_background">#FFFFFFFF</color>
+    <color name="widget_text_primary">#FF101828</color>
+    <color name="widget_text_muted">#FF667085</color>
+    <color name="widget_accent">#FF12B76A</color>
+</resources>

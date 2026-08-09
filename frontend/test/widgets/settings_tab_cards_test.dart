@@ -3,7 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/main.dart' show themeModeNotifier;
 import 'package:patrimonio/widgets/settings_cards.dart'
-    show SettingsAccountSecurityCard, SettingsPreferencesCard;
+    show
+        SettingsAccountSecurityCard,
+        SettingsHomeWidgetCard,
+        SettingsPreferencesCard;
 
 // The Settings tab's app-level settings cards (Preferences and
 // Account & security) — the settings home that replaces the AppBar kebab.
@@ -329,6 +332,91 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Sign out'), findsOneWidget);
+    });
+  });
+
+  // The Android home-screen widget's config card. The widget itself is a
+  // RemoteViews tree that cannot be pumped, so this — plus
+  // home_widget_snapshot_test — is the whole off-emulator surface.
+  group('SettingsHomeWidgetCard', () {
+    testWidgets('all three sections default ON', (tester) async {
+      await tester.pumpWidget(_host(SettingsHomeWidgetCard(onChanged: () {})));
+      await tester.pumpAndSettle();
+
+      // A freshly placed widget should be useful immediately; the user
+      // subtracts rather than hunting for switches to make it show anything.
+      final switches = tester.widgetList<SwitchListTile>(
+        find.byType(SwitchListTile),
+      );
+      expect(switches, hasLength(3));
+      expect(switches.every((s) => s.value), isTrue);
+      expect(find.text('Net worth'), findsOneWidget);
+      expect(find.text('USD/MXN rate'), findsOneWidget);
+      expect(find.text('Sync button'), findsOneWidget);
+    });
+
+    testWidgets('a toggle re-pushes immediately, not on the next load', (
+      tester,
+    ) async {
+      var pushes = 0;
+      await tester.pumpWidget(
+        _host(SettingsHomeWidgetCard(onChanged: () => pushes++)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('USD/MXN rate'));
+      await tester.pumpAndSettle();
+
+      // A switch whose effect shows up minutes later reads as broken.
+      expect(pushes, 1);
+      expect(
+        tester
+            .widgetList<SwitchListTile>(find.byType(SwitchListTile))
+            .elementAt(1)
+            .value,
+        isFalse,
+      );
+    });
+
+    testWidgets('says the sync button opens the app rather than syncing', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(SettingsHomeWidgetCard(onChanged: () {})));
+      await tester.pumpAndSettle();
+
+      // The widget does no networking; promising a silent background sync
+      // would be the one thing this design cannot deliver.
+      expect(
+        find.text('Opens the app, which syncs and refreshes the widget'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('warns when everything is switched off', (tester) async {
+      await tester.pumpWidget(_host(SettingsHomeWidgetCard(onChanged: () {})));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('just opens the app'), findsNothing);
+      for (final label in ['Net worth', 'USD/MXN rate', 'Sync button']) {
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+      }
+      // The all-off tile is legal but must not look like a rendering bug.
+      expect(find.textContaining('just opens the app'), findsOneWidget);
+    });
+
+    testWidgets('renders in es-MX', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          SettingsHomeWidgetCard(onChanged: () {}),
+          locale: const Locale('es'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Widget de pantalla de inicio'), findsOneWidget);
+      expect(find.text('Patrimonio neto'), findsOneWidget);
+      expect(find.text('Tipo de cambio USD/MXN'), findsOneWidget);
     });
   });
 }

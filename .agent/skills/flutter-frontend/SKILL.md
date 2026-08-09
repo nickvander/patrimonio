@@ -420,6 +420,42 @@ io impl under `if (dart.library.io)`).
   rejected. If you add a function to one impl, add it to all three, or the
   analyzer (which resolves the *stub*) breaks.
 
+## 9. The Android home-screen widget (the only non-Flutter UI)
+
+`PatrimonioWidgetProvider.kt` + `res/layout/patrimonio_widget.xml` render a
+`RemoteViews` tree the Flutter engine never touches. Two rules keep it honest:
+
+- **Never format money (or dates, or percents) in Kotlin.** RemoteViews cannot
+  reach `utils/currency.dart`, the reporting-currency preference, or the active
+  locale, so any native `String.format` becomes a second money formatter
+  guaranteed to drift from the app. Dart builds every string
+  (`utils/home_widget_snapshot.dart`) and pushes them as a flat `Map<String,
+  String>`; Kotlin only calls `setTextViewText`. **That map is the contract** —
+  renaming a key silently blanks a row on someone's home screen, so it is
+  pinned by `test/utils/home_widget_snapshot_test.dart`.
+- **The widget does no networking, deliberately.** It is *app-pushed*: the
+  dashboard writes fresh values after each load and broadcasts an update, and
+  the tile carries a "2h ago" line so stale values read as stale rather than
+  live. Making it self-refresh would need the Keystore session cookie in a
+  widget process, a second copy of the base-URL/Cloudflare-Access seam, and
+  WorkManager — the component that already caused a launch crash here (§ the
+  `proguard-rules.pro` keep rule). Don't add it casually.
+
+`package:home_widget` is Android-only, so it sits behind the usual
+conditional-import seam (`services/home_widget/`, §8). Remember the io impl
+also resolves in `flutter test` — it gates on `Platform.isAndroid` and swallows
+plugin errors so tests stay inert.
+
+**Testing it:** a RemoteViews tree cannot be pumped. Everything decidable in
+Dart lives in `utils/` and is unit-tested; the rest needs the emulator. Note
+`adb` cannot place a widget (`APPWIDGET_UPDATE` is a protected broadcast and
+`cmd appwidget` is unimplemented), so `onUpdate` executing is only verifiable
+by placing the widget on a real home screen. What the emulator CAN prove:
+`dumpsys appwidget` lists the provider with `zombie=false` and a resolved
+`initialLayout`, and `strings classes.dex` shows R8 kept the provider and
+`HomeWidgetPlugin` (R.id/R.layout ints are inlined — their absence as strings
+is expected).
+
 ## Anti-patterns to avoid
 
 - Adding to god files — `dashboard_screen.dart` (7,746 lines), `transactions_tab.dart`

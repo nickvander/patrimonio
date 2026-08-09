@@ -29,6 +29,10 @@ import '../utils/category.dart';
 import '../utils/currency.dart';
 import '../utils/drill_down_claim.dart';
 import '../utils/import_staleness.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+import '../services/home_widget/home_widget_bridge.dart';
+import '../utils/home_widget_snapshot.dart';
 import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
 import '../utils/month_window.dart';
@@ -872,6 +876,39 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Build the searchable index used by the Cmd-K palette. We do it on
   // demand so the list always reflects the most recent _loadAllData()
   // payload. Each item carries a callback that navigates to the right
+  /// Publish the current figures to the Android home-screen widget.
+  ///
+  /// Mirrors the reporting context `_buildBody` uses (same FX rate, same
+  /// target currency) so the tile can never disagree with the hero number the
+  /// user sees when they tap it. No-op off Android via the platform seam.
+  ///
+  /// Deliberately not awaited by callers: this is a side effect of a load, not
+  /// part of it.
+  void _pushHomeWidget() {
+    final fxRate = (_fxRate?['rate'] as num?)?.toDouble();
+    final l = AppLocalizations.of(context);
+    final snapshot = buildHomeWidgetSnapshot(
+      netWorthUsd: (_overview?['net_worth'] as num?)?.toDouble(),
+      conversionFactor: _targetCurrency == 'MXN' ? (fxRate ?? 1.0) : 1.0,
+      reportingCurrency: _targetCurrency,
+      usdMxnRate: fxRate,
+      syncedAt: _lastLoadCompletedAt,
+      now: DateTime.now(),
+      showNetWorth: Preferences.getWidgetShowNetWorth(),
+      showFx: Preferences.getWidgetShowFx(),
+      showSync: Preferences.getWidgetShowSync(),
+      // The freshness line is user-visible text, so it follows the app's
+      // active locale like everything else — the widget can't localize itself.
+      labels: HomeWidgetAgeLabels(
+        justNow: l.dashWidgetJustNow,
+        minutes: l.dashWidgetMinutesAgo,
+        hours: l.dashWidgetHoursAgo,
+        days: l.dashWidgetDaysAgo,
+      ),
+    );
+    pushHomeWidget(snapshot);
+  }
+
   // tab so the palette doesn't have to know the dashboard's layout.
   List<PaletteItem> _buildPaletteItems() {
     final items = <PaletteItem>[];
@@ -4240,6 +4277,13 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       _lastLoadCompletedAt = DateTime.now();
 
+      // Push the fresh figures to the Android home-screen widget. This is the
+      // widget's ONLY refresh path (it does no networking — see
+      // PatrimonioWidgetProvider.kt), so it hangs off the load that just
+      // succeeded. Unawaited and self-silencing: a widget that can't be
+      // updated must never disturb a data refresh the user asked for.
+      _pushHomeWidget();
+
       // Something came back stale (a read fell back to what was already on
       // screen). Re-run soon so the miss heals itself instead of waiting for
       // the user to notice and force a refresh.
@@ -6911,6 +6955,13 @@ class _DashboardScreenState extends State<DashboardScreen>
               // deliberately low-prominence confirmed sign-out as the final row).
               SizedBox(height: gap),
               _buildPreferencesCard(),
+              // Home-screen widget config — Android only; web and desktop have
+              // no home screen to place one on, so the card would be a dead
+              // control (same `kIsWeb` gate the Server row uses).
+              if (!kIsWeb) ...[
+                SizedBox(height: gap),
+                SettingsHomeWidgetCard(onChanged: _pushHomeWidget),
+              ],
               SizedBox(height: gap),
               _buildAccountCard(),
             ],

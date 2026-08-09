@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  updatePeriodMillis is 0 ON PURPOSE. This widget is app-pushed: the Flutter
+  app writes fresh values on every dashboard load and broadcasts an update.
+  A nonzero period would have Android wake the provider on its own schedule to
+  redraw the SAME cached strings — battery spent for no new information, since
+  the provider does no networking.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="70dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/patrimonio_widget"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_description" />

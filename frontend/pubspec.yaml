@@ -51,6 +51,7 @@ dependencies:
 
   web: any
   flutter_secure_storage: ^10.3.1
+  home_widget: ^0.9.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

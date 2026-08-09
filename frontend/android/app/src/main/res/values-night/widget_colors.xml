@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark counterpart of values/widget_colors.xml; see that file. -->
+<resources>
+    <color name="widget_background">#FF12161C</color>
+    <color name="widget_text_primary">#FFF2F4F7</color>
+    <color name="widget_text_muted">#FF98A2B3</color>
+    <color name="widget_accent">#FF3DDC97</color>
+</resources>

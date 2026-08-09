@@ -11609,6 +11609,72 @@ abstract class AppLocalizations {
   /// **'Couldn\'t load change attribution'**
   String get nwAttrError;
 
+  /// Settings tab: heading of the Android home-screen widget card (Android only — hidden on web).
+  ///
+  /// In en, this message translates to:
+  /// **'Home screen widget'**
+  String get dashWidgetTitle;
+
+  /// Settings tab: subtitle of the home-screen widget card. States the app-pushed refresh model up front so hours-old values never read as a bug.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what the widget shows. It updates whenever you open the app.'**
+  String get dashWidgetSubtitle;
+
+  /// Settings tab: toggle for the net-worth figure on the home-screen widget.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth'**
+  String get dashWidgetShowNetWorth;
+
+  /// Settings tab: toggle for the exchange rate on the home-screen widget.
+  ///
+  /// In en, this message translates to:
+  /// **'USD/MXN rate'**
+  String get dashWidgetShowFx;
+
+  /// Settings tab: toggle for the sync affordance on the home-screen widget.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync button'**
+  String get dashWidgetShowSync;
+
+  /// Settings tab: subtitle under the sync toggle. The widget does no networking of its own, so the button launches the app rather than syncing in the background — say so instead of letting the user expect a silent refresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens the app, which syncs and refreshes the widget'**
+  String get dashWidgetSyncNote;
+
+  /// Settings tab: warning shown when all three widget toggles are off, so the resulting near-empty tile reads as a choice rather than a bug.
+  ///
+  /// In en, this message translates to:
+  /// **'With everything off the widget just opens the app.'**
+  String get dashWidgetAllOff;
+
+  /// Home-screen widget freshness line when the app refreshed less than a minute ago.
+  ///
+  /// In en, this message translates to:
+  /// **'just now'**
+  String get dashWidgetJustNow;
+
+  /// Home-screen widget freshness line, minutes. Abbreviated because the tile is narrow.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}m ago'**
+  String dashWidgetMinutesAgo(int count);
+
+  /// Home-screen widget freshness line, hours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}h ago'**
+  String dashWidgetHoursAgo(int count);
+
+  /// Home-screen widget freshness line, days.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}d ago'**
+  String dashWidgetDaysAgo(int count);
+
   /// Net-worth card: caption under the "Why it changed" chips when the window opens before stored USD/MXN rate history, so the FX chip shows an em dash instead of a figure. Both endpoint rates would resolve to the same stored row, cancelling the fx term to a misleading exact $0.00. {date} is the oldest stored rate date, already formatted for the locale.
   ///
   /// In en, this message translates to:

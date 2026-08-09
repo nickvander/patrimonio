@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Widget chrome strings. These are the ONLY user-visible strings not in the
+  ARB files: the widget picker renders them before any Flutter code runs, so
+  gen-l10n cannot reach them. Spanish lives in values-es/.
+-->
+<resources>
+    <string name="widget_description">Net worth and USD/MXN at a glance</string>
+    <string name="widget_net_worth_label">Net worth</string>
+    <string name="widget_sync_label">Sync now</string>
+    <string name="widget_all_hidden">All sections are hidden \u2014 turn one on in Settings</string>
+</resources>

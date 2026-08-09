@@ -3998,6 +3998,53 @@
   "@nwAttrError": {
     "description": "Net-worth attribution: muted inline error when the attribution endpoint fails."
   },
+  "dashWidgetTitle": "Home screen widget",
+  "@dashWidgetTitle": {
+    "description": "Settings tab: heading of the Android home-screen widget card (Android only \u2014 hidden on web)."
+  },
+  "dashWidgetSubtitle": "Choose what the widget shows. It updates whenever you open the app.",
+  "@dashWidgetSubtitle": {
+    "description": "Settings tab: subtitle of the home-screen widget card. States the app-pushed refresh model up front so hours-old values never read as a bug."
+  },
+  "dashWidgetShowNetWorth": "Net worth",
+  "@dashWidgetShowNetWorth": {
+    "description": "Settings tab: toggle for the net-worth figure on the home-screen widget."
+  },
+  "dashWidgetShowFx": "USD/MXN rate",
+  "@dashWidgetShowFx": {
+    "description": "Settings tab: toggle for the exchange rate on the home-screen widget."
+  },
+  "dashWidgetShowSync": "Sync button",
+  "@dashWidgetShowSync": {
+    "description": "Settings tab: toggle for the sync affordance on the home-screen widget."
+  },
+  "dashWidgetSyncNote": "Opens the app, which syncs and refreshes the widget",
+  "@dashWidgetSyncNote": {
+    "description": "Settings tab: subtitle under the sync toggle. The widget does no networking of its own, so the button launches the app rather than syncing in the background \u2014 say so instead of letting the user expect a silent refresh."
+  },
+  "dashWidgetAllOff": "With everything off the widget just opens the app.",
+  "@dashWidgetAllOff": {
+    "description": "Settings tab: warning shown when all three widget toggles are off, so the resulting near-empty tile reads as a choice rather than a bug."
+  },
+  "dashWidgetJustNow": "just now",
+  "@dashWidgetJustNow": {
+    "description": "Home-screen widget freshness line when the app refreshed less than a minute ago."
+  },
+  "dashWidgetMinutesAgo": "{count}m ago",
+  "@dashWidgetMinutesAgo": {
+    "description": "Home-screen widget freshness line, minutes. Abbreviated because the tile is narrow.",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "dashWidgetHoursAgo": "{count}h ago",
+  "@dashWidgetHoursAgo": {
+    "description": "Home-screen widget freshness line, hours.",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "dashWidgetDaysAgo": "{count}d ago",
+  "@dashWidgetDaysAgo": {
+    "description": "Home-screen widget freshness line, days.",
+    "placeholders": { "count": { "type": "int" } }
+  },
   "nwFxNoRateHistory": "FX can't be separated out before {date}, where the stored rate history starts — the currency effect is inside Other.",
   "@nwFxNoRateHistory": {
     "description": "Net-worth card: caption under the \"Why it changed\" chips when the window opens before stored USD/MXN rate history, so the FX chip shows an em dash instead of a figure. Both endpoint rates would resolve to the same stored row, cancelling the fx term to a misleading exact $0.00. {date} is the oldest stored rate date, already formatted for the locale.",
