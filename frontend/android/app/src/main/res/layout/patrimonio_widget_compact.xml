@@ -36,14 +36,23 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
+        <!-- Autosized: grows into a tall launcher cell (the number is the
+             hero — a fixed 18sp left the card mostly background on a ~110dp
+             row) and shrinks instead of ellipsizing when a 2-column
+             placement meets a seven-figure net worth. autoSize* is an
+             ordinary TextView attribute, so RemoteViews inflates it fine
+             (API 26+; silently ignored below). -->
         <TextView
             android:id="@+id/widget_net_worth"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:maxLines="1"
-            android:ellipsize="end"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="16sp"
+            android:autoSizeMaxTextSize="34sp"
+            android:autoSizeStepGranularity="1sp"
             android:textColor="@color/widget_text_primary"
-            android:textSize="18sp"
+            android:textSize="24sp"
             android:textStyle="bold"
             android:contentDescription="@string/widget_net_worth_label" />
 
@@ -55,7 +64,7 @@
             android:maxLines="1"
             android:ellipsize="end"
             android:textColor="@color/widget_accent"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:textStyle="bold" />
 
         <!-- Only used when the net worth is hidden and the rate is the sole
@@ -67,7 +76,7 @@
             android:maxLines="1"
             android:ellipsize="end"
             android:textColor="@color/widget_text_muted"
-            android:textSize="10sp" />
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/widget_empty"
@@ -81,9 +90,9 @@
 
     <ImageView
         android:id="@+id/widget_sync"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
-        android:padding="3dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:padding="4dp"
         android:src="@android:drawable/ic_popup_sync"
         android:contentDescription="@string/widget_sync_label" />
 </LinearLayout>
