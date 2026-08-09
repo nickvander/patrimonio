@@ -3,10 +3,28 @@
   Widget chrome strings. These are the ONLY user-visible strings not in the
   ARB files: the widget picker renders them before any Flutter code runs, so
   gen-l10n cannot reach them. Spanish lives in values-es/.
+
+  The widget_preview_* values are SAMPLE data baked into the preview layouts.
+  The picker renders previewLayout with no widget data, so pointing it at the
+  live layout showed an empty white card with only the sync icon — which is
+  exactly how this shipped. Preview layouts therefore hardcode representative
+  text; nothing reads these at runtime.
 -->
 <resources>
+    <string name="widget_label">Patrimonio</string>
+    <string name="widget_label_small">Patrimonio (small)</string>
+    <string name="widget_label_large">Patrimonio (large)</string>
+
     <string name="widget_description">Net worth and USD/MXN at a glance</string>
+    <string name="widget_description_small">Net worth at a glance</string>
+    <string name="widget_description_large">Net worth, rate and last sync</string>
+
     <string name="widget_net_worth_label">Net worth</string>
     <string name="widget_sync_label">Sync now</string>
     <string name="widget_all_hidden">All sections are hidden \u2014 turn one on in Settings</string>
+
+    <string name="widget_preview_net_worth">$1,234,567</string>
+    <string name="widget_preview_fx">USD/MXN 17.15</string>
+    <string name="widget_preview_fx_aged">USD/MXN 17.15 \u00b7 just now</string>
+    <string name="widget_preview_age">just now</string>
 </resources>

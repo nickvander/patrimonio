@@ -184,6 +184,17 @@ class _DashboardScreenState extends State<DashboardScreen>
   // card is force-expanded regardless (warnings must stay visible).
   bool _setupExpanded = false;
   Map<String, dynamic>? _fxRate;
+
+  /// Set when the app was launched (or resumed) by the home-screen widget's
+  /// sync glyph. `_buildBody` owns the sync machinery — spinner, live
+  /// SyncStatusCard, completion toast — as a closure, so the launch handler
+  /// raises this flag and the next build fires that SAME path rather than
+  /// growing a second, feedback-less sync.
+  bool _pendingWidgetSync = false;
+
+  /// Widget taps arriving while the app is already running. Cancelled in
+  /// dispose (the analyzer promotes `cancel_subscriptions` to an error).
+  StreamSubscription<Uri?>? _widgetClickSub;
   List<dynamic>? _transactions;
   List<AllocationData>? _allocationData;
   // The raw /allocation rows behind [_allocationData]. Kept because
@@ -390,6 +401,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   void initState() {
     super.initState();
+    _watchWidgetLaunches();
     // Restore previously selected reporting currency + tab + chart range
     // from localStorage so a refresh doesn't reset the user's context.
     _targetCurrency = _loadSavedCurrency();
@@ -500,6 +512,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _silentRetryTimer?.cancel();
     _syncPollTimer?.cancel();
     _realtimeSub?.cancel();
+    _widgetClickSub?.cancel();
     _cancelPlaidSubs();
     _realtime.dispose();
     _lenderNameCtrl.dispose();
@@ -876,6 +889,24 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Build the searchable index used by the Cmd-K palette. We do it on
   // demand so the list always reflects the most recent _loadAllData()
   // payload. Each item carries a callback that navigates to the right
+  /// Turn a tap on the widget's sync glyph into an actual sync.
+  ///
+  /// Two paths, because the app is `launchMode="singleTop"`: a cold start
+  /// reports the launch URI once, while a tap on an already-running app only
+  /// ever arrives on the click stream. Handling just the first would make the
+  /// button work exactly once per process — which is how "it just takes me to
+  /// the app" would have looked even after wiring the intent.
+  void _watchWidgetLaunches() {
+    initialHomeWidgetLaunch().then(_handleWidgetUri);
+    _widgetClickSub = homeWidgetClicks().listen(_handleWidgetUri);
+  }
+
+  void _handleWidgetUri(Uri? uri) {
+    if (!mounted || uri?.host != 'sync') return;
+    // Raise the flag and let the next build fire `runSync`.
+    setState(() => _pendingWidgetSync = true);
+  }
+
   /// Publish the current figures to the Android home-screen widget.
   ///
   /// Mirrors the reporting context `_buildBody` uses (same FX rate, same
@@ -5255,6 +5286,17 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
         ],
       );
+    }
+
+    // The widget's sync glyph landed us here. Fire the SAME runSync the
+    // in-app button uses, so the user gets the spinner, the live status card
+    // and the completion toast rather than a silent background call. Deferred
+    // to after this frame because runSync calls setState.
+    if (_pendingWidgetSync) {
+      _pendingWidgetSync = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) runSync();
+      });
     }
 
     Future<void> handleReconnect(String institutionId) async {

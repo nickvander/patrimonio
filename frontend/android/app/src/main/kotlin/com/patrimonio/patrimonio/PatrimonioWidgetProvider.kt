@@ -5,9 +5,11 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
 
 /**
@@ -44,7 +46,7 @@ private const val TALL_LAYOUT_MIN_HEIGHT_DP = 90
  * currency, the active locale, or `utils/currency.dart`, so formatting here
  * would be a fourth money formatter guaranteed to drift from the app.
  */
-class PatrimonioWidgetProvider : AppWidgetProvider() {
+open class PatrimonioWidgetProvider : AppWidgetProvider() {
 
     /**
      * Resizing does NOT trigger onUpdate — without this override the widget
@@ -149,9 +151,22 @@ class PatrimonioWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_fx, fxText)
             views.setTextViewText(R.id.widget_synced_at, syncedAt)
 
-            // Whole tile and the sync glyph both open the app. FLAG_IMMUTABLE
-            // is required from API 31; we never fill in the intent, so an
-            // immutable one is also the correct choice on principle.
+            // Two DIFFERENT taps. The sync glyph carries a `patrimonio://sync`
+            // URI that the Flutter side reads on launch and turns into a real
+            // sync-everything run (see dashboard_screen's widget-launch hook) —
+            // "just opens the app" was not what a button labelled sync should
+            // do. The rest of the tile is a plain launch.
+            //
+            // HomeWidgetLaunchIntent is the plugin's supported delivery path
+            // for that URI; it builds the immutable PendingIntent for us.
+            views.setOnClickPendingIntent(
+                R.id.widget_sync,
+                HomeWidgetLaunchIntent.getActivity(
+                    context,
+                    MainActivity::class.java,
+                    Uri.parse("patrimonio://sync"),
+                ),
+            )
             val launch = context.packageManager
                 .getLaunchIntentForPackage(context.packageName)
                 ?.apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
@@ -162,7 +177,6 @@ class PatrimonioWidgetProvider : AppWidgetProvider() {
                     launch,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
-                views.setOnClickPendingIntent(R.id.widget_sync, pending)
                 views.setOnClickPendingIntent(R.id.widget_net_worth, pending)
                 views.setOnClickPendingIntent(R.id.widget_empty, pending)
             }

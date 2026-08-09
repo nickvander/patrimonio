@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Default (3x1) variant — compact layout. This is the original provider;
-  the small/large siblings are subclasses of its Kotlin class.
+  Large (4x2) variant — starts on the roomy two-line layout.
 
   SIZE FLOOR (shared by all three variants): the launcher converts dp to cells
   as ceil((dp + 30) / 70), so 110dp = 2 columns and 40dp = 1 row. targetCell*
@@ -24,8 +23,8 @@
     android:updatePeriodMillis="0"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
-    android:targetCellWidth="3"
-    android:targetCellHeight="1"
-    android:initialLayout="@layout/patrimonio_widget_compact"
-    android:previewLayout="@layout/patrimonio_widget_preview"
-    android:description="@string/widget_description" />
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:initialLayout="@layout/patrimonio_widget"
+    android:previewLayout="@layout/patrimonio_widget_preview_large"
+    android:description="@string/widget_description_large" />

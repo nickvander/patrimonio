@@ -30,21 +30,47 @@
         </activity>
 
         <!--
-          Home-screen widget. Declared exported="true" because the launcher
-          (a different process) must be able to deliver APPWIDGET_UPDATE to it.
-          The provider does no networking and reads only values the app itself
-          wrote — see PatrimonioWidgetProvider.kt.
+          Home-screen widget, three size variants. Android lists one picker
+          entry per PROVIDER, so "offer more sizes" means three receivers; the
+          small/large classes are subclasses of PatrimonioWidgetProvider and
+          add nothing but a different targetCell* default in their XML.
+
+          exported="true" because the launcher (a different process) must be
+          able to deliver APPWIDGET_UPDATE. The providers do no networking and
+          read only values the app itself wrote.
         -->
         <receiver
             android:name=".PatrimonioWidgetProvider"
             android:exported="true"
-            android:label="Patrimonio">
+            android:label="@string/widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/patrimonio_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".PatrimonioWidgetProviderSmall"
+            android:exported="true"
+            android:label="@string/widget_label_small">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/patrimonio_widget_info_small" />
+        </receiver>
+        <receiver
+            android:name=".PatrimonioWidgetProviderLarge"
+            android:exported="true"
+            android:label="@string/widget_label_large">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/patrimonio_widget_info_large" />
         </receiver>
 
         <!-- Don't delete the meta-data below.
