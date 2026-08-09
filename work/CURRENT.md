@@ -1,7 +1,59 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-03 (feature-research sweep, 4 features + tooltip fix committed; rules-engine MVP built)
+> **Last updated:** 2026-08-08 (FX chip reworked into the attribution chip; the FX-is-$0.00 rate-coverage bug fixed + rate backfill added)
 > **Branch:** `main`.
+
+## 2026-08-08 — The FX chip: unclear control, then a wrong number behind it
+
+Deployed through `da242df`; backend **280/280**, frontend **1392/1392**, CI
+green on both pushes. Owner-reported from phone screenshots again; neither
+half was reachable from the test suite.
+
+* **The "Ignore FX moves" chip was an orphan (`787fdc9`).** It floated
+  unlabelled between the chart and WHY IT CHANGED, styled as an unselected
+  FilterChip — reads as "do something", not "change this view" — with no
+  tooltip, no explanation until after you pressed it, and sitting 20px above
+  the very number it removes. The toggle is now the **FX attribution chip
+  itself**, so the label IS the number it removes: outline + eye icon, filled
+  when active, button semantics, ~40dp tap target from padding inside the ink
+  area, and a one-line hint that teaches the gesture then disappears.
+  It is also **gated on materiality** (`fxViewIsInformative`): |fx| against the
+  span the y-axis is fitted to, threshold 10%. Offered unconditionally, it
+  redrew a line that traced the old one — on the owner's $1.6M net worth,
+  $639 of FX in a $46k month is 0.5% of the plotted span, invisible, which is
+  exactly why pressing it felt broken. A SHARE not a dollar floor, so an
+  offsetting window (FX +$50k against market −$50k, flat delta, currency
+  entirely shaping the curve) stays offered. `Simple/Detailed` goes inert
+  while the replot shows — one total line has nothing to stack.
+* **Then the number itself was wrong (`da242df`) — the real bug.** The owner
+  asked why 1Y showed `FX $0.00`. It wasn't a display bug: `rate_on` resolves
+  a date with no on-or-before row by falling back to the LATEST stored rate,
+  so once a window opens before `exchange_rates` begins, r0 and r1 resolve to
+  the SAME row and `B0/r1 - B0/r0` cancels to **exactly 0.00**. Verified
+  read-only against prod: rate history starts **2026-03-22**, the 1Y window
+  opens 2025-08-08, and the owner held **619,039 pesos** at that open while
+  USD/MXN went 18.60 → 17.15. A confident "no currency effect" that was worth
+  ~$2,800. The whole year's FX had been absorbed into Market.
+  The endpoint now reports `fx_attributable` + `fx_rates_start`; the card
+  renders an em dash, captions where the value went ("inside Other"), and
+  never offers the replot (untrustworthy r0 ⇒ the constant-FX series IS the
+  live series). **A USD-only window stays attributable** — no pesos at the
+  open means fx is honestly zero however the rates resolve, and a permanent
+  dash for USD-only users would be its own lie.
+* **The data fix, since honesty doesn't restore the number.** The live
+  provider (open.er-api.com, free tier) serves today only and can never
+  populate history. `POST /api/fx/backfill` pulls the ECB daily series
+  (Frankfurter, free/keyless) from the instance's oldest snapshot to where its
+  own history starts — idempotent, skips dates that already hold a row, never
+  overwrites a pinned `manual` rate, `source='backfill'` forever. Reachable
+  from the FX center. **Not yet run on prod:** `exchange_rates` feeds every
+  MXN→USD conversion, so filling it shifts historical transactions, tax
+  figures and projections from "today's rate" to their real date's rate. That
+  is the correction, but it is the owner's call to make.
+* **Skill updated with the rule this cost us** — the "else latest rate" rung
+  is a per-row convenience, never a safe input to rate ARITHMETIC. Anything
+  differencing two rates must check coverage first and report unavailability
+  rather than emit the cancelled zero.
 
 ## 2026-08-05 — Three owner-reported defects from real phone screenshots
 
