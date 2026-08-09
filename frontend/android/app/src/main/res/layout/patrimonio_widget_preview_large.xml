@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="14dp">
+    android:padding="16dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -21,12 +21,12 @@
             android:ellipsize="end"
             android:text="@string/widget_preview_net_worth"
             android:textColor="@color/widget_text_primary"
-            android:textSize="22sp"
+            android:textSize="28sp"
             android:textStyle="bold" />
 
         <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:padding="4dp"
             android:src="@android:drawable/ic_popup_sync"
             android:contentDescription="@string/widget_sync_label" />
@@ -39,7 +39,7 @@
         android:maxLines="1"
         android:text="@string/widget_preview_fx"
         android:textColor="@color/widget_accent"
-        android:textSize="14sp"
+        android:textSize="16sp"
         android:textStyle="bold" />
 
     <TextView
@@ -49,5 +49,5 @@
         android:maxLines="1"
         android:text="@string/widget_preview_age"
         android:textColor="@color/widget_text_muted"
-        android:textSize="11sp" />
+        android:textSize="12sp" />
 </LinearLayout>

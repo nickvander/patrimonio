@@ -102,6 +102,13 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
             val netWorth = prefs.getString("net_worth", "").orEmpty()
             val fxRate = prefs.getString("fx_rate", "").orEmpty()
             val syncedAt = prefs.getString("synced_at", "").orEmpty()
+            // Compact shares one line between the rate and the age, so it uses
+            // the ultra-short age ("2h", "now"); the full "2h ago" ellipsed to
+            // "· j…" at two columns. Both forms are built in Dart — see
+            // HomeWidgetSnapshot.syncedAtShort.
+            val syncedAtShort = prefs.getString("synced_at_short", "")
+                .orEmpty()
+                .ifEmpty { syncedAt }
 
             val showFxRow = showFx && !allHidden && fxRate.isNotEmpty()
 
@@ -143,8 +150,8 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
             // The pair label is chrome, not data — it belongs next to the
             // number, and keeping it here spares Dart from re-sending a
             // constant on every push.
-            val fxText = if (compact && syncedAt.isNotEmpty()) {
-                "USD/MXN $fxRate · $syncedAt"
+            val fxText = if (compact && syncedAtShort.isNotEmpty()) {
+                "USD/MXN $fxRate · $syncedAtShort"
             } else {
                 "USD/MXN $fxRate"
             }

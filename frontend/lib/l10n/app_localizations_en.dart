@@ -7287,6 +7287,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashWidgetJustNow => 'just now';
 
   @override
+  String get dashWidgetJustNowShort => 'now';
+
+  @override
   String dashWidgetMinutesAgo(int count) {
     return '${count}m ago';
   }

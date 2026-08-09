@@ -932,6 +932,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       // active locale like everything else — the widget can't localize itself.
       labels: HomeWidgetAgeLabels(
         justNow: l.dashWidgetJustNow,
+        justNowShort: l.dashWidgetJustNowShort,
         minutes: l.dashWidgetMinutesAgo,
         hours: l.dashWidgetHoursAgo,
         days: l.dashWidgetDaysAgo,

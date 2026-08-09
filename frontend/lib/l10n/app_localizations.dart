@@ -11657,6 +11657,12 @@ abstract class AppLocalizations {
   /// **'just now'**
   String get dashWidgetJustNow;
 
+  /// Home-screen widget: ultra-short freshness used by the compact layout, where the rate and the age share one line. The full "just now" ellipsed to a useless "j..." at two grid columns. Minutes/hours/days are unit letters (5m, 2h, 3d) and are not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'now'**
+  String get dashWidgetJustNowShort;
+
   /// Home-screen widget freshness line, minutes. Abbreviated because the tile is narrow.
   ///
   /// In en, this message translates to:

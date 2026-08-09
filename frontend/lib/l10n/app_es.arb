@@ -2895,6 +2895,7 @@
   "dashWidgetSyncNote": "Abre la app, que sincroniza y actualiza el widget",
   "dashWidgetAllOff": "Con todo desactivado, el widget solo abre la app.",
   "dashWidgetJustNow": "ahora",
+  "dashWidgetJustNowShort": "ahora",
   "dashWidgetMinutesAgo": "hace {count} min",
   "dashWidgetHoursAgo": "hace {count} h",
   "dashWidgetDaysAgo": "hace {count} d",

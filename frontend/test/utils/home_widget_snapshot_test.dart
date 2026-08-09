@@ -71,12 +71,17 @@ void main() {
         'net_worth',
         'fx_rate',
         'synced_at',
+        'synced_at_short',
         'show_net_worth',
         'show_fx',
         'show_sync',
       });
       expect(data['show_net_worth'], 'true');
       expect(data['synced_at'], '2h ago');
+      // The compact layout shares one line between the rate and the age, so
+      // it needs the form that FITS: "USD/MXN 17.15 · just now" ellipsed to
+      // "· j…" at two grid columns on a real home screen.
+      expect(data['synced_at_short'], '2h');
     });
 
     test('nulls cross the bridge as empty strings, not the text "null"', () {
@@ -84,6 +89,7 @@ void main() {
       expect(data['net_worth'], '');
       expect(data['fx_rate'], '');
       expect(data['synced_at'], '');
+      expect(data['synced_at_short'], '');
     });
 
     test('isEmpty only when every section is off', () {
@@ -161,6 +167,78 @@ void main() {
         'hace 2 h',
       );
       expect(formatWidgetAge(now, now, labels: es), 'ahora');
+    });
+  });
+
+  // The short age exists for exactly one reason: the compact tile ellipsed
+  // "USD/MXN 17.15 · just now" to "USD/MXN 17.15 · j…" at two grid columns.
+  // Shortening the AGE rather than dropping the "USD/MXN" label keeps the
+  // rate unambiguous — a bare "17.15" could be anything.
+  group('the short age form', () {
+    final now = DateTime.utc(2026, 8, 9, 12);
+    final labels = const HomeWidgetAgeLabels().short;
+
+    test('drops the trailing "ago" at every scale', () {
+      expect(formatWidgetAge(now, now, labels: labels), 'now');
+      expect(
+        formatWidgetAge(
+          now.subtract(const Duration(minutes: 5)),
+          now,
+          labels: labels,
+        ),
+        '5m',
+      );
+      expect(
+        formatWidgetAge(
+          now.subtract(const Duration(hours: 2)),
+          now,
+          labels: labels,
+        ),
+        '2h',
+      );
+      expect(
+        formatWidgetAge(
+          now.subtract(const Duration(days: 3)),
+          now,
+          labels: labels,
+        ),
+        '3d',
+      );
+    });
+
+    test('is short enough to fit beside the rate', () {
+      // The line the compact provider composes. 24 chars ellipsed on a 2-col
+      // tile; this form is what made it fit.
+      final composed =
+          'USD/MXN 17.15 · '
+          '${formatWidgetAge(now.subtract(const Duration(hours: 2)), now, labels: labels)}';
+      expect(composed.length, lessThan(20));
+    });
+
+    test('localizes only the "now" case — units stay letters', () {
+      final es = const HomeWidgetAgeLabels(justNowShort: 'ahora').short;
+      expect(formatWidgetAge(now, now, labels: es), 'ahora');
+      // "2h" is a unit letter, not a word; translating it would be noise.
+      expect(
+        formatWidgetAge(
+          now.subtract(const Duration(hours: 2)),
+          now,
+          labels: es,
+        ),
+        '2h',
+      );
+    });
+
+    test('the long form is untouched by the short one', () {
+      final long = const HomeWidgetAgeLabels();
+      expect(
+        formatWidgetAge(
+          now.subtract(const Duration(hours: 2)),
+          now,
+          labels: long,
+        ),
+        '2h ago',
+      );
     });
   });
 }

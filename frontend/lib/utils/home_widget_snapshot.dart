@@ -30,6 +30,19 @@ class HomeWidgetSnapshot {
   /// When the app last refreshed, preformatted (`2h ago`).
   final String? syncedAt;
 
+  /// The same age, ultra-short (`2h`, `now`).
+  ///
+  /// The compact layout puts the rate and the age on ONE line beside a sync
+  /// icon; at two grid columns `USD/MXN 17.15 · just now` ellipsed to
+  /// `USD/MXN 17.15 · j…`, which is worse than useless — it looks broken and
+  /// says nothing. Shortening the AGE rather than dropping the `USD/MXN`
+  /// label keeps the rate unambiguous (a bare `17.15` could be anything).
+  ///
+  /// Both forms cross the bridge because only the provider knows which layout
+  /// it is about to inflate — and formatting stays here rather than moving a
+  /// substring rule into Kotlin.
+  final String? syncedAtShort;
+
   final bool showNetWorth;
   final bool showFx;
   final bool showSync;
@@ -38,6 +51,7 @@ class HomeWidgetSnapshot {
     this.netWorth,
     this.fxRate,
     this.syncedAt,
+    this.syncedAtShort,
     this.showNetWorth = true,
     this.showFx = true,
     this.showSync = true,
@@ -55,6 +69,7 @@ class HomeWidgetSnapshot {
     'net_worth': netWorth ?? '',
     'fx_rate': fxRate ?? '',
     'synced_at': syncedAt ?? '',
+    'synced_at_short': syncedAtShort ?? '',
     'show_net_worth': showNetWorth.toString(),
     'show_fx': showFx.toString(),
     'show_sync': showSync.toString(),
@@ -101,6 +116,9 @@ HomeWidgetSnapshot buildHomeWidgetSnapshot({
     syncedAt: syncedAt == null
         ? null
         : formatWidgetAge(syncedAt, now, labels: labels),
+    syncedAtShort: syncedAt == null
+        ? null
+        : formatWidgetAge(syncedAt, now, labels: labels.short),
     showNetWorth: showNetWorth,
     showFx: showFx,
     showSync: showSync,
@@ -138,12 +156,29 @@ class HomeWidgetAgeLabels {
   final String Function(int) hours;
   final String Function(int) days;
 
+  /// Ultra-short forms for [HomeWidgetSnapshot.syncedAtShort]. Defaults strip
+  /// the trailing "ago" — the unit letter alone reads as an age next to a
+  /// rate, and it is the difference between fitting and ellipsing at two grid
+  /// columns. Callers pass localized words for the "now" case only; `5m`/`2h`
+  /// are unit letters, not words, and stay as they are in both locales.
+  final String justNowShort;
+
   const HomeWidgetAgeLabels({
     this.justNow = 'just now',
+    this.justNowShort = 'now',
     this.minutes = _defaultMinutes,
     this.hours = _defaultHours,
     this.days = _defaultDays,
   });
+
+  /// This label set with the ultra-short renderings substituted.
+  HomeWidgetAgeLabels get short => HomeWidgetAgeLabels(
+    justNow: justNowShort,
+    justNowShort: justNowShort,
+    minutes: (n) => '${n}m',
+    hours: (n) => '${n}h',
+    days: (n) => '${n}d',
+  );
 
   static String _defaultMinutes(int n) => '${n}m ago';
   static String _defaultHours(int n) => '${n}h ago';

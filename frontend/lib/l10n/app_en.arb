@@ -4030,6 +4030,10 @@
   "@dashWidgetJustNow": {
     "description": "Home-screen widget freshness line when the app refreshed less than a minute ago."
   },
+  "dashWidgetJustNowShort": "now",
+  "@dashWidgetJustNowShort": {
+    "description": "Home-screen widget: ultra-short freshness used by the compact layout, where the rate and the age share one line. The full \"just now\" ellipsed to a useless \"j...\" at two grid columns. Minutes/hours/days are unit letters (5m, 2h, 3d) and are not translated."
+  },
   "dashWidgetMinutesAgo": "{count}m ago",
   "@dashWidgetMinutesAgo": {
     "description": "Home-screen widget freshness line, minutes. Abbreviated because the tile is narrow.",
