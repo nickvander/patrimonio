@@ -10,10 +10,18 @@
 
   Ids are IDENTICAL to the tall layout on purpose — the provider binds the
   same ids either way, so layout selection can't drift from the binding code.
+
+  The root FILLS its cell (match_parent) with the content vertically centred.
+  It briefly wrapped instead, which left a short pill floating in a taller
+  cell — visibly unlike every other widget on the home screen, and the source
+  of the "blank space" in the picker, where a wrapped preview sits in a box
+  sized for a full cell. Wrapping was the wrong fix for the original bug: that
+  was a forced 3x2 size with TOP-aligned content, and the size is what was
+  wrong.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/widget_background"

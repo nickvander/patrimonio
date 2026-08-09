@@ -18,17 +18,19 @@
   PatrimonioWidgetSizes.kt). PatrimonioWidgetProvider.layoutFor swaps to it
   once a widget is dragged past ~90dp tall.
 
-  NOTE `layout_height="wrap_content"`, not match_parent. A widget root that
-  matches its parent paints the card across the ENTIRE allocated cell area
-  while the content sits at the top — which is exactly how this shipped: a
-  3x2 tile with three lines of text and a large empty white void beneath.
-  Wrapping makes the card hug its content, so an over-tall placement just
-  leaves transparent space instead of a stretched card.
+  The root FILLS its cell with content vertically CENTRED. The original bug
+  here looked like a fill problem — a 3x2 tile with a large empty white void
+  below three lines of text — but the real fault was the forced 3x2 size
+  (minHeight made 1 row unreachable) combined with TOP-aligned content.
+  Wrapping the card fixed the void and introduced a subtler one: a short pill
+  floating inside a taller cell, unlike every other widget on the home screen.
+  Filling + centring is what the size fix made correct.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:orientation="vertical"
+    android:gravity="center_vertical"
     android:background="@drawable/widget_background"
     android:padding="16dp">
 
