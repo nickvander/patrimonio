@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Compact (single-row) widget — the DEFAULT, and what a 1-row-tall placement
+  gets. The tall layout in patrimonio_widget.xml takes over once the host
+  gives us the height for it (see PatrimonioWidgetProvider.layoutFor).
+
+  Freshness rides on the same line as the rate ("17.15 · 2h ago") rather than
+  being dropped: the widget only updates when the app runs, so hiding its age
+  to save a row would turn a known-stale number into an apparently live one.
+
+  Ids are IDENTICAL to the tall layout on purpose — the provider binds the
+  same ids either way, so layout selection can't drift from the binding code.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_background"
+    android:paddingStart="12dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_net_worth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:contentDescription="@string/widget_net_worth_label" />
+
+        <!-- Rate + age share one line here; the provider composes the text. -->
+        <TextView
+            android:id="@+id/widget_fx"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="@color/widget_accent"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <!-- Only used when the net worth is hidden and the rate is the sole
+             content; otherwise the provider folds the age into widget_fx. -->
+        <TextView
+            android:id="@+id/widget_synced_at"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="@color/widget_text_muted"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/widget_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text="@string/widget_all_hidden"
+            android:textColor="@color/widget_text_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/widget_sync"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:padding="3dp"
+        android:src="@android:drawable/ic_popup_sync"
+        android:contentDescription="@string/widget_sync_label" />
+</LinearLayout>

@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
+  SIZING — read the cell math before touching these numbers.
+
+  The launcher converts a dp size to grid cells as `ceil((dp + 30) / 70)`. The
+  first version declared minHeight="70dp", which is ceil(100/70) = **2 rows**
+  — so `targetCellHeight="1"` could never take effect and the widget always
+  landed 3x2, with the content stranded in the top quarter of a big empty card.
+  40dp is ceil(70/70) = 1 row; 110dp is ceil(140/70) = 2 columns.
+
+  minResize* is what actually lets the user drag it down — without it the
+  resize handles stop at the min* floor.
+
   updatePeriodMillis is 0 ON PURPOSE. This widget is app-pushed: the Flutter
   app writes fresh values on every dashboard load and broadcasts an update.
   A nonzero period would have Android wake the provider on its own schedule to
@@ -7,12 +18,15 @@
   the provider does no networking.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="180dp"
-    android:minHeight="70dp"
+    android:minWidth="110dp"
+    android:minHeight="40dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="40dp"
     android:targetCellWidth="3"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
-    android:initialLayout="@layout/patrimonio_widget"
+    android:initialLayout="@layout/patrimonio_widget_compact"
+    android:previewLayout="@layout/patrimonio_widget_compact"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/widget_description" />

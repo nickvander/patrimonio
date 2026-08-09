@@ -5,9 +5,17 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetPlugin
+
+/**
+ * Height (dp) at or above which the roomy two-line layout is used. One grid
+ * row is ~40-70dp depending on device; the tall layout needs ~90dp before its
+ * 22sp figure and two sub-lines stop feeling cramped.
+ */
+private const val TALL_LAYOUT_MIN_HEIGHT_DP = 90
 
 /**
  * Home-screen widget: net worth, USD/MXN, and a sync affordance.
@@ -38,6 +46,33 @@ import es.antonborri.home_widget.HomeWidgetPlugin
  */
 class PatrimonioWidgetProvider : AppWidgetProvider() {
 
+    /**
+     * Resizing does NOT trigger onUpdate — without this override the widget
+     * keeps whichever layout it was first drawn with, so dragging it taller
+     * would leave the cramped single-row version in a two-row cell.
+     */
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle,
+    ) {
+        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+        onUpdate(context, appWidgetManager, intArrayOf(appWidgetId))
+    }
+
+    /** Roomy layout only once the host actually gives us the height for it. */
+    private fun layoutFor(appWidgetManager: AppWidgetManager, id: Int): Int {
+        val height = appWidgetManager
+            .getAppWidgetOptions(id)
+            .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+        return if (height >= TALL_LAYOUT_MIN_HEIGHT_DP) {
+            R.layout.patrimonio_widget
+        } else {
+            R.layout.patrimonio_widget_compact
+        }
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -49,7 +84,9 @@ class PatrimonioWidgetProvider : AppWidgetProvider() {
             // upgrade that moves the store can't silently strand us on stale
             // values.
             val prefs = HomeWidgetPlugin.getData(context)
-            val views = RemoteViews(context.packageName, R.layout.patrimonio_widget)
+            val layoutId = layoutFor(appWidgetManager, id)
+            val compact = layoutId == R.layout.patrimonio_widget_compact
+            val views = RemoteViews(context.packageName, layoutId)
 
             // Absent keys mean the app has never pushed (widget placed before
             // first launch). Default the toggles ON to match Settings, and
@@ -64,6 +101,8 @@ class PatrimonioWidgetProvider : AppWidgetProvider() {
             val fxRate = prefs.getString("fx_rate", "").orEmpty()
             val syncedAt = prefs.getString("synced_at", "").orEmpty()
 
+            val showFxRow = showFx && !allHidden && fxRate.isNotEmpty()
+
             views.setViewVisibility(
                 R.id.widget_net_worth,
                 if (showNetWorth && !allHidden) View.VISIBLE else View.GONE,
@@ -77,11 +116,21 @@ class PatrimonioWidgetProvider : AppWidgetProvider() {
             // bug, where an absent one just reads as a tighter card.
             views.setViewVisibility(
                 R.id.widget_fx,
-                if (showFx && !allHidden && fxRate.isNotEmpty()) View.VISIBLE else View.GONE,
+                if (showFxRow) View.VISIBLE else View.GONE,
             )
+            // Compact has no room for a dedicated age line, so the age rides
+            // on the rate line instead — and only needs its own row when
+            // there is no rate line to ride on. Dropping it entirely was not
+            // an option: these values are only as fresh as the last app
+            // launch, and an unlabelled stale number reads as a live one.
+            val ageOnItsOwnLine = if (compact) !showFxRow else true
             views.setViewVisibility(
                 R.id.widget_synced_at,
-                if (!allHidden && syncedAt.isNotEmpty()) View.VISIBLE else View.GONE,
+                if (!allHidden && syncedAt.isNotEmpty() && ageOnItsOwnLine) {
+                    View.VISIBLE
+                } else {
+                    View.GONE
+                },
             )
             views.setViewVisibility(
                 R.id.widget_empty,
@@ -92,7 +141,12 @@ class PatrimonioWidgetProvider : AppWidgetProvider() {
             // The pair label is chrome, not data — it belongs next to the
             // number, and keeping it here spares Dart from re-sending a
             // constant on every push.
-            views.setTextViewText(R.id.widget_fx, "USD/MXN $fxRate")
+            val fxText = if (compact && syncedAt.isNotEmpty()) {
+                "USD/MXN $fxRate · $syncedAt"
+            } else {
+                "USD/MXN $fxRate"
+            }
+            views.setTextViewText(R.id.widget_fx, fxText)
             views.setTextViewText(R.id.widget_synced_at, syncedAt)
 
             // Whole tile and the sync glyph both open the app. FLAG_IMMUTABLE

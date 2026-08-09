@@ -12,9 +12,17 @@
   Nothing here formats money: RemoteViews has no access to the reporting
   currency or the locale, and a second formatter would drift from the app.
 -->
+<!--
+  NOTE `layout_height="wrap_content"`, not match_parent. A widget root that
+  matches its parent paints the card across the ENTIRE allocated cell area
+  while the content sits at the top — which is exactly how this shipped: a
+  3x2 tile with three lines of text and a large empty white void beneath.
+  Wrapping makes the card hug its content, so an over-tall placement just
+  leaves transparent space instead of a stretched card.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
     android:padding="14dp">
