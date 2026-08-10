@@ -1,7 +1,66 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-08 (FX chip reworked into the attribution chip; the FX-is-$0.00 rate-coverage bug fixed + rate backfill added)
+> **Last updated:** 2026-08-10 (Android home-screen widget shipped and iterated to done: sparkline, sizes, toggle combos, on-launcher verification loop)
 > **Branch:** `main`.
+
+## 2026-08-09/10 — The Android home-screen widget (and how it taught us to look)
+
+Deployed through `742622f`; frontend **1424/1424**, CI green on every push.
+Owner-driven feature that became a case study in verifying visual work: seven
+of the ten commits fix something a phone screenshot caught that the test
+suite could not.
+
+* **The widget (`1c7d14c`)**: net worth + USD/MXN + sync affordance, each
+  toggleable in Settings (all default ON). App-pushed by design — no
+  networking, no session cookie, no WorkManager in the widget process; the
+  dashboard pushes preformatted strings after each load and the tile carries
+  a freshness line ("2h ago") so stale reads as stale. **All formatting in
+  Dart** (`utils/home_widget_snapshot.dart`): RemoteViews can't reach
+  currency.dart or the locale, and a Kotlin formatter would drift. The flat
+  string map IS the Kotlin contract, pinned by unit test.
+* **Sizes and the picker (`3813a37`→`534b68d`)**: launcher cell math is
+  `ceil((dp+30)/70)` — the original 70dp minHeight made 1 row unreachable and
+  locked the tile to 3x2. Two variants ship (2x1, 3x1); a 4x2 was added and
+  dropped the same day because the picker sizes every row to the tallest
+  widget an app offers. The roomy layout remains reachable by resizing
+  (layoutFor swaps ≥90dp). Picker previews are dedicated layouts with sample
+  text — the picker renders previewLayout with NO widget data, so pointing it
+  at the live layout drew a blank card (shipped once).
+* **Sync button syncs (`7e177de`)**: carries `patrimonio://sync` via the
+  plugin's launch intent; the dashboard turns it into the SAME runSync as the
+  in-app button (spinner, status card, toast). Both delivery paths handled —
+  cold start URI and the warm-app click stream (singleTop) — or the button
+  works exactly once per process.
+* **The sparkline (`0d9cdf4`→`fc689ef`) — the deep bug**: the tile felt empty
+  because two lines of text can't fill a ~110dp cell; the fix was content (a
+  90-day net-worth sparkline), and the first version shipped BLANK in release
+  builds only. `HomeWidget.renderFlutterWidget` wraps the widget in a Column
+  (unbounded main axis); an infinite-size CustomPaint asserts in debug and
+  silently emits an empty image in release. Fix: render the PNG directly with
+  PictureRecorder — no layout pipeline at all — and hand the plugin finished
+  bytes. A pixel-level test now decodes the production bytes and asserts
+  >1000 green pixels; every layout-level check passed while the shipped
+  bitmap was blank.
+* **Narrow-tile truncations (`3978120`, `1253ec3`, `742622f`)**: three
+  rounds of the same lesson. "· just now" ellipsed at 2 columns (short age
+  form, built in Dart); the rate line lost 32dp to the sync icon (icon moved
+  to the hero row, rate autosizes 10-14sp); the fx-hero clipped "USD/MXN
+  17.14" to "USD/MXN" at the 16sp autosize floor (the NUMBER is the hero now,
+  the label rides with the age). Each had been verified at 3 columns where it
+  happened to fit.
+* **Toggle combinations (`64c4aed`)**: three switches = six layouts; only
+  all-on had ever been looked at. Rule: the hero slot is never empty while
+  something can be promoted into it — net-worth-off renders as a purpose-built
+  rate tile. All six verified on a placed widget.
+* **The verification loop that ended the ship-screenshot-ship cycle**: rooted
+  emulator + seed HomeWidgetPreferences.xml directly + APPWIDGET_UPDATE
+  broadcast as root + `input draganddrop` to physically place the widget +
+  screencap. Two traps recorded for the next person: SharedPreferences caches
+  in-process (force-stop between seeded configs or every screenshot shows the
+  first one), and **verify at 2 columns** — the tightest real size; what fits
+  there fits everywhere. Full-chain repro (registered throwaway user, seeded
+  90 days of snapshots, logged in through the real UI on the emulator) lives
+  in the session notes; the throwaway user and its data were removed after.
 
 ## 2026-08-08 — The FX chip: unclear control, then a wrong number behind it
 
