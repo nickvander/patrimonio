@@ -113,27 +113,38 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
 
             val showFxRow = showFx && !allHidden && fxRate.isNotEmpty()
 
+            // The toggles form six layouts, and each must look DESIGNED, not
+            // like a layout with holes. The rule: the hero slot is never left
+            // empty while there is something to promote into it. With net
+            // worth hidden, the RATE takes the hero slot (autosized, accent
+            // colour) — a widget the user configured down to "just FX" should
+            // read as a purpose-built rate tile, not as a net-worth tile with
+            // the number knocked out (which shipped: a floating sync icon
+            // above a small rate line in a mostly-empty card).
+            val fxHero = showFxRow && !showNetWorth
+
             views.setViewVisibility(
                 R.id.widget_net_worth,
-                if (showNetWorth && !allHidden) View.VISIBLE else View.GONE,
+                if ((showNetWorth || fxHero) && !allHidden) View.VISIBLE else View.GONE,
             )
             views.setViewVisibility(
                 R.id.widget_sync,
                 if (showSync && !allHidden) View.VISIBLE else View.GONE,
             )
-            // The FX row hides both when switched off AND when there is no
-            // rate yet — an empty accent-coloured line reads as a rendering
-            // bug, where an absent one just reads as a tighter card.
+            // The FX row hides when switched off, when there is no rate yet —
+            // an empty accent-coloured line reads as a rendering bug — and
+            // when the rate was promoted to the hero slot.
             views.setViewVisibility(
                 R.id.widget_fx,
-                if (showFxRow) View.VISIBLE else View.GONE,
+                if (showFxRow && !fxHero) View.VISIBLE else View.GONE,
             )
             // Compact has no room for a dedicated age line, so the age rides
             // on the rate line instead — and only needs its own row when
-            // there is no rate line to ride on. Dropping it entirely was not
-            // an option: these values are only as fresh as the last app
+            // there is no rate line to ride on (including when the rate is
+            // the hero, whose slot carries no age). Dropping it entirely was
+            // not an option: these values are only as fresh as the last app
             // launch, and an unlabelled stale number reads as a live one.
-            val ageOnItsOwnLine = if (compact) !showFxRow else true
+            val ageOnItsOwnLine = if (compact) (!showFxRow || fxHero) else true
             views.setViewVisibility(
                 R.id.widget_synced_at,
                 if (!allHidden && syncedAt.isNotEmpty() && ageOnItsOwnLine) {
@@ -147,7 +158,29 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
                 if (allHidden) View.VISIBLE else View.GONE,
             )
 
-            views.setTextViewText(R.id.widget_net_worth, netWorth)
+            if (fxHero) {
+                views.setTextViewText(R.id.widget_net_worth, "USD/MXN $fxRate")
+                views.setTextColor(
+                    R.id.widget_net_worth,
+                    context.getColor(R.color.widget_accent),
+                )
+                views.setContentDescription(
+                    R.id.widget_net_worth,
+                    context.getString(R.string.widget_rate_label),
+                )
+            } else {
+                views.setTextViewText(R.id.widget_net_worth, netWorth)
+                // Explicitly restore: RemoteViews are rebuilt each update, but
+                // being explicit keeps the two branches symmetric.
+                views.setTextColor(
+                    R.id.widget_net_worth,
+                    context.getColor(R.color.widget_text_primary),
+                )
+                views.setContentDescription(
+                    R.id.widget_net_worth,
+                    context.getString(R.string.widget_net_worth_label),
+                )
+            }
             // The pair label is chrome, not data — it belongs next to the
             // number, and keeping it here spares Dart from re-sending a
             // constant on every push.

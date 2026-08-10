@@ -8,6 +8,7 @@
     <string name="widget_description_small">Patrimonio neto de un vistazo</string>
 
     <string name="widget_net_worth_label">Patrimonio neto</string>
+    <string name="widget_rate_label">Tipo de cambio USD/MXN</string>
     <string name="widget_sync_label">Sincronizar</string>
     <string name="widget_all_hidden">Todas las secciones est\u00e1n ocultas \u2014 activa una en Ajustes</string>
 
