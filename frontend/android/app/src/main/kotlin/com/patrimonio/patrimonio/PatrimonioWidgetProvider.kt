@@ -147,7 +147,9 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
             val ageOnItsOwnLine = if (compact) (!showFxRow || fxHero) else true
             views.setViewVisibility(
                 R.id.widget_synced_at,
-                if (!allHidden && syncedAt.isNotEmpty() && ageOnItsOwnLine) {
+                if (!allHidden && ageOnItsOwnLine &&
+                    (syncedAt.isNotEmpty() || fxHero)
+                ) {
                     View.VISIBLE
                 } else {
                     View.GONE
@@ -159,7 +161,15 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
             )
 
             if (fxHero) {
-                views.setTextViewText(R.id.widget_net_worth, "USD/MXN $fxRate")
+                // The NUMBER is the hero, the label goes to the sub-line.
+                // "USD/MXN 17.14" as one hero string clipped to "USD/MXN" on
+                // a 2-column tile: the hero's autosize floor is 16sp, the
+                // string doesn't fit at 16sp there, and a TextView without
+                // ellipsize clips at a word boundary — which read as the rate
+                // having vanished. A bare "17.14" fits at ANY width the
+                // launcher can produce; the pair label rides with the age
+                // ("USD/MXN · 2h ago") where small text is expected.
+                views.setTextViewText(R.id.widget_net_worth, fxRate)
                 views.setTextColor(
                     R.id.widget_net_worth,
                     context.getColor(R.color.widget_accent),
@@ -190,7 +200,16 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
                 "USD/MXN $fxRate"
             }
             views.setTextViewText(R.id.widget_fx, fxText)
-            views.setTextViewText(R.id.widget_synced_at, syncedAt)
+            views.setTextViewText(
+                R.id.widget_synced_at,
+                if (fxHero && syncedAt.isNotEmpty()) {
+                    "USD/MXN · $syncedAt"
+                } else if (fxHero) {
+                    "USD/MXN"
+                } else {
+                    syncedAt
+                },
+            )
 
             // The net-worth trend bitmap the app rendered ('chart_path' is a
             // file path from renderFlutterWidget). Follows the net-worth
