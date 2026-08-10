@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Material You palette for the widget (API 31+). These are the SYSTEM's
+  wallpaper-derived tonal tokens — the same ones stock widgets use — so the
+  tile tints itself to the user's wallpaper like every other late-Android
+  widget on the home screen. The plain hex palettes in values/ and
+  values-night/ remain as the pre-31 fallback.
+
+  Tone choices mirror M3 component mapping: surface ≈ neutral1_10, on-surface
+  ≈ neutral1_900, tonal icon container ≈ accent1_100 with accent1_700 content.
+  The ACCENT stays the brand green (see values/) — the rate/trend is data,
+  and recoloring data by wallpaper would make green-vs-red readings
+  meaningless. Only the CHROME is dynamic.
+-->
+<resources>
+    <color name="widget_background">@android:color/system_neutral1_10</color>
+    <color name="widget_text_primary">@android:color/system_neutral1_900</color>
+    <color name="widget_text_muted">@android:color/system_neutral2_500</color>
+    <color name="widget_icon_bg">@android:color/system_accent1_100</color>
+    <color name="widget_icon_tint">@android:color/system_accent1_700</color>
+</resources>

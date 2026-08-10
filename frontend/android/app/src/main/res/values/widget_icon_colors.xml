@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-31 fallback for the tonal icon button (values-v31 overrides with
+     dynamic tokens). Soft brand-green container, dark green glyph. -->
+<resources>
+    <color name="widget_icon_bg">#1F12B76A</color>
+    <color name="widget_icon_tint">#FF0E8A54</color>
+</resources>

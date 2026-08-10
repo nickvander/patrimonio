@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark counterpart of values/widget_icon_colors.xml. -->
+<resources>
+    <color name="widget_icon_bg">#3312B76A</color>
+    <color name="widget_icon_tint">#FF7BE0B0</color>
+</resources>

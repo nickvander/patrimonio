@@ -32,7 +32,7 @@
     android:orientation="vertical"
     android:gravity="center_vertical"
     android:background="@drawable/widget_background"
-    android:padding="16dp">
+    android:padding="18dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -57,10 +57,12 @@
              native code, no WorkManager, no R8 surface. -->
         <ImageView
             android:id="@+id/widget_sync"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:padding="4dp"
-            android:src="@android:drawable/ic_popup_sync"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="7dp"
+            android:background="@drawable/widget_icon_bg"
+            android:tint="@color/widget_icon_tint"
+            android:src="@drawable/ic_widget_refresh"
             android:contentDescription="@string/widget_sync_label" />
     </LinearLayout>
 
