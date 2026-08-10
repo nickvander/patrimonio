@@ -9,7 +9,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:gravity="center_vertical"
     android:background="@drawable/widget_background"
     android:paddingStart="12dp"
@@ -18,16 +18,16 @@
     android:paddingBottom="10dp">
 
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:maxLines="1"
-            android:ellipsize="end"
             android:text="@string/widget_preview_net_worth"
             android:autoSizeTextType="uniform"
             android:autoSizeMinTextSize="16sp"
@@ -37,21 +37,24 @@
             android:textSize="24sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:text="@string/widget_preview_fx_aged"
-            android:textColor="@color/widget_accent"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+        <ImageView
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
+            android:src="@android:drawable/ic_popup_sync"
+            android:contentDescription="@string/widget_sync_label" />
     </LinearLayout>
 
-    <ImageView
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:padding="4dp"
-        android:src="@android:drawable/ic_popup_sync"
-        android:contentDescription="@string/widget_sync_label" />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:text="@string/widget_preview_fx_aged"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="10sp"
+        android:autoSizeMaxTextSize="14sp"
+        android:autoSizeStepGranularity="1sp"
+        android:textColor="@color/widget_accent"
+        android:textSize="14sp"
+        android:textStyle="bold" />
 </LinearLayout>

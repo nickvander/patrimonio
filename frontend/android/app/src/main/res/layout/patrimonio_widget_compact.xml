@@ -30,28 +30,26 @@
     android:paddingTop="10dp"
     android:paddingBottom="10dp">
 
+    <!-- The sync icon shares the NUMBER's row, not the whole text column:
+         beside an autosized number it costs nothing visible, while parked
+         beside the column it stole 32dp from the rate line — which is what
+         ellipsized "USD/MXN 17.1…" on a 2-column placement. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
-
         <!-- Autosized: grows into a tall launcher cell (the number is the
-             hero — a fixed 18sp left the card mostly background on a ~110dp
-             row) and shrinks instead of ellipsizing when a 2-column
+             hero) and shrinks instead of ellipsizing when a 2-column
              placement meets a seven-figure net worth. autoSize* is an
              ordinary TextView attribute, so RemoteViews inflates it fine
              (API 26+; silently ignored below). -->
         <TextView
             android:id="@+id/widget_net_worth"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:maxLines="1"
             android:autoSizeTextType="uniform"
             android:autoSizeMinTextSize="16sp"
@@ -62,52 +60,54 @@
             android:textStyle="bold"
             android:contentDescription="@string/widget_net_worth_label" />
 
-        <!-- Rate + age share one line here; the provider composes the text. -->
-        <TextView
-            android:id="@+id/widget_fx"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:textColor="@color/widget_accent"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <!-- Only used when the net worth is hidden and the rate is the sole
-             content; otherwise the provider folds the age into widget_fx. -->
-        <TextView
-            android:id="@+id/widget_synced_at"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:textColor="@color/widget_text_muted"
-            android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/widget_empty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            android:text="@string/widget_all_hidden"
-            android:textColor="@color/widget_text_muted"
-            android:textSize="11sp" />
+        <ImageView
+            android:id="@+id/widget_sync"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:padding="4dp"
+            android:src="@android:drawable/ic_popup_sync"
+            android:contentDescription="@string/widget_sync_label" />
     </LinearLayout>
 
-    <ImageView
-        android:id="@+id/widget_sync"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:padding="4dp"
-        android:src="@android:drawable/ic_popup_sync"
-        android:contentDescription="@string/widget_sync_label" />
-    </LinearLayout>
+    <!-- Rate + age share one line; the provider composes the text. Autosized
+         down to 10sp so a 2-column tile fits "USD/MXN 17.14 · 2h" whole —
+         a shrunken rate beats an ellipsized one, which reads as broken. -->
+    <TextView
+        android:id="@+id/widget_fx"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="10sp"
+        android:autoSizeMaxTextSize="14sp"
+        android:autoSizeStepGranularity="1sp"
+        android:textColor="@color/widget_accent"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <!-- Only used when the net worth is hidden and the rate is the sole
+         content; otherwise the provider folds the age into widget_fx. -->
+    <TextView
+        android:id="@+id/widget_synced_at"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/widget_text_muted"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/widget_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:text="@string/widget_all_hidden"
+        android:textColor="@color/widget_text_muted"
+        android:textSize="11sp" />
 
     <!-- The net-worth trend, filling whatever vertical room the cell has
-         left (weight=1, height 0 when there is none). This is what keeps a
-         tall launcher row from reading as empty card: two lines of text
-         cannot fill ~110dp, a trend line can. Bitmap pushed by the app
-         ('chart_path'); GONE until one exists. Decorative — the numbers
+         left (weight=1, height 0 when there is none). Bitmap pushed by the
+         app ('chart_path'); GONE until one exists. Decorative — the numbers
          above carry the semantics — so no contentDescription. -->
     <ImageView
         android:id="@+id/widget_chart"
