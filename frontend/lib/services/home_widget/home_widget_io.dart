@@ -45,12 +45,17 @@ Future<void> pushHomeWidget(
     // Two charts, one slot: the provider shows the net-worth trend normally
     // and the RATE trend when the tile is configured down to FX-only — a
     // rate tile with the net-worth chart suppressed used to be half empty.
-    for (final (key, values) in [
-      ('chart_path', trend),
-      ('fx_chart_path', fxTrend),
+    // Each series keeps its own color — net worth green, rate blue — so the
+    // shared chart slot is self-identifying (see sparklineFxColor).
+    for (final (key, values, color) in [
+      ('chart_path', trend, null),
+      ('fx_chart_path', fxTrend, sparklineFxColor),
     ]) {
       final png = values.length >= 2
-          ? await renderSparklinePng(thinSparkline(values))
+          ? await renderSparklinePng(
+              thinSparkline(values),
+              line: color ?? sparklineNetWorthColor,
+            )
           : null;
       if (png != null) {
         await HomeWidget.saveFile(key, png, extension: 'png');

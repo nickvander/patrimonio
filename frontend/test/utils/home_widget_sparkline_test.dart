@@ -84,4 +84,30 @@ void main() {
       expect(rgba.getUint8(3), 0);
     },
   );
+
+  // The two series must never be confusable: both lived in one chart slot in
+  // the same green, and the owner's first question was "is that exchange rate
+  // or net worth?". Color is the disambiguation, so it is pinned.
+  test('the FX color renders a blue line, never the net-worth green', () async {
+    final png = await renderSparklinePng([
+      for (var i = 0; i < 30; i++) 17.0 + i * 0.01,
+    ], line: sparklineFxColor);
+    final rgba = await _pixels(png!);
+    var blue = 0, green = 0;
+    for (var i = 0; i < rgba.lengthInBytes; i += 4) {
+      final r = rgba.getUint8(i);
+      final g = rgba.getUint8(i + 1);
+      final b = rgba.getUint8(i + 2);
+      final a = rgba.getUint8(i + 3);
+      if (a > 128 && b > 120 && b > r && b >= g) blue++;
+      if (a > 128 && g > 100 && g > r && g > b) green++;
+    }
+    expect(blue, greaterThan(1000));
+    expect(
+      green,
+      0,
+      reason:
+          'an FX chart in net-worth green is the ambiguity this exists to prevent',
+    );
+  });
 }

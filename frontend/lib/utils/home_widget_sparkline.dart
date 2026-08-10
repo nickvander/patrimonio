@@ -25,10 +25,23 @@ import 'sparkline_geometry.dart';
 /// CURRENT theme into a bitmap that outlives theme switches.
 const Color _line = Color(0xFF16A05B);
 
+/// The net-worth line's green, public so the io bridge names one constant
+/// instead of re-inlining the hex.
+const Color sparklineNetWorthColor = _line;
+
+/// The rate sparkline's blue — the app's "info / lake blue" family
+/// (theme/palette.dart), split the difference between its light and dark
+/// values so one PNG reads on both cards. Exists so the FX chart can NEVER be
+/// mistaken for the net-worth chart: both lived in the same slot in the same
+/// green, and the owner's first question was "is that exchange rate or net
+/// worth?" — a chart you have to ask about is worse than no chart.
+const Color sparklineFxColor = Color(0xFF3F8FC4);
+
 Future<Uint8List?> renderSparklinePng(
   List<double> values, {
   double width = 600,
   double height = 140,
+  Color line = _line,
 }) async {
   final pts = sparklinePoints(values, width: width, height: height);
   if (pts.isEmpty) return null;
@@ -53,14 +66,14 @@ Future<Uint8List?> renderSparklinePng(
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [_line.withValues(alpha: 0.22), _line.withValues(alpha: 0)],
+        colors: [line.withValues(alpha: 0.22), line.withValues(alpha: 0)],
       ).createShader(Offset.zero & size),
   );
 
   canvas.drawPath(
     path,
     Paint()
-      ..color = _line
+      ..color = line
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round
