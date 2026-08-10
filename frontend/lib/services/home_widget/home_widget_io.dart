@@ -1,11 +1,10 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/widgets.dart' show Size;
 import 'package:home_widget/home_widget.dart';
 
 import '../../utils/home_widget_snapshot.dart';
+import '../../utils/home_widget_sparkline.dart';
 import '../../utils/sparkline_geometry.dart';
-import '../../widgets/home_widget_sparkline.dart';
 
 /// Every provider declared in AndroidManifest.xml. Android lists one picker
 /// entry per provider, so each offered size is a receiver — and an update
@@ -31,23 +30,32 @@ Future<void> pushHomeWidget(
 }) async {
   // iOS/macOS/Linux have no provider registered; the test VM reports linux.
   if (!Platform.isAndroid) return;
+  // The sparkline is what keeps the tile from being a mostly-empty card: two
+  // lines of text cannot fill a ~110dp launcher row, a trend can. Rendered to
+  // PNG bytes HERE with a PictureRecorder — deliberately not through
+  // HomeWidget.renderFlutterWidget, whose internal Column gave the paint an
+  // unbounded height and, in release builds (asserts stripped), a silently
+  // BLANK image; see renderSparklinePng. The provider only decodes a bitmap.
+  //
+  // In its own try: a chart failure downgrades the widget to text-only, it
+  // must never block the numbers. (The first version had one try around
+  // both, so a throwing render would have silently frozen the text too.)
   try {
-    // The sparkline is what keeps the tile from being a mostly-empty card:
-    // two lines of text cannot fill a ~110dp launcher row, a trend can.
-    // Rendered off-screen to a PNG whose PATH rides the same KV bridge
-    // ('chart_path'); the provider only decodes and sets a bitmap. Thinned
-    // first — a year of daily points is sub-2px segments on a 600px bitmap.
-    if (trend.length >= 2) {
-      await HomeWidget.renderFlutterWidget(
-        HomeWidgetSparkline(values: thinSparkline(trend)),
-        key: 'chart_path',
-        logicalSize: const Size(600, 140),
-      );
+    final png = trend.length >= 2
+        ? await renderSparklinePng(thinSparkline(trend))
+        : null;
+    if (png != null) {
+      await HomeWidget.saveFile('chart_path', png, extension: 'png');
     } else {
-      // No plottable history: clear the stale path so the provider hides the
-      // image instead of showing last month's line under today's number.
+      // No plottable history: clear the stale path (this also deletes the
+      // managed file) so the provider hides the image instead of showing
+      // last month's line under today's number.
       await HomeWidget.saveWidgetData<String?>('chart_path', null);
     }
+  } catch (_) {
+    // Chart is decoration; the numbers below must still go out.
+  }
+  try {
     for (final entry in snapshot.toWidgetData().entries) {
       await HomeWidget.saveWidgetData<String>(entry.key, entry.value);
     }
