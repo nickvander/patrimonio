@@ -27,6 +27,7 @@ const List<String> _androidProviders = [
 Future<void> pushHomeWidget(
   HomeWidgetSnapshot snapshot, {
   List<double> trend = const [],
+  List<double> fxTrend = const [],
 }) async {
   // iOS/macOS/Linux have no provider registered; the test VM reports linux.
   if (!Platform.isAndroid) return;
@@ -41,19 +42,27 @@ Future<void> pushHomeWidget(
   // must never block the numbers. (The first version had one try around
   // both, so a throwing render would have silently frozen the text too.)
   try {
-    final png = trend.length >= 2
-        ? await renderSparklinePng(thinSparkline(trend))
-        : null;
-    if (png != null) {
-      await HomeWidget.saveFile('chart_path', png, extension: 'png');
-    } else {
-      // No plottable history: clear the stale path (this also deletes the
-      // managed file) so the provider hides the image instead of showing
-      // last month's line under today's number.
-      await HomeWidget.saveWidgetData<String?>('chart_path', null);
+    // Two charts, one slot: the provider shows the net-worth trend normally
+    // and the RATE trend when the tile is configured down to FX-only — a
+    // rate tile with the net-worth chart suppressed used to be half empty.
+    for (final (key, values) in [
+      ('chart_path', trend),
+      ('fx_chart_path', fxTrend),
+    ]) {
+      final png = values.length >= 2
+          ? await renderSparklinePng(thinSparkline(values))
+          : null;
+      if (png != null) {
+        await HomeWidget.saveFile(key, png, extension: 'png');
+      } else {
+        // No plottable history: clear the stale path (this also deletes the
+        // managed file) so the provider hides the image instead of showing
+        // last month's line under today's number.
+        await HomeWidget.saveWidgetData<String?>(key, null);
+      }
     }
   } catch (_) {
-    // Chart is decoration; the numbers below must still go out.
+    // Charts are decoration; the numbers below must still go out.
   }
   try {
     for (final entry in snapshot.toWidgetData().entries) {

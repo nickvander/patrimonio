@@ -32,6 +32,7 @@ import '../utils/import_staleness.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../services/home_widget/home_widget_bridge.dart';
+import '../utils/fx_center.dart';
 import '../utils/home_widget_snapshot.dart';
 import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
@@ -915,7 +916,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   ///
   /// Deliberately not awaited by callers: this is a side effect of a load, not
   /// part of it.
-  void _pushHomeWidget() {
+  Future<void> _pushHomeWidget() async {
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble();
     final l = AppLocalizations.of(context);
     final snapshot = buildHomeWidgetSnapshot(
@@ -953,7 +954,25 @@ class _DashboardScreenState extends State<DashboardScreen>
             row['net_worth'] is num)
           (row['net_worth'] as num).toDouble() * factor,
     ];
-    pushHomeWidget(snapshot, trend: trend);
+    // The rate trend backs the FX-only tile's sparkline. Fetched lazily and
+    // best-effort: a failed history read must never block the push, and the
+    // widget simply keeps its previous rate chart (the freshness line already
+    // labels its age).
+    List<double> fxTrend = const [];
+    try {
+      final raw = await _apiService.getExchangeRateHistory(
+        'USD',
+        'MXN',
+        days: 30,
+      );
+      fxTrend = [
+        for (final r in raw)
+          if (fxHistoryPoint(r) != null) fxHistoryPoint(r)!.close,
+      ];
+    } catch (_) {
+      // keep const []
+    }
+    pushHomeWidget(snapshot, trend: trend, fxTrend: fxTrend);
   }
 
   // tab so the palette doesn't have to know the dashboard's layout.

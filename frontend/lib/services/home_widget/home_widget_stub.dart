@@ -5,6 +5,7 @@ import '../../utils/home_widget_snapshot.dart';
 Future<void> pushHomeWidget(
   HomeWidgetSnapshot snapshot, {
   List<double> trend = const [],
+  List<double> fxTrend = const [],
 }) async {}
 
 /// Never launched from a widget off Android.

@@ -211,13 +211,20 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
                 },
             )
 
-            // The net-worth trend bitmap the app rendered ('chart_path' is a
-            // file path from renderFlutterWidget). Follows the net-worth
-            // toggle — it IS net-worth data — and hides on any problem
-            // (no push yet, deleted file, decode failure): a missing chart
-            // is a tighter card, a broken one is a support ticket.
-            val chartPath = prefs.getString("chart_path", "").orEmpty()
-            val chart = if (showNetWorth && !allHidden && chartPath.isNotEmpty()) {
+            // One chart slot, two possible trends. Normally the net-worth
+            // trend (it follows the net-worth toggle — it IS net-worth data);
+            // in fx-hero mode the RATE trend, so a tile configured down to
+            // FX-only fills with the rate's own history instead of sitting
+            // half empty. Hides on any problem (no push yet, deleted file,
+            // decode failure): a missing chart is a tighter card, a broken
+            // one is a support ticket.
+            val chartPath = when {
+                fxHero -> prefs.getString("fx_chart_path", "").orEmpty()
+                showNetWorth && !allHidden ->
+                    prefs.getString("chart_path", "").orEmpty()
+                else -> ""
+            }
+            val chart = if (chartPath.isNotEmpty()) {
                 runCatching { BitmapFactory.decodeFile(chartPath) }.getOrNull()
             } else {
                 null

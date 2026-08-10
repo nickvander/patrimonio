@@ -6,4 +6,5 @@
     <color name="widget_text_muted">@android:color/system_neutral2_200</color>
     <color name="widget_icon_bg">@android:color/system_accent1_700</color>
     <color name="widget_icon_tint">@android:color/system_accent1_100</color>
+    <color name="widget_outline">@android:color/system_neutral2_700</color>
 </resources>
