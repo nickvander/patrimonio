@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -157,6 +158,24 @@ open class PatrimonioWidgetProvider : AppWidgetProvider() {
             }
             views.setTextViewText(R.id.widget_fx, fxText)
             views.setTextViewText(R.id.widget_synced_at, syncedAt)
+
+            // The net-worth trend bitmap the app rendered ('chart_path' is a
+            // file path from renderFlutterWidget). Follows the net-worth
+            // toggle — it IS net-worth data — and hides on any problem
+            // (no push yet, deleted file, decode failure): a missing chart
+            // is a tighter card, a broken one is a support ticket.
+            val chartPath = prefs.getString("chart_path", "").orEmpty()
+            val chart = if (showNetWorth && !allHidden && chartPath.isNotEmpty()) {
+                runCatching { BitmapFactory.decodeFile(chartPath) }.getOrNull()
+            } else {
+                null
+            }
+            if (chart != null) {
+                views.setImageViewBitmap(R.id.widget_chart, chart)
+                views.setViewVisibility(R.id.widget_chart, View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.widget_chart, View.GONE)
+            }
 
             // Two DIFFERENT taps. The sync glyph carries a `patrimonio://sync`
             // URI that the Flutter side reads on launch and turns into a real

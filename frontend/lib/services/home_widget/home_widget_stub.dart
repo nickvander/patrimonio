@@ -2,7 +2,10 @@ import '../../utils/home_widget_snapshot.dart';
 
 /// No-op bridge for web (and any non-Android platform): there is no home
 /// screen to put a widget on.
-Future<void> pushHomeWidget(HomeWidgetSnapshot snapshot) async {}
+Future<void> pushHomeWidget(
+  HomeWidgetSnapshot snapshot, {
+  List<double> trend = const [],
+}) async {}
 
 /// Never launched from a widget off Android.
 Future<Uri?> initialHomeWidgetLaunch() async => null;

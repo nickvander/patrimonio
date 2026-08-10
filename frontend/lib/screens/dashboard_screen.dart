@@ -938,7 +938,22 @@ class _DashboardScreenState extends State<DashboardScreen>
         days: l.dashWidgetDaysAgo,
       ),
     );
-    pushHomeWidget(snapshot);
+    // The trend under the number: last ~90 days of carried net worth, in the
+    // same reporting currency as the figure above it (base USD × the same
+    // factor). Malformed rows drop out rather than plotting as zero dips.
+    final cutoff = DateTime.now().subtract(const Duration(days: 90));
+    final factor = _targetCurrency == 'MXN' ? (fxRate ?? 1.0) : 1.0;
+    final trend = <double>[
+      for (final row in _netWorthHistory ?? const [])
+        if (row is Map &&
+            (DateTime.tryParse(
+                  row['date']?.toString() ?? '',
+                )?.isAfter(cutoff) ??
+                false) &&
+            row['net_worth'] is num)
+          (row['net_worth'] as num).toDouble() * factor,
+    ];
+    pushHomeWidget(snapshot, trend: trend);
   }
 
   // tab so the palette doesn't have to know the dashboard's layout.

@@ -1,8 +1,11 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/widgets.dart' show Size;
 import 'package:home_widget/home_widget.dart';
 
 import '../../utils/home_widget_snapshot.dart';
+import '../../utils/sparkline_geometry.dart';
+import '../../widgets/home_widget_sparkline.dart';
 
 /// Every provider declared in AndroidManifest.xml. Android lists one picker
 /// entry per provider, so each offered size is a receiver — and an update
@@ -22,10 +25,29 @@ const List<String> _androidProviders = [
 /// surface an error into a data refresh the user actually asked for. Failures
 /// are swallowed — the widget simply keeps its previous values, which the
 /// freshness line already labels honestly.
-Future<void> pushHomeWidget(HomeWidgetSnapshot snapshot) async {
+Future<void> pushHomeWidget(
+  HomeWidgetSnapshot snapshot, {
+  List<double> trend = const [],
+}) async {
   // iOS/macOS/Linux have no provider registered; the test VM reports linux.
   if (!Platform.isAndroid) return;
   try {
+    // The sparkline is what keeps the tile from being a mostly-empty card:
+    // two lines of text cannot fill a ~110dp launcher row, a trend can.
+    // Rendered off-screen to a PNG whose PATH rides the same KV bridge
+    // ('chart_path'); the provider only decodes and sets a bitmap. Thinned
+    // first — a year of daily points is sub-2px segments on a 600px bitmap.
+    if (trend.length >= 2) {
+      await HomeWidget.renderFlutterWidget(
+        HomeWidgetSparkline(values: thinSparkline(trend)),
+        key: 'chart_path',
+        logicalSize: const Size(600, 140),
+      );
+    } else {
+      // No plottable history: clear the stale path so the provider hides the
+      // image instead of showing last month's line under today's number.
+      await HomeWidget.saveWidgetData<String?>('chart_path', null);
+    }
     for (final entry in snapshot.toWidgetData().entries) {
       await HomeWidget.saveWidgetData<String>(entry.key, entry.value);
     }
