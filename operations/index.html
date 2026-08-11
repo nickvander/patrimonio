@@ -1,0 +1,1799 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://nickvander.github.io/patrimonio/operations/">
+      
+      
+        <link rel="prev" href="../deployment/">
+      
+      
+        <link rel="next" href="../migration/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Operations - Patrimonio</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#patrimonio-operations-runbook" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Patrimonio" class="md-header__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Patrimonio
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Operations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../adding-accounts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Adding Accounts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../multi-currency/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Multi-currency
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../backend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Backend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../frontend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Frontend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../database/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Database
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../deployment/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Deployment
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../migration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Migration (homelab)
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Patrimonio" class="md-nav__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Patrimonio
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-accounts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding Accounts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-currency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-currency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#backup-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backup strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backup-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backup setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backup setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-time
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#first-manual-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First manual backup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#daily-cron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Daily cron
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retention
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#off-machine-copies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Off-machine copies
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restore-drill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restore drill
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Restore drill">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-pick-the-dump-to-restore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1 — pick the dump to restore
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-bring-up-the-test-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2 — bring up the test project
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-restore-into-the-test-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3 — restore into the test project
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-start-the-api-against-the-restored-db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4 — start the api against the restored DB
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5 — verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-tear-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6 — tear down
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-good-looks-like" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "good" looks like
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disaster-recovery-real-restore-not-a-drill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disaster recovery (real restore, not a drill)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#encryption_key-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ENCRYPTION_KEY rotation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ENCRYPTION_KEY rotation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#procedure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Procedure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-happens-if-you-lose-the-old-key-mid-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What happens if you lose the old key mid-rotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-happens-if-you-lose-the-new-key-after-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What happens if you lose the new key after rotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tearing-it-all-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tearing it all down
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-failure-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common failure modes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pointers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pointers
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration (homelab)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#backup-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backup strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backup-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backup setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backup setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-time
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#first-manual-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First manual backup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#daily-cron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Daily cron
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retention
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#off-machine-copies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Off-machine copies
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restore-drill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restore drill
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Restore drill">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-pick-the-dump-to-restore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 1 — pick the dump to restore
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-bring-up-the-test-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 2 — bring up the test project
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-restore-into-the-test-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 3 — restore into the test project
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-start-the-api-against-the-restored-db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 4 — start the api against the restored DB
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-5-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 5 — verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-6-tear-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step 6 — tear down
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-good-looks-like" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "good" looks like
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disaster-recovery-real-restore-not-a-drill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disaster recovery (real restore, not a drill)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#encryption_key-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ENCRYPTION_KEY rotation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ENCRYPTION_KEY rotation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#procedure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Procedure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-happens-if-you-lose-the-old-key-mid-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What happens if you lose the old key mid-rotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-happens-if-you-lose-the-new-key-after-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What happens if you lose the new key after rotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tearing-it-all-down" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tearing it all down
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-failure-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common failure modes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pointers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pointers
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="patrimonio-operations-runbook">Patrimonio operations runbook<a class="headerlink" href="#patrimonio-operations-runbook" title="Permanent link">&para;</a></h1>
+<p>This is the playbook for running a self-hosted Patrimonio install:
+backups, restores, key rotation, recovery from common failure modes.
+Aimed at the single-operator deployment Patrimonio is built for —
+not a multi-tenant SaaS.</p>
+<p>If you only read one section, read <strong><a href="#backup-setup">Backup setup</a></strong> —
+your Plaid tokens, TOTP secrets, and every transaction sit on a single
+Docker volume. One <code>docker volume prune --force</code> and you start over.</p>
+<p>Moving to a new box (e.g. a homelab) without re-linking Plaid? See the
+<strong><a href="../migration/">migration runbook</a></strong> — it builds on the backup/restore
+scripts here and covers the secrets that must travel with the dump. Locked
+out? There's an offline break-glass CLI (<code>cargo run --bin admin_reset</code>,
+documented in the migration runbook's last section).</p>
+<hr />
+<h2 id="backup-strategy">Backup strategy<a class="headerlink" href="#backup-strategy" title="Permanent link">&para;</a></h2>
+<p>What gets backed up:</p>
+<ul>
+<li>Every row in the <code>patrimonio</code> Postgres database. This includes the
+  encrypted Plaid access tokens, the encrypted TOTP secrets, every
+  transaction, every holding lot, every balance snapshot, the
+  invitation tokens, the session table, the FX rate history.</li>
+<li>Sidecar metadata file (<code>.meta</code>) recording when the dump was taken
+  and which migration head it was at.</li>
+</ul>
+<p>What does NOT get backed up by this script:</p>
+<ul>
+<li><code>.env</code> — including <code>ENCRYPTION_KEY</code>, <code>POSTGRES_PASSWORD</code>, Plaid
+  credentials. <strong>A dump without the matching <code>ENCRYPTION_KEY</code> is
+  useless</strong> — the <code>*_enc</code> columns can't be decrypted. Back <code>.env</code> up
+  separately, in a different location, encrypted with a different
+  passphrase.</li>
+<li>Redis cache. It's pure cache (FX rate lookups, session token cache,
+  passkey flow state). Discardable on restore — the app rebuilds it
+  on the next request.</li>
+<li>Docker images. Reproducible from the git repo (<code>docker compose
+  build</code>). Don't waste backup space on them.</li>
+</ul>
+<p>The dump itself is encrypted with <strong>AES-256 (GPG symmetric)</strong> using a
+passphrase you choose. The cleartext SQL never touches disk — the
+pipeline is <code>pg_dump | gpg | &lt;file&gt;</code>.</p>
+<hr />
+<h2 id="backup-setup">Backup setup<a class="headerlink" href="#backup-setup" title="Permanent link">&para;</a></h2>
+<h3 id="one-time">One-time<a class="headerlink" href="#one-time" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Pick a backup passphrase. This is separate from <code>ENCRYPTION_KEY</code> —
+   defence in depth so a leaked <code>.env</code> doesn't trivially decrypt the
+   dumps. Generate one with:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>openssl<span class="w"> </span>rand<span class="w"> </span>-base64<span class="w"> </span><span class="m">48</span>
+</code></pre></div>
+<p>Store it in a password manager. Losing it makes every backup
+   unreadable.</p>
+<ol>
+<li>
+<p>Pick a backup directory. Default is <code>~/patrimonio-backups</code>.</p>
+</li>
+<li>
+<p>Stash the passphrase in a private file the cron job can read:</p>
+</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">umask</span><span class="w"> </span><span class="m">077</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">printf</span><span class="w"> </span><span class="s1">&#39;BACKUP_PASSPHRASE=%s\n&#39;</span><span class="w"> </span><span class="s1">&#39;&lt;the-passphrase&gt;&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>&gt;<span class="w"> </span>~/.patrimonio-backup.env
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>~/.patrimonio-backup.env
+</code></pre></div>
+<p><code>umask 077</code> ensures <code>cat ~/.patrimonio-backup.env</code> from another
+   user is denied.</p>
+<h3 id="first-manual-backup">First manual backup<a class="headerlink" href="#first-manual-backup" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">set</span><span class="w"> </span>-a<span class="p">;</span><span class="w"> </span>.<span class="w"> </span>~/.patrimonio-backup.env<span class="p">;</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span>+a
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>bash<span class="w"> </span>scripts/backup.sh
+</code></pre></div>
+<p>You should see:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>backup: source=patrimonio-postgres-1 dest=/home/&lt;you&gt;/patrimonio-backups/patrimonio-20260518T154200Z.sql.gpg
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>backup: ok (245678 bytes)
+</code></pre></div>
+<p>The script does a round-trip decrypt of its own output before
+returning success — a passphrase shell-quoting bug or a corrupt write
+would fail loudly here.</p>
+<h3 id="daily-cron">Daily cron<a class="headerlink" href="#daily-cron" title="Permanent link">&para;</a></h3>
+<p>The host crontab (NOT in-container — the api container shouldn't have
+docker socket access):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a># Patrimonio nightly backup — 03:15 local, off-peak.
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a># Append stdout/stderr to a log file so a failed backup is debuggable
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a># without having to wait for the next run.
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>15 3 * * * set -a; . $HOME/.patrimonio-backup.env; set +a; \
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>           cd $HOME/patrimonio &amp;&amp; bash scripts/backup.sh \
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>           &gt;&gt; $HOME/.patrimonio-backup.log 2&gt;&amp;1
+</code></pre></div>
+<p>Install with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="o">(</span><span class="w"> </span>crontab<span class="w"> </span>-l<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="p">;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;15 3 * * * set -a; . $HOME/.patrimonio-backup.env; set +a; cd $HOME/patrimonio &amp;&amp; bash scripts/backup.sh &gt;&gt; $HOME/.patrimonio-backup.log 2&gt;&amp;1&#39;</span><span class="w"> </span><span class="o">)</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>crontab<span class="w"> </span>-
+</code></pre></div>
+<p>Verify the next morning:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ls<span class="w"> </span>-la<span class="w"> </span>~/patrimonio-backups/<span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-3
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>tail<span class="w"> </span>-20<span class="w"> </span>~/.patrimonio-backup.log
+</code></pre></div>
+<h3 id="retention">Retention<a class="headerlink" href="#retention" title="Permanent link">&para;</a></h3>
+<p><code>BACKUP_RETENTION</code> controls how many most-recent dumps the script
+keeps; older ones are pruned each run. Default 14 (~two weeks at one
+backup per day). Set higher for monthlies:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">BACKUP_RETENTION</span><span class="o">=</span><span class="m">90</span><span class="w"> </span>bash<span class="w"> </span>scripts/backup.sh
+</code></pre></div>
+<h3 id="off-machine-copies">Off-machine copies<a class="headerlink" href="#off-machine-copies" title="Permanent link">&para;</a></h3>
+<p>The local volume is one disk failure away from being useless. At
+least one of the backup files should sit on different hardware:</p>
+<ul>
+<li>Sync <code>~/patrimonio-backups/</code> to a separate machine (rsync, syncthing).</li>
+<li>Or push to object storage (<code>aws s3 cp ... --sse aws:kms</code> —
+  belt-and-suspenders since the file is already encrypted).</li>
+<li>Or copy the most recent dump to a USB drive on a monthly cadence.</li>
+</ul>
+<p>The dump file is already encrypted — it's safe to drop on any
+storage that <em>you</em> trust to be reliable, regardless of who else might
+read it.</p>
+<hr />
+<h2 id="restore-drill">Restore drill<a class="headerlink" href="#restore-drill" title="Permanent link">&para;</a></h2>
+<p><strong>Run this once after setup, then quarterly.</strong> A backup you've never
+restored isn't a backup, it's a hope.</p>
+<p>The drill restores into an <strong>isolated compose project</strong> (different
+project name, different ports, different volumes) so the live data
+stays untouched. If anything goes wrong, you throw away the test
+project and try again.</p>
+<h3 id="step-1-pick-the-dump-to-restore">Step 1 — pick the dump to restore<a class="headerlink" href="#step-1-pick-the-dump-to-restore" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>ls<span class="w"> </span>-t<span class="w"> </span>~/patrimonio-backups/patrimonio-*.sql.gpg<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-5
+</code></pre></div>
+<p>The newest one is fine for a drill. Pick a specific timestamp for a
+real point-in-time restore.</p>
+<h3 id="step-2-bring-up-the-test-project">Step 2 — bring up the test project<a class="headerlink" href="#step-2-bring-up-the-test-project" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Use different ports so the live stack stays running.</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nv">COMPOSE_PROJECT_NAME</span><span class="o">=</span>patrimonio-restore-test<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nv">POSTGRES_PORT</span><span class="o">=</span><span class="m">5435</span><span class="w"> </span><span class="nv">REDIS_PORT</span><span class="o">=</span><span class="m">6382</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="nv">API_PORT</span><span class="o">=</span><span class="m">8082</span><span class="w"> </span><span class="nv">FRONTEND_PORT</span><span class="o">=</span><span class="m">3002</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio-restore-test<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>postgres<span class="w"> </span>redis
+</code></pre></div>
+<p>The api/frontend containers we leave down for now — they'd just sit
+idle until we restore data for them to serve.</p>
+<h3 id="step-3-restore-into-the-test-project">Step 3 — restore into the test project<a class="headerlink" href="#step-3-restore-into-the-test-project" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nb">set</span><span class="w"> </span>-a<span class="p">;</span><span class="w"> </span>.<span class="w"> </span>~/.patrimonio-backup.env<span class="p">;</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span>+a
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>bash<span class="w"> </span>scripts/restore.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span>--project<span class="w"> </span>patrimonio-restore-test<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span>~/patrimonio-backups/patrimonio-20260518T154200Z.sql.gpg
+</code></pre></div>
+<p>You'll get a confirmation prompt naming the project being clobbered.
+Type <code>yes</code>. After the dump replays you should see smoke counts:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Restore complete. Smoke counts:
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>  users=1
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>  institutions=11
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>  accounts=23
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>  transactions=4582
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>  ...
+</code></pre></div>
+<p>The counts should be in the same ballpark as the live DB. A <code>users=0</code>
+result means the dump is empty — abort and investigate.</p>
+<h3 id="step-4-start-the-api-against-the-restored-db">Step 4 — start the api against the restored DB<a class="headerlink" href="#step-4-start-the-api-against-the-restored-db" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nv">COMPOSE_PROJECT_NAME</span><span class="o">=</span>patrimonio-restore-test<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nv">POSTGRES_PORT</span><span class="o">=</span><span class="m">5435</span><span class="w"> </span><span class="nv">REDIS_PORT</span><span class="o">=</span><span class="m">6382</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nv">API_PORT</span><span class="o">=</span><span class="m">8082</span><span class="w"> </span><span class="nv">FRONTEND_PORT</span><span class="o">=</span><span class="m">3002</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio-restore-test<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>api<span class="w"> </span>frontend
+</code></pre></div>
+<h3 id="step-5-verify">Step 5 — verify<a class="headerlink" href="#step-5-verify" title="Permanent link">&para;</a></h3>
+<ol>
+<li>API health:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://127.0.0.1:8082/api/health
+</code></pre></div>
+<p>Expect <code>{"status":"ok","database":"connected"}</code>.</p>
+<ol>
+<li>
+<p>Login. Open <code>http://127.0.0.1:3002</code> and sign in with the live
+   credentials. If it accepts you, sessions table + password hashes
+   restored cleanly.</p>
+</li>
+<li>
+<p><strong>Plaid sync</strong> — this is the key test, because it exercises the
+   <code>plaid_access_token_enc</code> decrypt path. Hit the dashboard's "Sync"
+   button. If you see balances refresh, the encrypted columns
+   decrypted against the live <code>ENCRYPTION_KEY</code> (which the test stack
+   inherits via the same <code>.env</code>).</p>
+</li>
+</ol>
+<h3 id="step-6-tear-down">Step 6 — tear down<a class="headerlink" href="#step-6-tear-down" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio-restore-test<span class="w"> </span>down<span class="w"> </span>-v
+</code></pre></div>
+<p>The <code>-v</code> removes the test project's volumes too — the restore drill
+leaves nothing behind.</p>
+<h3 id="what-good-looks-like">What "good" looks like<a class="headerlink" href="#what-good-looks-like" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Pass</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API health 200</td>
+<td>✅ database connected</td>
+</tr>
+<tr>
+<td>Smoke counts non-zero, matching live</td>
+<td>✅ schema + rows landed</td>
+</tr>
+<tr>
+<td>Login succeeds</td>
+<td>✅ password_hash, sessions intact</td>
+</tr>
+<tr>
+<td>Sync refreshes balances</td>
+<td>✅ <code>*_enc</code> columns decrypt with live key</td>
+</tr>
+</tbody>
+</table>
+<p>If any step fails, the dump or the <code>.env</code> is suspect. Investigate
+before deleting the test project.</p>
+<hr />
+<h2 id="disaster-recovery-real-restore-not-a-drill">Disaster recovery (real restore, not a drill)<a class="headerlink" href="#disaster-recovery-real-restore-not-a-drill" title="Permanent link">&para;</a></h2>
+<p>Same procedure as the drill, except the project is <code>patrimonio</code> (the
+live one), not the test one. The destructive step is <code>DROP DATABASE
+patrimonio</code> — <code>scripts/restore.sh</code> will name the project in its
+confirmation prompt, but read it carefully.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># 1. Stop the api so its connection pool can&#39;t fight us.</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio<span class="w"> </span>stop<span class="w"> </span>api<span class="w"> </span>frontend
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># 2. Restore over the live DB.</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="nb">set</span><span class="w"> </span>-a<span class="p">;</span><span class="w"> </span>.<span class="w"> </span>~/.patrimonio-backup.env<span class="p">;</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span>+a
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>bash<span class="w"> </span>scripts/restore.sh<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span>--project<span class="w"> </span>patrimonio<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">  </span>~/patrimonio-backups/patrimonio-&lt;latest&gt;.sql.gpg
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="c1"># 3. Bring api + frontend back up.</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>api<span class="w"> </span>frontend
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="c1"># 4. Verify the dashboard loads and Sync works (same checks as the drill).</span>
+</code></pre></div>
+<p>If <code>restore.sh</code> aborts mid-flight, the database is left in whatever
+state the last successful statement reached. <code>DROP DATABASE</code> is
+already committed by that point, so re-running with the same dump is
+the right move — not trying to recover the half-state.</p>
+<hr />
+<h2 id="encryption_key-rotation">ENCRYPTION_KEY rotation<a class="headerlink" href="#encryption_key-rotation" title="Permanent link">&para;</a></h2>
+<p>You need to rotate <code>ENCRYPTION_KEY</code> when:</p>
+<ul>
+<li>The current key may have been exposed (committed to a repo, posted
+  in a chat, etc.). Treat as urgent.</li>
+<li>As a scheduled rotation (annual is reasonable).</li>
+<li>Before handing the deployment to a different operator.</li>
+</ul>
+<h3 id="procedure">Procedure<a class="headerlink" href="#procedure" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Generate the new key:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>openssl<span class="w"> </span>rand<span class="w"> </span>-hex<span class="w"> </span><span class="m">32</span>
+</code></pre></div>
+<p>Store it somewhere safe — you'll need it for <code>.env</code> in step 4.</p>
+<ol>
+<li>Take a fresh backup with the OLD key still in effect. This is your
+   rollback if the rotation goes wrong.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nb">set</span><span class="w"> </span>-a<span class="p">;</span><span class="w"> </span>.<span class="w"> </span>~/.patrimonio-backup.env<span class="p">;</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span>+a
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>bash<span class="w"> </span>scripts/backup.sh
+</code></pre></div>
+<ol>
+<li>Run the rotation. The script stops the api, runs
+   <code>rotate_encryption_key</code> in a transient container, and reports row
+   counts per column:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nv">OLD_ENCRYPTION_KEY</span><span class="o">=</span><span class="k">$(</span>grep<span class="w"> </span><span class="s1">&#39;^ENCRYPTION_KEY=&#39;</span><span class="w"> </span>.env<span class="w"> </span><span class="p">|</span><span class="w"> </span>cut<span class="w"> </span>-d<span class="o">=</span><span class="w"> </span>-f2<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="nv">NEW_ENCRYPTION_KEY</span><span class="o">=</span>&lt;the<span class="w"> </span>new<span class="w"> </span><span class="m">64</span>-hex<span class="w"> </span>key&gt;<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>bash<span class="w"> </span>scripts/rotate-encryption-key.sh
+</code></pre></div>
+<p>Expected output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>rotate: running rotate_encryption_key…
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>rotate_encryption_key: starting
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>  institutions.plaid_access_token_enc: 11 rows
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>  institutions.api_key_enc: 2 rows
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>  institutions.api_secret_enc: 2 rows
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>  institutions.api_pass_enc: 0 rows
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>  users.totp_secret_enc: 1 rows
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>rotate_encryption_key: done (16 rows rotated)
+</code></pre></div>
+<p>Each row is decrypted with OLD, re-encrypted with NEW, AND the new
+   ciphertext is verified to decrypt cleanly with NEW — before the
+   transaction commits. A "wrong NEW key" stops the rotation before
+   any data is committed.</p>
+<ol>
+<li>Update <code>.env</code>: replace the <code>ENCRYPTION_KEY=…</code> line with the NEW
+   key, then bring the api back up:</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>--force-recreate<span class="w"> </span>api
+</code></pre></div>
+<ol>
+<li>
+<p>Verify end-to-end. Sign in, click Sync. A successful Plaid call
+   proves the new key decrypts the Plaid access token cleanly.</p>
+</li>
+<li>
+<p>Take a fresh backup so the new ciphertext is on disk.</p>
+</li>
+<li>
+<p>Park the OLD key in cold storage for ≥30 days. If anything goes
+   wrong post-rotation, a pre-rotation backup will still decrypt with
+   it.</p>
+</li>
+</ol>
+<h3 id="what-happens-if-you-lose-the-old-key-mid-rotation">What happens if you lose the old key mid-rotation<a class="headerlink" href="#what-happens-if-you-lose-the-old-key-mid-rotation" title="Permanent link">&para;</a></h3>
+<p>The rotation is a single transaction per column. If it aborts before
+commit, nothing changed — the DB is still on the old key. You're
+fine: re-run with the correct OLD key.</p>
+<p>If it committed and you no longer have the OLD key, you've still got
+the new key working — there's nothing to roll back to.</p>
+<h3 id="what-happens-if-you-lose-the-new-key-after-rotation">What happens if you lose the new key after rotation<a class="headerlink" href="#what-happens-if-you-lose-the-new-key-after-rotation" title="Permanent link">&para;</a></h3>
+<p>If the new key is gone AND you haven't taken a fresh backup yet,
+restore the pre-rotation backup with the OLD key, then redo the
+rotation with a new "new key" that you actually have.</p>
+<hr />
+<h2 id="tearing-it-all-down">Tearing it all down<a class="headerlink" href="#tearing-it-all-down" title="Permanent link">&para;</a></h2>
+<p>For a clean reinstall on the same machine:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio<span class="w"> </span>down<span class="w"> </span>-v
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="c1"># All volumes gone. Pgdata, redisdata both wiped. The encrypted</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="c1"># backup files in ~/patrimonio-backups/ are untouched.</span>
+</code></pre></div>
+<p>Then either restore from backup (see <a href="#disaster-recovery-real-restore-not-a-drill">Disaster recovery</a>)
+or <code>docker compose -p patrimonio up -d</code> for a fresh bootstrap flow.</p>
+<hr />
+<h2 id="common-failure-modes">Common failure modes<a class="headerlink" href="#common-failure-modes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Diagnosis</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backup.sh</code>: "round-trip decrypt failed"</td>
+<td>Passphrase had shell metacharacters that the shell mangled</td>
+<td>Re-quote the passphrase, or stash it in a file (see <a href="#one-time">Backup setup</a>)</td>
+</tr>
+<tr>
+<td><code>restore.sh</code>: "no running postgres container"</td>
+<td>Target project's postgres is down</td>
+<td><code>docker compose -p &lt;project&gt; up -d postgres</code></td>
+</tr>
+<tr>
+<td><code>restore.sh</code>: <code>psql: ERROR: ... CREATE TABLE ... already exists</code></td>
+<td>DROP DATABASE didn't complete (rare; usually a stuck connection)</td>
+<td>Re-run; the script kills active connections before DROP</td>
+</tr>
+<tr>
+<td>Restored stack: <code>/api/health</code> returns 503</td>
+<td>Stale connection pool on the api container</td>
+<td><code>docker compose -p &lt;project&gt; restart api</code></td>
+</tr>
+<tr>
+<td>Restored stack: Sync fails with "Failed to decrypt token"</td>
+<td><code>.env</code>'s <code>ENCRYPTION_KEY</code> doesn't match the one used at backup time</td>
+<td>Update <code>.env</code> to the original key, or rotate forward</td>
+</tr>
+<tr>
+<td><code>rotate_encryption_key</code>: "decrypt failed with OLD key"</td>
+<td><code>OLD_ENCRYPTION_KEY</code> env var doesn't match what's actually in the DB</td>
+<td>Re-export from <code>.env</code> — check for stray whitespace</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="pointers">Pointers<a class="headerlink" href="#pointers" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>scripts/backup.sh</code> — implementation of the backup pipeline</li>
+<li><code>scripts/restore.sh</code> — implementation of the restore pipeline</li>
+<li><code>scripts/rotate-encryption-key.sh</code> — host-side rotation wrapper</li>
+<li><code>backend/src/bin/rotate_encryption_key.rs</code> — the actual rotation binary</li>
+<li><code>backend/src/services/encryption.rs</code> — AES-256-GCM helpers shared
+  with the main app</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

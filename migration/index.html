@@ -1,0 +1,1331 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://nickvander.github.io/patrimonio/migration/">
+      
+      
+        <link rel="prev" href="../operations/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Migration (homelab) - Patrimonio</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#migrating-to-a-new-server-homelab" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Patrimonio" class="md-header__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Patrimonio
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Migration (homelab)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../adding-accounts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Adding Accounts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../multi-currency/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Multi-currency
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../backend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Backend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../frontend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Frontend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../database/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Database
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../deployment/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Deployment
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../operations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Migration (homelab)
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Patrimonio" class="md-nav__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Patrimonio
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-accounts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding Accounts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-currency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-currency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration (homelab)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration (homelab)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-has-to-travel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What has to travel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step by step
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step by step">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-on-the-old-box-take-a-fresh-complete-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. On the OLD box — take a fresh, complete backup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-on-the-new-box-get-the-code-env-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. On the NEW box — get the code + env in place
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-on-the-new-box-restore-the-dump" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. On the NEW box — restore the dump
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-start-the-app-and-verify-the-tokens-decrypted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Start the app and verify the tokens decrypted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-re-point-plaid-for-the-new-hostname" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Re-point Plaid for the new hostname
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gotchas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#picking-up-app-updates-migrations-backfills" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Picking up app updates (migrations &amp; backfills)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Picking up app updates (migrations &amp; backfills)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-time-data-backfills-june-2026" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-time data backfills (June 2026)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#do-future-transactions-need-any-of-this" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do future transactions need any of this?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#if-you-get-locked-out-break-glass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If you get locked out (break-glass)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-has-to-travel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What has to travel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-by-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step by step
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Step by step">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-on-the-old-box-take-a-fresh-complete-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. On the OLD box — take a fresh, complete backup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-on-the-new-box-get-the-code-env-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. On the NEW box — get the code + env in place
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-on-the-new-box-restore-the-dump" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. On the NEW box — restore the dump
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-start-the-app-and-verify-the-tokens-decrypted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Start the app and verify the tokens decrypted
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-re-point-plaid-for-the-new-hostname" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Re-point Plaid for the new hostname
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gotchas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gotchas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#picking-up-app-updates-migrations-backfills" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Picking up app updates (migrations &amp; backfills)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Picking up app updates (migrations &amp; backfills)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-time-data-backfills-june-2026" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-time data backfills (June 2026)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#do-future-transactions-need-any-of-this" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Do future transactions need any of this?
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#if-you-get-locked-out-break-glass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If you get locked out (break-glass)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="migrating-to-a-new-server-homelab">Migrating to a new server (homelab)<a class="headerlink" href="#migrating-to-a-new-server-homelab" title="Permanent link">&para;</a></h1>
+<p>Moving Patrimonio to a new box — say from a laptop/VPS to a homelab — keeps
+<strong>all your data and all your linked accounts</strong>, including Plaid, with no
+re-linking. The trick is that the Plaid access tokens (and TOTP / Coinbase
+secrets) are encrypted in Postgres with a key that is <strong>not</strong> machine-bound:
+it's just the <code>ENCRYPTION_KEY</code> env var. Carry the database dump <em>and</em> that key
+and everything decrypts on the new box.</p>
+<blockquote>
+<p>The single most important rule: <strong>a database dump without the matching
+<code>ENCRYPTION_KEY</code> is useless.</strong> Every <code>*_enc</code> column (Plaid tokens, TOTP
+secrets, Coinbase tokens) is AES-256-GCM encrypted under that key. Lose it
+and those accounts must be re-linked from scratch. Store it offline before
+you start.</p>
+</blockquote>
+<h2 id="what-has-to-travel">What has to travel<a class="headerlink" href="#what-has-to-travel" title="Permanent link">&para;</a></h2>
+<p>Run this on the <strong>old</strong> box to get a categorized checklist of exactly what to
+copy (it only prints to your terminal, never to a file):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>bash<span class="w"> </span>scripts/migrate-secrets.sh<span class="w">        </span><span class="c1"># reads ./.env</span>
+</code></pre></div>
+<p>It splits your <code>.env</code> into two groups:</p>
+<p><strong>Carry verbatim</strong> (must match on the new box, or data breaks):</p>
+<ul>
+<li><code>ENCRYPTION_KEY</code> — <strong>critical.</strong> Decrypts Plaid/TOTP/Coinbase tokens.</li>
+<li><code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code>, <code>PLAID_ENV</code> — Plaid only syncs items
+  from the same environment they were linked in (<code>sandbox</code> / <code>production</code>).</li>
+<li><code>COINBASE_CLIENT_ID</code> / <code>COINBASE_CLIENT_SECRET</code>, <code>EXCHANGE_RATE_API_KEY</code>.</li>
+<li><code>BACKUP_PASSPHRASE</code> — needed to decrypt the backup you carry over.</li>
+</ul>
+<p><strong>Change for the new host</strong> (don't copy blindly — they encode the hostname):</p>
+<ul>
+<li><code>FRONTEND_BASE_URL</code>, <code>ALLOWED_ORIGINS</code> — the new URL the browser uses.</li>
+<li><code>PLAID_REDIRECT_URI</code>, <code>PLAID_WEBHOOK_URL</code>, <code>COINBASE_REDIRECT_URI</code> — point
+  at the new host <strong>and re-register them in the Plaid / Coinbase dashboards</strong>
+  (OAuth banks reject an unregistered redirect URI).</li>
+<li><code>POSTGRES_PASSWORD</code> / <code>REDIS_PASSWORD</code> can be regenerated, as long as
+  <code>DATABASE_URL</code> / <code>REDIS_URL</code> on the new box match what compose creates.</li>
+</ul>
+<h2 id="step-by-step">Step by step<a class="headerlink" href="#step-by-step" title="Permanent link">&para;</a></h2>
+<h3 id="1-on-the-old-box-take-a-fresh-complete-backup">1. On the OLD box — take a fresh, complete backup<a class="headerlink" href="#1-on-the-old-box-take-a-fresh-complete-backup" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">BACKUP_PASSPHRASE</span><span class="o">=</span><span class="s1">&#39;&lt;from your password manager&gt;&#39;</span><span class="w"> </span>bash<span class="w"> </span>scripts/backup.sh
+</code></pre></div>
+<p>This writes an encrypted <code>pg_dump</code> (<code>*.sql.gpg</code>) to <code>~/patrimonio-backups</code>
+(see <a href="../operations/">operations.md</a> for details). Copy the newest file to the
+new box (USB, <code>scp</code>, syncthing — anything).</p>
+<p>Also save the <code>migrate-secrets.sh</code> output (the "carry verbatim" block) and your
+<code>ENCRYPTION_KEY</code> to your password manager <strong>now</strong>, before you decommission the
+old box.</p>
+<h3 id="2-on-the-new-box-get-the-code-env-in-place">2. On the NEW box — get the code + env in place<a class="headerlink" href="#2-on-the-new-box-get-the-code-env-in-place" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>clone<span class="w"> </span>&lt;your<span class="w"> </span>patrimonio<span class="w"> </span>remote&gt;<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>patrimonio
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>cp<span class="w"> </span>.env.example<span class="w"> </span>.env
+</code></pre></div>
+<p>Edit <code>.env</code>:</p>
+<ul>
+<li>Paste the <strong>carry-verbatim</strong> values (<code>ENCRYPTION_KEY</code>, <code>PLAID_*</code>,
+  <code>COINBASE_*</code>, <code>EXCHANGE_RATE_API_KEY</code>).</li>
+<li>Set the <strong>change-for-host</strong> values to the new hostname
+  (<code>FRONTEND_BASE_URL</code>, <code>ALLOWED_ORIGINS</code>, <code>PLAID_REDIRECT_URI</code>, …).</li>
+<li>Set fresh <code>POSTGRES_PASSWORD</code> / <code>REDIS_PASSWORD</code> if you like, and make sure
+  <code>DATABASE_URL</code> / <code>REDIS_URL</code> reference them.</li>
+</ul>
+<p>Bring up just the datastores so there's an empty DB to restore into:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>postgres<span class="w"> </span>redis
+</code></pre></div>
+<h3 id="3-on-the-new-box-restore-the-dump">3. On the NEW box — restore the dump<a class="headerlink" href="#3-on-the-new-box-restore-the-dump" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">BACKUP_PASSPHRASE</span><span class="o">=</span><span class="s1">&#39;&lt;same passphrase&gt;&#39;</span><span class="w"> </span>bash<span class="w"> </span>scripts/restore.sh<span class="w"> </span>&lt;the-dump&gt;.sql.gpg
+</code></pre></div>
+<p><code>restore.sh</code> drops and recreates the DB, then replays the dump with
+<code>ON_ERROR_STOP</code> so a half-applied restore can't slip through.</p>
+<h3 id="4-start-the-app-and-verify-the-tokens-decrypted">4. Start the app and verify the tokens decrypted<a class="headerlink" href="#4-start-the-app-and-verify-the-tokens-decrypted" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-p<span class="w"> </span>patrimonio<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>api<span class="w"> </span>frontend
+</code></pre></div>
+<p>Open the app, log in (your <strong>password, TOTP, passkeys, and recovery codes all
+came over in the dump</strong> — same credentials as before), and click <strong>Sync</strong>. If
+balances refresh, the Plaid tokens decrypted against the carried
+<code>ENCRYPTION_KEY</code> — the migration worked end to end.</p>
+<h3 id="5-re-point-plaid-for-the-new-hostname">5. Re-point Plaid for the new hostname<a class="headerlink" href="#5-re-point-plaid-for-the-new-hostname" title="Permanent link">&para;</a></h3>
+<ul>
+<li>In the <a href="https://dashboard.plaid.com">Plaid dashboard</a>, add the new
+  <code>PLAID_REDIRECT_URI</code> to the allowed redirect URIs (OAuth banks need it).</li>
+<li>If you use webhooks, set <code>PLAID_WEBHOOK_URL</code> to the new host and run the
+  one-shot updater so existing items point at it:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>POST /api/institutions/update-webhook    # authenticated; updates all items
+</code></pre></div>
+<p>Without a webhook URL, Plaid falls back to periodic polling — fine, just less
+  real-time.</p>
+<h2 id="gotchas">Gotchas<a class="headerlink" href="#gotchas" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><code>PLAID_ENV</code> mismatch</strong> is the most common failure: an item linked in
+  <code>production</code> cannot sync against <code>sandbox</code> and vice-versa. Keep it identical.</li>
+<li><strong>Redis is a cache, not state</strong> — don't bother migrating its volume; a fresh
+  empty Redis is correct.</li>
+<li><strong>Cursors come along</strong> in the dump (<code>institutions.plaid_transactions_cursor</code>),
+  so syncs resume incrementally rather than re-pulling all history.</li>
+<li><strong>HTTPS / same-origin</strong>: OAuth banks need the API reachable same-origin over
+  HTTPS. On a homelab that usually means a reverse proxy (Caddy/nginx/Traefik)
+  terminating TLS in front of the frontend + <code>/api</code>. See the OAuth notes in
+  <a href="../deployment/">deployment.md</a>.</li>
+</ul>
+<h2 id="picking-up-app-updates-migrations-backfills">Picking up app updates (migrations &amp; backfills)<a class="headerlink" href="#picking-up-app-updates-migrations-backfills" title="Permanent link">&para;</a></h2>
+<p>Pulling a new build is two images plus a restart — there is <strong>no manual DB
+step</strong>:</p>
+<ol>
+<li><strong>Rebuild the API and frontend images</strong> from the new commit and <strong>restart
+   the containers</strong>. Most UI fixes are frontend-only; backend changes ride the
+   API image.</li>
+<li>On boot the API runs <code>sqlx::migrate!("./migrations")</code>
+   (<a href="../backend/src/main.rs"><code>backend/src/main.rs</code></a>). Applied migrations are
+   recorded in the <code>_sqlx_migrations</code> table, so each runs <strong>exactly once</strong> and
+   is a no-op on every later boot. Your Postgres <strong>data volume is never
+   rebuilt</strong> — migrations transform the existing data in place.</li>
+</ol>
+<blockquote>
+<p>The migrations only fire on a <strong>fresh API process</strong>. If your daily job
+rebuilds the image but leaves the old container running, they won't apply —
+make sure the container actually restarts.</p>
+</blockquote>
+<h3 id="one-time-data-backfills-june-2026">One-time data backfills (June 2026)<a class="headerlink" href="#one-time-data-backfills-june-2026" title="Permanent link">&para;</a></h3>
+<p>Two of these are <em>data</em> migrations — they repair rows that pre-date the fix.
+They run once (the <code>_sqlx_migrations</code> guard) and preserve anything the user
+confirmed:</p>
+<ul>
+<li><strong><code>2026061401_counterparty_aggregator_backfill.sql</code></strong> — for historical rows
+  whose displayed name was a payment processor ("Square", "Stripe", "PayPal"…)
+  rather than the real shop, promote the real merchant from <code>merchant_name</code>
+  into <code>counterparty_name</code>.</li>
+<li><strong><code>2026061402_fx_transfer_relink.sql</code></strong> — delete auto-detected, <em>not</em> user-
+  confirmed cross-currency transfer links so they get rebuilt under the new
+  one-to-one matcher. <strong>Lazy:</strong> the relink itself happens the next time
+  detection runs — on <strong>any Plaid sync</strong>, or immediately via the <strong>"scan for
+  transfers"</strong> button. User-confirmed pairs are untouched.</li>
+</ul>
+<h3 id="do-future-transactions-need-any-of-this">Do future transactions need any of this?<a class="headerlink" href="#do-future-transactions-need-any-of-this" title="Permanent link">&para;</a></h3>
+<p><strong>No.</strong> The backfills exist only to repair data created <em>before</em> the fix. The
+code changes correct things at the source, so every transaction ingested from
+here on is handled right with no further action:</p>
+<ul>
+<li>New transactions pick the real merchant over the aggregator at sync time
+  (<code>best_counterparty</code>).</li>
+<li>New cross-currency transfers are matched one-to-one as they arrive
+  (<code>fx_transfer_link::detect_for_user</code>, which runs during sync).</li>
+<li>Spending / cash-flow figures exclude confirmed internal transfers in the
+  live queries.</li>
+</ul>
+<p>So these two migrations are a one-shot cleanup of the old rows; you will not
+need to re-run anything for ongoing use.</p>
+<h2 id="if-you-get-locked-out-break-glass">If you get locked out (break-glass)<a class="headerlink" href="#if-you-get-locked-out-break-glass" title="Permanent link">&para;</a></h2>
+<p>You can't be permanently locked out of a box you control. If you forget the
+password, lose your recovery codes, <em>and</em> lose your TOTP device, run the
+offline admin CLI directly against Postgres on the new host:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">DATABASE_URL</span><span class="o">=</span><span class="s1">&#39;postgres://patrimonio:&lt;pw&gt;@127.0.0.1:5433/patrimonio&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>cargo<span class="w"> </span>run<span class="w"> </span>--bin<span class="w"> </span>admin_reset<span class="w"> </span>--<span class="w"> </span>reset-password
+</code></pre></div>
+<p>It can also <code>disable-totp</code>, regenerate <code>recovery-codes</code>, <code>reactivate</code> a
+disabled account, and <code>revoke-sessions</code>. Every action is logged to
+<code>auth_audit</code>. Run <code>admin_reset -- list</code> first to see your users. Because the
+only "credential" is shell + DB access, keep the box itself secured.</p>
+<blockquote>
+<p><strong>Do this on day one of the homelab:</strong> from Settings, regenerate your
+recovery codes and store them offline, and register a passkey (your phone's
+biometric). That's a second and third way back in before you ever need the
+CLI.</p>
+</blockquote>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

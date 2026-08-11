@@ -1,0 +1,1392 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://nickvander.github.io/patrimonio/multi-currency/">
+      
+      
+        <link rel="prev" href="../adding-accounts/">
+      
+      
+        <link rel="next" href="../backend/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Multi-currency - Patrimonio</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#multi-currency-how-patrimonio-handles-usd-mxn" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Patrimonio" class="md-header__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Patrimonio
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Multi-currency
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../adding-accounts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Adding Accounts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Multi-currency
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../backend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Backend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../frontend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Frontend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../database/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Database
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../deployment/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Deployment
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../operations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../migration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Migration (homelab)
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Patrimonio" class="md-nav__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Patrimonio
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-accounts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding Accounts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-currency
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-currency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TL;DR
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-1-investment-lots-shipped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline 1: investment lots (shipped)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pipeline 1: investment lots (shipped)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#whats-a-lot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's a "lot"?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-gets-recorded-per-lot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What gets recorded per lot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-the-data-comes-from" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the data comes from
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-this-gives-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this gives you
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-can-make-the-mxn-side-look-wrong" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What can make the MXN side look wrong
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-2-cross-currency-cash-transfers-shipped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline 2: cross-currency cash transfers (shipped)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pipeline 2: cross-currency cash transfers (shipped)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-a-pair-is-detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a pair is detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-it-shows-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it shows up
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#if-it-links-the-wrong-pair" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If it links the wrong pair
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whats-deliberately-not-in-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's deliberately NOT in scope
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-if-the-dashboard-says-mx000-pl-but-i-have-mxn-holdings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What if the dashboard says "MX$0.00 P&amp;L" but I have MXN holdings?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cheat-sheet-for-reading-the-portfolio-card" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cheat sheet for reading the portfolio card
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration (homelab)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tldr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TL;DR
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-1-investment-lots-shipped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline 1: investment lots (shipped)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pipeline 1: investment lots (shipped)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#whats-a-lot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's a "lot"?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-gets-recorded-per-lot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What gets recorded per lot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-the-data-comes-from" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the data comes from
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-this-gives-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this gives you
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-can-make-the-mxn-side-look-wrong" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What can make the MXN side look wrong
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipeline-2-cross-currency-cash-transfers-shipped" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline 2: cross-currency cash transfers (shipped)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pipeline 2: cross-currency cash transfers (shipped)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-a-pair-is-detected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a pair is detected
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-it-shows-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it shows up
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#if-it-links-the-wrong-pair" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If it links the wrong pair
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whats-deliberately-not-in-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's deliberately NOT in scope
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-if-the-dashboard-says-mx000-pl-but-i-have-mxn-holdings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What if the dashboard says "MX$0.00 P&amp;L" but I have MXN holdings?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cheat-sheet-for-reading-the-portfolio-card" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cheat sheet for reading the portfolio card
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="multi-currency-how-patrimonio-handles-usd-mxn">Multi-currency: how Patrimonio handles USD + MXN<a class="headerlink" href="#multi-currency-how-patrimonio-handles-usd-mxn" title="Permanent link">&para;</a></h1>
+<p>A short, plain-English guide to how the app tracks bi-national money.
+There are <strong>two distinct pipelines</strong> here — they sound similar but
+solve different problems. Knowing which one applies to a given number
+makes the dashboard a lot less mysterious.</p>
+<h2 id="tldr">TL;DR<a class="headerlink" href="#tldr" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Investment positions</strong> (stocks, ETFs, mutual funds in a brokerage)
+  have FX-aware cost basis. Each buy is recorded at that day's USDMXN
+  rate. Your MXN profit / loss is genuinely computed, not just a
+  current-FX conversion of the USD number.</li>
+<li><strong>Cash transfers between currencies</strong> (US bank → Wise → Nu Bank, or
+  similar) are <strong>linked automatically</strong>. The detector pairs the USD
+  outflow with the MXN inflow, backs out the implied FX rate the
+  service actually gave you, and shows it next to the day's spot rate.
+  Confirmed pairs are treated as internal transfers, not spending.</li>
+</ul>
+<h2 id="pipeline-1-investment-lots-shipped">Pipeline 1: investment lots (shipped)<a class="headerlink" href="#pipeline-1-investment-lots-shipped" title="Permanent link">&para;</a></h2>
+<h3 id="whats-a-lot">What's a "lot"?<a class="headerlink" href="#whats-a-lot" title="Permanent link">&para;</a></h3>
+<p>A lot is one acquisition event. Buying 10 shares of VTI on March 5
+creates one lot. Buying 5 more shares on April 12 creates a second
+lot — different price, different date, possibly different FX rate.
+Selling shares depletes lots oldest-first (FIFO — the IRS default).</p>
+<h3 id="what-gets-recorded-per-lot">What gets recorded per lot<a class="headerlink" href="#what-gets-recorded-per-lot" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>acquired_at</code></td>
+<td>The trade date.</td>
+</tr>
+<tr>
+<td><code>qty</code></td>
+<td>Number of shares.</td>
+</tr>
+<tr>
+<td><code>cost_per_unit</code></td>
+<td>Price per share at the trade.</td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>The native currency the trade settled in (USD for a US broker; MXN for a Mexican one).</td>
+</tr>
+<tr>
+<td><code>usd_fx_rate</code></td>
+<td>The USDMXN exchange rate <strong>on the trade date</strong>. <code>1.0</code> for USD-denominated securities; the historical rate for MXN-denominated ones.</td>
+</tr>
+<tr>
+<td><code>source_id</code></td>
+<td>Plaid's <code>investment_transaction_id</code>. Used so re-syncs never duplicate lots.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="where-the-data-comes-from">Where the data comes from<a class="headerlink" href="#where-the-data-comes-from" title="Permanent link">&para;</a></h3>
+<p>Every time you click <strong>Sync all accounts</strong>, the backend hits Plaid's
+<code>/investments/transactions/get</code> endpoint per linked brokerage. Each
+returned transaction maps to either:</p>
+<ul>
+<li>a <code>buy</code> (and <code>dividend reinvestment</code>) → <strong>insert a new lot</strong></li>
+<li>a <code>sell</code> → <strong>FIFO-deplete the oldest lots</strong></li>
+<li>a cash dividend / fee / deposit / withdrawal → <strong>skipped</strong> (no
+  share change; that data lives on the regular cash transactions
+  side)</li>
+</ul>
+<h3 id="what-this-gives-you">What this gives you<a class="headerlink" href="#what-this-gives-you" title="Permanent link">&para;</a></h3>
+<p>The portfolio card shows a side-by-side panel:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>USD US Dollar             MXN Mexican Peso
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Total value $X            Total value MX$Y
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Profit / Loss …           Profit / Loss …
+</code></pre></div>
+<p>The MXN side isn't just "USD value × current FX" — it's computed
+lot-by-lot using each lot's own historical FX rate. So a holding
+bought when USDMXN was 17.5 and held until USDMXN is 19.0 shows a
+<em>different</em> MXN P&amp;L than a naive current-FX conversion would.</p>
+<h3 id="what-can-make-the-mxn-side-look-wrong">What can make the MXN side look wrong<a class="headerlink" href="#what-can-make-the-mxn-side-look-wrong" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>You haven't synced since the lot code shipped.</strong> The endpoint
+  falls back to <code>holdings.cost_basis × current FX</code>, which is correct
+  in USD and approximate in MXN. Fix: click Sync.</li>
+<li><strong>Your broker doesn't expose the <code>investments</code> product to Plaid.</strong>
+  Some don't — you'll see <code>INVALID_PRODUCT</code> / <code>PRODUCTS_NOT_SUPPORTED</code>
+  in the backend logs. The fallback computation still applies.</li>
+<li><strong>The buy was outside the 1-year lookback window.</strong> The sync pulls
+  the trailing 12 months. Older lots aren't backfilled. (Bumping the
+  window is a one-line change if it ever matters.)</li>
+</ul>
+<h2 id="pipeline-2-cross-currency-cash-transfers-shipped">Pipeline 2: cross-currency cash transfers (shipped)<a class="headerlink" href="#pipeline-2-cross-currency-cash-transfers-shipped" title="Permanent link">&para;</a></h2>
+<p>Your real-life flow:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>US bank account (USD)  →  Wise (does FX: USD→MXN)  →  Nu Bank (MXN)
+</code></pre></div>
+<p>This is <strong>not</strong> the same as buying an investment. There's no
+security, no lot, no brokerage. Wise just converts dollars to pesos
+at whatever rate it offers that day.</p>
+<h3 id="how-a-pair-is-detected">How a pair is detected<a class="headerlink" href="#how-a-pair-is-detected" title="Permanent link">&para;</a></h3>
+<p>The auto-linker runs during every Plaid sync (and on demand via the
+<strong>Scan for cross-currency transfers</strong> action on the Transactions tab).
+It links a USD outflow to an MXN inflow (or the reverse) when:</p>
+<ul>
+<li>they land within <strong>5 days</strong> of each other,</li>
+<li>the amount ratio backs out to an implied USD/MXN rate within <strong>10%</strong>
+  of that day's reference rate, and</li>
+<li>either side's description contains a remittance keyword (Wise,
+  Remitly, Xoom, Western Union, MoneyGram, Revolut, …) — <strong>or</strong>, for
+  keyword-less wires and direct deposits, the pair is within <strong>2 days</strong>
+  and the implied rate within <strong>3%</strong> of the reference rate.</li>
+</ul>
+<p>Transfers below ~$50 USD equivalent are ignored (FX rounding noise
+would flood small purchases with false matches). Each pair carries a
+confidence, so clear matches auto-confirm and borderline ones ask for
+review.</p>
+<h3 id="where-it-shows-up">Where it shows up<a class="headerlink" href="#where-it-shows-up" title="Permanent link">&para;</a></h3>
+<ul>
+<li>The <strong>transaction detail panel</strong> shows "Linked cross-currency
+  transfer": source → destination amounts and the implied rate
+  ("$1,000 USD → MX$19,500 at 19.50").</li>
+<li>The <strong>Cash flow tab</strong> has a "Cross-currency transfers" card listing
+  each pair's implied rate next to the day's spot rate — so you can
+  see whether Wise gave you a good deal that day — with a Confirm
+  action for pairs that need review.</li>
+<li><strong>Confirmed pairs count as internal transfers</strong>, so the money
+  doesn't show up as spending in cash-flow figures.</li>
+</ul>
+<h3 id="if-it-links-the-wrong-pair">If it links the wrong pair<a class="headerlink" href="#if-it-links-the-wrong-pair" title="Permanent link">&para;</a></h3>
+<p>Unlink it from the transaction detail panel. Dismissed pairs are
+remembered (Settings → Hidden items → "FX-transfer pairs") so the
+detector won't re-propose them, and user-confirmed pairs are never
+re-evaluated.</p>
+<h3 id="whats-deliberately-not-in-scope">What's deliberately NOT in scope<a class="headerlink" href="#whats-deliberately-not-in-scope" title="Permanent link">&para;</a></h3>
+<p>Tracking "realized FX gain/loss on the MXN cash you held over time"
+is a harder model question — when does "the MXN I got from Wise on
+May 5" stop being a distinct unit? Every Nu Bank outflow is
+arguably a partial disposal of that pool. That's only worth solving
+if it shows up as an actual user complaint.</p>
+<h2 id="what-if-the-dashboard-says-mx000-pl-but-i-have-mxn-holdings">What if the dashboard says "MX$0.00 P&amp;L" but I have MXN holdings?<a class="headerlink" href="#what-if-the-dashboard-says-mx000-pl-but-i-have-mxn-holdings" title="Permanent link">&para;</a></h2>
+<p>Two likely causes, both fixable:</p>
+<ol>
+<li><strong>You haven't synced since the dual-currency code shipped.</strong>
+   The endpoint reads the new fields only after the backend writes
+   them. Click Sync.</li>
+<li><strong>The <code>exchange_rates</code> table doesn't have a USDMXN row for your
+   sync date.</strong> Fall-through path: latest rate is used; if there's
+   no rate at all, a hardcoded 20.0 is the absolute last resort.
+   Check the FX rate in the app bar (its own badge on wide layouts;
+   inside the currency chip on phones) — if it's showing a real
+   number you're fine.</li>
+</ol>
+<h2 id="cheat-sheet-for-reading-the-portfolio-card">Cheat sheet for reading the portfolio card<a class="headerlink" href="#cheat-sheet-for-reading-the-portfolio-card" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>You see</th>
+<th>It means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>USD tile shows a number, MXN tile shows the same number ÷ current FX</td>
+<td>Lots haven't populated yet — fallback path. Sync to fix.</td>
+</tr>
+<tr>
+<td>MXN P&amp;L % differs from USD P&amp;L %</td>
+<td>Lots have populated, you're seeing true FX-aware P&amp;L. The two percentages will only match exactly if the FX rate hasn't moved since acquisition.</td>
+</tr>
+<tr>
+<td>Both tiles say "—" or hide entirely</td>
+<td>The backend response didn't include the new fields. Old build, redeploy.</td>
+</tr>
+<tr>
+<td>Either tile is empty but the other has data</td>
+<td>Shouldn't happen — file a bug.</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,1882 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://nickvander.github.io/patrimonio/deployment/">
+      
+      
+        <link rel="prev" href="../database/">
+      
+      
+        <link rel="next" href="../operations/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Deployment - Patrimonio</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#deployment-infrastructure" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Patrimonio" class="md-header__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Patrimonio
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Deployment
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../adding-accounts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Adding Accounts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../multi-currency/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Multi-currency
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../backend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Backend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../frontend/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Frontend
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../database/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Database
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Deployment
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../operations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../migration/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Migration (homelab)
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Patrimonio" class="md-nav__button md-logo" aria-label="Patrimonio" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Patrimonio
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/nickvander/patrimonio" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adding-accounts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding Accounts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../multi-currency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multi-currency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#local-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Development
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Local Development">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-the-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start the Stack
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#smoke-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Smoke Test
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#setup-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup Status
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#android-apk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Android APK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Android APK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connecting-the-app-to-your-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connecting the app to your server
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cloudflare-access-service-token-step-by-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cloudflare Access service token (step by step)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#release-signing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Release signing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plaid-oauth-from-the-android-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plaid OAuth from the Android app
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#native-passkeys-android" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native passkeys (Android)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#production-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Production Shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vps-deployment-single-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VPS deployment (single-host)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="VPS deployment (single-host)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-provision-the-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Provision the host
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-nginx-lets-encrypt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. nginx + Let's Encrypt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-trusted-proxy-ips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Trusted proxy IPs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-plaid-webhook-activation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Plaid webhook activation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-log-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Log rotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Backups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-health-checks-restart-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Health checks + restart policy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Continuous Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentation-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation Build
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migration (homelab)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#local-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Development
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Local Development">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-the-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start the Stack
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#common-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common Commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#smoke-test" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Smoke Test
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#setup-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup Status
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#android-apk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Android APK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Android APK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connecting-the-app-to-your-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connecting the app to your server
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cloudflare-access-service-token-step-by-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cloudflare Access service token (step by step)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#release-signing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Release signing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plaid-oauth-from-the-android-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plaid OAuth from the Android app
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#native-passkeys-android" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native passkeys (Android)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#production-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Production Shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vps-deployment-single-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VPS deployment (single-host)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="VPS deployment (single-host)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-provision-the-host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Provision the host
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-nginx-lets-encrypt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. nginx + Let's Encrypt
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-trusted-proxy-ips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Trusted proxy IPs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-plaid-webhook-activation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Plaid webhook activation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-log-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Log rotation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Backups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-health-checks-restart-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Health checks + restart policy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#continuous-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Continuous Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentation-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation Build
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="deployment-infrastructure">Deployment &amp; Infrastructure<a class="headerlink" href="#deployment-infrastructure" title="Permanent link">&para;</a></h1>
+<p>Patrimonio runs as a Docker Compose stack — an nginx-served Flutter web frontend, the Rust API, PostgreSQL 17, and Redis 7 — both locally and in production. The supported production shape is that same stack on a host you control, behind a reverse proxy with TLS (see <a href="#vps-deployment-single-host">VPS deployment</a>).</p>
+<h2 id="local-development">Local Development<a class="headerlink" href="#local-development" title="Permanent link">&para;</a></h2>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Docker and Docker Compose</li>
+<li>Optional Plaid credentials for US account linking</li>
+<li>Optional Coinbase and Bitso credentials for crypto sync</li>
+<li>Optional ExchangeRate-API key for live FX data</li>
+<li><code>ENCRYPTION_KEY</code> configured in <code>.env</code> before storing integration tokens or API secrets</li>
+</ul>
+<p>For real Plaid users, also configure the Plaid dashboard environment, product access, and deployed HTTPS redirect/webhook URLs. Linking OAuth banks from the Android APK additionally requires the app's package name to be registered in the Plaid dashboard — see <a href="#plaid-oauth-from-the-android-app">Plaid OAuth from the Android app</a>. Sandbox credentials are enough for local test data only.</p>
+<h3 id="start-the-stack">Start the Stack<a class="headerlink" href="#start-the-stack" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>cp<span class="w"> </span>.env.example<span class="w"> </span>.env
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>--build<span class="w"> </span>-d
+</code></pre></div>
+<p>This starts:</p>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Container role</th>
+<th>Host URL/port</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend</td>
+<td>Flutter web build served by nginx</td>
+<td><code>http://127.0.0.1:3000</code></td>
+</tr>
+<tr>
+<td>API</td>
+<td>Rust/Axum server</td>
+<td><code>http://127.0.0.1:8080</code></td>
+</tr>
+<tr>
+<td>PostgreSQL</td>
+<td>Primary database</td>
+<td><code>127.0.0.1:5433</code></td>
+</tr>
+<tr>
+<td>Redis</td>
+<td>FX cache, sessions, and short-lived auth state</td>
+<td><code>127.0.0.1:6380</code></td>
+</tr>
+</tbody>
+</table>
+<p>The non-default Postgres and Redis host ports reduce conflicts with other local services.</p>
+<h3 id="common-commands">Common Commands<a class="headerlink" href="#common-commands" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>ps
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>api
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>--build<span class="w"> </span>-d<span class="w"> </span>frontend
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>docker<span class="w"> </span>compose<span class="w"> </span>down
+</code></pre></div>
+<h3 id="smoke-test">Smoke Test<a class="headerlink" href="#smoke-test" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">NODE_PATH</span><span class="o">=</span>/path/to/node_modules<span class="w"> </span>./scripts/smoke.cjs
+</code></pre></div>
+<p>The smoke test checks API health and uses Playwright to confirm the Flutter app renders in a browser. Use <code>SKIP_BROWSER=1 ./scripts/smoke.cjs</code> when browser dependencies are unavailable and API-only validation is enough.</p>
+<h3 id="setup-status">Setup Status<a class="headerlink" href="#setup-status" title="Permanent link">&para;</a></h3>
+<p>The API exposes <code>GET /api/setup/status</code> for launch readiness checks. The Settings tab uses it to show whether Plaid credentials and <code>ENCRYPTION_KEY</code> are configured before enabling real account linking.</p>
+<h2 id="android-apk">Android APK<a class="headerlink" href="#android-apk" title="Permanent link">&para;</a></h2>
+<p>The Flutter frontend also builds a native Android APK that connects to a
+self-hosted backend over HTTPS. It's the same codebase as the web build; browser
+-only code is isolated behind conditional-import platform seams.</p>
+<h3 id="build">Build<a class="headerlink" href="#build" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">cd</span><span class="w"> </span>frontend
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># Phone installs: per-ABI APKs — ~3x smaller because the universal APK</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># bundles native libs for three CPU architectures and a phone uses one.</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>flutter<span class="w"> </span>build<span class="w"> </span>apk<span class="w"> </span>--release<span class="w"> </span>--split-per-abi
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># → build/app/outputs/flutter-apk/app-arm64-v8a-release.apk  (~25 MB — any modern phone)</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1">#   app-armeabi-v7a-release.apk / app-x86_64-release.apk also produced</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Universal APK (all ABIs in one file — needed for the x86_64 emulator</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># smoke test; also what CI builds as the Android gate):</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>flutter<span class="w"> </span>build<span class="w"> </span>apk<span class="w"> </span>--release
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="c1"># → build/app/outputs/flutter-apk/app-release.apk  (~70 MB)</span>
+</code></pre></div>
+<p>Both are signed with the same key, so either installs as an update over the
+other — but Android refuses a <em>downgrade</em> by <code>versionCode</code>, and per-ABI APKs
+get a derived versionCode offset. If an install fails with
+<code>INSTALL_FAILED_VERSION_DOWNGRADE</code>, uninstall first or bump the version.</p>
+<p>The Android SDK is required (<code>ANDROID_HOME</code>). On first launch the app shows a
+<strong>Settings screen</strong> to enter the backend URL (e.g. <code>https://patrimonio.nickvda.com</code>),
+persisted on-device. To bake in a default, add
+<code>--dart-define=API_BASE_URL=https://your-host</code>.</p>
+<p>The app is <strong>HTTPS-only</strong> (<code>android/app/src/main/res/xml/network_security_config.xml</code>).
+Production already serves HTTPS with <code>COOKIE_SECURE=true</code>, so the session cookie
+works. If you must target a plain-http backend, flip <code>cleartextTrafficPermitted</code>
+to <code>true</code> there and re-add <code>android:usesCleartextTraffic="true"</code> to the manifest.</p>
+<h3 id="connecting-the-app-to-your-server">Connecting the app to your server<a class="headerlink" href="#connecting-the-app-to-your-server" title="Permanent link">&para;</a></h3>
+<p>The app is <strong>edge-agnostic</strong>: it only ever needs a backend URL, plus (optionally)
+a Cloudflare Access service token. That keeps one APK usable by every hosting
+style — each operator brings their own front door:</p>
+<table>
+<thead>
+<tr>
+<th>Your setup</th>
+<th>What to enter in the app</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend on a plain HTTPS domain (reverse proxy, Cloudflare Tunnel <em>without</em> Access, Caddy, nginx…)</td>
+<td>Just the URL. Patrimonio's own auth (Argon2 password + TOTP + rate limiting) is the gate.</td>
+</tr>
+<tr>
+<td>Backend behind <strong>Cloudflare Access</strong> (Zero Trust)</td>
+<td>The URL <strong>and</strong> a CF Access <strong>service token</strong> under <em>Advanced</em> (see below).</td>
+</tr>
+<tr>
+<td>Backend on a <strong>Tailscale</strong> tailnet</td>
+<td>The <code>https://&lt;host&gt;.&lt;tailnet&gt;.ts.net</code> URL from <code>tailscale serve</code> (mobile requires real HTTPS — the raw <code>100.x.y.z</code> IP over plain http will not work). Phone must run Tailscale.</td>
+</tr>
+</tbody>
+</table>
+<p>If the URL you enter is guarded by Cloudflare Access and no token is configured,
+the setup screen detects the Access login page during its connection test and
+tells you a service token is needed — it won't fail silently.</p>
+<h3 id="cloudflare-access-service-token-step-by-step">Cloudflare Access service token (step by step)<a class="headerlink" href="#cloudflare-access-service-token-step-by-step" title="Permanent link">&para;</a></h3>
+<p>A browser can complete Cloudflare Access's interactive login; a native app
+cannot. A <strong>service token</strong> is the CF-supported way to let a non-browser client
+through while keeping the edge gate up for everyone else. The app sends it as
+<code>CF-Access-Client-Id</code> / <code>CF-Access-Client-Secret</code> headers on every API request
+(WebSocket included).</p>
+<p><strong>1. Mint the token</strong> (Cloudflare Zero Trust dashboard):</p>
+<ol>
+<li>Go to <strong>Access ➔ Service Auth ➔ Service Tokens</strong> and click
+   <strong>Create Service Token</strong>.</li>
+<li>Name it after the device/purpose, e.g. <code>patrimonio-android-nick</code> (one token
+   per device makes revocation surgical).</li>
+<li>Pick a duration (or non-expiring; you can rotate any time).</li>
+<li>Copy the <strong>Client ID</strong> (<code>….access</code>) and <strong>Client Secret</strong> now — the secret
+   is shown only once. Store both in Bitwarden/Vaultwarden.</li>
+</ol>
+<p><strong>2. Allow it on the application:</strong></p>
+<ol>
+<li>Go to <strong>Access ➔ Applications</strong>, edit the application for your Patrimonio
+   hostname (e.g. <code>patrimonio.nickvda.com</code>).</li>
+<li>Add a <strong>second policy</strong> (keep your existing browser-login policy as-is):</li>
+<li><strong>Action</strong>: <code>Service Auth</code> (not Allow — Service Auth skips the identity
+     login entirely).</li>
+<li><strong>Include ➔ Selector</strong>: <code>Service Token</code> → pick the token you just minted.</li>
+<li>Save. Browser users still get the normal Access login; requests carrying the
+   token headers pass straight through.</li>
+</ol>
+<p><strong>3. Enter it in the app:</strong> on the backend-setup screen, expand
+<strong>Advanced: Cloudflare Access</strong> and paste the Client ID and Client Secret, then
+Connect. (Reachable later via <strong>Change server</strong> on the login screen.)</p>
+<p><strong>Rotation/revocation:</strong> delete or roll the token in Service Auth; the app keeps
+working until its next request, then fails cleanly — enter the new token via
+<em>Change server</em>. Losing the phone = revoke that one token; nothing else changes.</p>
+<p><strong>Security note:</strong> the token only lets a client <em>reach</em> Patrimonio — the app's
+own login (password + TOTP) is still required. Prefer the service token over an
+Access <em>Bypass</em> policy: with Bypass, every pre-auth endpoint is exposed to the
+whole internet; with Service Auth, the edge stays closed to anyone without a
+token.</p>
+<h3 id="release-signing">Release signing<a class="headerlink" href="#release-signing" title="Permanent link">&para;</a></h3>
+<p>Release builds are signed from <code>frontend/android/key.properties</code> (gitignored),
+which points at a keystore under <code>frontend/android/keystore/</code> (also gitignored):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="na">storePassword</span><span class="o">=</span><span class="s">…</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="na">keyPassword</span><span class="o">=</span><span class="s">…</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="na">keyAlias</span><span class="o">=</span><span class="s">patrimonio</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="na">storeFile</span><span class="o">=</span><span class="s">/abs/path/to/patrimonio-release.jks</span>
+</code></pre></div>
+<p>Generate a keystore once with <code>keytool -genkeypair -keystore … -alias patrimonio
+-keyalg RSA -keysize 2048 -validity 10000</code>. <strong>Back up the keystore and
+<code>key.properties</code></strong> — losing them means you can't ship updates to an installed
+app. When <code>key.properties</code> is absent (fresh clone / CI), the build falls back to
+debug signing so it still succeeds; it just isn't signed with the real upload key.</p>
+<p>Install by sideloading the APK onto the phone (enable "install unknown apps").
+The APK is not published to the Play Store.</p>
+<h3 id="plaid-oauth-from-the-android-app">Plaid OAuth from the Android app<a class="headerlink" href="#plaid-oauth-from-the-android-app" title="Permanent link">&para;</a></h3>
+<p>Plaid link tokens carry an OAuth return target. The web client uses the
+deployment's <code>PLAID_REDIRECT_URI</code>; a native Android client must <strong>not</strong> —
+the OAuth bank would send the user back to the browser at that URL, outside
+the app's Link session, and the linked item silently vanishes after Plaid's
+success screen. The app therefore sends <code>{"platform": "android"}</code> on
+<code>POST /api/institutions/link-token</code> and
+<code>POST /api/institutions/reconnect-token/{id}</code>, and the backend attaches
+<code>android_package_name</code> instead of <code>redirect_uri</code>, so the Plaid SDK
+intercepts the OAuth return in-app. Requests without a platform body
+(web, older clients) keep the <code>redirect_uri</code> behavior unchanged.</p>
+<p>Two operator pieces:</p>
+<ol>
+<li><strong>Register the package name in the Plaid dashboard</strong> under <strong>Allowed
+   Android package names</strong> (<strong>Developers ➔ API</strong> — the same page as the
+   redirect URIs). Without this, OAuth institutions (e.g. U.S. Bank)
+   cannot link from the APK.</li>
+<li><strong><code>PLAID_ANDROID_PACKAGE_NAME</code></strong> is the package name the backend
+   sends. It defaults to <code>com.patrimonio.patrimonio</code> — this repo's
+   <code>applicationId</code> — so a stock APK needs no configuration. Set it only
+   if you build the APK under a custom application id; it must match
+   what you registered in the dashboard. The compose file forwards it
+   from <code>.env</code> like the other Plaid variables.</li>
+</ol>
+<h3 id="native-passkeys-android">Native passkeys (Android)<a class="headerlink" href="#native-passkeys-android" title="Permanent link">&para;</a></h3>
+<p>The app performs real WebAuthn ceremonies through Android's Credential
+Manager (Google Password Manager passkeys AND USB/NFC security keys). Three
+server-side pieces make the native app a legitimate WebAuthn client for your
+domain — all driven by ONE env var:</p>
+<ol>
+<li><strong>Set <code>ANDROID_APK_CERT_SHA256</code></strong> in the api's <code>.env</code>: the SHA-256 of the
+   APK signing certificate, exactly as <code>apksigner verify --print-certs
+   your.apk</code> prints it (colon-hex or plain hex; comma-separate several to
+   trust more than one build key). This feeds both of the following — they
+   can't drift apart.</li>
+<li><strong>Allowed WebAuthn origin.</strong> The backend appends
+   <code>android:apk-key-hash:&lt;base64url(sha256)&gt;</code> to webauthn-rs' allowed
+   origins, which is the origin GMS stamps into clientDataJSON for an APK
+   signed with that cert. No extra config.</li>
+<li><strong>Digital Asset Links.</strong> The backend serves
+   <code>GET /.well-known/assetlinks.json</code> (nginx proxies that exact path to the
+   api) binding <code>ANDROID_PACKAGE_NAME</code> (default <code>com.patrimonio.patrimonio</code>)</li>
+<li>the fingerprint to your domain. Android verifies this file — via
+   <strong>Google's servers</strong> — before allowing any passkey ceremony for the
+   domain.</li>
+</ol>
+<p><strong>Cloudflare Access deployments need one extra application:</strong> Google fetches
+<code>/.well-known/assetlinks.json</code> from its own infrastructure, which can't pass
+your Access login OR carry a service token. This is a different problem than
+the app's service token (§above): the token lets <em>your APK</em> through the edge;
+this lets <em>Google's verifier</em> read one public file. Path scoping in Zero
+Trust lives on the application, so: <strong>Access ➔ Applications ➔ Add ➔
+Self-hosted</strong>, domain = your Patrimonio host, path =
+<code>.well-known/assetlinks.json</code>, with a single policy <strong>Action: Bypass,
+Include: Everyone</strong>. Access matches the most specific application per
+request, so everything else on the host stays gated exactly as before. The
+file is public-by-design (it only states "this APK may speak for this
+domain"), so the bypass leaks nothing.</p>
+<p>Verify after deploying: <code>curl https://your-domain/.well-known/assetlinks.json</code>
+from anywhere (no CF token) must return the JSON with your fingerprint.
+Then on the phone: Security → Passkeys → Add → This device (Google Password
+Manager, needs a Google account + screen lock) or → Security key (USB/NFC).
+Sign out and use "Sign in with passkey" to confirm the assertion path. If
+every ceremony fails instantly with a security error, it's almost always
+the assetlinks file: unreachable (CF bypass missing), wrong fingerprint
+(debug-signed build vs release fingerprint), or a stale Google-side cache
+(propagates within ~minutes, occasionally longer).</p>
+<h2 id="production-shape">Production Shape<a class="headerlink" href="#production-shape" title="Permanent link">&para;</a></h2>
+<p>Production is the same Docker Compose stack as local development, run on a
+host you control behind a reverse proxy that terminates TLS. The
+<a href="#vps-deployment-single-host">VPS deployment</a> section below is the primary,
+supported path — it is what the backup/restore runbook
+(<a href="../operations/">operations.md</a>) and the <a href="../migration/">migration runbook</a>
+assume.</p>
+<p>If you'd rather split the services across managed cloud offerings, the
+boundaries hold (Rust API as a stateless container, managed PostgreSQL,
+managed Redis, secrets in the platform secret manager) — with one caveat:
+the web frontend expects the API <strong>same-origin</strong> at <code>/api</code> (the nginx
+container proxies it), so a static host for the Flutter web build only works
+if that host can rewrite <code>/api/*</code> to the API service. Whatever the shape,
+enable scheduled database backups before connecting real financial data.</p>
+<h2 id="vps-deployment-single-host">VPS deployment (single-host)<a class="headerlink" href="#vps-deployment-single-host" title="Permanent link">&para;</a></h2>
+<p>The minimum production target supported out of the box is "one Linux
+VPS running <code>docker compose</code> behind nginx with Let's Encrypt." This is
+the shape needed for Plaid Production: Plaid's egress has to be able
+to reach <code>/api/institutions/webhook</code> at a public HTTPS URL.</p>
+<h3 id="1-provision-the-host">1. Provision the host<a class="headerlink" href="#1-provision-the-host" title="Permanent link">&para;</a></h3>
+<ul>
+<li>A small VPS (1 vCPU / 2 GB RAM is enough for a single-household
+  deployment). Open ports 22, 80, and 443. Keep port 8080 closed to
+  the public — nginx proxies to it on the loopback only.</li>
+<li>Install Docker + the Compose plugin, nginx, and certbot.</li>
+<li>Clone the repo, copy <code>.env.example</code> → <code>.env</code>, and fill in:</li>
+<li><code>PLAID_CLIENT_ID</code>, <code>PLAID_SECRET</code>, <code>PLAID_ENV=production</code>.</li>
+<li><code>ENCRYPTION_KEY</code> (a strong, persisted random 32-byte key —
+    <code>openssl rand -base64 32</code>; rotating this is a separate runbook in
+    <code>operations.md</code>).</li>
+<li><code>FRONTEND_BASE_URL=https://patrimonio.example.com</code>.</li>
+<li><code>PLAID_WEBHOOK_URL=https://patrimonio.example.com/api/institutions/webhook</code>.</li>
+<li>If users will link OAuth banks from the Android app: register the
+    package name (<code>com.patrimonio.patrimonio</code> unless you changed the
+    APK's <code>applicationId</code>) in the Plaid dashboard — see
+    <a href="#plaid-oauth-from-the-android-app">Plaid OAuth from the Android app</a>.</li>
+<li><code>TRUSTED_PROXY_CIDRS=127.0.0.1/32</code> (the nginx loopback address —
+    add the docker bridge if nginx runs in a container).</li>
+<li>DB / Redis URLs can stay on the defaults if the compose stack
+    runs on the same host.</li>
+</ul>
+<h3 id="2-nginx-lets-encrypt">2. nginx + Let's Encrypt<a class="headerlink" href="#2-nginx-lets-encrypt" title="Permanent link">&para;</a></h3>
+<p>A working sample for <code>patrimonio.example.com</code> (replace the hostname
+and the TLS paths once certbot emits them):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="kn">listen</span><span class="w"> </span><span class="mi">80</span><span class="p">;</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="kn">server_name</span><span class="w"> </span><span class="s">patrimonio.example.com</span><span class="p">;</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/.well-known/acme-challenge/</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kn">root</span><span class="w"> </span><span class="s">/var/www/certbot</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="kn">return</span><span class="w"> </span><span class="mi">301</span><span class="w"> </span><span class="s">https://</span><span class="nv">$host$request_uri</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">}</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="kn">listen</span><span class="w"> </span><span class="mi">443</span><span class="w"> </span><span class="s">ssl</span><span class="w"> </span><span class="s">http2</span><span class="p">;</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="kn">server_name</span><span class="w"> </span><span class="s">patrimonio.example.com</span><span class="p">;</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="kn">ssl_certificate</span><span class="w">     </span><span class="s">/etc/letsencrypt/live/patrimonio.example.com/fullchain.pem</span><span class="p">;</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">    </span><span class="kn">ssl_certificate_key</span><span class="w"> </span><span class="s">/etc/letsencrypt/live/patrimonio.example.com/privkey.pem</span><span class="p">;</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">    </span><span class="kn">client_max_body_size</span><span class="w"> </span><span class="mi">25m</span><span class="p">;</span><span class="w">     </span><span class="c1"># PDF imports can run several MB</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">    </span><span class="kn">proxy_read_timeout</span><span class="w"> </span><span class="s">120s</span><span class="p">;</span><span class="w">       </span><span class="c1"># Plaid syncs occasionally take time</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="w">    </span><span class="c1"># API</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/api/</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">        </span><span class="kn">proxy_pass</span><span class="w"> </span><span class="s">http://127.0.0.1:8080</span><span class="p">;</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Host</span><span class="w">              </span><span class="nv">$host</span><span class="p">;</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Real-IP</span><span class="w">         </span><span class="nv">$remote_addr</span><span class="p">;</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-For</span><span class="w">   </span><span class="nv">$proxy_add_x_forwarded_for</span><span class="p">;</span>
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-Proto</span><span class="w"> </span><span class="nv">$scheme</span><span class="p">;</span>
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a><span class="w">    </span><span class="c1"># Frontend static</span>
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a><span class="w">        </span><span class="kn">proxy_pass</span><span class="w"> </span><span class="s">http://127.0.0.1:3000</span><span class="p">;</span>
+<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a><span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Host</span><span class="w"> </span><span class="nv">$host</span><span class="p">;</span>
+<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a><span class="p">}</span>
+</code></pre></div>
+<p>Issue the cert once:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>sudo<span class="w"> </span>certbot<span class="w"> </span>certonly<span class="w"> </span>--webroot<span class="w"> </span>-w<span class="w"> </span>/var/www/certbot<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span>-d<span class="w"> </span>patrimonio.example.com<span class="w"> </span>-m<span class="w"> </span>you@example.com<span class="w"> </span>--agree-tos
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>sudo<span class="w"> </span>systemctl<span class="w"> </span>reload<span class="w"> </span>nginx
+</code></pre></div>
+<p>certbot installs a renewal timer by default; verify with
+<code>systemctl list-timers | grep certbot</code>.</p>
+<h3 id="3-trusted-proxy-ips">3. Trusted proxy IPs<a class="headerlink" href="#3-trusted-proxy-ips" title="Permanent link">&para;</a></h3>
+<p>The API ignores <code>X-Forwarded-For</code> / <code>X-Real-IP</code> from any peer that
+isn't in <code>TRUSTED_PROXY_CIDRS</code>. With the compose stack on the same
+host as nginx, the API sees connections from the docker bridge or
+loopback. The simplest correct value is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>TRUSTED_PROXY_CIDRS=127.0.0.1/32,172.16.0.0/12
+</code></pre></div>
+<p>The <code>172.16.0.0/12</code> block covers the default docker0 + compose
+networks. If you've customized the bridge, set it to the actual
+gateway IP — <code>docker network inspect patrimonio_default</code> shows it.</p>
+<p>Without this, audit-log <code>ip_address</code> stays NULL because XFF gets
+stripped at the API layer. With it set correctly, audit rows show
+the real client IP again.</p>
+<h3 id="4-plaid-webhook-activation">4. Plaid webhook activation<a class="headerlink" href="#4-plaid-webhook-activation" title="Permanent link">&para;</a></h3>
+<p>Plaid binds the webhook URL to each item <em>at link time</em> — items
+linked before <code>PLAID_WEBHOOK_URL</code> was configured keep polling
+forever.</p>
+<p>After the first time you set the env var on a deployment that
+already has linked items, choose one of:</p>
+<ul>
+<li><strong>Re-link an institution</strong>: opens Plaid Link, exchanges a new
+  token, and the new webhook URL takes effect for that item.</li>
+<li><strong>One-shot update (preferred for ≥ 1 institution)</strong>: the API
+  exposes <code>POST /api/institutions/update-webhook</code>. It iterates
+  every Plaid item the caller owns and calls Plaid's
+  <code>/item/webhook/update</code> with the configured URL. Returns a
+  per-institution result list — confirm <code>updated</code> matches the
+  number of items you expect.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>https://patrimonio.example.com/api/institutions/update-webhook<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">     </span>-H<span class="w"> </span><span class="s1">&#39;Cookie: patrimonio_session=...&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">     </span>-H<span class="w"> </span><span class="s1">&#39;X-Requested-With: patrimonio&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+</code></pre></div>
+<p>The Settings tab also surfaces the "Webhook URL configured"
+  card from <code>GET /api/setup/status</code>.</p>
+<p>Once the URL is registered, Plaid pushes <code>INITIAL_UPDATE</code>,
+<code>DEFAULT_UPDATE</code>, <code>TRANSACTIONS_REMOVED</code>, and <code>ITEM_ERROR</code> events.
+The receiver in <code>backend/src/api/institutions.rs::plaid_webhook</code>
+ES256-verifies every request before doing anything, so an
+unauthenticated POST to that path is a no-op.</p>
+<h3 id="5-log-rotation">5. Log rotation<a class="headerlink" href="#5-log-rotation" title="Permanent link">&para;</a></h3>
+<p><code>docker compose up -d</code> does <em>not</em> rotate container logs by default —
+they accumulate in <code>/var/lib/docker/containers/&lt;id&gt;/&lt;id&gt;-json.log</code>
+until the disk fills.</p>
+<p>Add the <code>logging</code> block to each service in <code>docker-compose.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">services</span><span class="p">:</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">api</span><span class="p">:</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="c1"># ...</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">logging</span><span class="p">:</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">      </span><span class="nt">driver</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">json-file</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">      </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">        </span><span class="nt">max-size</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;20m&quot;</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">        </span><span class="nt">max-file</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;5&quot;</span>
+</code></pre></div>
+<p>Or set a daemon-wide default in <code>/etc/docker/daemon.json</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">&quot;log-driver&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;json-file&quot;</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span><span class="nt">&quot;log-opts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;max-size&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;20m&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;max-file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;5&quot;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="p">}</span>
+</code></pre></div>
+<p>(Daemon-wide setting applies to newly-started containers — restart
+the stack after changing it.)</p>
+<h3 id="6-backups">6. Backups<a class="headerlink" href="#6-backups" title="Permanent link">&para;</a></h3>
+<p><code>docs/operations.md</code> documents the encrypted nightly backup +
+restore drill. The TL;DR for a new VPS:</p>
+<ul>
+<li>Arrange an off-host copy of the backup directory (rsync/syncthing
+  to another machine, object storage, or a periodic USB copy — see
+  "Off-machine copies" in the runbook). Local-disk-only backups
+  don't survive a host loss.</li>
+<li>Run the bootstrap restore drill on day one; the runbook walks
+  through verifying encryption, restoring into a fresh database,
+  and rotating the encryption key.</li>
+</ul>
+<h3 id="7-health-checks-restart-policy">7. Health checks + restart policy<a class="headerlink" href="#7-health-checks-restart-policy" title="Permanent link">&para;</a></h3>
+<p>The compose file already sets <code>restart: unless-stopped</code> on every
+service. Pair that with a small uptime check (any external
+monitor that hits <code>https://patrimonio.example.com/api/health</code> every
+few minutes) so a wedged container surfaces as a notification
+rather than via "the app feels slow."</p>
+<h2 id="continuous-integration">Continuous Integration<a class="headerlink" href="#continuous-integration" title="Permanent link">&para;</a></h2>
+<p>CI (<code>.github/workflows/test.yml</code>) runs on every push and PR:</p>
+<ol>
+<li><strong>Backend</strong>: <code>cargo fmt --check</code>, <code>cargo clippy --all-targets -- -D
+   warnings</code>, and <code>cargo test -- --test-threads=1</code> — the full unit +
+   integration suite against real Postgres 17 and Redis 7 service
+   containers. The integration harness panics on a
+   configured-but-unreachable database, so a green run means the suite
+   genuinely ran rather than silently skipping.</li>
+<li><strong>Frontend</strong>: <code>dart format --set-exit-if-changed</code>, <code>flutter analyze</code>,
+   <code>flutter test</code>, and <code>flutter build apk --release</code> as an Android build
+   gate (build config only — launch crashes need a real device/emulator).</li>
+</ol>
+<p>Locally, <code>./scripts/test.sh</code> runs the same backend integration suite inside
+a docker-pinned Rust toolchain against a transient Postgres database, and
+<code>scripts/smoke.cjs</code> covers the browser smoke test. Docs pushes to <code>main</code>
+build and deploy via <code>mkdocs gh-deploy</code> (<code>.github/workflows/docs.yml</code>).</p>
+<h3 id="documentation-build">Documentation Build<a class="headerlink" href="#documentation-build" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>pip<span class="w"> </span>install<span class="w"> </span>mkdocs-material
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mkdocs<span class="w"> </span>serve
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
