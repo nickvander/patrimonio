@@ -1,6 +1,6 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-08-10 (Android home-screen widget shipped and iterated to done: sparkline, sizes, toggle combos, on-launcher verification loop)
+> **Last updated:** 2026-08-10 (widget done incl. design pass: Material You chrome, per-series chart colors, FX-only rate sparkline; docs + skill updated)
 > **Branch:** `main`.
 
 ## 2026-08-09/10 — The Android home-screen widget (and how it taught us to look)
@@ -61,6 +61,21 @@ suite could not.
   there fits everywhere. Full-chain repro (registered throwaway user, seeded
   90 days of snapshots, logged in through the real UI on the emulator) lives
   in the session notes; the throwaway user and its data were removed after.
+
+**Addendum (2026-08-10 evening, through `a6c6946`)** — the design pass, all
+verified on placed widgets: Material You chrome (`0b17e30`: values-v31 maps
+surface/text/icon tokens to the wallpaper palette, system widget corner
+radius, tonal M3 icon button replacing the Gingerbread ic_popup_sync; data
+accents stay fixed — wallpaper-recolored data would make green-vs-red
+meaningless); the FX-only tile gets its OWN 30-day rate sparkline plus a 1dp
+hairline outline for depth (`aeb043e`; real blurred shadows aren't
+expressible in shape drawables — elevation on the root is best-effort); and
+per-series chart colors, net worth green / rate blue, after the owner's
+"is that exchange rate or net worth?" (`a6c6946`, pinned by a zero-green
+pixel test on the FX render). Public docs gained the widget section
+(docs/frontend.md + README) and the flutter-frontend skill §9 now carries the
+saga's durable rules: PictureRecorder not renderFlutterWidget, chart = hero,
+autosize clips without ellipsize, verify placed at 2 columns.
 
 ## 2026-08-08 — The FX chip: unclear control, then a wrong number behind it
 

@@ -214,6 +214,8 @@ front door needs only the URL. Release signing, install steps, and the
 Cloudflare walkthrough are in the
 [Deployment guide](docs/deployment.md#android-apk).
 
+A **home-screen widget** shows net worth, the USD/MXN rate, and a sync shortcut at a glance — sections toggleable in Settings, trend sparkline included, Material You theming on Android 12+.
+
 ## API Endpoints
 
 All data routes require a session cookie. Public endpoints are health,

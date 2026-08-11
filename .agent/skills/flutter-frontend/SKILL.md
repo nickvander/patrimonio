@@ -446,15 +446,49 @@ conditional-import seam (`services/home_widget/`, §8). Remember the io impl
 also resolves in `flutter test` — it gates on `Platform.isAndroid` and swallows
 plugin errors so tests stay inert.
 
+- **The sparkline bitmaps are drawn with a `PictureRecorder`, never
+  `HomeWidget.renderFlutterWidget`.** That helper wraps the widget in a
+  `Column`, whose children get an unbounded main axis — a fill-the-area
+  `CustomPaint` asserts in debug and silently emits a BLANK image in release
+  (this shipped: fresh numbers over an empty chart strip, while every
+  layout-level check passed). `utils/home_widget_sparkline.dart` records the
+  canvas directly and hands finished PNG bytes to `HomeWidget.saveFile`; a
+  pixel test decodes the actual bytes and asserts the line exists. If a change
+  can only fail visually, only pixels (or a placed screenshot) can catch it.
+- **The chart slot always plots the HERO number, and each series keeps its own
+  color** — net worth green (`sparklineNetWorthColor`), USD/MXN blue
+  (`sparklineFxColor`, pinned by a zero-green pixel test). Both trends once
+  rendered in one green and the owner's first question was "is that exchange
+  rate or net worth?" — a chart you have to ask about is worse than no chart.
+  Same rule drives layout: the hero slot is never left empty while something
+  can be promoted into it (net-worth off ⇒ the RATE is the hero and the pair
+  label rides with the age line).
+- **Autosized text without `ellipsize` CLIPS at a word boundary at its
+  min-size floor** — "USD/MXN 17.14" became "USD/MXN" on a 2-column tile, i.e.
+  the data vanished and the label survived. Put the invariant part (the
+  number) in the autosized hero and the droppable words in a sub-line, rather
+  than lowering the floor.
+- **Chrome is Material You; data is not.** `values-v31/` maps surface/text/
+  icon tokens to the system's wallpaper palette (with plain hex pre-31
+  fallbacks) and the card uses `@android:dimen/
+  system_app_widget_background_radius` + a 1dp outline; real blurred shadows
+  are not expressible in shape drawables (`android:elevation` on the root is
+  best-effort). The green/blue data accents stay fixed — wallpaper-recolored
+  data would make green-vs-red readings meaningless.
+
 **Testing it:** a RemoteViews tree cannot be pumped. Everything decidable in
-Dart lives in `utils/` and is unit-tested; the rest needs the emulator. Note
-`adb` cannot place a widget (`APPWIDGET_UPDATE` is a protected broadcast and
-`cmd appwidget` is unimplemented), so `onUpdate` executing is only verifiable
-by placing the widget on a real home screen. What the emulator CAN prove:
-`dumpsys appwidget` lists the provider with `zombie=false` and a resolved
-`initialLayout`, and `strings classes.dex` shows R8 kept the provider and
-`HomeWidgetPlugin` (R.id/R.layout ints are inlined — their absence as strings
-is expected).
+Dart lives in `utils/` and is unit-tested (geometry, snapshot contract, chart
+pixels); the rest is verified on a PLACED widget via the rooted-emulator loop:
+`adb root`, seed `shared_prefs/HomeWidgetPreferences.xml` + the chart PNGs
+directly (then `chown` to the app uid), place once with `input draganddrop`
+from the picker, and re-render config variants with `am broadcast
+APPWIDGET_UPDATE` (allowed as root). Two traps, both hit: SharedPreferences
+caches in-process — **`am force-stop` between seeded configs** or every
+screenshot silently shows the first one — and **verify at 2 grid columns**,
+the tightest real size; every truncation that shipped had been verified at 3
+columns where it happened to fit. Without root, the ceiling is: `dumpsys
+appwidget` shows the provider `zombie=false`, and `strings classes.dex` shows
+R8 kept the classes (R.id ints inline — their absence as strings is expected).
 
 ## Anti-patterns to avoid
 
