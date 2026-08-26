@@ -107,21 +107,39 @@ class SyncErrorBanner extends StatelessWidget {
             reconnectButton = FilledButton.icon(
               onPressed: () => onReconnect!(target['id'].toString()),
               icon: const Icon(Icons.link, size: 16),
-              label: Text(label),
+              // Capped to the banner's inner width (minus the button's own
+              // icon + padding chrome) and ellipsized: "Reconnect Morgan
+              // Stanley - StockPlan Connect / Benefit Access" must truncate,
+              // not push the row past the card. An unconstrained Text inside
+              // a button never ellipsizes — buttons size to their child.
+              label: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: (c.maxWidth - 88).clamp(96.0, double.infinity),
+                ),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             );
           }
-          final actionRow = Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          // A Wrap, not a Row: "Reconnect American Express" + "Open settings"
+          // + the dismiss × cannot share one line at phone width, and a rigid
+          // Row painted the tail off the card edge (this shipped). Wrapped
+          // actions flow onto a second end-aligned line instead.
+          final actionRow = Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
             children: [
               if (reconnectButton != null) reconnectButton,
-              if (reconnectButton != null) const SizedBox(width: 8),
               TextButton.icon(
                 onPressed: onJumpToManagement,
                 icon: const Icon(Icons.settings, size: 16),
                 label: Text(l.lwSyncBannerOpenSettings),
               ),
-              if (onDismiss != null) ...[
-                const SizedBox(width: 4),
+              if (onDismiss != null)
                 IconButton(
                   onPressed: () => onDismiss!(problemIds),
                   icon: const Icon(Icons.close, size: 18),
@@ -129,7 +147,6 @@ class SyncErrorBanner extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                   color: context.textSubtle,
                 ),
-              ],
             ],
           );
 
@@ -166,6 +183,7 @@ class SyncErrorBanner extends StatelessWidget {
             );
           }
           return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(Icons.warning_amber_rounded, color: accent, size: 18),
               const SizedBox(width: 8),
@@ -189,7 +207,9 @@ class SyncErrorBanner extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              actionRow,
+              // Flexible bounds the Wrap: bare in a Row it gets unbounded
+              // width and degenerates to a single overflowing line.
+              Flexible(child: actionRow),
             ],
           );
         },

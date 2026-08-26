@@ -80,4 +80,91 @@ void main() {
     await tester.pump();
     expect(dismissed, {'a', 'b'});
   });
+
+  // The owner's phone: one reconnect_required institution with a long name.
+  // "Reconnect American Express" + "Open settings" + the dismiss × cannot
+  // share one row at phone width — the actions must WRAP, not paint past the
+  // card edge (which shipped: "Open settings" ran off the screen).
+  testWidgets('phone width: a long reconnect label does not overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _wrap(
+        SyncErrorBanner(
+          syncData: const [
+            {
+              'id': 'amex',
+              'name': 'American Express',
+              'sync_status': 'reconnect_required',
+            },
+          ],
+          onReconnect: (_) async {},
+          onJumpToManagement: () {},
+          onDismiss: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Both actions present and usable…
+    expect(find.textContaining('Reconnect'), findsOneWidget);
+    expect(find.text('Open settings'), findsOneWidget);
+    // …and nothing overflowed (a RenderFlex overflow surfaces here).
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an absurdly long institution name still fits', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _wrap(
+        SyncErrorBanner(
+          syncData: const [
+            {
+              'id': 'ms',
+              'name': 'Morgan Stanley - StockPlan Connect / Benefit Access',
+              'sync_status': 'reconnect_required',
+            },
+          ],
+          onReconnect: (_) async {},
+          onJumpToManagement: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide layout with a long name wraps instead of overflowing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _wrap(
+        SyncErrorBanner(
+          syncData: const [
+            {
+              'id': 'ms',
+              'name': 'Morgan Stanley - StockPlan Connect / Benefit Access',
+              'sync_status': 'reconnect_required',
+            },
+          ],
+          onReconnect: (_) async {},
+          onJumpToManagement: () {},
+          onDismiss: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }
