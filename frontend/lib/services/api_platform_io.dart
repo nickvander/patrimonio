@@ -218,6 +218,11 @@ class _CookieClient extends http.BaseClient {
     ioReq.maxRedirects = request.maxRedirects;
     ioReq.persistentConnection = request.persistentConnection;
 
+    // Finalize the request body FIRST — MultipartRequest.finalize() sets the
+    // content-type header (including the boundary). Copying headers before
+    // finalize loses the boundary and causes a 400 on the server.
+    final body = await request.finalize().toBytes();
+
     // Copy headers, but let HttpClient own content-length and host so we don't
     // fight it over framing.
     request.headers.forEach((name, value) {
@@ -236,7 +241,6 @@ class _CookieClient extends http.BaseClient {
       ioReq.cookies.addAll(_jar.values);
     }
 
-    final body = await request.finalize().toBytes();
     if (body.isNotEmpty) {
       ioReq.add(body);
     }
