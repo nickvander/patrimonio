@@ -271,6 +271,7 @@ class _ImportScreenState extends State<ImportScreen> {
         type: FileType.custom,
         allowedExtensions: ['csv', 'pdf'],
         allowMultiple: true,
+        withData: true,
       );
 
       if (result != null && result.files.isNotEmpty) {
