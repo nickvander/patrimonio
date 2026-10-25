@@ -133,15 +133,16 @@ async fn main() -> Result<()> {
                 let snapshot_sql = format!(
                     r#"
                     INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
-                    SELECT a.id, a.current_balance, $1, a.currency,
+                    SELECT a.id, COALESCE(a.current_balance, 0), $1, a.currency,
                            CASE
                              WHEN a.currency = 'MXN'
-                                  THEN ROUND(a.current_balance / fx.rate, 2)
-                             ELSE a.current_balance
+                                  THEN ROUND(COALESCE(a.current_balance, 0) / fx.rate, 2)
+                             ELSE COALESCE(a.current_balance, 0)
                            END,
                            a.user_id
                     FROM accounts a
                     CROSS JOIN LATERAL (SELECT {rate} AS rate) fx
+                    WHERE a.archived_at IS NULL
                     ON CONFLICT (account_id, as_of_date) DO NOTHING
                     "#,
                     rate = patrimonio::services::fx::LATEST_USD_MXN_RATE_SQL,

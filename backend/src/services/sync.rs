@@ -477,13 +477,13 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                                 // again: clear archived_at to un-archive a row
                                 // a prior sync had marked as removed.
                                 sqlx::query(
-                                    "UPDATE accounts SET name = $1, current_balance = $2, available_balance = $3, credit_limit = COALESCE($4, credit_limit), archived_at = NULL, updated_at = NOW() WHERE external_id = $5 AND user_id = $6"
+                                    "UPDATE accounts SET name = $1, current_balance = COALESCE($2, current_balance), available_balance = COALESCE($3, available_balance), credit_limit = COALESCE($4, credit_limit), archived_at = NULL, updated_at = NOW() WHERE external_id = $5 AND user_id = $6"
                                 )
                                     .bind(&name).bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
                                     .execute(db).await?;
                             } else {
                                 sqlx::query(
-                                    "UPDATE accounts SET current_balance = $1, available_balance = $2, credit_limit = COALESCE($3, credit_limit), archived_at = NULL, updated_at = NOW() WHERE external_id = $4 AND user_id = $5"
+                                    "UPDATE accounts SET current_balance = COALESCE($1, current_balance), available_balance = COALESCE($2, available_balance), credit_limit = COALESCE($3, credit_limit), archived_at = NULL, updated_at = NOW() WHERE external_id = $4 AND user_id = $5"
                                 )
                                     .bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
                                     .execute(db).await?;
