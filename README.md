@@ -29,6 +29,17 @@ transactions (disbursement out, repayments in), generated payment
 schedules with due-date reminders, and interest-income reporting with
 CSV exports plus a printable promissory-note agreement.
 
+## AI Agent Access (MCP Server & CLI)
+
+Query your Patrimonio instance safely from Claude Desktop, Claude Code,
+Gemini / Antigravity, Cursor, or your terminal via the built-in
+`patrimonio_mcp` server and CLI (`backend/src/bin/patrimonio_mcp.rs`).
+Uses a dedicated least-privilege PostgreSQL role (`scripts/setup_mcp_role.sql`)
+with read-only transactions and column-level grants that block all encrypted
+tokens and password/TOTP hashes. See the
+[AI Agent (MCP & CLI) guide](docs/mcp-and-cli.md) and the bundled skill in
+[`.agent/skills/patrimonio-mcp/SKILL.md`](.agent/skills/patrimonio-mcp/SKILL.md).
+
 ## Tech Stack
 
 | Layer | Technology |

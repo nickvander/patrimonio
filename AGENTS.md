@@ -36,6 +36,9 @@ classes it has actually hit, and ends with a "Definition of done" checklist:
   `dart-flutter-conventions.md` (Effective Dart + Flutter style guide + lints).
 - **`backend-dev/`**, **`dev-workflow/`**, **`work-tracking/`** — how to add
   endpoints/tables/services, run the stack, and track project progress.
+- **`patrimonio-mcp/`** — read-first MCP server & CLI (`patrimonio_mcp`,
+  `scripts/setup_mcp_role.sql`) for querying live/local Patrimonio data safely
+  under the least-privilege `patrimonio_mcp_ro` PostgreSQL role.
 
 If a checkable rule matters, it's also enforced (see "Enforcement" below) — but
 the skills are the human/agent-readable source.

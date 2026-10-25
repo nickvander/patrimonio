@@ -57,4 +57,5 @@ nav:
   - Database: database.md
   - Deployment: deployment.md
   - Operations: operations.md
+  - AI Agent (MCP & CLI): mcp-and-cli.md
   - Migration (homelab): migration.md

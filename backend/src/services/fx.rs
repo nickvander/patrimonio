@@ -39,7 +39,7 @@ pub const FX_FALLBACK_USD_MXN_DEC: Decimal = dec!(20.0);
 ///      behavior of summing raw MXN and USD amounts together, which was off
 ///      ~18x by construction. Zero/negative stored rates are skipped so a
 ///      bad row can never divide-by-zero a sum into NULL.
-pub(crate) const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
+pub const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
     (SELECT rate FROM exchange_rates
       WHERE base_currency = 'USD' AND target_currency = 'MXN'
         AND rate > 0
@@ -56,9 +56,9 @@ pub(crate) const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
 /// LATERAL-projected `USD_MXN_ROW_RATE_SQL`). Currencies other than MXN are
 /// treated as USD-equivalent (fx = 1) — the same "trust the native amount"
 /// stance sync.rs takes for unknown currencies.
-pub(crate) const AMOUNT_USD_SQL: &str =
+pub const AMOUNT_USD_SQL: &str =
     "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount / fx.rate ELSE t.amount END)";
-pub(crate) const AMOUNT_MXN_SQL: &str =
+pub const AMOUNT_MXN_SQL: &str =
     "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount ELSE t.amount * fx.rate END)";
 
 /// SQL scalar: the USD→MXN rate to convert a *present-day* balance with.
