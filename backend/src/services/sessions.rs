@@ -301,3 +301,209 @@ pub async fn revoke_all_except(db: &PgPool, user_id: Uuid, keep_session_id: Uuid
     .map_err(|e| anyhow!("revoke_all_except: {e}"))?;
     Ok(result.rows_affected())
 }
+
+// =============================================================================
+// Personal Access Tokens (PATs) — `pat_<base64url>`
+// =============================================================================
+
+pub const API_TOKEN_PREFIX: &str = "pat_";
+
+pub struct CreatedApiToken {
+    pub id: Uuid,
+    pub name: String,
+    pub token: String,
+    pub token_prefix: String,
+    pub scope: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+pub struct ValidatedApiToken {
+    pub token_id: Uuid,
+    pub user_id: Uuid,
+    pub scope: String,
+    /// Effective role threaded into `AuthContext`. A `read_only`-scoped
+    /// PAT forces `role = "read_only"` even if the owning user is `"owner"`,
+    /// so `require_owner` automatically rejects mutating business routes.
+    pub effective_role: String,
+}
+
+#[derive(Debug)]
+pub struct ApiTokenRow {
+    pub id: Uuid,
+    pub name: String,
+    pub token_prefix: String,
+    pub scope: String,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+/// Generate a `pat_<32-byte base64url>` Personal Access Token and store only
+/// its 32-byte SHA-256 hash (`token_hash`) plus a 12-char `token_prefix`.
+pub async fn create_api_token(
+    db: &PgPool,
+    user_id: Uuid,
+    name: &str,
+    scope: &str,
+    ttl_days: Option<i64>,
+) -> Result<CreatedApiToken> {
+    let mut bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    let raw = format!("{API_TOKEN_PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes));
+    let prefix: String = raw.chars().take(12).collect();
+    let hash = hash_token(&raw);
+    let expires_at = ttl_days.map(|days| Utc::now() + Duration::days(days));
+
+    let row: (Uuid, DateTime<Utc>) = sqlx::query_as(
+        r#"
+        INSERT INTO user_api_tokens (user_id, name, token_prefix, token_hash, scope, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, created_at
+        "#,
+    )
+    .bind(user_id)
+    .bind(name)
+    .bind(&prefix)
+    .bind(&hash)
+    .bind(scope)
+    .bind(expires_at)
+    .fetch_one(db)
+    .await
+    .map_err(|e| anyhow!("create_api_token: {e}"))?;
+
+    Ok(CreatedApiToken {
+        id: row.0,
+        name: name.to_string(),
+        token: raw,
+        token_prefix: prefix,
+        scope: scope.to_string(),
+        created_at: row.1,
+        expires_at,
+    })
+}
+
+/// Validate a `Bearer pat_...` Personal Access Token and throttle-update its
+/// `last_used_at` timestamp (at most once per minute).
+pub async fn validate_api_token(db: &PgPool, raw_token: &str) -> Result<Option<ValidatedApiToken>> {
+    if !raw_token.starts_with(API_TOKEN_PREFIX) {
+        return Ok(None);
+    }
+    let hash = hash_token(raw_token);
+
+    #[allow(clippy::type_complexity)]
+    let row: Option<(
+        Uuid,
+        Uuid,
+        String,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+        String,
+        bool,
+    )> = sqlx::query_as(
+        r#"
+        SELECT t.id, t.user_id, t.scope, t.expires_at, t.revoked_at,
+               u.role, u.is_active
+        FROM user_api_tokens t
+        JOIN users u ON u.id = t.user_id
+        WHERE t.token_hash = $1
+        "#,
+    )
+    .bind(&hash)
+    .fetch_optional(db)
+    .await
+    .map_err(|e| anyhow!("validate_api_token lookup: {e}"))?;
+
+    let Some((token_id, user_id, scope, expires_at, revoked_at, user_role, is_active)) = row else {
+        return Ok(None);
+    };
+    if !is_active || revoked_at.is_some() {
+        return Ok(None);
+    }
+    if expires_at.is_some_and(|exp| exp < Utc::now()) {
+        return Ok(None);
+    }
+
+    sqlx::query(
+        r#"
+        UPDATE user_api_tokens
+           SET last_used_at = NOW()
+         WHERE id = $1
+           AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '1 minute')
+        "#,
+    )
+    .bind(token_id)
+    .execute(db)
+    .await
+    .map_err(|e| anyhow!("validate_api_token touch: {e}"))?;
+
+    let effective_role = if scope == "read_write" && user_role == "owner" {
+        "owner".to_string()
+    } else {
+        "read_only".to_string()
+    };
+
+    Ok(Some(ValidatedApiToken {
+        token_id,
+        user_id,
+        scope,
+        effective_role,
+    }))
+}
+
+pub async fn list_active_api_tokens(db: &PgPool, user_id: Uuid) -> Result<Vec<ApiTokenRow>> {
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(
+        Uuid,
+        String,
+        String,
+        String,
+        DateTime<Utc>,
+        Option<DateTime<Utc>>,
+        Option<DateTime<Utc>>,
+    )> = sqlx::query_as(
+        r#"
+        SELECT id, name, token_prefix, scope, created_at, last_used_at, expires_at
+        FROM user_api_tokens
+        WHERE user_id = $1
+          AND revoked_at IS NULL
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .map_err(|e| anyhow!("list_active_api_tokens: {e}"))?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, name, token_prefix, scope, created_at, last_used_at, expires_at)| ApiTokenRow {
+                id,
+                name,
+                token_prefix,
+                scope,
+                created_at,
+                last_used_at,
+                expires_at,
+            },
+        )
+        .collect())
+}
+
+pub async fn revoke_api_token_for_user(db: &PgPool, token_id: Uuid, user_id: Uuid) -> Result<bool> {
+    let result = sqlx::query(
+        r#"
+        UPDATE user_api_tokens
+           SET revoked_at = NOW()
+         WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+        "#,
+    )
+    .bind(token_id)
+    .bind(user_id)
+    .execute(db)
+    .await
+    .map_err(|e| anyhow!("revoke_api_token_for_user: {e}"))?;
+    Ok(result.rows_affected() > 0)
+}

@@ -57,8 +57,10 @@ pub fn protected_router() -> Router<AppState> {
         .route("/totp/confirm", post(totp_confirm))
         .route("/totp/disable", post(totp_disable))
         .route("/sessions", get(list_sessions))
-        .route("/sessions/{id}", delete(revoke_session))
         .route("/sessions/revoke-others", post(revoke_other_sessions))
+        .route("/sessions/{id}", delete(revoke_session))
+        .route("/tokens", get(list_api_tokens).post(create_api_token))
+        .route("/tokens/{id}", delete(revoke_api_token))
 }
 
 // ----- request / response types -----
@@ -653,9 +655,10 @@ async fn me(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Result<Json<UserView>, ApiError> {
-    let user = load_user_view(&state.db, ctx.user_id)
+    let mut user = load_user_view(&state.db, ctx.user_id)
         .await
         .map_err(internal)?;
+    user.role = ctx.role;
     Ok(Json(user))
 }
 
@@ -1219,6 +1222,159 @@ async fn revoke_other_sessions(
     .await;
 
     Ok(Json(RevokeOthersResponse { revoked }))
+}
+
+// ----- personal access tokens (MCP / CLI) -----
+
+#[derive(Serialize)]
+pub struct ApiTokenView {
+    pub id: Uuid,
+    pub name: String,
+    pub token_prefix: String,
+    pub scope: String,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateApiTokenRequest {
+    pub name: String,
+    /// Defaults to `"read_only"`. Only an owner-role user may mint a
+    /// `"read_write"` token.
+    pub scope: Option<String>,
+    /// Optional lifetime in days (`1..=3650`). `None` means no expiry.
+    pub expires_in_days: Option<i64>,
+}
+
+/// Returned once when a Personal Access Token is minted. `token` is the
+/// plaintext `pat_...` secret and is never stored or returned again.
+#[derive(Serialize)]
+pub struct CreatedApiTokenView {
+    pub id: Uuid,
+    pub name: String,
+    pub token: String,
+    pub token_prefix: String,
+    pub scope: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+async fn list_api_tokens(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Result<Json<Vec<ApiTokenView>>, ApiError> {
+    let rows = sessions::list_active_api_tokens(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
+    let out = rows
+        .into_iter()
+        .map(|r| ApiTokenView {
+            id: r.id,
+            name: r.name,
+            token_prefix: r.token_prefix,
+            scope: r.scope,
+            created_at: r.created_at,
+            last_used_at: r.last_used_at,
+            expires_at: r.expires_at,
+        })
+        .collect();
+    Ok(Json(out))
+}
+
+async fn create_api_token(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateApiTokenRequest>,
+) -> Result<(StatusCode, Json<CreatedApiTokenView>), ApiError> {
+    let name = payload.name.trim();
+    if name.is_empty() || name.len() > 100 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Token name must be between 1 and 100 characters.",
+        ));
+    }
+    let scope = payload.scope.as_deref().unwrap_or("read_only").trim();
+    if !matches!(scope, "read_only" | "read_write") {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Token scope must be 'read_only' or 'read_write'.",
+        ));
+    }
+    if scope == "read_write" && !ctx.is_owner() {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "Read-only users can only mint 'read_only' Personal Access Tokens.",
+        ));
+    }
+    if let Some(days) = payload.expires_in_days {
+        if !(1..=3650).contains(&days) {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "expires_in_days must be between 1 and 3650.",
+            ));
+        }
+    }
+
+    let created =
+        sessions::create_api_token(&state.db, ctx.user_id, name, scope, payload.expires_in_days)
+            .await
+            .map_err(internal)?;
+
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+    record_audit(
+        &state.db,
+        "create_api_token",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        Some(&format!("prefix={} scope={scope}", created.token_prefix)),
+    )
+    .await;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(CreatedApiTokenView {
+            id: created.id,
+            name: created.name,
+            token: created.token,
+            token_prefix: created.token_prefix,
+            scope: created.scope,
+            created_at: created.created_at,
+            expires_at: created.expires_at,
+        }),
+    ))
+}
+
+async fn revoke_api_token(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+    Path(token_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    let _revoked = sessions::revoke_api_token_for_user(&state.db, token_id, ctx.user_id)
+        .await
+        .map_err(internal)?;
+
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+    record_audit(
+        &state.db,
+        "revoke_api_token",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        Some(&token_id.to_string()),
+    )
+    .await;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ----- helpers -----

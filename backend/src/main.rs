@@ -356,10 +356,20 @@ async fn main() -> Result<()> {
         // owner-gated, so the worst a read-only user can do is
         // start an OAuth dance that gets 403'd at the final
         // callback. Worth revisiting.
-        .nest("/api/auth", patrimonio::api::auth::router());
+        .nest("/api/auth", patrimonio::api::auth::router())
+        .layer(axum::middleware::from_fn(
+            patrimonio::api::middleware::reject_api_token_account_mgmt,
+        ));
+
+    // Streamable HTTP MCP endpoint (`POST /api/mcp`). Uses JSON-RPC 2.0
+    // over POST for both read-only tools/resources and write tools, so
+    // write-gating happens per-tool inside `patrimonio::api::mcp` rather
+    // than HTTP-method-level `require_owner`.
+    let mcp_router = Router::new().nest("/api/mcp", patrimonio::api::mcp::router());
 
     let protected = business
         .merge(account_mgmt)
+        .merge(mcp_router)
         // Inner-to-outer: require_owner runs FIRST per-route via
         // business.layer above; then require_auth populates
         // AuthContext; then require_csrf_header gates mutating

@@ -107,12 +107,17 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
     // posture matches production exactly.
     let public = Router::new().nest("/api/auth", patrimonio::api::session::public_router());
 
-    let protected = Router::new()
+    let account_mgmt = Router::new()
         .nest("/api/auth", patrimonio::api::session::protected_router())
-        .layer(from_fn_with_state(
-            state.clone(),
-            patrimonio::api::middleware::require_auth,
+        .layer(axum::middleware::from_fn(
+            patrimonio::api::middleware::reject_api_token_account_mgmt,
         ));
+    let mcp_router = Router::new().nest("/api/mcp", patrimonio::api::mcp::router());
+
+    let protected = account_mgmt.merge(mcp_router).layer(from_fn_with_state(
+        state.clone(),
+        patrimonio::api::middleware::require_auth,
+    ));
 
     let app = public.merge(protected).with_state(state);
 
@@ -640,4 +645,171 @@ async fn rate_limit_kicks_in_after_repeated_failures() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn personal_access_tokens_and_mcp_streamable_http_flow() {
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+
+    // 1. Bootstrap owner user and capture session cookie
+    let res = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/auth/bootstrap",
+            &serde_json::json!({"username": "patowner", "password": "correcthorsebatterystaple"}),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let session_cookie = set_cookie_value(res.headers()).expect("session cookie");
+
+    // 2. Mint a read_only Personal Access Token via POST /api/auth/tokens
+    let res = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/auth/tokens",
+            &serde_json::json!({
+                "name": "Antigravity MCP",
+                "scope": "read_only",
+                "expires_in_days": 30
+            }),
+            Some(&session_cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let created = body_json(res.into_body()).await;
+    let raw_pat = created["token"]
+        .as_str()
+        .expect("raw pat token")
+        .to_string();
+    let token_id = created["id"].as_str().expect("token id").to_string();
+    assert!(raw_pat.starts_with("pat_"));
+    assert_eq!(created["scope"], "read_only");
+
+    // 3. List active tokens via GET /api/auth/tokens
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/tokens", Some(&session_cookie)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let listed = body_json(res.into_body()).await;
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["id"], token_id);
+    assert_eq!(listed[0]["name"], "Antigravity MCP");
+
+    // 4. Authenticate with Bearer pat_... against GET /api/auth/me:
+    //    effective role MUST be downgraded to "read_only" even though user is an owner.
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/auth/me")
+                .header(header::AUTHORIZATION, format!("Bearer {raw_pat}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let me = body_json(res.into_body()).await;
+    assert_eq!(me["username"], "patowner");
+    assert_eq!(me["role"], "read_only");
+
+    // 5. Verify Bearer pat_... is blocked from account-security endpoints (POST /api/auth/tokens)
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/auth/tokens")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {raw_pat}"))
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({"name": "Escalated"})).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 6. Call Streamable HTTP MCP endpoint POST /api/mcp with Bearer pat_...
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/mcp")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {raw_pat}"))
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "get_net_worth_summary",
+                            "arguments": {}
+                        }
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let mcp_body = body_json(res.into_body()).await;
+    assert!(mcp_body["error"].is_null());
+    assert_eq!(
+        mcp_body["result"]["structuredContent"]["net_worth_usd"],
+        0.0
+    );
+
+    // 7. Revoke the PAT via DELETE /api/auth/tokens/{id} using the interactive session cookie
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/auth/tokens/{token_id}"))
+                .header(header::COOKIE, cookie_header(&session_cookie))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // 8. Revoked PAT must now receive 401 Unauthorized on /api/mcp
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/mcp")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::AUTHORIZATION, format!("Bearer {raw_pat}"))
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "ping"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 }

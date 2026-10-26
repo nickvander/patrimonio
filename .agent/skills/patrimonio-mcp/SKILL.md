@@ -11,7 +11,7 @@ description: >-
 
 # Patrimonio MCP & CLI Financial Operations Skill
 
-Access Patrimonio data through **two identical, security-hardened interfaces** backed by [`backend/src/bin/patrimonio_mcp.rs`](../../../backend/src/bin/patrimonio_mcp.rs):
+Access Patrimonio data through **security-hardened MCP and CLI interfaces** backed by [`backend/src/mcp.rs`](../../../backend/src/mcp.rs), [`backend/src/api/mcp.rs`](../../../backend/src/api/mcp.rs), and [`backend/src/bin/patrimonio_mcp.rs`](../../../backend/src/bin/patrimonio_mcp.rs):
 
 1. **MCP Server (`patrimonio`)**: Invoked via `call_mcp_tool` (`ServerName: "patrimonio"`).
 2. **Direct CLI (`patrimonio-mcp` or [`./scripts/patrimonio-cli.sh`](./scripts/patrimonio-cli.sh))**: Run directly from a shell for terminal inspection or `jq` pipelines.
@@ -20,13 +20,14 @@ Do not run ad-hoc `psql` queries unless performing an explicitly requested admin
 
 ---
 
-## 1. Security Architecture & Guardrails
+## 1. Authentication & Security Architecture
 
-1. **Zero Secret Exposure**:
-   - Credentials live outside git in `~/.config/patrimonio-mcp/config.env` (`chmod 0600`), never in `mcp_config.json` or command-line arguments.
-   - Connects either via `DATABASE_URL` or an automatic loopback-bound (`127.0.0.1`) SSH tunnel (`PATRIMONIO_SSH_HOST`) using the dedicated PostgreSQL role **`patrimonio_mcp_ro`** (provisioned by [`scripts/setup_mcp_role.sql`](../../../scripts/setup_mcp_role.sql)).
-   - PostgreSQL enforces `default_transaction_read_only = on`, `statement_timeout = '10s'`, `lock_timeout = '2s'`, and **column-level `SELECT` grants** that physically block reading `plaid_access_token_enc`, `api_key_enc`, `api_secret_enc`, `api_pass_enc`, `password_hash`, `totp_secret_enc`, `passkey_credentials`, `user_sessions`, `recovery_codes`, and `invite_tokens`.
+1. **Three Scalable Authentication Modes**:
+   - **Personal Access Token + CLI/stdio (`patrimonio-mcp login --url https://...`)**: Authenticates with username/password (+ 2FA TOTP if enabled), mints a scoped `pat_...` Personal Access Token via `POST /api/auth/tokens` (stored as SHA-256 hash in `user_api_tokens`), revokes the temporary session cookie, and saves `PATRIMONIO_API_URL` + `PATRIMONIO_API_TOKEN` to `~/.config/patrimonio-mcp/config.env` (`chmod 0600`). Requires zero SSH or DB access.
+   - **Streamable HTTP MCP (`POST /api/mcp`)**: Accepts `Authorization: Bearer pat_...` directly on the Patrimonio backend.
+   - **Least-Privilege PostgreSQL / SSH (`patrimonio_mcp_ro`)**: Connects via `PATRIMONIO_MCP_DATABASE_URL` or an automatic loopback (`127.0.0.1`) SSH tunnel (`PATRIMONIO_SSH_HOST`) using `patrimonio_mcp_ro` ([`scripts/setup_mcp_role.sql`](../../../scripts/setup_mcp_role.sql)), which blocks reading `plaid_access_token_enc`, `password_hash`, `totp_secret_enc`, `passkey_credentials`, `user_sessions`, `user_api_tokens`, `recovery_codes`, and `invite_tokens`.
 2. **Read-First / Dry-Run Mutations**:
+   - Personal Access Tokens default to `scope = "read_only"` (which downgrades `AuthContext.role` to `"read_only"` even for owner accounts) and are blocked from calling account-credential endpoints (`reject_api_token_account_mgmt`).
    - All inspection tools carry `readOnlyHint: true`.
    - Any mutating tool (`reconcile_loan_installment`) defaults to `dry_run: true` and writes every preview/commit to `~/.config/patrimonio-mcp/audit.jsonl`.
    - Never pass `dry_run: false` without first running `dry_run: true`, showing the user the `before` and `proposed_after` state, and obtaining confirmation.
@@ -38,6 +39,9 @@ Do not run ad-hoc `psql` queries unless performing an explicitly requested admin
 Run via `patrimonio-mcp` (if installed on `$PATH`) or [`./scripts/patrimonio-cli.sh`](./scripts/patrimonio-cli.sh):
 
 ```bash
+# Authenticate interactively and mint a read_only Personal Access Token (pat_...)
+./.agent/skills/patrimonio-mcp/scripts/patrimonio-cli.sh login --url https://patrimonio.example.com
+
 # Net worth summary (USD/MXN, live FX rate, currency & institution breakdown)
 ./.agent/skills/patrimonio-mcp/scripts/patrimonio-cli.sh summary
 
@@ -63,7 +67,7 @@ Run via `patrimonio-mcp` (if installed on `$PATH`) or [`./scripts/patrimonio-cli
 # Generic MCP tool invocation with JSON arguments
 ./.agent/skills/patrimonio-mcp/scripts/patrimonio-cli.sh call reconcile_loan_installment '{"loan_id":"<uuid>","installment_number":1,"status":"paid","reason":"preview","dry_run":true}'
 
-# Verify security guards (secret column denial, read-only enforcement, connectivity)
+# Verify security guards and connectivity
 ./.agent/skills/patrimonio-mcp/scripts/patrimonio-cli.sh self-test
 ```
 

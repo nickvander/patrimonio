@@ -8,6 +8,7 @@ pub mod imports;
 pub mod institutions;
 pub mod invites;
 pub mod loans;
+pub mod mcp;
 pub mod middleware;
 pub mod notifications;
 pub mod passkeys;

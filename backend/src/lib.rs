@@ -1,6 +1,7 @@
 pub mod api;
 pub mod config;
 pub mod db;
+pub mod mcp;
 pub mod models;
 pub mod panic_guard;
 pub mod services;
